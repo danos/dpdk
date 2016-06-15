@@ -1,0 +1,52 @@
+Description: backport of dpdk 16.07 fix 7cc3f2c2
+
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Date:   Tue Apr 12 15:49:27 2016 +0200
+
+    lpm: fix freeing in compatibility mode
+
+    Back then when we fixed the missing free lpm I was to quickly to say yes
+    if it applies not only to the lpm6 but also to all of the lpm code.
+
+    It turned out to not apply to all of them. In rte_lpm_create_v20 there
+    is an unexpected fused allocation:
+    mem_size = sizeof(*lpm) + (sizeof(lpm->rules_tbl[0]) * max_rules);
+    [...]
+    lpm = (struct rte_lpm_v20 *)rte_zmalloc_socket(mem_name,mem_size,
+                   RTE_CACHE_LINE_SIZE, socket_id);
+
+    That causes lpm->rules_tbl not to have an own struct malloc_elem that
+    can be derived via RTE_PTR_SUB(data, MALLOC_ELEM_HEADER_LEN) in
+    malloc_elem_from_data.
+    Due to that the rte_lpm_free_v20 accidentially misderives the elem and
+    assumes it is ELEM_FREE triggering in malloc_elem_free
+    if (!malloc_elem_cookies_ok(elem) || elem->state !=
+            return -1;
+
+    While it seems counter-intuitive the way to properly remove rules_tbl in
+    the old fused allocation style of rte_lpm_free_v20 is to not remove it.
+
+    The newer rte_lpm_free_v1604 is safe because in rte_lpm_create_v1604
+    rules_tbl is a separate allocation.
+
+    Fixes: d4c18f0a1d5d ("lpm: fix missing free")
+
+    Signed-off-by: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+    Acked-by: Olivier Matz <olivier.matz@6wind.com>
+
+Forwarded: yes (in DPDK 16.07)
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Last-Update: 2016-05-17
+
+Index: dpdk/lib/librte_lpm/rte_lpm.c
+===================================================================
+--- dpdk.orig/lib/librte_lpm/rte_lpm.c
++++ dpdk/lib/librte_lpm/rte_lpm.c
+@@ -373,7 +373,6 @@ rte_lpm_free_v20(struct rte_lpm_v20 *lpm
+ 
+ 	rte_rwlock_write_unlock(RTE_EAL_TAILQ_RWLOCK);
+ 
+-	rte_free(lpm->rules_tbl);
+ 	rte_free(lpm);
+ 	rte_free(te);
+ }

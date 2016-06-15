@@ -1,0 +1,25 @@
+Description: backport of dpdk 16.07 fix for tar >=1.29
+
+This is a backport of:
+- dd9ae4c7 mk: fix install with tar 1.29
+
+Forwarded: yes (in DPDK 16.07)
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Last-Update: 2016-06-14
+
+Index: dpdk/mk/rte.sdkinstall.mk
+===================================================================
+--- dpdk.orig/mk/rte.sdkinstall.mk
++++ dpdk/mk/rte.sdkinstall.mk
+@@ -116,9 +116,9 @@ install-runtime:
+ 	$(Q)$(call rte_mkdir, $(DESTDIR)$(libdir))
+ 	$(Q)cp -a    $O/lib/* $(DESTDIR)$(libdir)
+ 	$(Q)$(call rte_mkdir, $(DESTDIR)$(bindir))
+-	$(Q)tar -cf -      -C $O app  --exclude 'app/*.map' \
++	$(Q)tar -cf -      -C $O --exclude 'app/*.map' \
+ 		--exclude 'app/cmdline*' --exclude app/test \
+-		--exclude app/testacl --exclude app/testpipeline | \
++		--exclude app/testacl --exclude app/testpipeline app | \
+ 	    tar -xf -      -C $(DESTDIR)$(bindir) --strip-components=1 \
+ 		--keep-newer-files --warning=no-ignore-newer
+ 	$(Q)$(call rte_mkdir,      $(DESTDIR)$(datadir))

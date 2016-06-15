@@ -1,0 +1,81 @@
+Index: dpdk/config/common_base
+===================================================================
+--- dpdk.orig/config/common_base
++++ dpdk/config/common_base
+@@ -88,7 +88,7 @@ CONFIG_RTE_MAX_NUMA_NODES=8
+ CONFIG_RTE_MAX_MEMSEG=256
+ CONFIG_RTE_MAX_MEMZONE=2560
+ CONFIG_RTE_MAX_TAILQ=32
+-CONFIG_RTE_LOG_LEVEL=8
++CONFIG_RTE_LOG_LEVEL=RTE_LOG_INFO
+ CONFIG_RTE_LOG_HISTORY=256
+ CONFIG_RTE_LIBEAL_USE_HPET=n
+ CONFIG_RTE_EAL_ALLOW_INV_SOCKET_ID=n
+Index: dpdk/doc/guides/faq/faq.rst
+===================================================================
+--- dpdk.orig/doc/guides/faq/faq.rst
++++ dpdk/doc/guides/faq/faq.rst
+@@ -88,9 +88,7 @@ the wrong socket, the application simply
+ On application startup, there is a lot of EAL information printed. Is there any way to reduce this?
+ ---------------------------------------------------------------------------------------------------
+ 
+-Yes, each EAL has a configuration file that is located in the /config directory. Within each configuration file, you will find CONFIG_RTE_LOG_LEVEL=8.
+-You can change this to a lower value, such as 6 to reduce this printout of debug information. The following is a list of LOG levels that can be found in the rte_log.h file.
+-You must remove, then rebuild, the EAL directory for the change to become effective as the configuration file creates the rte_config.h file in the EAL directory.
++Yes, the option ``--log-level=`` accepts one of these numbers:
+ 
+ .. code-block:: c
+ 
+@@ -103,6 +101,9 @@ You must remove, then rebuild, the EAL d
+     #define RTE_LOG_INFO 7U     /* Informational. */
+     #define RTE_LOG_DEBUG 8U    /* Debug-level messages. */
+ 
++It is also possible to change the maximum (and default level) at compile time
++with ``CONFIG_RTE_LOG_LEVEL``.
++
+ 
+ How can I tune my network application to achieve lower latency?
+ ---------------------------------------------------------------
+Index: dpdk/lib/librte_eal/common/eal_common_log.c
+===================================================================
+--- dpdk.orig/lib/librte_eal/common/eal_common_log.c
++++ dpdk/lib/librte_eal/common/eal_common_log.c
+@@ -195,5 +195,10 @@ rte_eal_common_log_init(FILE *default_lo
+ {
+ 	default_log_stream = default_log;
+ 	rte_openlog_stream(default_log);
++
++#if RTE_LOG_LEVEL >= RTE_LOG_DEBUG
++	RTE_LOG(NOTICE, EAL, "Debug logs available - lower performance\n");
++#endif
++
+ 	return 0;
+ }
+Index: dpdk/lib/librte_eal/common/eal_common_options.c
+===================================================================
+--- dpdk.orig/lib/librte_eal/common/eal_common_options.c
++++ dpdk/lib/librte_eal/common/eal_common_options.c
+@@ -141,7 +141,11 @@ eal_reset_internal_config(struct interna
+ 
+ 	internal_cfg->syslog_facility = LOG_DAEMON;
+ 	/* default value from build option */
++#if RTE_LOG_LEVEL >= RTE_LOG_DEBUG
++	internal_cfg->log_level = RTE_LOG_INFO;
++#else
+ 	internal_cfg->log_level = RTE_LOG_LEVEL;
++#endif
+ 
+ 	internal_cfg->xen_dom0_support = 0;
+ 
+Index: dpdk/scripts/test-build.sh
+===================================================================
+--- dpdk.orig/scripts/test-build.sh
++++ dpdk/scripts/test-build.sh
+@@ -138,6 +138,7 @@ config () # <directory> <target> <option
+ 		! echo $3 | grep -q '+shared' || \
+ 		sed -ri         's,(SHARED_LIB=)n,\1y,' $1/.config
+ 		! echo $3 | grep -q '+debug' || ( \
++		sed -ri     's,(RTE_LOG_LEVEL=).*,\1RTE_LOG_DEBUG,' $1/.config
+ 		sed -ri           's,(_DEBUG.*=)n,\1y,' $1/.config
+ 		sed -ri            's,(_STAT.*=)n,\1y,' $1/.config
+ 		sed -ri 's,(TEST_PMD_RECORD_.*=)n,\1y,' $1/.config )

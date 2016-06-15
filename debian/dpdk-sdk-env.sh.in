@@ -1,0 +1,3 @@
+export RTE_TARGET=SDK_TARGET
+export RTE_SDK="/usr/share/dpdk/"
+export RTE_INCLUDE="/usr/include/dpdk"
