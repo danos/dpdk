@@ -42,6 +42,7 @@ dpdk (16.04-1) UNRELEASED; urgency=medium
       allows consumers of dpdk to just depend on what they need. As well as
       installation of multiple .so versions concurrently.
     - added the hidden dependency of librte_eal to librte_mempool
+    - use dpkg-buildflags and properly enable hardening
   * Adding DKMS package for rte_kni (LP: #1592786)
 
   [ Ricardo Salveti ]
