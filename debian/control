@@ -1,6 +1,6 @@
 Source: dpdk
 Priority: optional
-Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+Maintainer: deb_dpdk Packagers <deb-dpdk@lists.fd.io>
 Build-Depends: debhelper (>= 9),
                dh-python,
                dh-systemd (>= 1.5),
