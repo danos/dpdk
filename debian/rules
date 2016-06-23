@@ -127,6 +127,7 @@ binary-arch:
 		DESTDIR=debian/dpdk install-runtime
 	cp debian/dpdk.interfaces debian/dpdk/etc/dpdk/interfaces
 	rm debian/dpdk/usr/sbin/dpdk_nic_bind
+	mkdir -p debian/dpdk/sbin
 	ln -s /usr/share/dpdk/tools/dpdk_nic_bind.py \
 		debian/dpdk/sbin/dpdk_nic_bind
 	# Package: dpdk-dev (build environment)
