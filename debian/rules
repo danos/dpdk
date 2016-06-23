@@ -24,14 +24,16 @@ export EXTRA_CFLAGS = -g -fPIC
 # package maintainers to append LDFLAGS
 #export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 
+# People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
+# RTE_TARGET via environment variables if they like
 ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
-DPDK_CONFIG = "arm64-armv8a-linuxapp-gcc"
-RTE_MACHINE = "armv8a"
-RTE_TARGET = "arm64-armv8a-linuxapp-gcc"
+DPDK_CONFIG := "arm64-armv8a-linuxapp-gcc"
+RTE_MACHINE := "armv8a"
+RTE_TARGET := "arm64-armv8a-linuxapp-gcc"
 else
-DPDK_CONFIG = "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
-RTE_MACHINE = "default"
-RTE_TARGET = "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
+DPDK_CONFIG := "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
+RTE_MACHINE := "default"
+RTE_TARGET := "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
 endif
 DPDK_STATIC_DIR = "debian/build/static-root"
 DPDK_SHARED_DIR = "debian/build/shared-root"
