@@ -27,6 +27,7 @@ dpdk (16.04-1) UNRELEASED; urgency=medium
       This was formerly part of a combined patch that we dropped because the
       majority is upstream (d/p/ubuntu-fix-lpm-use-after-free-and-leak.patch).
     - d/p/ubuntu-backport-40-linking-fixes-stage-[1-4]-4.patch
+      d/p/ubuntu-backport-44-linking-cleanup.patch
       Fixing underlinking and overlinking issues in apps and libraries.
     - d/p/ubuntu-backport-41-fix-install-tar-1.29.patch
       Fix issues with tar >=1.29 (Yakkety)
