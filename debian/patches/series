@@ -10,3 +10,4 @@ ubuntu-backport-40-linking-fixes-stage-4-4.patch
 ubuntu-backport-41-fix-install-tar-1.29.patch
 ubuntu-backport-42-increase-default-logging-level.patch
 ubuntu-backport-43-fix-level-type-retrieving.patch
+ubuntu-backport-44-linking-cleanup.patch
