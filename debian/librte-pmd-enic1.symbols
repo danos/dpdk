@@ -1,0 +1,2 @@
+librte_pmd_enic.so.1 librte-pmd-enic1 #MINVER#
+ DPDK_2.0@DPDK_2.0 16.04

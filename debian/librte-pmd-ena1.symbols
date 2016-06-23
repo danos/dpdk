@@ -1,0 +1,2 @@
+librte_pmd_ena.so.1 librte-pmd-ena1 #MINVER#
+ DPDK_16.04@DPDK_16.04 16.04

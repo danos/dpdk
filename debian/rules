@@ -148,10 +148,9 @@ binary-arch:
 	  BN=$$(basename $${lib}); \
 	  VER=$$(echo $${BN} | sed -e 's/^.*\.so\.//'); \
 	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9]*$$//' | tr '_' '-'); \
-	  LNV="libdpdk-$${LN}$${VER}"; \
-	  echo "moving $${lib} for library $${LNV}"; \
-	  mkdir -p debian/$${LNV}/$(LIBDIR); \
-	  mv $${lib} debian/$${LNV}/$(LIBDIR); \
+	  echo "moving $${lib} for library $${LN}$${VER}"; \
+	  mkdir -p debian/$${LN}$${VER}/$(LIBDIR); \
+	  mv $${lib} debian/$${LN}$${VER}/$(LIBDIR); \
 	done
 	# Package: dpdk-igb-uio-dkms
 	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(VERSION)

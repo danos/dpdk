@@ -1,0 +1,2 @@
+librte_pmd_fm10k.so.1 librte-pmd-fm10k1 #MINVER#
+ DPDK_2.0@DPDK_2.0 16.04

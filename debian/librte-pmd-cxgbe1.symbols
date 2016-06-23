@@ -1,0 +1,2 @@
+librte_pmd_cxgbe.so.1 librte-pmd-cxgbe1 #MINVER#
+ DPDK_2.1@DPDK_2.1 16.04

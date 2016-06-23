@@ -1,0 +1,2 @@
+librte_pmd_af_packet.so.1 librte-pmd-af-packet1 #MINVER#
+ DPDK_2.0@DPDK_2.0 16.04

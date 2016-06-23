@@ -91,48 +91,48 @@ Multi-Arch: same
 Homepage: http://www.dpdk.org
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
-         libdpdk-libethdev3 (= ${binary:Version}),
-         libdpdk-librte-acl2 (= ${binary:Version}),
-         libdpdk-librte-cfgfile2 (= ${binary:Version}),
-         libdpdk-librte-cmdline2 (= ${binary:Version}),
-         libdpdk-librte-cryptodev1 (= ${binary:Version}),
-         libdpdk-librte-distributor1 (= ${binary:Version}),
-         libdpdk-librte-eal2 (= ${binary:Version}),
-         libdpdk-librte-hash2 (= ${binary:Version}),
-         libdpdk-librte-ip-frag1 (= ${binary:Version}),
-         libdpdk-librte-jobstats1 (= ${binary:Version}),
-         libdpdk-librte-kni2 (= ${binary:Version}) [amd64 arm64],
-         libdpdk-librte-kvargs1 (= ${binary:Version}),
-         libdpdk-librte-lpm2 (= ${binary:Version}),
-         libdpdk-librte-mbuf2 (= ${binary:Version}),
-         libdpdk-librte-mempool1 (= ${binary:Version}),
-         libdpdk-librte-meter1 (= ${binary:Version}),
-         libdpdk-librte-pipeline3 (= ${binary:Version}),
-         libdpdk-librte-pmd-af-packet1 (= ${binary:Version}),
-         libdpdk-librte-pmd-bond1 (= ${binary:Version}),
-         libdpdk-librte-pmd-cxgbe1 (= ${binary:Version}),
-         libdpdk-librte-pmd-e10001 (= ${binary:Version}),
-         libdpdk-librte-pmd-ena1 (= ${binary:Version}),
-         libdpdk-librte-pmd-enic1 (= ${binary:Version}),
-         libdpdk-librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
-         libdpdk-librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386],
-         libdpdk-librte-pmd-ixgbe1 (= ${binary:Version}),
-         libdpdk-librte-pmd-null-crypto1 (= ${binary:Version}),
-         libdpdk-librte-pmd-null1 (= ${binary:Version}),
-         libdpdk-librte-pmd-pcap1 (= ${binary:Version}),
-         libdpdk-librte-pmd-ring2 (= ${binary:Version}),
-         libdpdk-librte-pmd-vhost1 (= ${binary:Version}),
-         libdpdk-librte-pmd-virtio1 (= ${binary:Version}),
-         libdpdk-librte-pmd-vmxnet3-uio1 (= ${binary:Version}),
-         libdpdk-librte-pmd-xenvirt1 (= ${binary:Version}),
-         libdpdk-librte-port2 (= ${binary:Version}),
-         libdpdk-librte-power1 (= ${binary:Version}),
-         libdpdk-librte-reorder1 (= ${binary:Version}),
-         libdpdk-librte-ring1 (= ${binary:Version}),
-         libdpdk-librte-sched1 (= ${binary:Version}),
-         libdpdk-librte-table2 (= ${binary:Version}),
-         libdpdk-librte-timer1 (= ${binary:Version}),
-         libdpdk-librte-vhost2 (= ${binary:Version})
+         libethdev3 (= ${binary:Version}),
+         librte-acl2 (= ${binary:Version}),
+         librte-cfgfile2 (= ${binary:Version}),
+         librte-cmdline2 (= ${binary:Version}),
+         librte-cryptodev1 (= ${binary:Version}),
+         librte-distributor1 (= ${binary:Version}),
+         librte-eal2 (= ${binary:Version}),
+         librte-hash2 (= ${binary:Version}),
+         librte-ip-frag1 (= ${binary:Version}),
+         librte-jobstats1 (= ${binary:Version}),
+         librte-kni2 (= ${binary:Version}) [amd64 arm64],
+         librte-kvargs1 (= ${binary:Version}),
+         librte-lpm2 (= ${binary:Version}),
+         librte-mbuf2 (= ${binary:Version}),
+         librte-mempool1 (= ${binary:Version}),
+         librte-meter1 (= ${binary:Version}),
+         librte-pipeline3 (= ${binary:Version}),
+         librte-pmd-af-packet1 (= ${binary:Version}),
+         librte-pmd-bond1 (= ${binary:Version}),
+         librte-pmd-cxgbe1 (= ${binary:Version}),
+         librte-pmd-e10001 (= ${binary:Version}),
+         librte-pmd-ena1 (= ${binary:Version}),
+         librte-pmd-enic1 (= ${binary:Version}),
+         librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
+         librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386],
+         librte-pmd-ixgbe1 (= ${binary:Version}),
+         librte-pmd-null-crypto1 (= ${binary:Version}),
+         librte-pmd-null1 (= ${binary:Version}),
+         librte-pmd-pcap1 (= ${binary:Version}),
+         librte-pmd-ring2 (= ${binary:Version}),
+         librte-pmd-vhost1 (= ${binary:Version}),
+         librte-pmd-virtio1 (= ${binary:Version}),
+         librte-pmd-vmxnet3-uio1 (= ${binary:Version}),
+         librte-pmd-xenvirt1 (= ${binary:Version}),
+         librte-port2 (= ${binary:Version}),
+         librte-power1 (= ${binary:Version}),
+         librte-reorder1 (= ${binary:Version}),
+         librte-ring1 (= ${binary:Version}),
+         librte-sched1 (= ${binary:Version}),
+         librte-table2 (= ${binary:Version}),
+         librte-timer1 (= ${binary:Version}),
+         librte-vhost2 (= ${binary:Version})
 Description: Data Plane Development Kit (basic development files)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
@@ -140,7 +140,7 @@ Description: Data Plane Development Kit (basic development files)
  build external applications which will also require at least SSE3 support
  when running.
 
-Package: libdpdk-libethdev3
+Package: libethdev3
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -153,7 +153,7 @@ Description: Data Plane Development Kit (libethdev runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for libethdev
 
-Package: libdpdk-librte-acl2
+Package: librte-acl2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -166,7 +166,7 @@ Description: Data Plane Development Kit (librte-acl runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_acl
 
-Package: libdpdk-librte-cfgfile2
+Package: librte-cfgfile2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -179,7 +179,7 @@ Description: Data Plane Development Kit (librte-cfgfile runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_cfgfile
 
-Package: libdpdk-librte-cmdline2
+Package: librte-cmdline2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -191,7 +191,7 @@ Description: Data Plane Development Kit (librte-cmdline runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_cmdline
 
-Package: libdpdk-librte-cryptodev1
+Package: librte-cryptodev1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -204,7 +204,7 @@ Description: Data Plane Development Kit (librte-cryptodev runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_cryptodev
 
-Package: libdpdk-librte-distributor1
+Package: librte-distributor1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -217,20 +217,20 @@ Description: Data Plane Development Kit (librte-distributor runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_distributor
 
-Package: libdpdk-librte-eal2
+Package: librte-eal2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__eal_8h.html
 Pre-Depends: ${misc:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}, libdpdk-librte-mempool1
+Depends: ${misc:Depends}, ${shlibs:Depends}, librte-mempool1
 Conflicts: libdpdk0
 Description: Data Plane Development Kit (librte-eal runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_eal
 
-Package: libdpdk-librte-hash2
+Package: librte-hash2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -243,7 +243,7 @@ Description: Data Plane Development Kit (librte-hash runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_hash
 
-Package: libdpdk-librte-ip-frag1
+Package: librte-ip-frag1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -256,7 +256,7 @@ Description: Data Plane Development Kit (librte-ip-frag runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_ip_frag
 
-Package: libdpdk-librte-jobstats1
+Package: librte-jobstats1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -269,7 +269,7 @@ Description: Data Plane Development Kit (librte-jobstats runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_jobstats
 
-Package: libdpdk-librte-kni2
+Package: librte-kni2
 Architecture: amd64 arm64
 Section: libs
 Multi-Arch: same
@@ -282,7 +282,7 @@ Description: Data Plane Development Kit (librte-kni runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_kni
 
-Package: libdpdk-librte-kvargs1
+Package: librte-kvargs1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -295,7 +295,7 @@ Description: Data Plane Development Kit (librte-kvargs runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_kvargs
 
-Package: libdpdk-librte-lpm2
+Package: librte-lpm2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -308,7 +308,7 @@ Description: Data Plane Development Kit (librte-lpm runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_lpm
 
-Package: libdpdk-librte-mbuf2
+Package: librte-mbuf2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -321,7 +321,7 @@ Description: Data Plane Development Kit (librte-mbuf2 runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_mbuf
 
-Package: libdpdk-librte-mempool1
+Package: librte-mempool1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -334,7 +334,7 @@ Description: Data Plane Development Kit (librte-mempool runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_mempool
 
-Package: libdpdk-librte-meter1
+Package: librte-meter1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -347,7 +347,7 @@ Description: Data Plane Development Kit (librte-meter runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_meter
 
-Package: libdpdk-librte-pipeline3
+Package: librte-pipeline3
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -360,7 +360,7 @@ Description: Data Plane Development Kit (librte-pipeline runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pipeline
 
-Package: libdpdk-librte-pmd-af-packet1
+Package: librte-pmd-af-packet1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -373,7 +373,7 @@ Description: Data Plane Development Kit (librte-pmd-af-packet runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_af_packet
 
-Package: libdpdk-librte-pmd-bond1
+Package: librte-pmd-bond1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -386,7 +386,7 @@ Description: Data Plane Development Kit (librte-pmd-bond runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_bond
 
-Package: libdpdk-librte-pmd-cxgbe1
+Package: librte-pmd-cxgbe1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -399,7 +399,7 @@ Description: Data Plane Development Kit (librte-pmd-cxgbe runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_cxgbe
 
-Package: libdpdk-librte-pmd-e10001
+Package: librte-pmd-e10001
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -412,7 +412,7 @@ Description: Data Plane Development Kit (librte-pmd-e1000 runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_e1000
 
-Package: libdpdk-librte-pmd-ena1
+Package: librte-pmd-ena1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -425,7 +425,7 @@ Description: Data Plane Development Kit (librte-pmd-ena runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_ena
 
-Package: libdpdk-librte-pmd-enic1
+Package: librte-pmd-enic1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -438,7 +438,7 @@ Description: Data Plane Development Kit (librte-pmd-enic runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_enic
 
-Package: libdpdk-librte-pmd-fm10k1
+Package: librte-pmd-fm10k1
 Architecture: amd64 i386
 Section: libs
 Multi-Arch: same
@@ -451,7 +451,7 @@ Description: Data Plane Development Kit (librte-pmd-fm10k runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_fm10k
 
-Package: libdpdk-librte-pmd-i40e1
+Package: librte-pmd-i40e1
 Architecture: amd64 i386
 Section: libs
 Multi-Arch: same
@@ -464,7 +464,7 @@ Description: Data Plane Development Kit (librte-pmd-i40e runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_i40e
 
-Package: libdpdk-librte-pmd-ixgbe1
+Package: librte-pmd-ixgbe1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -477,7 +477,7 @@ Description: Data Plane Development Kit (librte-pmd-ixgbe runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_ixgbe
 
-Package: libdpdk-librte-pmd-null-crypto1
+Package: librte-pmd-null-crypto1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -490,7 +490,7 @@ Description: Data Plane Development Kit (librte-pmd-null-crypto runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_null_crypto
 
-Package: libdpdk-librte-pmd-null1
+Package: librte-pmd-null1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -503,7 +503,7 @@ Description: Data Plane Development Kit (librte-pmd-null runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_null
 
-Package: libdpdk-librte-pmd-pcap1
+Package: librte-pmd-pcap1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -516,7 +516,7 @@ Description: Data Plane Development Kit (librte-pmd-pcap runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_pcap
 
-Package: libdpdk-librte-pmd-ring2
+Package: librte-pmd-ring2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -529,7 +529,7 @@ Description: Data Plane Development Kit (librte-pmd-ring runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_ring
 
-Package: libdpdk-librte-pmd-vhost1
+Package: librte-pmd-vhost1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -542,7 +542,7 @@ Description: Data Plane Development Kit (librte-pmd-vhost runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_vhost
 
-Package: libdpdk-librte-pmd-virtio1
+Package: librte-pmd-virtio1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -555,7 +555,7 @@ Description: Data Plane Development Kit (librte-pmd-virtio runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_virtio
 
-Package: libdpdk-librte-pmd-vmxnet3-uio1
+Package: librte-pmd-vmxnet3-uio1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -568,7 +568,7 @@ Description: Data Plane Development Kit (librte-pmd-vmxnet3-uio runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_vmxnet3_uio
 
-Package: libdpdk-librte-pmd-xenvirt1
+Package: librte-pmd-xenvirt1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -581,7 +581,7 @@ Description: Data Plane Development Kit (librte-pmd-xenvirt runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_xenvirt
 
-Package: libdpdk-librte-port2
+Package: librte-port2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -594,7 +594,7 @@ Description: Data Plane Development Kit (librte-port runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_port
 
-Package: libdpdk-librte-power1
+Package: librte-power1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -607,7 +607,7 @@ Description: Data Plane Development Kit (librte-power runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_power
 
-Package: libdpdk-librte-reorder1
+Package: librte-reorder1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -620,7 +620,7 @@ Description: Data Plane Development Kit (librte-reorder runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_reorder
 
-Package: libdpdk-librte-ring1
+Package: librte-ring1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -633,7 +633,7 @@ Description: Data Plane Development Kit (librte_ring runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_ring
 
-Package: libdpdk-librte-sched1
+Package: librte-sched1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -646,7 +646,7 @@ Description: Data Plane Development Kit (librte_sched runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_sched
 
-Package: libdpdk-librte-table2
+Package: librte-table2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -659,7 +659,7 @@ Description: Data Plane Development Kit (librte_table runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_table
 
-Package: libdpdk-librte-timer1
+Package: librte-timer1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -672,7 +672,7 @@ Description: Data Plane Development Kit (librte_timer runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_timer
 
-Package: libdpdk-librte-vhost2
+Package: librte-vhost2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same

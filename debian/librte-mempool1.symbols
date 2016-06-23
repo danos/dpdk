@@ -1,0 +1,15 @@
+librte_mempool.so.1 librte-mempool1 #MINVER#
+ DPDK_2.0@DPDK_2.0 16.04
+ rte_dom0_mempool_create@DPDK_2.0 16.04
+ rte_mempool_audit@DPDK_2.0 16.04
+ rte_mempool_calc_obj_size@DPDK_2.0 16.04
+ rte_mempool_count@DPDK_2.0 16.04
+ rte_mempool_create@DPDK_2.0 16.04
+ rte_mempool_dump@DPDK_2.0 16.04
+ rte_mempool_list_dump@DPDK_2.0 16.04
+ rte_mempool_lookup@DPDK_2.0 16.04
+ rte_mempool_obj_iter@DPDK_2.0 16.04
+ rte_mempool_walk@DPDK_2.0 16.04
+ rte_mempool_xmem_create@DPDK_2.0 16.04
+ rte_mempool_xmem_size@DPDK_2.0 16.04
+ rte_mempool_xmem_usage@DPDK_2.0 16.04
