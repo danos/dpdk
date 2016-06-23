@@ -223,7 +223,7 @@ Section: libs
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__eal_8h.html
 Pre-Depends: ${misc:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}, librte-mempool1
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
 Description: Data Plane Development Kit (librte-eal runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
