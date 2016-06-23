@@ -52,12 +52,12 @@ build-config:
 	echo EXTRA_LDFLAGS: $$EXTRA_LDFLAGS
 	$(MAKE) O=$(DPDK_STATIC_DIR) T=$(DPDK_CONFIG) config
 	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
-	        -e 's,(RTE_NEXT_ABI=).*,\1n,' \
-                -e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1n,' \
-                -e 's,(CONFIG_RTE_KNI_KMOD=).*,\1n,' \
-	        -e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
-	        -e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
-	        $(DPDK_STATIC_DIR)/.config
+		-e 's,(RTE_NEXT_ABI=).*,\1n,' \
+		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1n,' \
+		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1n,' \
+		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
+		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
+		$(DPDK_STATIC_DIR)/.config
 
 build-indep: build-config
 	dh_testdir
@@ -77,7 +77,7 @@ build-arch: build-config
 	# used to get static libraries.
 	cp -a $(DPDK_STATIC_DIR) $(DPDK_SHARED_DIR)
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
-	        $(DPDK_SHARED_DIR)/.config
+		$(DPDK_SHARED_DIR)/.config
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) build
 
 build: build-arch build-indep
