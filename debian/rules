@@ -46,6 +46,8 @@ clean:
 
 build-config:
 	dh_testdir
+	# report dpkg-buildflags status to build log
+	dpkg-buildflags --status
 	$(MAKE) O=$(DPDK_STATIC_DIR) T=$(DPDK_CONFIG) config
 	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
 	        -e 's,(RTE_NEXT_ABI=).*,\1n,' \
