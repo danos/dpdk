@@ -22,7 +22,8 @@ export DEB_CFLAGS_MAINT_APPEND  = -fPIC
 
 include /usr/share/dpkg/buildflags.mk
 export EXTRA_CFLAGS=$(CFLAGS)
-export EXTRA_LDFLAGS=$(LDFLAGS)
+# need to be stripped as DPDK build system adds them and it would be -Wl,-Wl,opt
+export EXTRA_LDFLAGS=$(shell echo $(LDFLAGS) | sed 's/-Wl,//g')
 
 # People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
 # RTE_TARGET via environment variables if they like
