@@ -7,23 +7,22 @@ export DH_OPTIONS=-v
 VERSION := $(shell dpkg-parsechangelog | sed -nr '/^Version:/s/Version: (.*:)?(.*)-(.*)/\2/p')
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
-DPKG_EXPORT_BUILDFLAGS = 1
 include /usr/share/dpkg/default.mk
 
 DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
 
 # see FEATURE AREAS in dpkg-buildflags(1)
-export DEB_BUILD_MAINT_OPTIONS = hardening=+all
-
-# build with debug symbols, dh_strip will create -dgbsyms packages by that
-# also export -fPIC for the static build (already used by shared by default)
-export EXTRA_CFLAGS = -g -fPIC
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
 
 # see ENVIRONMENT in dpkg-buildflags(1)
 # package maintainers to append CFLAGS
-#export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
+export DEB_CFLAGS_MAINT_APPEND  = -fPIC
 # package maintainers to append LDFLAGS
 #export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+
+include /usr/share/dpkg/buildflags.mk
+export EXTRA_CFLAGS=$(CFLAGS)
+export EXTRA_LDFLAGS=$(LDFLAGS)
 
 # People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
 # RTE_TARGET via environment variables if they like
@@ -48,6 +47,8 @@ build-config:
 	dh_testdir
 	# report dpkg-buildflags status to build log
 	dpkg-buildflags --status
+	echo EXTRA_CFLAGS $$EXTRA_CFLAGS
+	echo EXTRA_LDFLAGS: $$EXTRA_LDFLAGS
 	$(MAKE) O=$(DPDK_STATIC_DIR) T=$(DPDK_CONFIG) config
 	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
 	        -e 's,(RTE_NEXT_ABI=).*,\1n,' \
