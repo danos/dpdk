@@ -1,7 +1,8 @@
 #!/usr/bin/make -f
 # See debhelper(7) (uncomment to enable)
 # output every command that modifies files on the build system.
-#export DH_VERBOSE = 1
+export DH_VERBOSE=1
+export DH_OPTIONS=-v
 
 VERSION := $(shell dpkg-parsechangelog | sed -nr '/^Version:/s/Version: (.*:)?(.*)-(.*)/\2/p')
 
@@ -60,7 +61,7 @@ build-indep: build-config
 
 build-arch: build-config
 	dh_testdir
-	$(MAKE) O=$(DPDK_STATIC_DIR) build
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) build
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
 	# (but not both).
@@ -73,7 +74,7 @@ build-arch: build-config
 	cp -a $(DPDK_STATIC_DIR) $(DPDK_SHARED_DIR)
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 	        $(DPDK_SHARED_DIR)/.config
-	$(MAKE) O=$(DPDK_SHARED_DIR) build
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) build
 
 build: build-arch build-indep
 
