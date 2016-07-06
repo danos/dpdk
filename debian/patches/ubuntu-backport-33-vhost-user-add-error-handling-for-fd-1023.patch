@@ -2,7 +2,7 @@ Description: backport of dpdk fix for LP: #1566874
 
 Forwarded: n/a (already discussed upstream)
 Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
-Last-Update: 2016-04-11
+Last-Update: 2016-06-06
 
 Extended by Christian Ehrhardt <christian.ehrhardt@canonical.com>
 Close fd on vserver->listenfd (Part of the upstream discussion)
@@ -38,10 +38,10 @@ Signed-off-by: Patrik Andersson <patrik.r.andersson@ericsson.com>
  vhost-net-user.c |   23 +++++++++++++++++++++--
  2 files changed, 27 insertions(+), 7 deletions(-)
 
-Index: dpdk/lib/librte_vhost/vhost_user/fd_man.c
+Index: deb_dpdk/lib/librte_vhost/vhost_user/fd_man.c
 ===================================================================
---- dpdk.orig/lib/librte_vhost/vhost_user/fd_man.c
-+++ dpdk/lib/librte_vhost/vhost_user/fd_man.c
+--- deb_dpdk.orig/lib/librte_vhost/vhost_user/fd_man.c
++++ deb_dpdk/lib/librte_vhost/vhost_user/fd_man.c
 @@ -71,20 +71,22 @@ fdset_find_free_slot(struct fdset *pfdse
  	return fdset_find_fd(pfdset, -1);
  }
@@ -82,60 +82,48 @@ Index: dpdk/lib/librte_vhost/vhost_user/fd_man.c
  	pfdset->num++;
  
  	pthread_mutex_unlock(&pfdset->fd_mutex);
-Index: dpdk/lib/librte_vhost/vhost_user/vhost-net-user.c
+Index: deb_dpdk/lib/librte_vhost/vhost_user/vhost-net-user.c
 ===================================================================
---- dpdk.orig/lib/librte_vhost/vhost_user/vhost-net-user.c
-+++ dpdk/lib/librte_vhost/vhost_user/vhost-net-user.c
-@@ -288,6 +288,7 @@ vserver_new_vq_conn(int fd, void *dat, _
- 	int fh;
- 	struct vhost_device_ctx vdev_ctx = { (pid_t)0, 0 };
- 	unsigned int size;
+--- deb_dpdk.orig/lib/librte_vhost/vhost_user/vhost-net-user.c
++++ deb_dpdk/lib/librte_vhost/vhost_user/vhost-net-user.c
+@@ -257,6 +257,7 @@ vhost_user_add_connection(int fd, struct
+ 	int vid;
+ 	size_t size;
+ 	struct vhost_user_connection *conn;
 +	int ret;
  
- 	conn_fd = accept(fd, NULL, NULL);
- 	RTE_LOG(INFO, VHOST_CONFIG,
-@@ -317,8 +318,15 @@ vserver_new_vq_conn(int fd, void *dat, _
+ 	conn = malloc(sizeof(*conn));
+ 	if (conn == NULL) {
+@@ -278,7 +279,15 @@ vhost_user_add_connection(int fd, struct
  
- 	ctx->vserver = vserver;
- 	ctx->fh = fh;
--	fdset_add(&g_vhost_server.fdset,
-+	ret = fdset_add(&g_vhost_server.fdset,
- 		conn_fd, vserver_message_handler, NULL, ctx);
+ 	conn->vsocket = vsocket;
+ 	conn->vid = vid;
+-	fdset_add(&vhost_user.fdset, fd, vhost_user_msg_handler, NULL, conn);
++	ret = fdset_add(&vhost_user.fdset, fd, vhost_user_msg_handler,
++			NULL, conn);
 +	if (ret < 0) {
-+		free(ctx);
-+		close(conn_fd);
++		free(conn);
++		close(fd);
 +		RTE_LOG(ERR, VHOST_CONFIG,
-+				"failed to add fd %d into vhost server fdset\n",
-+				conn_fd);
++			"failed to add fd %d into vhost server fdset\n",
++			fd);
 +	}
  }
  
- /* callback when there is message on the connfd */
-@@ -453,6 +461,7 @@ int
- rte_vhost_driver_register(const char *path)
- {
- 	struct vhost_server *vserver;
-+	int ret;
+ /* call back when there is new vhost-user connection from client  */
+@@ -469,8 +478,14 @@ vhost_user_create_server(struct vhost_us
+ 		goto err;
  
- 	pthread_mutex_lock(&g_vhost_server.server_mutex);
- 
-@@ -478,8 +487,18 @@ rte_vhost_driver_register(const char *pa
- 
- 	vserver->path = strdup(path);
- 
--	fdset_add(&g_vhost_server.fdset, vserver->listenfd,
-+	ret = fdset_add(&g_vhost_server.fdset, vserver->listenfd,
- 		vserver_new_vq_conn, NULL, vserver);
+ 	vsocket->listenfd = fd;
+-	fdset_add(&vhost_user.fdset, fd, vhost_user_server_new_connection,
++	ret = fdset_add(&vhost_user.fdset, fd, vhost_user_server_new_connection,
+ 		  NULL, vsocket);
 +	if (ret < 0) {
-+		pthread_mutex_unlock(&g_vhost_server.server_mutex);
 +		RTE_LOG(ERR, VHOST_CONFIG,
-+				"failed to add listen fd %d to vhost server fdset\n",
-+				vserver->listenfd);
-+		close(vserver->listenfd);
-+		free(vserver->path);
-+		free(vserver);
-+		return -1;
++			"failed to add listen fd %d to vhost server fdset\n",
++			fd);
++		goto err;
 +	}
  
- 	g_vhost_server.server[g_vhost_server.vserver_cnt++] = vserver;
- 	pthread_mutex_unlock(&g_vhost_server.server_mutex);
+ 	return 0;
+ 

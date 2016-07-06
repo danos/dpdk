@@ -29,10 +29,10 @@ Forwarded: yes
 Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
 Last-Update: 2016-05-18
 
-Index: dpdk/lib/librte_eal/common/eal_common_options.c
+Index: deb_dpdk/lib/librte_eal/common/eal_common_options.c
 ===================================================================
---- dpdk.orig/lib/librte_eal/common/eal_common_options.c
-+++ dpdk/lib/librte_eal/common/eal_common_options.c
+--- deb_dpdk.orig/lib/librte_eal/common/eal_common_options.c
++++ deb_dpdk/lib/librte_eal/common/eal_common_options.c
 @@ -95,6 +95,8 @@ eal_long_options[] = {
  	{OPT_VFIO_INTR,         1, NULL, OPT_VFIO_INTR_NUM        },
  	{OPT_VMWARE_TSC_MAP,    0, NULL, OPT_VMWARE_TSC_MAP_NUM   },
@@ -42,7 +42,7 @@ Index: dpdk/lib/librte_eal/common/eal_common_options.c
  	{0,                     0, NULL, 0                        }
  };
  
-@@ -153,6 +155,8 @@ eal_reset_internal_config(struct interna
+@@ -157,6 +159,8 @@ eal_reset_internal_config(struct interna
  #endif
  	internal_cfg->vmware_tsc_map = 0;
  	internal_cfg->create_uio_dev = 0;
@@ -51,10 +51,10 @@ Index: dpdk/lib/librte_eal/common/eal_common_options.c
  }
  
  static int
-Index: dpdk/lib/librte_eal/common/eal_internal_cfg.h
+Index: deb_dpdk/lib/librte_eal/common/eal_internal_cfg.h
 ===================================================================
---- dpdk.orig/lib/librte_eal/common/eal_internal_cfg.h
-+++ dpdk/lib/librte_eal/common/eal_internal_cfg.h
+--- deb_dpdk.orig/lib/librte_eal/common/eal_internal_cfg.h
++++ deb_dpdk/lib/librte_eal/common/eal_internal_cfg.h
 @@ -83,6 +83,8 @@ struct internal_config {
  	volatile enum rte_intr_mode vfio_intr_mode;
  	const char *hugefile_prefix;      /**< the base filename of hugetlbfs files */
@@ -64,10 +64,10 @@ Index: dpdk/lib/librte_eal/common/eal_internal_cfg.h
  
  	unsigned num_hugepage_sizes;      /**< how many sizes on this system */
  	struct hugepage_info hugepage_info[MAX_HUGEPAGE_SIZES];
-Index: dpdk/lib/librte_eal/common/eal_options.h
+Index: deb_dpdk/lib/librte_eal/common/eal_options.h
 ===================================================================
---- dpdk.orig/lib/librte_eal/common/eal_options.h
-+++ dpdk/lib/librte_eal/common/eal_options.h
+--- deb_dpdk.orig/lib/librte_eal/common/eal_options.h
++++ deb_dpdk/lib/librte_eal/common/eal_options.h
 @@ -83,6 +83,10 @@ enum {
  	OPT_VMWARE_TSC_MAP_NUM,
  #define OPT_XEN_DOM0          "xen-dom0"
@@ -79,32 +79,31 @@ Index: dpdk/lib/librte_eal/common/eal_options.h
  	OPT_LONG_MAX_NUM
  };
  
-Index: dpdk/lib/librte_vhost/vhost_user/vhost-net-user.c
+Index: deb_dpdk/lib/librte_vhost/vhost_user/vhost-net-user.c
 ===================================================================
---- dpdk.orig/lib/librte_vhost/vhost_user/vhost-net-user.c
-+++ dpdk/lib/librte_vhost/vhost_user/vhost-net-user.c
-@@ -51,6 +51,8 @@
- #include "vhost-net.h"
- #include "virtio-net-user.h"
+--- deb_dpdk.orig/lib/librte_vhost/vhost_user/vhost-net-user.c
++++ deb_dpdk/lib/librte_vhost/vhost_user/vhost-net-user.c
+@@ -77,6 +77,8 @@ struct vhost_user {
+ 	pthread_mutex_t mutex;
+ };
  
 +#include <rte_eal.h>
 +
  #define MAX_VIRTIO_BACKLOG 128
  
- static void vserver_new_vq_conn(int fd, void *data, int *remove);
-@@ -486,6 +488,8 @@ rte_vhost_driver_register(const char *pa
- 		return -1;
- 	}
- 
+ static void vhost_user_server_new_connection(int fd, void *data, int *remove);
+@@ -629,6 +631,7 @@ rte_vhost_driver_register(const char *pa
+ 	if (!vsocket)
+ 		goto out;
+ 	memset(vsocket, 0, sizeof(struct vhost_user_socket));
 +	rte_eal_set_socket_permissions(path);
-+
- 	vserver->path = strdup(path);
- 	vserver->fh = -1;
+ 	vsocket->path = strdup(path);
  
-Index: dpdk/lib/librte_eal/linuxapp/eal/eal.c
+ 	if ((flags & RTE_VHOST_USER_CLIENT) != 0) {
+Index: deb_dpdk/lib/librte_eal/linuxapp/eal/eal.c
 ===================================================================
---- dpdk.orig/lib/librte_eal/linuxapp/eal/eal.c
-+++ dpdk/lib/librte_eal/linuxapp/eal/eal.c
+--- deb_dpdk.orig/lib/librte_eal/linuxapp/eal/eal.c
++++ deb_dpdk/lib/librte_eal/linuxapp/eal/eal.c
 @@ -53,6 +53,9 @@
  #if defined(RTE_ARCH_X86)
  #include <sys/io.h>
@@ -124,7 +123,7 @@ Index: dpdk/lib/librte_eal/linuxapp/eal/eal.c
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -618,6 +623,14 @@ eal_parse_args(int argc, char **argv)
+@@ -600,6 +605,14 @@ eal_parse_args(int argc, char **argv)
  			internal_config.create_uio_dev = 1;
  			break;
  
@@ -139,7 +138,7 @@ Index: dpdk/lib/librte_eal/linuxapp/eal/eal.c
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -934,3 +947,172 @@ rte_eal_check_module(const char *module_
+@@ -910,3 +923,172 @@ rte_eal_check_module(const char *module_
  	/* Module has been found */
  	return 1;
  }
@@ -312,10 +311,10 @@ Index: dpdk/lib/librte_eal/linuxapp/eal/eal.c
 +		vhost_set_ownership(path);
 +	}
 +}
-Index: dpdk/lib/librte_eal/common/include/rte_eal.h
+Index: deb_dpdk/lib/librte_eal/common/include/rte_eal.h
 ===================================================================
---- dpdk.orig/lib/librte_eal/common/include/rte_eal.h
-+++ dpdk/lib/librte_eal/common/include/rte_eal.h
+--- deb_dpdk.orig/lib/librte_eal/common/include/rte_eal.h
++++ deb_dpdk/lib/librte_eal/common/include/rte_eal.h
 @@ -252,6 +252,11 @@ static inline int rte_gettid(void)
  	return RTE_PER_LCORE(_thread_id);
  }
@@ -328,10 +327,10 @@ Index: dpdk/lib/librte_eal/common/include/rte_eal.h
  #ifdef __cplusplus
  }
  #endif
-Index: dpdk/doc/guides/testpmd_app_ug/run_app.rst
+Index: deb_dpdk/doc/guides/testpmd_app_ug/run_app.rst
 ===================================================================
---- dpdk.orig/doc/guides/testpmd_app_ug/run_app.rst
-+++ dpdk/doc/guides/testpmd_app_ug/run_app.rst
+--- deb_dpdk.orig/doc/guides/testpmd_app_ug/run_app.rst
++++ deb_dpdk/doc/guides/testpmd_app_ug/run_app.rst
 @@ -156,6 +156,25 @@ See the DPDK Getting Started Guides for
  
      Use malloc instead of hugetlbfs.
@@ -358,10 +357,10 @@ Index: dpdk/doc/guides/testpmd_app_ug/run_app.rst
  
  Testpmd Command-line Options
  ----------------------------
-Index: dpdk/lib/librte_eal/linuxapp/eal/rte_eal_version.map
+Index: deb_dpdk/lib/librte_eal/linuxapp/eal/rte_eal_version.map
 ===================================================================
---- dpdk.orig/lib/librte_eal/linuxapp/eal/rte_eal_version.map
-+++ dpdk/lib/librte_eal/linuxapp/eal/rte_eal_version.map
+--- deb_dpdk.orig/lib/librte_eal/linuxapp/eal/rte_eal_version.map
++++ deb_dpdk/lib/librte_eal/linuxapp/eal/rte_eal_version.map
 @@ -138,6 +138,7 @@ DPDK_2.2 {
  	rte_keepalive_mark_alive;
  	rte_keepalive_register_core;
