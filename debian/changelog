@@ -1,3 +1,37 @@
+dpdk (16.07-rc1-1) UNRELEASED; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * Merge with upstream DPDK 16.07-rc1 release
+  * droping patches/backports that are already upstream in DPDK 16.07
+    - d/p/ubuntu-backport-39-lpm-fix-freeing-in-compatibility-mode.patch
+      This was formerly part of a combined patch that we dropped because the
+      majority is upstream (d/p/ubuntu-fix-lpm-use-after-free-and-leak.patch).
+    - d/p/ubuntu-backport-40-linking-fixes-stage-[1-4]-4.patch
+      d/p/ubuntu-backport-44-linking-cleanup.patch
+      Fixing underlinking and overlinking issues in apps and libraries.
+    - d/p/ubuntu-backport-41-fix-install-tar-1.29.patch
+      Fix issues with tar >=1.29 (Yakkety)
+    - d/p/ubuntu-backport-42-increase-default-logging-level.patch
+      avoid default debug messages causing a perf degradation
+    - d/p/ubuntu-backport-43-fix-level-type-retrieving.patch
+      Fix type retrieving which was broken in standard threads
+    - d/p/ubuntu-fix-xenvirt-support-dynamic-page-size.patch: fix build
+      failure on arm64
+  * droping patches/backports that are no more applicable
+    - d/p/ubuntu-backport-38-* was never accepted despite looking good.
+      Upstream discussion around proper successor started.
+  * keeping patches:
+    - d/p/ubuntu-backport-33-vhost-user-add-error-handling-for-fd-1023.patch
+      Was never accepted, Upstream discussion around proper successor started.
+  * adapt debian/* to upstream changes
+    - update symbols and ABI versions
+    - add librte-pdump1
+  * adding changes
+   - fix exported symbols of librte_pmd_bond (sent upstream, can be dropped
+     later)
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Wed, 06 Jul 2016 09:40:49 +0200
+
 dpdk (16.04-1) UNRELEASED; urgency=medium
 
   [ Christian Ehrhardt ]
@@ -31,7 +65,7 @@ dpdk (16.04-1) UNRELEASED; urgency=medium
       Fixing underlinking and overlinking issues in apps and libraries.
     - d/p/ubuntu-backport-41-fix-install-tar-1.29.patch
       Fix issues with tar >=1.29 (Yakkety)
-    - d/p/ubuntu-backport-43-increase-default-logging-level.patch
+    - d/p/ubuntu-backport-42-increase-default-logging-level.patch
       avoid default debug messages causing a perf degradation
     - d/p/ubuntu-backport-43-fix-level-type-retrieving.patch
       Fix type retrieving which was broken in standard threads
