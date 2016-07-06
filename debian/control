@@ -108,6 +108,7 @@ Depends: ${misc:Depends},
          librte-mbuf2 (= ${binary:Version}),
          librte-mempool2 (= ${binary:Version}),
          librte-meter1 (= ${binary:Version}),
+         librte-pdump1 (= ${binary:Version}),
          librte-pipeline3 (= ${binary:Version}),
          librte-pmd-af-packet1 (= ${binary:Version}),
          librte-pmd-bond1 (= ${binary:Version}),
@@ -685,3 +686,15 @@ Description: Data Plane Development Kit (librte_vhost runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_vhost
+
+Package: librte-pdump1
+Architecture: amd64 arm64 i386
+Section: libs
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte_pdump runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ This package contains the runtime libraries for librte_pdump
