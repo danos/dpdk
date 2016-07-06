@@ -35,6 +35,7 @@ default_path=$PATH
 # Load config options:
 # - AESNI_MULTI_BUFFER_LIB_PATH
 # - DPDK_BUILD_TEST_CONFIGS (defconfig1+option1+option2 defconfig2)
+# - DPDK_DEP_ARCHIVE
 # - DPDK_DEP_CFLAGS
 # - DPDK_DEP_LDFLAGS
 # - DPDK_DEP_MOFED (y/[n])
@@ -44,7 +45,8 @@ default_path=$PATH
 # - DPDK_DEP_ZLIB (y/[n])
 # - DPDK_MAKE_JOBS (int)
 # - DPDK_NOTIFY (notify-send)
-# - LIBSSO_PATH
+# - LIBSSO_SNOW3G_PATH
+# - LIBSSO_KASUMI_PATH
 . $(dirname $(readlink -e $0))/load-devel-config.sh
 
 print_usage () {
@@ -61,6 +63,7 @@ print_help () {
 	        -h    this help
 	        -jX   use X parallel jobs in "make"
 	        -s    short test with only first config without examples/doc
+	        -v    verbose build
 
 	config: defconfig[[~][+]option1[[~][+]option2...]]
 	        Example: x86_64-native-linuxapp-gcc+debug~RXTX_CALLBACKS
@@ -111,6 +114,7 @@ reset_env ()
 {
 	export PATH=$default_path
 	unset CROSS
+	unset DPDK_DEP_ARCHIVE
 	unset DPDK_DEP_CFLAGS
 	unset DPDK_DEP_LDFLAGS
 	unset DPDK_DEP_MOFED
@@ -119,13 +123,19 @@ reset_env ()
 	unset DPDK_DEP_SZE
 	unset DPDK_DEP_ZLIB
 	unset AESNI_MULTI_BUFFER_LIB_PATH
-	unset LIBSSO_PATH
+	unset LIBSSO_SNOW3G_PATH
+	unset LIBSSO_KASUMI_PATH
 	unset PQOS_INSTALL_PATH
 }
 
 config () # <directory> <target> <options>
 {
-	if [ ! -e $1/.config ] ; then
+	reconfig=false
+	if git rev-parse 2>&- && [ -n "$(git diff HEAD~ -- config)" ] ; then
+		echo 'Default config may have changed'
+		reconfig=true
+	fi
+	if [ ! -e $1/.config ] || $reconfig ; then
 		echo "================== Configure $1"
 		make T=$2 O=$1 config
 
@@ -138,6 +148,7 @@ config () # <directory> <target> <options>
 		! echo $3 | grep -q '+shared' || \
 		sed -ri         's,(SHARED_LIB=)n,\1y,' $1/.config
 		! echo $3 | grep -q '+debug' || ( \
+		sed -ri     's,(RTE_LOG_LEVEL=).*,\1RTE_LOG_DEBUG,' $1/.config
 		sed -ri           's,(_DEBUG.*=)n,\1y,' $1/.config
 		sed -ri            's,(_STAT.*=)n,\1y,' $1/.config
 		sed -ri 's,(TEST_PMD_RECORD_.*=)n,\1y,' $1/.config )
@@ -148,12 +159,16 @@ config () # <directory> <target> <options>
 		sed -ri         's,(PCI_CONFIG=)n,\1y,' $1/.config
 		sed -ri    's,(LIBRTE_IEEE1588=)n,\1y,' $1/.config
 		sed -ri             's,(BYPASS=)n,\1y,' $1/.config
+		test "$DPDK_DEP_ARCHIVE" != y || \
+		sed -ri       's,(RESOURCE_TAR=)n,\1y,' $1/.config
 		test "$DPDK_DEP_MOFED" != y || \
 		sed -ri           's,(MLX._PMD=)n,\1y,' $1/.config
 		test "$DPDK_DEP_SZE" != y || \
 		sed -ri       's,(PMD_SZEDATA2=)n,\1y,' $1/.config
 		test "$DPDK_DEP_ZLIB" != y || \
 		sed -ri          's,(BNX2X_PMD=)n,\1y,' $1/.config
+		test "$DPDK_DEP_ZLIB" != y || \
+		sed -ri           's,(QEDE_PMD=)n,\1y,' $1/.config
 		sed -ri            's,(NFP_PMD=)n,\1y,' $1/.config
 		test "$DPDK_DEP_PCAP" != y || \
 		sed -ri               's,(PCAP=)n,\1y,' $1/.config
@@ -161,8 +176,10 @@ config () # <directory> <target> <options>
 		sed -ri       's,(PMD_AESNI_MB=)n,\1y,' $1/.config
 		test -z "$AESNI_MULTI_BUFFER_LIB_PATH" || \
 		sed -ri      's,(PMD_AESNI_GCM=)n,\1y,' $1/.config
-		test -z "$LIBSSO_PATH" || \
+		test -z "$LIBSSO_SNOW3G_PATH" || \
 		sed -ri         's,(PMD_SNOW3G=)n,\1y,' $1/.config
+		test -z "$LIBSSO_KASUMI_PATH" || \
+		sed -ri         's,(PMD_KASUMI=)n,\1y,' $1/.config
 		test "$DPDK_DEP_SSL" != y || \
 		sed -ri            's,(PMD_QAT=)n,\1y,' $1/.config
 		sed -ri        's,(KNI_VHOST.*=)n,\1y,' $1/.config

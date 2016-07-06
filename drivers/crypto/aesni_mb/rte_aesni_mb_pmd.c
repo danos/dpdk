@@ -222,6 +222,9 @@ aesni_mb_set_session_cipher_parameters(const struct aesni_mb_ops *mb_ops,
 	case RTE_CRYPTO_CIPHER_AES_CBC:
 		sess->cipher.mode = CBC;
 		break;
+	case RTE_CRYPTO_CIPHER_AES_CTR:
+		sess->cipher.mode = CNTR;
+		break;
 	default:
 		MB_LOG_ERR("Unsupported cipher mode parameter");
 		return -1;
@@ -379,9 +382,11 @@ process_crypto_op(struct aesni_mb_qp *qp, struct rte_crypto_op *op,
 		/* append space for output data to mbuf */
 		char *odata = rte_pktmbuf_append(m_dst,
 				rte_pktmbuf_data_len(op->sym->m_src));
-		if (odata == NULL)
+		if (odata == NULL) {
 			MB_LOG_ERR("failed to allocate space in destination "
 					"mbuf for source data");
+			return NULL;
+		}
 
 		memcpy(odata, rte_pktmbuf_mtod(op->sym->m_src, void*),
 				rte_pktmbuf_data_len(op->sym->m_src));
@@ -560,7 +565,7 @@ aesni_mb_pmd_enqueue_burst(void *queue_pair, struct rte_crypto_op **ops,
 		goto flush_jobs;
 	else
 		qp->stats.enqueued_count += processed_jobs;
-		return i;
+	return i;
 
 flush_jobs:
 	/*

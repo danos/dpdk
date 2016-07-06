@@ -269,14 +269,18 @@ static int enicpmd_dev_rx_queue_setup(struct rte_eth_dev *eth_dev,
 	struct enic *enic = pmd_priv(eth_dev);
 
 	ENICPMD_FUNC_TRACE();
-	if (queue_idx >= ENIC_RQ_MAX) {
+	/* With Rx scatter support, two RQs are now used on VIC per RQ used
+	 * by the application.
+	 */
+	if (queue_idx * 2 >= ENIC_RQ_MAX) {
 		dev_err(enic,
-			"Max number of RX queues exceeded.  Max is %d\n",
+			"Max number of RX queues exceeded.  Max is %d. This PMD uses 2 RQs on VIC per RQ used by DPDK.\n",
 			ENIC_RQ_MAX);
 		return -EINVAL;
 	}
 
-	eth_dev->data->rx_queues[queue_idx] = (void *)&enic->rq[queue_idx];
+	eth_dev->data->rx_queues[queue_idx] =
+		(void *)&enic->rq[enic_sop_rq(queue_idx)];
 
 	ret = enic_alloc_rq(enic, queue_idx, socket_id, mp, nb_desc);
 	if (ret) {
@@ -435,7 +439,8 @@ static void enicpmd_dev_info_get(struct rte_eth_dev *eth_dev,
 	device_info->max_rx_queues = enic->rq_count;
 	device_info->max_tx_queues = enic->wq_count;
 	device_info->min_rx_bufsize = ENIC_MIN_MTU;
-	device_info->max_rx_pktlen = enic->config.mtu;
+	device_info->max_rx_pktlen = enic->rte_dev->data->mtu
+				   + ETHER_HDR_LEN + 4;
 	device_info->max_mac_addrs = 1;
 	device_info->rx_offload_capa =
 		DEV_RX_OFFLOAD_VLAN_STRIP |
@@ -455,8 +460,12 @@ static void enicpmd_dev_info_get(struct rte_eth_dev *eth_dev,
 static const uint32_t *enicpmd_dev_supported_ptypes_get(struct rte_eth_dev *dev)
 {
 	static const uint32_t ptypes[] = {
-		RTE_PTYPE_L3_IPV4,
-		RTE_PTYPE_L3_IPV6,
+		RTE_PTYPE_L3_IPV4_EXT_UNKNOWN,
+		RTE_PTYPE_L3_IPV6_EXT_UNKNOWN,
+		RTE_PTYPE_L4_TCP,
+		RTE_PTYPE_L4_UDP,
+		RTE_PTYPE_L4_FRAG,
+		RTE_PTYPE_L4_NONFRAG,
 		RTE_PTYPE_UNKNOWN
 	};
 
@@ -519,69 +528,12 @@ static void enicpmd_remove_mac_addr(struct rte_eth_dev *eth_dev, __rte_unused ui
 	enic_del_mac_address(enic);
 }
 
-
-static uint16_t enicpmd_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
-	uint16_t nb_pkts)
+static int enicpmd_mtu_set(struct rte_eth_dev *eth_dev, uint16_t mtu)
 {
-	uint16_t index;
-	unsigned int frags;
-	unsigned int pkt_len;
-	unsigned int seg_len;
-	unsigned int inc_len;
-	unsigned int nb_segs;
-	struct rte_mbuf *tx_pkt, *next_tx_pkt;
-	struct vnic_wq *wq = (struct vnic_wq *)tx_queue;
-	struct enic *enic = vnic_dev_priv(wq->vdev);
-	unsigned short vlan_id;
-	unsigned short ol_flags;
-	uint8_t last_seg, eop;
-	unsigned int host_tx_descs = 0;
+	struct enic *enic = pmd_priv(eth_dev);
 
-	for (index = 0; index < nb_pkts; index++) {
-		tx_pkt = *tx_pkts++;
-		inc_len = 0;
-		nb_segs = tx_pkt->nb_segs;
-		if (nb_segs > vnic_wq_desc_avail(wq)) {
-			if (index > 0)
-				enic_post_wq_index(wq);
-
-			/* wq cleanup and try again */
-			if (!enic_cleanup_wq(enic, wq) ||
-				(nb_segs > vnic_wq_desc_avail(wq))) {
-				return index;
-			}
-		}
-
-		pkt_len = tx_pkt->pkt_len;
-		vlan_id = tx_pkt->vlan_tci;
-		ol_flags = tx_pkt->ol_flags;
-		for (frags = 0; inc_len < pkt_len; frags++) {
-			if (!tx_pkt)
-				break;
-			next_tx_pkt = tx_pkt->next;
-			seg_len = tx_pkt->data_len;
-			inc_len += seg_len;
-
-			host_tx_descs++;
-			last_seg = 0;
-			eop = 0;
-			if ((pkt_len == inc_len) || !next_tx_pkt) {
-				eop = 1;
-				/* post if last packet in batch or > thresh */
-				if ((index == (nb_pkts - 1)) ||
-				   (host_tx_descs > ENIC_TX_POST_THRESH)) {
-					last_seg = 1;
-					host_tx_descs = 0;
-				}
-			}
-			enic_send_pkt(enic, wq, tx_pkt, (unsigned short)seg_len,
-				      !frags, eop, last_seg, ol_flags, vlan_id);
-			tx_pkt = next_tx_pkt;
-		}
-	}
-
-	enic_cleanup_wq(enic, wq);
-	return index;
+	ENICPMD_FUNC_TRACE();
+	return enic_set_mtu(enic, mtu);
 }
 
 static const struct eth_dev_ops enicpmd_eth_dev_ops = {
@@ -601,7 +553,7 @@ static const struct eth_dev_ops enicpmd_eth_dev_ops = {
 	.queue_stats_mapping_set = NULL,
 	.dev_infos_get        = enicpmd_dev_info_get,
 	.dev_supported_ptypes_get = enicpmd_dev_supported_ptypes_get,
-	.mtu_set              = NULL,
+	.mtu_set              = enicpmd_mtu_set,
 	.vlan_filter_set      = enicpmd_vlan_filter_set,
 	.vlan_tpid_set        = NULL,
 	.vlan_offload_set     = enicpmd_vlan_offload_set,
@@ -642,7 +594,7 @@ static int eth_enicpmd_dev_init(struct rte_eth_dev *eth_dev)
 	enic->rte_dev = eth_dev;
 	eth_dev->dev_ops = &enicpmd_eth_dev_ops;
 	eth_dev->rx_pkt_burst = &enic_recv_pkts;
-	eth_dev->tx_pkt_burst = &enicpmd_xmit_pkts;
+	eth_dev->tx_pkt_burst = &enic_xmit_pkts;
 
 	pdev = eth_dev->pci_dev;
 	rte_eth_copy_pci_info(eth_dev, pdev);
