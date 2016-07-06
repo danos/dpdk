@@ -465,24 +465,6 @@ eal_parse_vfio_intr(const char *mode)
 	return -1;
 }
 
-static inline size_t
-eal_get_hugepage_mem_size(void)
-{
-	uint64_t size = 0;
-	unsigned i, j;
-
-	for (i = 0; i < internal_config.num_hugepage_sizes; i++) {
-		struct hugepage_info *hpi = &internal_config.hugepage_info[i];
-		if (hpi->hugedir != NULL) {
-			for (j = 0; j < RTE_MAX_NUMA_NODES; j++) {
-				size += hpi->hugepage_sz * hpi->num_pages[j];
-			}
-		}
-	}
-
-	return (size < SIZE_MAX) ? (size_t)(size) : SIZE_MAX;
-}
-
 /* Parse the arguments for --log-level only */
 static void
 eal_log_level_parse(int argc, char **argv)
@@ -715,12 +697,8 @@ rte_eal_iopl_init(void)
 #if defined(RTE_ARCH_X86)
 	if (iopl(3) != 0)
 		return -1;
-	return 0;
-#elif defined(RTE_ARCH_ARM) || defined(RTE_ARCH_ARM64)
-	return 0; /* iopl syscall not supported for ARM/ARM64 */
-#else
-	return -1;
 #endif
+	return 0;
 }
 
 /* Launch threads, called at application init(). */
@@ -766,8 +744,6 @@ rte_eal_init(int argc, char **argv)
 	if (internal_config.memory == 0 && internal_config.force_sockets == 0) {
 		if (internal_config.no_hugetlbfs)
 			internal_config.memory = MEMSIZE_IF_NO_HUGE_PAGE;
-		else
-			internal_config.memory = eal_get_hugepage_mem_size();
 	}
 
 	if (internal_config.vmware_tsc_map == 1) {
@@ -863,7 +839,7 @@ rte_eal_init(int argc, char **argv)
 		ret = rte_thread_setname(lcore_config[i].thread_id,
 						thread_name);
 		if (ret != 0)
-			RTE_LOG(ERR, EAL,
+			RTE_LOG(DEBUG, EAL,
 				"Cannot set name for lcore thread\n");
 	}
 

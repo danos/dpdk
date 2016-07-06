@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2015 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -111,7 +111,10 @@ static int i40evf_dev_link_update(struct rte_eth_dev *dev,
 static void i40evf_dev_stats_get(struct rte_eth_dev *dev,
 				struct rte_eth_stats *stats);
 static int i40evf_dev_xstats_get(struct rte_eth_dev *dev,
-				 struct rte_eth_xstats *xstats, unsigned n);
+				 struct rte_eth_xstat *xstats, unsigned n);
+static int i40evf_dev_xstats_get_names(struct rte_eth_dev *dev,
+				       struct rte_eth_xstat_name *xstats_names,
+				       unsigned limit);
 static void i40evf_dev_xstats_reset(struct rte_eth_dev *dev);
 static int i40evf_vlan_filter_set(struct rte_eth_dev *dev,
 				  uint16_t vlan_id, int on);
@@ -196,6 +199,7 @@ static const struct eth_dev_ops i40evf_eth_dev_ops = {
 	.link_update          = i40evf_dev_link_update,
 	.stats_get            = i40evf_dev_stats_get,
 	.xstats_get           = i40evf_dev_xstats_get,
+	.xstats_get_names     = i40evf_dev_xstats_get_names,
 	.xstats_reset         = i40evf_dev_xstats_reset,
 	.dev_close            = i40evf_dev_close,
 	.dev_infos_get        = i40evf_dev_info_get,
@@ -214,6 +218,9 @@ static const struct eth_dev_ops i40evf_eth_dev_ops = {
 	.rx_descriptor_done   = i40e_dev_rx_descriptor_done,
 	.tx_queue_setup       = i40e_dev_tx_queue_setup,
 	.tx_queue_release     = i40e_dev_tx_queue_release,
+	.rx_queue_count       = i40e_dev_rx_queue_count,
+	.rxq_info_get         = i40e_rxq_info_get,
+	.txq_info_get         = i40e_txq_info_get,
 	.mac_addr_add	      = i40evf_add_mac_addr,
 	.mac_addr_remove      = i40evf_del_mac_addr,
 	.reta_update          = i40evf_dev_rss_reta_update,
@@ -327,8 +334,7 @@ i40evf_execute_vf_cmd(struct rte_eth_dev *dev, struct vf_cmd_info *args)
 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
 	struct i40evf_arq_msg_info info;
 	enum i40evf_aq_result ret;
-	int err = -1;
-	int i = 0;
+	int err, i = 0;
 
 	if (_atomic_set_cmd(vf, args->ops))
 		return -1;
@@ -349,19 +355,19 @@ i40evf_execute_vf_cmd(struct rte_eth_dev *dev, struct vf_cmd_info *args)
 	switch (args->ops) {
 	case I40E_VIRTCHNL_OP_RESET_VF:
 		/*no need to process in this function */
+		err = 0;
 		break;
 	case I40E_VIRTCHNL_OP_VERSION:
 	case I40E_VIRTCHNL_OP_GET_VF_RESOURCES:
 		/* for init adminq commands, need to poll the response */
+		err = -1;
 		do {
 			ret = i40evf_read_pfmsg(dev, &info);
 			if (ret == I40EVF_MSG_CMD) {
 				err = 0;
 				break;
-			} else if (ret == I40EVF_MSG_ERR) {
-				err = -1;
+			} else if (ret == I40EVF_MSG_ERR)
 				break;
-			}
 			rte_delay_ms(ASQ_DELAY_MS);
 			/* If don't read msg or read sys event, continue */
 		} while (i++ < MAX_TRY_TIMES);
@@ -370,6 +376,7 @@ i40evf_execute_vf_cmd(struct rte_eth_dev *dev, struct vf_cmd_info *args)
 
 	default:
 		/* for other adminq in running time, waiting the cmd done flag */
+		err = -1;
 		do {
 			if (vf->pend_cmd == I40E_VIRTCHNL_OP_UNKNOWN) {
 				err = 0;
@@ -538,7 +545,7 @@ i40evf_config_vlan_pvid(struct rte_eth_dev *dev,
 	struct vf_cmd_info args;
 	struct i40e_virtchnl_pvid_info tpid_info;
 
-	if (dev == NULL || info == NULL) {
+	if (info == NULL) {
 		PMD_DRV_LOG(ERR, "invalid parameters");
 		return I40E_ERR_PARAM;
 	}
@@ -981,8 +988,23 @@ i40evf_dev_xstats_reset(struct rte_eth_dev *dev)
 	vf->vsi.eth_stats_offset = vf->vsi.eth_stats;
 }
 
+static int i40evf_dev_xstats_get_names(__rte_unused struct rte_eth_dev *dev,
+				      struct rte_eth_xstat_name *xstats_names,
+				      __rte_unused unsigned limit)
+{
+	unsigned i;
+
+	if (xstats_names != NULL)
+		for (i = 0; i < I40EVF_NB_XSTATS; i++) {
+			snprintf(xstats_names[i].name,
+				sizeof(xstats_names[i].name),
+				"%s", rte_i40evf_stats_strings[i].name);
+		}
+	return I40EVF_NB_XSTATS;
+}
+
 static int i40evf_dev_xstats_get(struct rte_eth_dev *dev,
-				 struct rte_eth_xstats *xstats, unsigned n)
+				 struct rte_eth_xstat *xstats, unsigned n)
 {
 	int ret;
 	unsigned i;
@@ -1000,8 +1022,7 @@ static int i40evf_dev_xstats_get(struct rte_eth_dev *dev,
 
 	/* loop over xstats array and values from pstats */
 	for (i = 0; i < I40EVF_NB_XSTATS; i++) {
-		snprintf(xstats[i].name, sizeof(xstats[i].name),
-			 "%s", rte_i40evf_stats_strings[i].name);
+		xstats[i].id = i;
 		xstats[i].value = *(uint64_t *)(((char *)pstats) +
 			rte_i40evf_stats_strings[i].offset);
 	}
@@ -1567,6 +1588,8 @@ i40evf_dev_configure(struct rte_eth_dev *dev)
 {
 	struct i40e_adapter *ad =
 		I40E_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
+	struct rte_eth_conf *conf = &dev->data->dev_conf;
+	struct i40e_vf *vf;
 
 	/* Initialize to TRUE. If any of Rx queues doesn't meet the bulk
 	 * allocation or vector Rx preconditions we will reset it.
@@ -1575,6 +1598,19 @@ i40evf_dev_configure(struct rte_eth_dev *dev)
 	ad->rx_vec_allowed = true;
 	ad->tx_simple_allowed = true;
 	ad->tx_vec_allowed = true;
+
+	/* For non-DPDK PF drivers, VF has no ability to disable HW
+	 * CRC strip, and is implicitly enabled by the PF.
+	 */
+	if (!conf->rxmode.hw_strip_crc) {
+		vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
+		if ((vf->version_major == I40E_VIRTCHNL_VERSION_MAJOR) &&
+		    (vf->version_minor <= I40E_VIRTCHNL_VERSION_MINOR)) {
+			/* Peer is running non-DPDK PF driver. */
+			PMD_INIT_LOG(ERR, "VF can't disable HW CRC Strip");
+			return -EINVAL;
+		}
+	}
 
 	return i40evf_init_vlan(dev);
 }

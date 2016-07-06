@@ -1,6 +1,6 @@
 #   BSD LICENSE
 #
-#   Copyright(c) 2014 6WIND S.A.
+#   Copyright(c) 2016 6WIND S.A.
 #
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions
@@ -64,6 +64,7 @@ DIRS-$(CONFIG_RTE_LIBRTE_CRYPTODEV) += l2fwd-crypto
 DIRS-$(CONFIG_RTE_LIBRTE_IVSHMEM) += l2fwd-ivshmem
 DIRS-$(CONFIG_RTE_LIBRTE_JOBSTATS) += l2fwd-jobstats
 DIRS-y += l2fwd-keepalive
+DIRS-y += l2fwd-keepalive/ka-agent
 DIRS-$(CONFIG_RTE_LIBRTE_LPM) += l3fwd
 DIRS-$(CONFIG_RTE_LIBRTE_ACL) += l3fwd-acl
 ifeq ($(CONFIG_RTE_LIBRTE_LPM),y)
