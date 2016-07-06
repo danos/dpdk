@@ -92,7 +92,7 @@ Multi-Arch: same
 Homepage: http://www.dpdk.org
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
-         libethdev3 (= ${binary:Version}),
+         libethdev4 (= ${binary:Version}),
          librte-acl2 (= ${binary:Version}),
          librte-cfgfile2 (= ${binary:Version}),
          librte-cmdline2 (= ${binary:Version}),
@@ -106,7 +106,7 @@ Depends: ${misc:Depends},
          librte-kvargs1 (= ${binary:Version}),
          librte-lpm2 (= ${binary:Version}),
          librte-mbuf2 (= ${binary:Version}),
-         librte-mempool1 (= ${binary:Version}),
+         librte-mempool2 (= ${binary:Version}),
          librte-meter1 (= ${binary:Version}),
          librte-pipeline3 (= ${binary:Version}),
          librte-pmd-af-packet1 (= ${binary:Version}),
@@ -126,14 +126,14 @@ Depends: ${misc:Depends},
          librte-pmd-virtio1 (= ${binary:Version}),
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}),
          librte-pmd-xenvirt1 (= ${binary:Version}),
-         librte-port2 (= ${binary:Version}),
+         librte-port3 (= ${binary:Version}),
          librte-power1 (= ${binary:Version}),
          librte-reorder1 (= ${binary:Version}),
          librte-ring1 (= ${binary:Version}),
          librte-sched1 (= ${binary:Version}),
          librte-table2 (= ${binary:Version}),
          librte-timer1 (= ${binary:Version}),
-         librte-vhost2 (= ${binary:Version})
+         librte-vhost3 (= ${binary:Version})
 Description: Data Plane Development Kit (basic development files)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
@@ -141,7 +141,7 @@ Description: Data Plane Development Kit (basic development files)
  build external applications which will also require at least SSE3 support
  when running.
 
-Package: libethdev3
+Package: libethdev4
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -322,7 +322,7 @@ Description: Data Plane Development Kit (librte-mbuf2 runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_mbuf
 
-Package: librte-mempool1
+Package: librte-mempool2
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -582,7 +582,7 @@ Description: Data Plane Development Kit (librte-pmd-xenvirt runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_xenvirt
 
-Package: librte-port2
+Package: librte-port3
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
@@ -673,7 +673,7 @@ Description: Data Plane Development Kit (librte_timer runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_timer
 
-Package: librte-vhost2
+Package: librte-vhost3
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
