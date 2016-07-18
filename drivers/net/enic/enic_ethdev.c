@@ -57,15 +57,11 @@
 /*
  * The set of PCI devices this driver supports
  */
+#define CISCO_PCI_VENDOR_ID 0x1137
 static const struct rte_pci_id pci_id_enic_map[] = {
-#define RTE_PCI_DEV_ID_DECL_ENIC(vend, dev) {RTE_PCI_DEVICE(vend, dev)},
-#ifndef PCI_VENDOR_ID_CISCO
-#define PCI_VENDOR_ID_CISCO	0x1137
-#endif
-#include "rte_pci_dev_ids.h"
-RTE_PCI_DEV_ID_DECL_ENIC(PCI_VENDOR_ID_CISCO, PCI_DEVICE_ID_CISCO_VIC_ENET)
-RTE_PCI_DEV_ID_DECL_ENIC(PCI_VENDOR_ID_CISCO, PCI_DEVICE_ID_CISCO_VIC_ENET_VF)
-{.vendor_id = 0, /* Sentinal */},
+	{ RTE_PCI_DEVICE(CISCO_PCI_VENDOR_ID, PCI_DEVICE_ID_CISCO_VIC_ENET) },
+	{ RTE_PCI_DEVICE(CISCO_PCI_VENDOR_ID, PCI_DEVICE_ID_CISCO_VIC_ENET_VF) },
+	{.vendor_id = 0, /* sentinel */},
 };
 
 static int
@@ -436,8 +432,9 @@ static void enicpmd_dev_info_get(struct rte_eth_dev *eth_dev,
 	struct enic *enic = pmd_priv(eth_dev);
 
 	ENICPMD_FUNC_TRACE();
-	device_info->max_rx_queues = enic->rq_count;
-	device_info->max_tx_queues = enic->wq_count;
+	/* Scattered Rx uses two receive queues per rx queue exposed to dpdk */
+	device_info->max_rx_queues = enic->conf_rq_count / 2;
+	device_info->max_tx_queues = enic->conf_wq_count;
 	device_info->min_rx_bufsize = ENIC_MIN_MTU;
 	device_info->max_rx_pktlen = enic->rte_dev->data->mtu
 				   + ETHER_HDR_LEN + 4;
@@ -636,4 +633,5 @@ static struct rte_driver rte_enic_driver = {
 	.init = rte_enic_pmd_init,
 };
 
-PMD_REGISTER_DRIVER(rte_enic_driver);
+PMD_REGISTER_DRIVER(rte_enic_driver, enic);
+DRIVER_REGISTER_PCI_TABLE(enic, pci_id_enic_map);

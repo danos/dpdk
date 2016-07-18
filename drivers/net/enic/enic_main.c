@@ -203,7 +203,7 @@ void enic_set_mac_address(struct enic *enic, uint8_t *mac_addr)
 		return;
 	}
 
-	err = vnic_dev_del_addr(enic->vdev, mac_addr);
+	err = vnic_dev_del_addr(enic->vdev, enic->mac_addr);
 	if (err) {
 		dev_err(enic, "del mac addr failed\n");
 		return;
@@ -334,6 +334,7 @@ enic_alloc_rx_queue_mbufs(struct enic *enic, struct vnic_rq *rq)
 	dev_debug(enic, "port=%u, qidx=%u, Write %u posted idx, %u sw held\n",
 		enic->port_id, rq->index, rq->posted_index, rq->rx_nb_hold);
 	iowrite32(rq->posted_index, &rq->ctrl->posted_index);
+	iowrite32(0, &rq->ctrl->fetch_index);
 	rte_rmb();
 
 	return 0;
@@ -454,6 +455,8 @@ int enic_enable(struct enic *enic)
 		enic_start_wq(enic, index);
 	for (index = 0; index < enic->rq_count; index++)
 		enic_start_rq(enic, index);
+
+	vnic_dev_add_addr(enic->vdev, enic->mac_addr);
 
 	vnic_dev_enable_wait(enic->vdev);
 
@@ -971,8 +974,6 @@ int enic_setup_finish(struct enic *enic)
 		return -1;
 	}
 
-	vnic_dev_add_addr(enic->vdev, enic->mac_addr);
-
 	/* Default conf */
 	vnic_dev_packet_filter(enic->vdev,
 		1 /* directed  */,
@@ -1015,21 +1016,23 @@ int enic_set_vnic_res(struct enic *enic)
 	/* With Rx scatter support, two RQs are now used per RQ used by
 	 * the application.
 	 */
-	if (enic->rq_count < (eth_dev->data->nb_rx_queues * 2)) {
+	if (enic->conf_rq_count < eth_dev->data->nb_rx_queues) {
 		dev_err(dev, "Not enough Receive queues. Requested:%u which uses %d RQs on VIC, Configured:%u\n",
 			eth_dev->data->nb_rx_queues,
-			eth_dev->data->nb_rx_queues * 2, enic->rq_count);
+			eth_dev->data->nb_rx_queues * 2, enic->conf_rq_count);
 		rc = -EINVAL;
 	}
-	if (enic->wq_count < eth_dev->data->nb_tx_queues) {
+	if (enic->conf_wq_count < eth_dev->data->nb_tx_queues) {
 		dev_err(dev, "Not enough Transmit queues. Requested:%u, Configured:%u\n",
-			eth_dev->data->nb_tx_queues, enic->wq_count);
+			eth_dev->data->nb_tx_queues, enic->conf_wq_count);
 		rc = -EINVAL;
 	}
 
-	if (enic->cq_count < (enic->rq_count + enic->wq_count)) {
+	if (enic->conf_cq_count < (eth_dev->data->nb_rx_queues +
+				   eth_dev->data->nb_tx_queues)) {
 		dev_err(dev, "Not enough Completion queues. Required:%u, Configured:%u\n",
-			enic->rq_count + enic->wq_count, enic->cq_count);
+			(eth_dev->data->nb_rx_queues +
+			 eth_dev->data->nb_tx_queues), enic->conf_cq_count);
 		rc = -EINVAL;
 	}
 

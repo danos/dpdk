@@ -1084,10 +1084,15 @@ rte_pmd_pcap_devuninit(const char *name)
 }
 
 static struct rte_driver pmd_pcap_drv = {
-	.name = "eth_pcap",
 	.type = PMD_VDEV,
 	.init = rte_pmd_pcap_devinit,
 	.uninit = rte_pmd_pcap_devuninit,
 };
 
-PMD_REGISTER_DRIVER(pmd_pcap_drv);
+PMD_REGISTER_DRIVER(pmd_pcap_drv, eth_pcap);
+DRIVER_REGISTER_PARAM_STRING(eth_pcap,
+	"rx_pcap=<string> "
+	"tx_pcap=<string> "
+	"rx_iface=<ifc> "
+	"tx_iface=<ifc> "
+	"iface=<ifc>");

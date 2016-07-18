@@ -320,7 +320,7 @@ virtio_user_eth_dev_alloc(const char *name)
 static int
 virtio_user_pmd_devinit(const char *name, const char *params)
 {
-	struct rte_kvargs *kvlist;
+	struct rte_kvargs *kvlist = NULL;
 	struct rte_eth_dev *eth_dev;
 	struct virtio_hw *hw;
 	uint64_t queues = VIRTIO_USER_DEF_Q_NUM;
@@ -343,31 +343,60 @@ virtio_user_pmd_devinit(const char *name, const char *params)
 	}
 
 	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_PATH) == 1)
-		rte_kvargs_process(kvlist, VIRTIO_USER_ARG_PATH,
-				   &get_string_arg, &path);
+		ret = rte_kvargs_process(kvlist, VIRTIO_USER_ARG_PATH,
+					 &get_string_arg, &path);
+		if (ret < 0) {
+			PMD_INIT_LOG(ERR, "error to parse %s",
+				     VIRTIO_USER_ARG_PATH);
+			goto end;
+		}
 	else {
 		PMD_INIT_LOG(ERR, "arg %s is mandatory for virtio-user\n",
 			  VIRTIO_USER_ARG_QUEUE_SIZE);
 		goto end;
 	}
 
-	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_MAC) == 1)
-		rte_kvargs_process(kvlist, VIRTIO_USER_ARG_MAC,
-				   &get_string_arg, &mac_addr);
+	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_MAC) == 1) {
+		ret = rte_kvargs_process(kvlist, VIRTIO_USER_ARG_MAC,
+					 &get_string_arg, &mac_addr);
+		if (ret < 0) {
+			PMD_INIT_LOG(ERR, "error to parse %s",
+				     VIRTIO_USER_ARG_MAC);
+			goto end;
+		}
+	}
 
-	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_QUEUE_SIZE) == 1)
-		rte_kvargs_process(kvlist, VIRTIO_USER_ARG_QUEUE_SIZE,
-				   &get_integer_arg, &queue_size);
+	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_QUEUE_SIZE) == 1) {
+		ret = rte_kvargs_process(kvlist, VIRTIO_USER_ARG_QUEUE_SIZE,
+					 &get_integer_arg, &queue_size);
+		if (ret < 0) {
+			PMD_INIT_LOG(ERR, "error to parse %s",
+				     VIRTIO_USER_ARG_QUEUE_SIZE);
+			goto end;
+		}
+	}
 
-	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_QUEUES_NUM) == 1)
-		rte_kvargs_process(kvlist, VIRTIO_USER_ARG_QUEUES_NUM,
-				   &get_integer_arg, &queues);
+	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_QUEUES_NUM) == 1) {
+		ret = rte_kvargs_process(kvlist, VIRTIO_USER_ARG_QUEUES_NUM,
+					 &get_integer_arg, &queues);
+		if (ret < 0) {
+			PMD_INIT_LOG(ERR, "error to parse %s",
+				     VIRTIO_USER_ARG_QUEUES_NUM);
+			goto end;
+		}
+	}
 
-	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_CQ_NUM) == 1)
-		rte_kvargs_process(kvlist, VIRTIO_USER_ARG_CQ_NUM,
-				   &get_integer_arg, &cq);
-	else if (queues > 1)
+	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_CQ_NUM) == 1) {
+		ret = rte_kvargs_process(kvlist, VIRTIO_USER_ARG_CQ_NUM,
+					 &get_integer_arg, &cq);
+		if (ret < 0) {
+			PMD_INIT_LOG(ERR, "error to parse %s",
+				     VIRTIO_USER_ARG_CQ_NUM);
+			goto end;
+		}
+	} else if (queues > 1) {
 		cq = 1;
+	}
 
 	if (queues > 1 && cq == 0) {
 		PMD_INIT_LOG(ERR, "multi-q requires ctrl-q");
@@ -393,6 +422,8 @@ virtio_user_pmd_devinit(const char *name, const char *params)
 	ret = 0;
 
 end:
+	if (kvlist)
+		rte_kvargs_free(kvlist);
 	if (path)
 		free(path);
 	if (mac_addr)
@@ -431,10 +462,15 @@ virtio_user_pmd_devuninit(const char *name)
 }
 
 static struct rte_driver virtio_user_driver = {
-	.name   = "virtio-user",
 	.type   = PMD_VDEV,
 	.init   = virtio_user_pmd_devinit,
 	.uninit = virtio_user_pmd_devuninit,
 };
 
-PMD_REGISTER_DRIVER(virtio_user_driver);
+PMD_REGISTER_DRIVER(virtio_user_driver, virtio_user);
+DRIVER_REGISTER_PARAM_STRING(virtio_user,
+	"path=<path> "
+	"mac=<mac addr> "
+	"cq=<int> "
+	"queue_size=<int> "
+	"queues=<int>");

@@ -164,6 +164,29 @@ rte_mem_virt2phy(const void *virtaddr)
 	int page_size;
 	off_t offset;
 
+	/* when using dom0, /proc/self/pagemap always returns 0, check in
+	 * dpdk memory by browsing the memsegs */
+	if (rte_xen_dom0_supported()) {
+		struct rte_mem_config *mcfg;
+		struct rte_memseg *memseg;
+		unsigned i;
+
+		mcfg = rte_eal_get_configuration()->mem_config;
+		for (i = 0; i < RTE_MAX_MEMSEG; i++) {
+			memseg = &mcfg->memseg[i];
+			if (memseg->addr == NULL)
+				break;
+			if (virtaddr > memseg->addr &&
+					virtaddr < RTE_PTR_ADD(memseg->addr,
+						memseg->len)) {
+				return memseg->phys_addr +
+					RTE_PTR_DIFF(virtaddr, memseg->addr);
+			}
+		}
+
+		return RTE_BAD_PHYS_ADDR;
+	}
+
 	/* Cannot parse /proc/self/pagemap, no need to log errors everywhere */
 	if (!proc_pagemap_readable)
 		return RTE_BAD_PHYS_ADDR;
@@ -1136,7 +1159,7 @@ int
 rte_eal_hugepage_init(void)
 {
 	struct rte_mem_config *mcfg;
-	struct hugepage_file *hugepage, *tmp_hp = NULL;
+	struct hugepage_file *hugepage = NULL, *tmp_hp = NULL;
 	struct hugepage_info used_hp[MAX_HUGEPAGE_SIZES];
 
 	uint64_t memory[RTE_MAX_NUMA_NODES];
@@ -1479,14 +1502,19 @@ rte_eal_hugepage_init(void)
 			"of memory.\n",
 			i, nr_hugefiles, RTE_STR(CONFIG_RTE_MAX_MEMSEG),
 			RTE_MAX_MEMSEG);
-		return -ENOMEM;
+		goto fail;
 	}
+
+	munmap(hugepage, nr_hugefiles * sizeof(struct hugepage_file));
 
 	return 0;
 
 fail:
 	huge_recover_sigbus();
 	free(tmp_hp);
+	if (hugepage != NULL)
+		munmap(hugepage, nr_hugefiles * sizeof(struct hugepage_file));
+
 	return -1;
 }
 

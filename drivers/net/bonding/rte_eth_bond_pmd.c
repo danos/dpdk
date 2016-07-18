@@ -2509,10 +2509,20 @@ bond_ethdev_configure(struct rte_eth_dev *dev)
 }
 
 static struct rte_driver bond_drv = {
-	.name = "eth_bond",
 	.type = PMD_VDEV,
 	.init = bond_init,
 	.uninit = bond_uninit,
 };
 
-PMD_REGISTER_DRIVER(bond_drv);
+PMD_REGISTER_DRIVER(bond_drv, eth_bond);
+
+DRIVER_REGISTER_PARAM_STRING(eth_bond,
+	"slave=<ifc> "
+	"primary=<ifc> "
+	"mode=[0-6] "
+	"xmit_policy=[l2 | l23 | l34] "
+	"socket_id=<int> "
+	"mac=<mac addr> "
+	"lsc_poll_period_ms=<int> "
+	"up_delay=<int> "
+	"down_delay=<int>");

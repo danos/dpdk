@@ -890,10 +890,15 @@ rte_pmd_af_packet_devuninit(const char *name)
 }
 
 static struct rte_driver pmd_af_packet_drv = {
-	.name = "eth_af_packet",
 	.type = PMD_VDEV,
 	.init = rte_pmd_af_packet_devinit,
 	.uninit = rte_pmd_af_packet_devuninit,
 };
 
-PMD_REGISTER_DRIVER(pmd_af_packet_drv);
+PMD_REGISTER_DRIVER(pmd_af_packet_drv, eth_af_packet);
+DRIVER_REGISTER_PARAM_STRING(eth_af_packet,
+	"iface=<string> "
+	"qpairs=<int> "
+	"blocksz=<int> "
+	"framesz=<int> "
+	"framecnt=<int>");

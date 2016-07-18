@@ -439,6 +439,7 @@ create_unix_socket(const char *path, struct sockaddr_un *un, bool is_server)
 	memset(un, 0, sizeof(*un));
 	un->sun_family = AF_UNIX;
 	strncpy(un->sun_path, path, sizeof(un->sun_path));
+	un->sun_path[sizeof(un->sun_path) - 1] = '\0';
 
 	return fd;
 }
@@ -576,6 +577,12 @@ vhost_user_create_client(struct vhost_user_socket *vsocket)
 
 	RTE_LOG(ERR, VHOST_CONFIG, "%s: reconnecting...\n", path);
 	reconn = malloc(sizeof(*reconn));
+	if (reconn == NULL) {
+		RTE_LOG(ERR, VHOST_CONFIG,
+			"failed to allocate memory for reconnect\n");
+		close(fd);
+		return -1;
+	}
 	reconn->un = un;
 	reconn->fd = fd;
 	reconn->vsocket = vsocket;
@@ -617,8 +624,11 @@ rte_vhost_driver_register(const char *path, uint64_t flags)
 	if ((flags & RTE_VHOST_USER_CLIENT) != 0) {
 		vsocket->reconnect = !(flags & RTE_VHOST_USER_NO_RECONNECT);
 		if (vsocket->reconnect && reconn_tid == 0) {
-			if (vhost_user_reconnect_init() < 0)
+			if (vhost_user_reconnect_init() < 0) {
+				free(vsocket->path);
+				free(vsocket);
 				goto out;
+			}
 		}
 		ret = vhost_user_create_client(vsocket);
 	} else {

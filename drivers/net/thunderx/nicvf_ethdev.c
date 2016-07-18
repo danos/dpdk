@@ -189,19 +189,16 @@ nicvf_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 }
 
 static int
-nicvf_dev_get_reg_length(struct rte_eth_dev *dev  __rte_unused)
-{
-	return nicvf_reg_get_count();
-}
-
-static int
 nicvf_dev_get_regs(struct rte_eth_dev *dev, struct rte_dev_reg_info *regs)
 {
 	uint64_t *data = regs->data;
 	struct nicvf *nic = nicvf_pmd_priv(dev);
 
-	if (data == NULL)
-		return -EINVAL;
+	if (data == NULL) {
+		regs->length = nicvf_reg_get_count();
+		regs->width = THUNDERX_REG_BYTES;
+		return 0;
+	}
 
 	/* Support only full register dump */
 	if ((regs->length == 0) ||
@@ -495,7 +492,7 @@ nicvf_qset_cq_alloc(struct nicvf *nic, struct nicvf_rxq *rxq, uint16_t qidx,
 		    uint32_t desc_cnt)
 {
 	const struct rte_memzone *rz;
-	uint32_t ring_size = desc_cnt * sizeof(union cq_entry_t);
+	uint32_t ring_size = CMP_QUEUE_SZ_MAX * sizeof(union cq_entry_t);
 
 	rz = rte_eth_dma_zone_reserve(nic->eth_dev, "cq_ring", qidx, ring_size,
 					NICVF_CQ_BASE_ALIGN_BYTES, nic->node);
@@ -518,7 +515,7 @@ nicvf_qset_sq_alloc(struct nicvf *nic,  struct nicvf_txq *sq, uint16_t qidx,
 		    uint32_t desc_cnt)
 {
 	const struct rte_memzone *rz;
-	uint32_t ring_size = desc_cnt * sizeof(union sq_entry_t);
+	uint32_t ring_size = SND_QUEUE_SZ_MAX * sizeof(union sq_entry_t);
 
 	rz = rte_eth_dma_zone_reserve(nic->eth_dev, "sq", qidx, ring_size,
 				NICVF_SQ_BASE_ALIGN_BYTES, nic->node);
@@ -551,7 +548,7 @@ nicvf_qset_rbdr_alloc(struct nicvf *nic, uint32_t desc_cnt, uint32_t buffsz)
 		return -ENOMEM;
 	}
 
-	ring_size = sizeof(struct rbdr_entry_t) * desc_cnt;
+	ring_size = sizeof(struct rbdr_entry_t) * RBDR_QUEUE_SZ_MAX;
 	rz = rte_eth_dma_zone_reserve(nic->eth_dev, "rbdr", 0, ring_size,
 				   NICVF_RBDR_BASE_ALIGN_BYTES, nic->node);
 	if (rz == NULL) {
@@ -1623,7 +1620,6 @@ static const struct eth_dev_ops nicvf_eth_dev_ops = {
 	.rx_queue_count           = nicvf_dev_rx_queue_count,
 	.tx_queue_setup           = nicvf_dev_tx_queue_setup,
 	.tx_queue_release         = nicvf_dev_tx_queue_release,
-	.get_reg_length           = nicvf_dev_get_reg_length,
 	.get_reg                  = nicvf_dev_get_regs,
 };
 
@@ -1783,9 +1779,9 @@ rte_nicvf_pmd_init(const char *name __rte_unused, const char *para __rte_unused)
 }
 
 static struct rte_driver rte_nicvf_driver = {
-	.name = "nicvf_driver",
 	.type = PMD_PDEV,
 	.init = rte_nicvf_pmd_init,
 };
 
-PMD_REGISTER_DRIVER(rte_nicvf_driver);
+PMD_REGISTER_DRIVER(rte_nicvf_driver, thunderx_nicvf);
+DRIVER_REGISTER_PCI_TABLE(thunderx_nicvf, pci_id_nicvf_map);

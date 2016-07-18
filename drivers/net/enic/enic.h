@@ -152,6 +152,12 @@ struct enic {
 	/* software counters */
 	struct enic_soft_stats soft_stats;
 
+	/* configured resources on vic */
+	unsigned int conf_rq_count;
+	unsigned int conf_wq_count;
+	unsigned int conf_cq_count;
+	unsigned int conf_intr_count;
+
 	/* linked list storing memory allocations */
 	LIST_HEAD(enic_memzone_list, enic_memzone_entry) memzone_list;
 	rte_spinlock_t memzone_list_lock;
@@ -220,18 +226,6 @@ enic_ring_incr(uint32_t n_descriptors, uint32_t idx)
 		idx = 0;
 	return idx;
 }
-
-#if RTE_LOG_LEVEL >= RTE_LOG_DEBUG
-#define ENIC_ASSERT(cond)				\
-	do {								\
-		if (unlikely(!(cond))) {				\
-			rte_panic("line %d\tassert \"" #cond "\""	\
-					"failed\n", __LINE__);		\
-		}							\
-	} while (0)
-#else
-#define ENIC_ASSERT(cond) do {} while (0)
-#endif
 
 extern void enic_fdir_stats_get(struct enic *enic,
 	struct rte_eth_fdir_stats *stats);
