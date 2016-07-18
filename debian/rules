@@ -50,7 +50,7 @@ build-config:
 	dpkg-buildflags --status
 	echo EXTRA_CFLAGS $$EXTRA_CFLAGS
 	echo EXTRA_LDFLAGS: $$EXTRA_LDFLAGS
-	$(MAKE) O=$(DPDK_STATIC_DIR) T=$(DPDK_CONFIG) config
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) T=$(DPDK_CONFIG) config
 	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
 		-e 's,(RTE_NEXT_ABI=).*,\1n,' \
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1n,' \
@@ -61,7 +61,7 @@ build-config:
 
 build-indep: build-config
 	dh_testdir
-	$(MAKE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
 
 build-arch: build-config
 	dh_testdir
@@ -96,7 +96,7 @@ binary-indep:
 	dh_lintian
 	# Package: dpdk-doc
 	# All files based on the install-doc rule (includes examples)
-	$(MAKE) O=$(DPDK_SHARED_DIR) prefix=/usr \
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk-doc install-doc
 	dh_link
 	dh_compress
@@ -121,9 +121,9 @@ binary-arch:
 	dh_installinit --no-start --no-restart-on-upgrade
 	dh_systemd_start --no-start --no-restart-on-upgrade
 	# Package: dpdk (runtime)
-	$(MAKE) O=$(DPDK_STATIC_DIR) prefix=/usr \
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk install-runtime
-	$(MAKE) O=$(DPDK_SHARED_DIR) prefix=/usr \
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk install-runtime
 	cp debian/dpdk.interfaces debian/dpdk/etc/dpdk/interfaces
 	rm debian/dpdk/usr/sbin/dpdk_nic_bind
@@ -131,7 +131,7 @@ binary-arch:
 	ln -s /usr/share/dpdk/tools/dpdk_nic_bind.py \
 		debian/dpdk/sbin/dpdk_nic_bind
 	# Package: dpdk-dev (build environment)
-	$(MAKE) O=$(DPDK_SHARED_DIR) prefix=/usr \
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk-dev install-sdk
 	cp $(DPDK_SHARED_DIR)/.config debian/dpdk-dev/usr/share/dpdk/config
 	sed -e 's/SDK_TARGET/$(RTE_TARGET)/' debian/dpdk-sdk-env.sh.in > \

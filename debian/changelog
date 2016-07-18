@@ -8,6 +8,9 @@ dpdk (16.07-rc3-1) UNRELEASED; urgency=medium
   * adapt d/p/ubuntu-fix-vhost-user-socket-permission.patch for dpdk 16.07-rc3
   * update symbols
 
+  [ Ricardo Salveti de Araujo ]
+  * debian/rules: allow all make commands to be verbose
+
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 19 Jul 2016 08:32:06 +0200
 
 dpdk (16.07-rc1-1) UNRELEASED; urgency=medium
