@@ -103,11 +103,8 @@ static int virtio_dev_queue_stats_mapping_set(
  * The set of PCI devices this driver supports
  */
 static const struct rte_pci_id pci_id_virtio_map[] = {
-
-#define RTE_PCI_DEV_ID_DECL_VIRTIO(vend, dev) {RTE_PCI_DEVICE(vend, dev)},
-#include "rte_pci_dev_ids.h"
-
-{ .vendor_id = 0, /* sentinel */ },
+	{ RTE_PCI_DEVICE(VIRTIO_PCI_VENDORID, VIRTIO_PCI_DEVICEID_MIN) },
+	{ .vendor_id = 0, /* sentinel */ },
 };
 
 struct rte_virtio_xstats_name_off {
@@ -166,7 +163,7 @@ virtio_send_command(struct virtnet_ctl *cvq, struct virtio_pmd_ctrl *ctrl,
 
 	ctrl->status = status;
 
-	if (!cvq && !cvq->vq) {
+	if (!cvq || !cvq->vq) {
 		PMD_INIT_LOG(ERR, "Control queue is not supported.");
 		return -1;
 	}
@@ -1571,4 +1568,5 @@ static struct rte_driver rte_virtio_driver = {
 	.init = rte_virtio_pmd_init,
 };
 
-PMD_REGISTER_DRIVER(rte_virtio_driver);
+PMD_REGISTER_DRIVER(rte_virtio_driver, virtio_net);
+DRIVER_REGISTER_PCI_TABLE(virtio_net, pci_id_virtio_map);

@@ -79,11 +79,20 @@ $(RTE_OUTPUT):
 ifdef NODOTCONF
 $(RTE_OUTPUT)/.config: ;
 else
+# Generate config from template, if there are duplicates keep only the last.
+# To do so the temp config is checked for duplicate keys with cut/sort/uniq
+# Then for each of those identified duplicates as long as there are more than
+# just one left the last match is removed.
 $(RTE_OUTPUT)/.config: $(RTE_CONFIG_TEMPLATE) FORCE | $(RTE_OUTPUT)
 	$(Q)if [ "$(RTE_CONFIG_TEMPLATE)" != "" -a -f "$(RTE_CONFIG_TEMPLATE)" ]; then \
 		$(CPP) -undef -P -x assembler-with-cpp \
 		-ffreestanding \
 		-o $(RTE_OUTPUT)/.config_tmp $(RTE_CONFIG_TEMPLATE) ; \
+		for config in $$(grep -v "^#" $(RTE_OUTPUT)/.config_tmp | cut -d"=" -f1 | sort | uniq -d); do \
+			while [ $$(grep "^$${config}=" $(RTE_OUTPUT)/.config_tmp -c ) -gt 1 ]; do \
+				sed -i "0,/^$${config}=/{//d}" $(RTE_OUTPUT)/.config_tmp; \
+			done; \
+		done; \
 		if ! cmp -s $(RTE_OUTPUT)/.config_tmp $(RTE_OUTPUT)/.config; then \
 			cp $(RTE_OUTPUT)/.config_tmp $(RTE_OUTPUT)/.config ; \
 			cp $(RTE_OUTPUT)/.config_tmp $(RTE_OUTPUT)/.config.orig ; \
@@ -108,7 +117,7 @@ $(RTE_OUTPUT)/Makefile: | $(RTE_OUTPUT)
 # if NODOTCONF variable is defined, don't try to rebuild .config
 $(RTE_OUTPUT)/include/rte_config.h: $(RTE_OUTPUT)/.config
 	$(Q)rm -rf $(RTE_OUTPUT)/include $(RTE_OUTPUT)/app \
-		$(RTE_OUTPUT)/hostapp $(RTE_OUTPUT)/lib \
+		$(RTE_OUTPUT)/lib \
 		$(RTE_OUTPUT)/hostlib $(RTE_OUTPUT)/kmod $(RTE_OUTPUT)/build
 	$(Q)mkdir -p $(RTE_OUTPUT)/include
 	$(Q)$(RTE_SDK)/scripts/gen-config-h.sh $(RTE_OUTPUT)/.config \

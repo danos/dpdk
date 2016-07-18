@@ -181,7 +181,7 @@ get_hugepage_file_info(struct hugepage_file_info huges[], int max)
 		}
 		huges[idx].addr = v_start;
 		huges[idx].size = v_end - v_start;
-		strcpy(huges[idx].path, tmp);
+		snprintf(huges[idx].path, PATH_MAX, "%s", tmp);
 		idx++;
 	}
 
@@ -392,7 +392,8 @@ vhost_user_setup(const char *path)
 	}
 
 	flag = fcntl(fd, F_GETFD);
-	fcntl(fd, F_SETFD, flag | FD_CLOEXEC);
+	if (fcntl(fd, F_SETFD, flag | FD_CLOEXEC) < 0)
+		PMD_DRV_LOG(WARNING, "fcntl failed, %s", strerror(errno));
 
 	memset(&un, 0, sizeof(un));
 	un.sun_family = AF_UNIX;

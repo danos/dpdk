@@ -1572,7 +1572,8 @@ mlx5_rx_burst(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 		rte_prefetch0(wqe);
 		rep = rte_mbuf_raw_alloc(rxq->mp);
 		if (unlikely(rep == NULL)) {
-			while (pkt) {
+			while (pkt != seg) {
+				assert(pkt != (*rxq->elts)[idx]);
 				seg = NEXT(pkt);
 				rte_mbuf_refcnt_set(pkt, 0);
 				__rte_mbuf_raw_free(pkt);
@@ -1599,6 +1600,8 @@ mlx5_rx_burst(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 			pkt = seg;
 			assert(len >= (rxq->crc_present << 2));
 			/* Update packet information. */
+			pkt->packet_type = 0;
+			pkt->ol_flags = 0;
 			if (rxq->csum | rxq->csum_l2tun | rxq->vlan_strip |
 			    rxq->crc_present) {
 				if (rxq->csum) {

@@ -687,10 +687,12 @@ rte_pmd_null_devuninit(const char *name)
 }
 
 static struct rte_driver pmd_null_drv = {
-	.name = "eth_null",
 	.type = PMD_VDEV,
 	.init = rte_pmd_null_devinit,
 	.uninit = rte_pmd_null_devuninit,
 };
 
-PMD_REGISTER_DRIVER(pmd_null_drv);
+PMD_REGISTER_DRIVER(pmd_null_drv, eth_null);
+DRIVER_REGISTER_PARAM_STRING(eth_null,
+	"size=<int> "
+	"copy=<int>");

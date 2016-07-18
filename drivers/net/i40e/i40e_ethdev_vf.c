@@ -1110,9 +1110,12 @@ i40evf_get_link_status(struct rte_eth_dev *dev, struct rte_eth_link *link)
 }
 
 static const struct rte_pci_id pci_id_i40evf_map[] = {
-#define RTE_PCI_DEV_ID_DECL_I40EVF(vend, dev) {RTE_PCI_DEVICE(vend, dev)},
-#include "rte_pci_dev_ids.h"
-{ .vendor_id = 0, /* sentinel */ },
+	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_VF) },
+	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_VF_HV) },
+	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_X722_A0_VF) },
+	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_X722_VF) },
+	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_X722_VF_HV) },
+	{ .vendor_id = 0, /* sentinel */ },
 };
 
 static inline int
@@ -1581,7 +1584,8 @@ static struct rte_driver rte_i40evf_driver = {
 	.init = rte_i40evf_pmd_init,
 };
 
-PMD_REGISTER_DRIVER(rte_i40evf_driver);
+PMD_REGISTER_DRIVER(rte_i40evf_driver, i40evf);
+DRIVER_REGISTER_PCI_TABLE(i40evf, pci_id_i40evf_map);
 
 static int
 i40evf_dev_configure(struct rte_eth_dev *dev)
@@ -2377,12 +2381,15 @@ i40evf_get_rss_lut(struct i40e_vsi *vsi, uint8_t *lut, uint16_t lut_size)
 static int
 i40evf_set_rss_lut(struct i40e_vsi *vsi, uint8_t *lut, uint16_t lut_size)
 {
-	struct i40e_vf *vf = I40E_VSI_TO_VF(vsi);
-	struct i40e_hw *hw = I40E_VSI_TO_HW(vsi);
+	struct i40e_vf *vf;
+	struct i40e_hw *hw;
 	int ret;
 
 	if (!vsi || !lut)
 		return -EINVAL;
+
+	vf = I40E_VSI_TO_VF(vsi);
+	hw = I40E_VSI_TO_HW(vsi);
 
 	if (vf->flags & I40E_FLAG_RSS_AQ_CAPABLE) {
 		ret = i40e_aq_set_rss_lut(hw, vsi->vsi_id, FALSE,

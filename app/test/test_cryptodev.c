@@ -186,12 +186,12 @@ testsuite_setup(void)
 		if (nb_devs < 2) {
 			for (i = nb_devs; i < 2; i++) {
 				ret = rte_eal_vdev_init(
-					CRYPTODEV_NAME_AESNI_MB_PMD, NULL);
+					RTE_STR(CRYPTODEV_NAME_AESNI_MB_PMD), NULL);
 
 				TEST_ASSERT(ret == 0,
 					"Failed to create instance %u of"
 					" pmd : %s",
-					i, CRYPTODEV_NAME_AESNI_MB_PMD);
+					i, RTE_STR(CRYPTODEV_NAME_AESNI_MB_PMD));
 			}
 		}
 	}
@@ -203,10 +203,10 @@ testsuite_setup(void)
 		if (nb_devs < 2) {
 			for (i = nb_devs; i < 2; i++) {
 				TEST_ASSERT_SUCCESS(rte_eal_vdev_init(
-					CRYPTODEV_NAME_AESNI_GCM_PMD, NULL),
+					RTE_STR(CRYPTODEV_NAME_AESNI_GCM_PMD), NULL),
 					"Failed to create instance %u of"
 					" pmd : %s",
-					i, CRYPTODEV_NAME_AESNI_GCM_PMD);
+					i, RTE_STR(CRYPTODEV_NAME_AESNI_GCM_PMD));
 			}
 		}
 	}
@@ -217,10 +217,10 @@ testsuite_setup(void)
 		if (nb_devs < 2) {
 			for (i = nb_devs; i < 2; i++) {
 				TEST_ASSERT_SUCCESS(rte_eal_vdev_init(
-					CRYPTODEV_NAME_SNOW3G_PMD, NULL),
+					RTE_STR(CRYPTODEV_NAME_SNOW3G_PMD), NULL),
 					"Failed to create instance %u of"
 					" pmd : %s",
-					i, CRYPTODEV_NAME_SNOW3G_PMD);
+					i, RTE_STR(CRYPTODEV_NAME_SNOW3G_PMD));
 			}
 		}
 	}
@@ -231,10 +231,10 @@ testsuite_setup(void)
 		if (nb_devs < 2) {
 			for (i = nb_devs; i < 2; i++) {
 				TEST_ASSERT_SUCCESS(rte_eal_vdev_init(
-					CRYPTODEV_NAME_KASUMI_PMD, NULL),
+					RTE_STR(CRYPTODEV_NAME_KASUMI_PMD), NULL),
 					"Failed to create instance %u of"
 					" pmd : %s",
-					i, CRYPTODEV_NAME_KASUMI_PMD);
+					i, RTE_STR(CRYPTODEV_NAME_KASUMI_PMD));
 			}
 		}
 	}
@@ -246,12 +246,12 @@ testsuite_setup(void)
 		if (nb_devs < 2) {
 			for (i = nb_devs; i < 2; i++) {
 				int dev_id = rte_eal_vdev_init(
-					CRYPTODEV_NAME_NULL_PMD, NULL);
+					RTE_STR(CRYPTODEV_NAME_NULL_PMD), NULL);
 
 				TEST_ASSERT(dev_id >= 0,
 					"Failed to create instance %u of"
 					" pmd : %s",
-					i, CRYPTODEV_NAME_NULL_PMD);
+					i, RTE_STR(CRYPTODEV_NAME_NULL_PMD));
 			}
 		}
 	}
@@ -2295,7 +2295,7 @@ test_snow3g_encryption(const struct snow3g_test_data *tdata)
 				plaintext_pad_len);
 	memcpy(plaintext, tdata->plaintext.data, plaintext_len);
 
-	TEST_HEXDUMP(stdout, "plaintext:", plaintext, tdata->plaintext.len);
+	TEST_HEXDUMP(stdout, "plaintext:", plaintext, plaintext_len);
 
 	/* Create SNOW3G operation */
 	retval = create_snow3g_kasumi_cipher_operation(tdata->iv.data, tdata->iv.len,
@@ -2316,7 +2316,7 @@ test_snow3g_encryption(const struct snow3g_test_data *tdata)
 	else
 		ciphertext = plaintext;
 
-	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, tdata->ciphertext.len);
+	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, plaintext_len);
 
 	/* Validate obuf */
 	TEST_ASSERT_BUFFERS_ARE_EQUAL_BIT(
@@ -2368,7 +2368,7 @@ test_snow3g_encryption_oop(const struct snow3g_test_data *tdata)
 	rte_pktmbuf_append(ut_params->obuf, plaintext_pad_len);
 	memcpy(plaintext, tdata->plaintext.data, plaintext_len);
 
-	TEST_HEXDUMP(stdout, "plaintext:", plaintext, tdata->plaintext.len);
+	TEST_HEXDUMP(stdout, "plaintext:", plaintext, plaintext_len);
 
 	/* Create SNOW3G operation */
 	retval = create_snow3g_kasumi_cipher_operation_oop(tdata->iv.data,
@@ -2390,7 +2390,7 @@ test_snow3g_encryption_oop(const struct snow3g_test_data *tdata)
 	else
 		ciphertext = plaintext;
 
-	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, tdata->ciphertext.len);
+	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, plaintext_len);
 
 	/* Validate obuf */
 	TEST_ASSERT_BUFFERS_ARE_EQUAL_BIT(
@@ -2549,7 +2549,7 @@ static int test_snow3g_decryption(const struct snow3g_test_data *tdata)
 				ciphertext_pad_len);
 	memcpy(ciphertext, tdata->ciphertext.data, ciphertext_len);
 
-	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, tdata->ciphertext.len);
+	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, ciphertext_len);
 
 	/* Create SNOW3G operation */
 	retval = create_snow3g_kasumi_cipher_operation(tdata->iv.data, tdata->iv.len,
@@ -2569,7 +2569,7 @@ static int test_snow3g_decryption(const struct snow3g_test_data *tdata)
 	else
 		plaintext = ciphertext;
 
-	TEST_HEXDUMP(stdout, "plaintext:", plaintext, tdata->plaintext.len);
+	TEST_HEXDUMP(stdout, "plaintext:", plaintext, ciphertext_len);
 
 	/* Validate obuf */
 	TEST_ASSERT_BUFFERS_ARE_EQUAL_BIT(plaintext,
@@ -2622,7 +2622,7 @@ static int test_snow3g_decryption_oop(const struct snow3g_test_data *tdata)
 	rte_pktmbuf_append(ut_params->obuf, ciphertext_pad_len);
 	memcpy(ciphertext, tdata->ciphertext.data, ciphertext_len);
 
-	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, tdata->ciphertext.len);
+	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, ciphertext_len);
 
 	/* Create SNOW3G operation */
 	retval = create_snow3g_kasumi_cipher_operation_oop(tdata->iv.data,
@@ -2643,7 +2643,7 @@ static int test_snow3g_decryption_oop(const struct snow3g_test_data *tdata)
 	else
 		plaintext = ciphertext;
 
-	TEST_HEXDUMP(stdout, "plaintext:", plaintext, tdata->plaintext.len);
+	TEST_HEXDUMP(stdout, "plaintext:", plaintext, ciphertext_len);
 
 	/* Validate obuf */
 	TEST_ASSERT_BUFFERS_ARE_EQUAL_BIT(plaintext,
@@ -2689,7 +2689,7 @@ test_snow3g_authenticated_encryption(const struct snow3g_test_data *tdata)
 				plaintext_pad_len);
 	memcpy(plaintext, tdata->plaintext.data, plaintext_len);
 
-	TEST_HEXDUMP(stdout, "plaintext:", plaintext, tdata->plaintext.len);
+	TEST_HEXDUMP(stdout, "plaintext:", plaintext, plaintext_len);
 
 	/* Create SNOW3G operation */
 	retval = create_snow3g_kasumi_cipher_hash_operation(tdata->digest.data,
@@ -2717,7 +2717,7 @@ test_snow3g_authenticated_encryption(const struct snow3g_test_data *tdata)
 	else
 		ciphertext = plaintext;
 
-	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, tdata->ciphertext.len);
+	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, plaintext_len);
 
 	/* Validate obuf */
 	TEST_ASSERT_BUFFERS_ARE_EQUAL_BIT(
@@ -2774,7 +2774,7 @@ test_snow3g_encrypted_authentication(const struct snow3g_test_data *tdata)
 				plaintext_pad_len);
 	memcpy(plaintext, tdata->plaintext.data, plaintext_len);
 
-	TEST_HEXDUMP(stdout, "plaintext:", plaintext, tdata->plaintext.len);
+	TEST_HEXDUMP(stdout, "plaintext:", plaintext, plaintext_len);
 
 	/* Create SNOW3G operation */
 	retval = create_snow3g_kasumi_auth_cipher_operation(
@@ -2805,7 +2805,7 @@ test_snow3g_encrypted_authentication(const struct snow3g_test_data *tdata)
 
 	ut_params->digest = rte_pktmbuf_mtod(ut_params->obuf, uint8_t *)
 			+ plaintext_pad_len + tdata->aad.len + tdata->iv.len;
-	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, tdata->ciphertext.len);
+	TEST_HEXDUMP(stdout, "ciphertext:", ciphertext, plaintext_len);
 
 	/* Validate obuf */
 	TEST_ASSERT_BUFFERS_ARE_EQUAL_BIT(
@@ -3002,6 +3002,7 @@ create_gcm_session(uint8_t dev_id, enum rte_crypto_cipher_operation op,
 	ut_params->cipher_xform.next = NULL;
 
 	ut_params->cipher_xform.cipher.algo = RTE_CRYPTO_CIPHER_AES_GCM;
+	ut_params->auth_xform.auth.op = RTE_CRYPTO_AUTH_OP_GENERATE;
 	ut_params->cipher_xform.cipher.op = op;
 	ut_params->cipher_xform.cipher.key.data = cipher_key;
 	ut_params->cipher_xform.cipher.key.length = key_len;
