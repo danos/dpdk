@@ -33,14 +33,23 @@
 dpdk_pdump Application
 ======================
 
-The ``dpdk_pdump`` application is a Data Plane Development Kit (DPDK) application that runs as a DPDK secondary process and
-is capable of enabling packet capture on dpdk ports.
+The ``dpdk_pdump`` tool is a Data Plane Development Kit (DPDK) tool that runs as
+a DPDK secondary process and is capable of enabling packet capture on dpdk ports.
+
+   .. Note::
+
+      * The ``dpdk_pdump`` tool depends on libpcap based PMD which is disabled
+        by default in the build configuration files,
+        owing to an external dependency on the libpcap development files
+        which must be installed on the board.
+        Once the libpcap development files are installed, the libpcap based PMD
+        can be enabled by setting CONFIG_RTE_LIBRTE_PMD_PCAP=y and recompiling the DPDK.
 
 
 Running the Application
 -----------------------
 
-The application has a ``--pdump`` command line option with various sub arguments:
+The tool has a number of command line options:
 
 .. code-block:: console
 
@@ -52,18 +61,31 @@ The application has a ``--pdump`` command line option with various sub arguments
                                    [ring-size=<ring size>],
                                    [mbuf-size=<mbuf data size>],
                                    [total-num-mbufs=<number of mbufs>]'
+                          [--server-socket-path=<server socket dir>]
+                          [--client-socket-path=<client socket dir>]
 
-Note:
+The ``--pdump`` command line option is mandatory and it takes various sub arguments which are described in
+below section.
 
-* Parameters inside the parentheses represents mandatory parameters.
+   .. Note::
 
-* Parameters inside the square brackets represents optional parameters.
+      * Parameters inside the parentheses represents mandatory parameters.
 
-Multiple instances of ``--pdump`` can be passed to capture packets on different port and queue combinations.
+      * Parameters inside the square brackets represents optional parameters.
+
+      * Multiple instances of ``--pdump`` can be passed to capture packets on different port and queue combinations.
+
+The ``--server-socket-path`` command line option is optional. This represents the server socket directory.
+If no value is passed default values are used i.e. ``/var/run/.dpdk/`` for root users and ``~/.dpdk/``
+for non root users.
+
+The ``--client-socket-path`` command line option is optional. This represents the client socket directory.
+If no value is passed default values are used i.e. ``/var/run/.dpdk/`` for root users and ``~/.dpdk/``
+for non root users.
 
 
-Parameters
-~~~~~~~~~~
+The ``--pdump`` parameters
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``port``:
 Port id of the eth device on which packets should be captured.
