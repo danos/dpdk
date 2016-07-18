@@ -39,6 +39,7 @@ default_path=$PATH
 # - DPDK_DEP_CFLAGS
 # - DPDK_DEP_LDFLAGS
 # - DPDK_DEP_MOFED (y/[n])
+# - DPDK_DEP_NUMA (y/[n])
 # - DPDK_DEP_PCAP (y/[n])
 # - DPDK_DEP_SSL (y/[n])
 # - DPDK_DEP_SZE (y/[n])
@@ -95,12 +96,13 @@ configs=${*:-$DPDK_BUILD_TEST_CONFIGS}
 success=false
 on_exit ()
 {
-	if [ "$DPDK_NOTIFY" = notify-send ] ; then
-		if $success ; then
+	if $success ; then
+		[ "$DPDK_NOTIFY" != notify-send ] || \
 			notify-send -u low --icon=dialog-information 'DPDK build' 'finished'
-		elif [ -z "$signal" ] ; then
+	elif [ -z "$signal" ] ; then
+		[ -z "$dir" ] || echo "failed to build $dir" >&2
+		[ "$DPDK_NOTIFY" != notify-send ] || \
 			notify-send -u low --icon=dialog-error 'DPDK build' 'failed'
-		fi
 	fi
 }
 # catch manual interrupt to ignore notification
@@ -118,6 +120,7 @@ reset_env ()
 	unset DPDK_DEP_CFLAGS
 	unset DPDK_DEP_LDFLAGS
 	unset DPDK_DEP_MOFED
+	unset DPDK_DEP_NUMA
 	unset DPDK_DEP_PCAP
 	unset DPDK_DEP_SSL
 	unset DPDK_DEP_SZE
@@ -154,9 +157,8 @@ config () # <directory> <target> <options>
 		sed -ri 's,(TEST_PMD_RECORD_.*=)n,\1y,' $1/.config )
 
 		# Automatic configuration
-		! echo $2 | grep -q '^x86_64' || \
+		test "$DPDK_DEP_NUMA" != y || \
 		sed -ri               's,(NUMA=)n,\1y,' $1/.config
-		sed -ri         's,(PCI_CONFIG=)n,\1y,' $1/.config
 		sed -ri    's,(LIBRTE_IEEE1588=)n,\1y,' $1/.config
 		sed -ri             's,(BYPASS=)n,\1y,' $1/.config
 		test "$DPDK_DEP_ARCHIVE" != y || \
@@ -231,6 +233,7 @@ for conf in $configs ; do
 		O=$(readlink -m $dir/examples/performance-thread)
 	unset RTE_TARGET
 	echo "################## $dir done."
+	unset dir
 done
 
 if ! $short ; then

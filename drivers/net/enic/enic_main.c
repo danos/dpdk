@@ -106,7 +106,7 @@ static void enic_free_wq_buf(struct vnic_wq_buf *buf)
 {
 	struct rte_mbuf *mbuf = (struct rte_mbuf *)buf->mb;
 
-	rte_mempool_put(mbuf->pool, mbuf);
+	rte_pktmbuf_free_seg(mbuf);
 	buf->mb = NULL;
 }
 
@@ -123,6 +123,8 @@ static void enic_log_q_error(struct enic *enic)
 	}
 
 	for (i = 0; i < enic_vnic_rq_count(enic); i++) {
+		if (!enic->rq[i].in_use)
+			continue;
 		error_status = vnic_rq_error_status(&enic->rq[i]);
 		if (error_status)
 			dev_err(enic, "RQ[%d] error_status %d\n", i,
@@ -172,7 +174,8 @@ void enic_dev_stats_get(struct enic *enic, struct rte_eth_stats *r_stats)
 	 * which can make ibytes be slightly higher than it should be.
 	 */
 	rx_packet_errors = rte_atomic64_read(&soft_stats->rx_packet_errors);
-	rx_truncated = rx_packet_errors - stats->rx.rx_errors;
+	rx_truncated = rx_packet_errors - stats->rx.rx_errors -
+		stats->rx.rx_no_bufs;
 
 	r_stats->ipackets = stats->rx.rx_frames_ok - rx_truncated;
 	r_stats->opackets = stats->tx.tx_frames_ok;
@@ -518,30 +521,41 @@ void enic_free_rq(void *rxq)
 
 void enic_start_wq(struct enic *enic, uint16_t queue_idx)
 {
+	struct rte_eth_dev *eth_dev = enic->rte_dev;
 	vnic_wq_enable(&enic->wq[queue_idx]);
+	eth_dev->data->tx_queue_state[queue_idx] = RTE_ETH_QUEUE_STATE_STARTED;
 }
 
 int enic_stop_wq(struct enic *enic, uint16_t queue_idx)
 {
-	return vnic_wq_disable(&enic->wq[queue_idx]);
+	struct rte_eth_dev *eth_dev = enic->rte_dev;
+	int ret;
+
+	ret = vnic_wq_disable(&enic->wq[queue_idx]);
+	if (ret)
+		return ret;
+
+	eth_dev->data->tx_queue_state[queue_idx] = RTE_ETH_QUEUE_STATE_STOPPED;
+	return 0;
 }
 
 void enic_start_rq(struct enic *enic, uint16_t queue_idx)
 {
 	struct vnic_rq *rq_sop = &enic->rq[enic_sop_rq(queue_idx)];
 	struct vnic_rq *rq_data = &enic->rq[rq_sop->data_queue_idx];
+	struct rte_eth_dev *eth_dev = enic->rte_dev;
 
 	if (rq_data->in_use)
 		vnic_rq_enable(rq_data);
 	rte_mb();
 	vnic_rq_enable(rq_sop);
-
+	eth_dev->data->rx_queue_state[queue_idx] = RTE_ETH_QUEUE_STATE_STARTED;
 }
 
 int enic_stop_rq(struct enic *enic, uint16_t queue_idx)
 {
 	int ret1 = 0, ret2 = 0;
-
+	struct rte_eth_dev *eth_dev = enic->rte_dev;
 	struct vnic_rq *rq_sop = &enic->rq[enic_sop_rq(queue_idx)];
 	struct vnic_rq *rq_data = &enic->rq[rq_sop->data_queue_idx];
 
@@ -552,8 +566,11 @@ int enic_stop_rq(struct enic *enic, uint16_t queue_idx)
 
 	if (ret2)
 		return ret2;
-	else
+	else if (ret1)
 		return ret1;
+
+	eth_dev->data->rx_queue_state[queue_idx] = RTE_ETH_QUEUE_STATE_STOPPED;
+	return 0;
 }
 
 int enic_alloc_rq(struct enic *enic, uint16_t queue_idx,
@@ -1128,7 +1145,7 @@ int enic_probe(struct enic *enic)
 	struct rte_pci_device *pdev = enic->pdev;
 	int err = -1;
 
-	dev_debug(enic, " Initializing ENIC PMD version %s\n", DRV_VERSION);
+	dev_debug(enic, " Initializing ENIC PMD\n");
 
 	enic->bar0.vaddr = (void *)pdev->mem_resource[0].addr;
 	enic->bar0.len = pdev->mem_resource[0].len;

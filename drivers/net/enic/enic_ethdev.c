@@ -142,8 +142,20 @@ static int enicpmd_dev_setup_intr(struct enic *enic)
 		if (!enic->cq[index].ctrl)
 			break;
 	}
-
 	if (enic->cq_count != index)
+		return 0;
+	for (index = 0; index < enic->wq_count; index++) {
+		if (!enic->wq[index].ctrl)
+			break;
+	}
+	if (enic->wq_count != index)
+		return 0;
+	/* check start of packet (SOP) RQs only in case scatter is disabled. */
+	for (index = 0; index < enic->rq_count; index++) {
+		if (!enic->rq[enic_sop_rq(index)].ctrl)
+			break;
+	}
+	if (enic->rq_count != index)
 		return 0;
 
 	ret = enic_alloc_intr_resources(enic);
@@ -196,7 +208,6 @@ static int enicpmd_dev_tx_queue_start(struct rte_eth_dev *eth_dev,
 	ENICPMD_FUNC_TRACE();
 
 	enic_start_wq(enic, queue_idx);
-	eth_dev->data->tx_queue_state[queue_idx] = RTE_ETH_QUEUE_STATE_STARTED;
 
 	return 0;
 }
@@ -212,8 +223,6 @@ static int enicpmd_dev_tx_queue_stop(struct rte_eth_dev *eth_dev,
 	ret = enic_stop_wq(enic, queue_idx);
 	if (ret)
 		dev_err(enic, "error in stopping wq %d\n", queue_idx);
-	else
-		eth_dev->data->tx_queue_state[queue_idx] = RTE_ETH_QUEUE_STATE_STOPPED;
 
 	return ret;
 }
@@ -226,7 +235,6 @@ static int enicpmd_dev_rx_queue_start(struct rte_eth_dev *eth_dev,
 	ENICPMD_FUNC_TRACE();
 
 	enic_start_rq(enic, queue_idx);
-	eth_dev->data->rx_queue_state[queue_idx] = RTE_ETH_QUEUE_STATE_STARTED;
 
 	return 0;
 }
@@ -242,8 +250,6 @@ static int enicpmd_dev_rx_queue_stop(struct rte_eth_dev *eth_dev,
 	ret = enic_stop_rq(enic, queue_idx);
 	if (ret)
 		dev_err(enic, "error in stopping rq %d\n", queue_idx);
-	else
-		eth_dev->data->rx_queue_state[queue_idx] = RTE_ETH_QUEUE_STATE_STOPPED;
 
 	return ret;
 }
