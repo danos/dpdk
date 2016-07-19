@@ -5,14 +5,12 @@ librte_pmd_bond.so.1 librte-pmd-bond1 #MINVER#
  DPDK_2.1@DPDK_2.1 16.04
  rte_eth_bond_8023ad_conf_get@DPDK_2.0 16.04
  rte_eth_bond_8023ad_setup@DPDK_2.0 16.04
- rte_eth_bond_8023ad_conf_get@DPDK_16.04 16.07-rc1
  rte_eth_bond_8023ad_conf_get@DPDK_16.07 16.07-rc1
  rte_eth_bond_8023ad_ext_collect@DPDK_16.07 16.07-rc1
  rte_eth_bond_8023ad_ext_collect_get@DPDK_16.07 16.07-rc1
  rte_eth_bond_8023ad_ext_distrib@DPDK_16.07 16.07-rc1
  rte_eth_bond_8023ad_ext_distrib_get@DPDK_16.07 16.07-rc1
  rte_eth_bond_8023ad_ext_slowtx@DPDK_16.07 16.07-rc1
- rte_eth_bond_8023ad_setup@DPDK_16.04 16.07-rc1
  rte_eth_bond_8023ad_setup@DPDK_16.07 16.07-rc1
  rte_eth_bond_active_slaves_get@DPDK_2.0 16.04
  rte_eth_bond_create@DPDK_2.0 16.04
