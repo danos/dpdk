@@ -1,4 +1,5 @@
 librte_hash.so.2 librte-hash2 #MINVER#
+ DPDK_16.07@DPDK_16.07 16.07-rc3
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
  DPDK_2.2@DPDK_2.2 16.04
@@ -14,6 +15,7 @@ librte_hash.so.2 librte-hash2 #MINVER#
  rte_hash_del_key_with_hash@DPDK_2.0 16.04
  rte_hash_find_existing@DPDK_2.0 16.04
  rte_hash_free@DPDK_2.0 16.04
+ rte_hash_get_key_with_position@DPDK_16.07 16.07-rc3
  rte_hash_hash@DPDK_2.0 16.04
  rte_hash_iterate@DPDK_2.1 16.04
  rte_hash_lookup@DPDK_2.0 16.04
