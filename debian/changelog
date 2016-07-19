@@ -1,3 +1,15 @@
+dpdk (16.07-rc3-1) UNRELEASED; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * Merge with upstream DPDK 16.07-rc3 release
+  * droping patches/backports that are already upstream in DPDK 16.07-rc3
+    - d/p/ubuntu-fix-bond-symbol-export.patch
+    - d/p/ubuntu-backport-33-vhost-user-add-error-handling-for-fd-1023.patch
+  * adapt d/p/ubuntu-fix-vhost-user-socket-permission.patch for dpdk 16.07-rc3
+  * update symbols
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 19 Jul 2016 08:32:06 +0200
+
 dpdk (16.07-rc1-1) UNRELEASED; urgency=medium
 
   [ Christian Ehrhardt ]
