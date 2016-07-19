@@ -1,0 +1,2 @@
+librte_pmd_bnxt.so.1 librte-pmd-bnxt1 #MINVER#
+ DPDK_16.04@DPDK_16.04 16.07-rc3
