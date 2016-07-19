@@ -9,7 +9,9 @@ dpdk (16.07-rc3-1) UNRELEASED; urgency=medium
   * update symbols
 
   [ Ricardo Salveti de Araujo ]
-  * debian/rules: allow all make commands to be verbose
+  * debian/rules:
+    - Allow all make commands to be verbose
+    - Fix libdpdk-dev headers path
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 19 Jul 2016 08:32:06 +0200
 

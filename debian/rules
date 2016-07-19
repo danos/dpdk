@@ -142,6 +142,7 @@ binary-arch:
 	# linker script
 	mv debian/dpdk/usr/lib/libdpdk.so debian/libdpdk-dev/$(LIBDIR)/
 	# includes
+	mkdir -p debian/libdpdk-dev/usr/include
 	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
 	# all static libs are in the dev package
 	mv debian/dpdk/usr/lib/lib*.a debian/libdpdk-dev/$(LIBDIR)/
