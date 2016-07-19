@@ -1,2 +1,1 @@
-ubuntu-backport-33-vhost-user-add-error-handling-for-fd-1023.patch
 ubuntu-fix-vhost-user-socket-permission.patch
