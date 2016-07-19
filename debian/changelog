@@ -15,6 +15,7 @@ dpdk (16.07-rc3-1) UNRELEASED; urgency=medium
   * Renaming package librte-pmd-e10001 to librte-pmd-e1000-1, to avoid mixing
     package name with soversion (lintian package-name-doesnt-match-sonames)
   * Adding package librte-pmd-bnxt1
+  * Merging symbols files, handling the arch differences inline instead
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 19 Jul 2016 08:32:06 +0200
 
