@@ -155,9 +155,14 @@ binary-arch:
 	  BN=$$(basename $${lib}); \
 	  VER=$$(echo $${BN} | sed -e 's/^.*\.so\.//'); \
 	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9]*$$//' | tr '_' '-'); \
-	  echo "moving $${lib} for library $${LN}$${VER}"; \
-	  mkdir -p debian/$${LN}$${VER}/$(LIBDIR); \
-	  mv $${lib} debian/$${LN}$${VER}/$(LIBDIR); \
+	  if echo $${LN} | grep -q ".*[0-9]$$"; then \
+	    PKG=$${LN}-$${VER}; \
+	  else \
+	    PKG=$${LN}$${VER}; \
+	  fi; \
+	  echo "moving $${lib} for library $${PKG}"; \
+	  mkdir -p debian/$${PKG}/$(LIBDIR); \
+	  mv $${lib} debian/$${PKG}/$(LIBDIR); \
 	done
 	# Package: dpdk-igb-uio-dkms
 	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(VERSION)

@@ -1,2 +1,0 @@
-librte_pmd_e1000.so.1 librte-pmd-e10001 #MINVER#
- DPDK_2.0@DPDK_2.0 16.04

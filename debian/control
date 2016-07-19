@@ -113,7 +113,7 @@ Depends: ${misc:Depends},
          librte-pmd-af-packet1 (= ${binary:Version}),
          librte-pmd-bond1 (= ${binary:Version}),
          librte-pmd-cxgbe1 (= ${binary:Version}),
-         librte-pmd-e10001 (= ${binary:Version}),
+         librte-pmd-e1000-1 (= ${binary:Version}),
          librte-pmd-ena1 (= ${binary:Version}),
          librte-pmd-enic1 (= ${binary:Version}),
          librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
@@ -401,7 +401,7 @@ Description: Data Plane Development Kit (librte-pmd-cxgbe runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  This package contains the runtime libraries for librte_pmd_cxgbe
 
-Package: librte-pmd-e10001
+Package: librte-pmd-e1000-1
 Architecture: amd64 arm64 i386
 Section: libs
 Multi-Arch: same
