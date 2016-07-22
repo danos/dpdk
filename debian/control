@@ -92,6 +92,7 @@ Multi-Arch: same
 Homepage: http://www.dpdk.org
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
+         libpcap-dev,
          libethdev4 (= ${binary:Version}),
          librte-acl2 (= ${binary:Version}),
          librte-cfgfile2 (= ${binary:Version}),

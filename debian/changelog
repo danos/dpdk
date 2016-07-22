@@ -17,6 +17,9 @@ dpdk (16.07-rc3-1) UNRELEASED; urgency=medium
   * Adding package librte-pmd-bnxt1
   * Merging symbols files, handling the arch differences inline instead
 
+  [ Anders Roxell ]
+  * debian/control: add libpcap-dev to libdpdk-dev's Depends list
+
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 19 Jul 2016 08:32:06 +0200
 
 dpdk (16.07-rc1-1) UNRELEASED; urgency=medium
