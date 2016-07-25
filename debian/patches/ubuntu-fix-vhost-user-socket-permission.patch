@@ -27,11 +27,43 @@ Fixes LP: #1546565
 
 Forwarded: yes
 Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
-Last-Update: 2016-05-18
+Last-Update: 2016-07-25
 
+diff --git a/doc/guides/testpmd_app_ug/run_app.rst b/doc/guides/testpmd_app_ug/run_app.rst
+index 7712bd2..28776b9 100644
+--- a/doc/guides/testpmd_app_ug/run_app.rst
++++ b/doc/guides/testpmd_app_ug/run_app.rst
+@@ -156,6 +156,25 @@ See the DPDK Getting Started Guides for more information on these options.
+ 
+     Use malloc instead of hugetlbfs.
+ 
++*   ``--vhost-owner``
++
++     When creating vhost_user sockets change owner and group to the specified value.
++     This can be given as ``user:group``, but also only ``user`` or ``:group`` are supported.
++
++    Examples::
++
++       --vhost-owner 'libvirt-qemu:kvm'
++       --vhost-owner 'libvirt-qemu'
++       --vhost-owner ':kvm'
++
++*   ``--vhost-perm``
++
++    When creating vhost_user sockets set them up with these permissions.
++
++    For example::
++
++       --vhost-perm '0664'
++
+ 
+ Testpmd Command-line Options
+ ----------------------------
+diff --git a/lib/librte_eal/common/eal_common_options.c b/lib/librte_eal/common/eal_common_options.c
+index 481c732..2126140 100644
 --- a/lib/librte_eal/common/eal_common_options.c
 +++ b/lib/librte_eal/common/eal_common_options.c
-@@ -95,6 +95,8 @@
+@@ -95,6 +95,8 @@ eal_long_options[] = {
  	{OPT_VFIO_INTR,         1, NULL, OPT_VFIO_INTR_NUM        },
  	{OPT_VMWARE_TSC_MAP,    0, NULL, OPT_VMWARE_TSC_MAP_NUM   },
  	{OPT_XEN_DOM0,          0, NULL, OPT_XEN_DOM0_NUM         },
@@ -40,7 +72,7 @@ Last-Update: 2016-05-18
  	{0,                     0, NULL, 0                        }
  };
  
-@@ -166,6 +168,8 @@
+@@ -166,6 +168,8 @@ eal_reset_internal_config(struct internal_config *internal_cfg)
  #endif
  	internal_cfg->vmware_tsc_map = 0;
  	internal_cfg->create_uio_dev = 0;
@@ -49,9 +81,11 @@ Last-Update: 2016-05-18
  }
  
  static int
+diff --git a/lib/librte_eal/common/eal_internal_cfg.h b/lib/librte_eal/common/eal_internal_cfg.h
+index 5f1367e..bdf34e3 100644
 --- a/lib/librte_eal/common/eal_internal_cfg.h
 +++ b/lib/librte_eal/common/eal_internal_cfg.h
-@@ -83,6 +83,8 @@
+@@ -83,6 +83,8 @@ struct internal_config {
  	volatile enum rte_intr_mode vfio_intr_mode;
  	const char *hugefile_prefix;      /**< the base filename of hugetlbfs files */
  	const char *hugepage_dir;         /**< specific hugetlbfs directory to use */
@@ -60,9 +94,11 @@ Last-Update: 2016-05-18
  
  	unsigned num_hugepage_sizes;      /**< how many sizes on this system */
  	struct hugepage_info hugepage_info[MAX_HUGEPAGE_SIZES];
+diff --git a/lib/librte_eal/common/eal_options.h b/lib/librte_eal/common/eal_options.h
+index a881c62..1161083 100644
 --- a/lib/librte_eal/common/eal_options.h
 +++ b/lib/librte_eal/common/eal_options.h
-@@ -83,6 +83,10 @@
+@@ -83,6 +83,10 @@ enum {
  	OPT_VMWARE_TSC_MAP_NUM,
  #define OPT_XEN_DOM0          "xen-dom0"
  	OPT_XEN_DOM0_NUM,
@@ -73,25 +109,24 @@ Last-Update: 2016-05-18
  	OPT_LONG_MAX_NUM
  };
  
---- a/lib/librte_vhost/vhost_user/vhost-net-user.c
-+++ b/lib/librte_vhost/vhost_user/vhost-net-user.c
-@@ -77,6 +77,8 @@
- 	pthread_mutex_t mutex;
- };
+diff --git a/lib/librte_eal/common/include/rte_eal.h b/lib/librte_eal/common/include/rte_eal.h
+index a71d6f5..506cf24 100644
+--- a/lib/librte_eal/common/include/rte_eal.h
++++ b/lib/librte_eal/common/include/rte_eal.h
+@@ -252,6 +252,11 @@ static inline int rte_gettid(void)
+ 	return RTE_PER_LCORE(_thread_id);
+ }
  
-+#include <rte_eal.h>
++/**
++ * Set owner/permissions on sockets if requested on EAL commandline
++ */
++void rte_eal_set_socket_permissions(const char *);
 +
- #define MAX_VIRTIO_BACKLOG 128
- 
- static void vhost_user_server_new_connection(int fd, void *data, int *remove);
-@@ -634,6 +636,7 @@
- 	if (!vsocket)
- 		goto out;
- 	memset(vsocket, 0, sizeof(struct vhost_user_socket));
-+	rte_eal_set_socket_permissions(path);
- 	vsocket->path = strdup(path);
- 
- 	if ((flags & RTE_VHOST_USER_CLIENT) != 0) {
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/lib/librte_eal/linuxapp/eal/eal.c b/lib/librte_eal/linuxapp/eal/eal.c
+index 3fb2188..dc84c5b 100644
 --- a/lib/librte_eal/linuxapp/eal/eal.c
 +++ b/lib/librte_eal/linuxapp/eal/eal.c
 @@ -53,6 +53,9 @@
@@ -104,7 +139,7 @@ Last-Update: 2016-05-18
  
  #include <rte_common.h>
  #include <rte_debug.h>
-@@ -344,6 +347,8 @@
+@@ -344,6 +347,8 @@ eal_usage(const char *prgname)
  	       "  --"OPT_CREATE_UIO_DEV"    Create /dev/uioX (usually done by hotplug)\n"
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
  	       "  --"OPT_XEN_DOM0"          Support running on Xen dom0 without hugetlbfs\n"
@@ -113,7 +148,7 @@ Last-Update: 2016-05-18
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -601,6 +606,14 @@
+@@ -601,6 +606,14 @@ eal_parse_args(int argc, char **argv)
  			internal_config.create_uio_dev = 1;
  			break;
  
@@ -128,7 +163,7 @@ Last-Update: 2016-05-18
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -943,3 +956,172 @@
+@@ -943,3 +956,172 @@ rte_eal_check_module(const char *module_name)
  	/* Module has been found */
  	return 1;
  }
@@ -301,55 +336,36 @@ Last-Update: 2016-05-18
 +		vhost_set_ownership(path);
 +	}
 +}
---- a/lib/librte_eal/common/include/rte_eal.h
-+++ b/lib/librte_eal/common/include/rte_eal.h
-@@ -252,6 +252,11 @@
- 	return RTE_PER_LCORE(_thread_id);
- }
- 
-+/**
-+ * Set owner/permissions on sockets if requested on EAL commandline
-+ */
-+void rte_eal_set_socket_permissions(const char *);
-+
- #ifdef __cplusplus
- }
- #endif
---- a/doc/guides/testpmd_app_ug/run_app.rst
-+++ b/doc/guides/testpmd_app_ug/run_app.rst
-@@ -156,6 +156,25 @@
- 
-     Use malloc instead of hugetlbfs.
- 
-+*   ``--vhost-owner``
-+
-+     When creating vhost_user sockets change owner and group to the specified value.
-+     This can be given as ``user:group``, but also only ``user`` or ``:group`` are supported.
-+
-+    Examples::
-+
-+       --vhost-owner 'libvirt-qemu:kvm'
-+       --vhost-owner 'libvirt-qemu'
-+       --vhost-owner ':kvm'
-+
-+*   ``--vhost-perm``
-+
-+    When creating vhost_user sockets set them up with these permissions.
-+
-+    For example::
-+
-+       --vhost-perm '0664'
-+
- 
- Testpmd Command-line Options
- ----------------------------
+diff --git a/lib/librte_eal/linuxapp/eal/rte_eal_version.map b/lib/librte_eal/linuxapp/eal/rte_eal_version.map
+index db8c984..bb92e57 100644
 --- a/lib/librte_eal/linuxapp/eal/rte_eal_version.map
 +++ b/lib/librte_eal/linuxapp/eal/rte_eal_version.map
-@@ -139,6 +139,7 @@
+@@ -139,6 +139,7 @@ DPDK_2.2 {
  	rte_keepalive_register_core;
  	rte_xen_dom0_supported;
  	rte_xen_mem_phy2mch;
 +	rte_eal_set_socket_permissions;
  
  } DPDK_2.1;
+ 
+diff --git a/lib/librte_vhost/vhost_user/vhost-net-user.c b/lib/librte_vhost/vhost_user/vhost-net-user.c
+index b35594d..dbdb8ad 100644
+--- a/lib/librte_vhost/vhost_user/vhost-net-user.c
++++ b/lib/librte_vhost/vhost_user/vhost-net-user.c
+@@ -79,6 +79,8 @@ struct vhost_user {
+ 	pthread_mutex_t mutex;
+ };
+ 
++#include <rte_eal.h>
++
+ #define MAX_VIRTIO_BACKLOG 128
+ 
+ static void vhost_user_server_new_connection(int fd, void *data, int *remove);
+@@ -682,6 +684,7 @@ rte_vhost_driver_register(const char *path, uint64_t flags)
+ 	if (!vsocket)
+ 		goto out;
+ 	memset(vsocket, 0, sizeof(struct vhost_user_socket));
++	rte_eal_set_socket_permissions(path);
+ 	vsocket->path = strdup(path);
+ 	vsocket->connfd = -1;
  

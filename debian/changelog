@@ -1,3 +1,11 @@
+dpdk (16.07-rc4-1) UNRELEASED; urgency=medium
+
+  * Merge with upstream DPDK 16.07-rc4 release
+    - Tools renamed, dpdk_nic_bind is now dpdk-devbind
+  * Adapt d/p/ubuntu-fix-vhost-user-socket-permission.patch for dpdk 16.07-rc4
+
+ -- Ricardo Salveti de Araujo <rsalveti@rsalveti.net>  Mon, 25 Jul 2016 13:38:13 -0300
+
 dpdk (16.07-rc3-1) UNRELEASED; urgency=medium
 
   [ Christian Ehrhardt ]
