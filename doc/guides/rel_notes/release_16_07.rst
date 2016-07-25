@@ -40,16 +40,16 @@ New Features
 
 * **Added mempool external cache for non-EAL thread.**
 
-   Added new functions to create, free or flush a user-owned mempool
-   cache for non-EAL threads. Previously, cache was always disabled
-   on these threads.
+  Added new functions to create, free or flush a user-owned mempool
+  cache for non-EAL threads. Previously the cache was always disabled
+  on these threads.
 
 * **Changed the memory allocation in mempool library.**
 
   * Added ability to allocate a large mempool in virtually fragmented memory.
   * Added new APIs to populate a mempool with memory.
   * Added an API to free a mempool.
-  * Modified the API of rte_mempool_obj_iter() function.
+  * Modified the API of the ``rte_mempool_obj_iter()`` function.
   * Dropped specific Xen Dom0 code.
   * Dropped specific anonymous mempool code in testpmd.
 
@@ -63,10 +63,10 @@ New Features
 
 * **Added mailbox interrupt support for ixgbe and igb VFs.**
 
-  When the physical NIC link comes down or up, the PF driver will send a
+  When the physical NIC link comes up or down, the PF driver will send a
   mailbox message to notify each VF. To handle this link up/down event,
-  add mailbox interrupts support to receive the message and allow the app to
-  register a callback for it.
+  support have been added for a mailbox interrupt to receive the message and
+  allow the application to register a callback for it.
 
 * **Updated the ixgbe base driver.**
 
@@ -74,51 +74,59 @@ New Features
   following:
 
   * Added sgmii link for X550.
-  * Added mac link setup for X550a SFP and SFP+.
+  * Added MAC link setup for X550a SFP and SFP+.
   * Added KR support for X550em_a.
-  * Added new phy definitions for M88E1500.
+  * Added new PHY definitions for M88E1500.
   * Added support for the VLVF to be bypassed when adding/removing a VFTA entry.
   * Added X550a flow control auto negotiation support.
 
 * **Updated the i40e base driver.**
 
-  Updated the i40e base driver, which includes support for new devices IDs.
+  Updated the i40e base driver including support for new devices IDs.
 
-* **Supported virtio on IBM POWER8.**
+* **Updated the enic driver.**
+
+  The enic driver was updated with changes including the following:
+
+  * Optimized the Tx function.
+  * Added Scattered Rx capability.
+  * Improved packet type identification.
+  * Added MTU update in non Scattered Rx mode and enabled MTU of up to 9208
+    with UCS Software release 2.2 on 1300 series VICs.
+
+* **Added support for virtio on IBM POWER8.**
 
   The ioports are mapped in memory when using Linux UIO.
 
-* **Virtio support for containers.**
+* **Added support for Virtio in containers.**
 
-  Add a new virtual device, named virtio-user, to support virtio for containers.
+  Add a new virtual device, named virtio_user, to support virtio for containers.
 
   Known limitations:
 
   * Control queue and multi-queue are not supported yet.
-  * Cannot work with --huge-unlink.
-  * Cannot work with --no-huge.
-  * Cannot work when there are more than VHOST_MEMORY_MAX_NREGIONS(8) hugepages.
-  * Root privilege is a must for sorting hugepages by physical address.
-  * Can only be used with vhost user backend.
+  * Doesn't work with ``--huge-unlink``.
+  * Doesn't work with ``--no-huge``.
+  * Doesn't work when there are more than ``VHOST_MEMORY_MAX_NREGIONS(8)`` hugepages.
+  * Root privilege is required for sorting hugepages by physical address.
+  * Can only be used with the vhost user backend.
 
 * **Added vhost-user client mode.**
 
-  DPDK vhost-user could be the server as well as the client. It supports
-  server mode only before, now it also supports client mode. Client mode
-  is enabled when ``RTE_VHOST_USER_CLIENT`` flag is set while calling
+  DPDK vhost-user now supports client mode as well as server mode. Client mode
+  is enabled when the ``RTE_VHOST_USER_CLIENT`` flag is set while calling
   ``rte_vhost_driver_register``.
 
-  When DPDK vhost-user restarts from normal or abnormal quit (say crash),
-  the client mode would allow DPDK to establish the connect again.  Note
-  that a brand new QEMU version (v2.7 or above) is needed, otherwise, the
-  reconnect won't work.
+  When DPDK vhost-user restarts from an normal or abnormal exit (such as a
+  crash), the client mode allows DPDK to establish the connection again. Note
+  that QEMU version v2.7 or above is required for this feature.
 
-  DPDK vhost-user will also try to reconnect by default when
+  DPDK vhost-user will also try to reconnect by default when:
 
-  * the first connect fails (when QEMU is not started yet)
-  * the connection is broken (when QEMU restarts)
+  * The first connect fails (when QEMU is not started yet).
+  * The connection is broken (when QEMU restarts).
 
-  It can be turned off if flag ``RTE_VHOST_USER_NO_RECONNECT`` is set.
+  It can be turned off by setting the ``RTE_VHOST_USER_NO_RECONNECT`` flag.
 
 * **Added NSH packet recognition in i40e.**
 
@@ -127,7 +135,7 @@ New Features
   Now AESNI MB PMD supports 128/192/256-bit counter mode AES encryption and
   decryption.
 
-* **Added support of AES counter mode for Intel QuickAssist devices.**
+* **Added support for AES counter mode with Intel QuickAssist devices.**
 
   Enabled support for the AES CTR algorithm for Intel QuickAssist devices.
   Provided support for algorithm-chaining operations.
@@ -141,33 +149,33 @@ New Features
 
   The following features/modifications have been added to rte_hash library:
 
-  * Enabled application developers to use an extra flag for rte_hash creation
-    to specify default behavior (multi-thread safe/unsafe) with rte_hash_add_key
-    function.
-  * Changed Cuckoo search algorithm to breadth first search for multi-writer
-    routine and split Cuckoo Search and Move operations in order to reduce
-    transactional code region and improve TSX performance.
-  * Added a hash multi-writer test case for test app.
+  * Enabled application developers to use an extra flag for ``rte_hash``
+    creation to specify default behavior (multi-thread safe/unsafe) with the
+    ``rte_hash_add_key`` function.
+  * Changed the Cuckoo Hash Search algorithm to breadth first search for
+    multi-writer routines and split Cuckoo Hash Search and Move operations in
+    order to reduce transactional code region and improve TSX performance.
+  * Added a hash multi-writer test case to the test app.
 
 * **Improved IP Pipeline Application.**
 
-  The following features have been added to ip_pipeline application:
+  The following features have been added to the ip_pipeline application:
 
-  * Configure the MAC address in the routing pipeline and automatic routes
+  * Configure the MAC address in the routing pipeline and automatic route
     updates with change in link state.
   * Enable RSS per network interface through the configuration file.
   * Streamline the CLI code.
 
 * **Added keepalive enhancements.**
 
-  Adds support for reporting of core states other than dead to
+  Added support for reporting of core states other than dead to
   monitoring applications, enabling the support of broader liveness
   reporting to external processes.
 
 * **Added packet capture framework.**
 
-  * A new library ``librte_pdump`` is added to provide packet capture API.
-  * A new ``app/pdump`` tool is added to capture packets in DPDK.
+  * A new library ``librte_pdump`` is added to provide a packet capture API.
+  * A new ``app/pdump`` tool is added to demonstrate capture packets in DPDK.
 
 
 * **Added floating VEB support for i40e PF driver.**
@@ -178,6 +186,10 @@ New Features
 
   For information on this feature,  please see the "I40E Poll Mode Driver"
   section of the "Network Interface Controller Drivers" document.
+
+* **Added support for live migration of a VM with SRIOV VF.**
+
+  Live migration of a VM with Virtio and VF PMD's using the bonding PMD.
 
 
 Resolved Issues
@@ -197,18 +209,20 @@ EAL
 
 * **igb_uio: Fixed possible mmap failure for Linux >= 4.5.**
 
-  mmaping the iomem range of the PCI device fails for kernels that
-  enabled CONFIG_IO_STRICT_DEVMEM option:
+  The mmaping of the iomem range of the PCI device fails for kernels that
+  enabled the ``CONFIG_IO_STRICT_DEVMEM`` option. The error seen by the
+  user is as similar to the following::
 
-  EAL: pci_map_resource():
-           cannot mmap(39, 0x7f1c51800000, 0x100000, 0x0):
-           Invalid argument (0xffffffffffffffff)
+      EAL: pci_map_resource():
 
-  CONFIG_IO_STRICT_DEVMEM is introduced in Linux v4.5
+          cannot mmap(39, 0x7f1c51800000, 0x100000, 0x0):
+          Invalid argument (0xffffffffffffffff)
 
-  Updated igb_uio to stop reserving PCI memory resources, from
-  kernel point of view iomem region looks like idle and mmap worked
-  again. This matches uio_pci_generic usage.
+  The ``CONFIG_IO_STRICT_DEVMEM`` kernel option was introduced in Linux v4.5.
+
+  The issues was resolve by updating ``igb_uio`` to stop reserving PCI memory
+  resources. From the kernel point of view the iomem region looks like idle
+  and mmap works again. This matches the ``uio_pci_generic`` usage.
 
 
 Drivers
@@ -228,15 +242,29 @@ Drivers
   outer VLAN header.
   This issue is fixed by changing corresponding register for single VLAN.
 
+* **enic: Fixed several issues when stopping then restarting ports and queues.**
+
+  Fixed several crashes related to stopping then restarting ports and queues.
+  Fixed possible crash when re-configuring the number of Rx queue descriptors.
+
+* **enic: Fixed Rx data mis-alignment if mbuf data offset modified.**
+
+  Fixed possible Rx corruption when mbufs were returned to a pool with data
+  offset other than RTE_PKTMBUF_HEADROOM.
+
+* **enic: Fixed Tx IP/UDP/TCP checksum offload and VLAN insertion.**
+
+* **enic: Fixed Rx error and missed counters.**
+
 
 Libraries
 ~~~~~~~~~
 
 * **mbuf: Fixed refcnt update when detaching.**
 
-  Fix the ``rte_pktmbuf_detach()`` function to decrement the direct
-  mbuf's reference counter. The previous behavior was not to affect
-  the reference counter. It lead a memory leak of the direct mbuf.
+  Fix the ``rte_pktmbuf_detach()`` function to decrement the direct mbuf's
+  reference counter. The previous behavior was not to affect the reference
+  counter. This lead to a memory leak of the direct mbuf.
 
 
 Examples
@@ -266,9 +294,17 @@ API Changes
    * Add a short 1-2 sentence description of the API change. Use fixed width
      quotes for ``rte_function_names`` or ``rte_struct_names``. Use the past tense.
 
-* The following counters are removed from ``rte_eth_stats`` structure:
-  ibadcrc, ibadlen, imcasts, fdirmatch, fdirmiss,
-  tx_pause_xon, rx_pause_xon, tx_pause_xoff, rx_pause_xoff.
+* The following counters are removed from the ``rte_eth_stats`` structure:
+
+  * ``ibadcrc``
+  * ``ibadlen``
+  * ``imcasts``
+  * ``fdirmatch``
+  * ``fdirmiss``
+  * ``tx_pause_xon``
+  * ``rx_pause_xon``
+  * ``tx_pause_xoff``
+  * ``rx_pause_xoff``
 
 * The extended statistics are fetched by ids with ``rte_eth_xstats_get``
   after a lookup by name ``rte_eth_xstats_get_names``.
@@ -280,14 +316,17 @@ API Changes
   ``rte_vhost_avail_entries``.
 
 * All existing vhost APIs and callbacks with ``virtio_net`` struct pointer
-  as the parameter have been changed due to the ABI refactoring mentioned
-  below: it's replaced by ``int vid``.
+  as the parameter have been changed due to the ABI refactoring described
+  below. It is replaced by ``int vid``.
 
 * The function ``rte_vhost_enqueue_burst`` no longer supports concurrent enqueuing
   packets to the same queue.
 
 * The function ``rte_eth_dev_set_mtu`` adds a new return value ``-EBUSY``, which
   indicates the operation is forbidden because the port is running.
+
+* The script ``dpdk_nic_bind.py`` is renamed to ``dpdk-devbind.py``.
+  And the script ``setup.sh`` is renamed to ``dpdk-setup.sh``.
 
 
 ABI Changes
@@ -297,15 +336,15 @@ ABI Changes
      the previous releases and made in this release. Use fixed width quotes for
      ``rte_function_names`` or ``rte_struct_names``. Use the past tense.
 
-* The ``rte_port_source_params`` structure has new fields to support PCAP file.
+* The ``rte_port_source_params`` structure has new fields to support PCAP files.
   It was already in release 16.04 with ``RTE_NEXT_ABI`` flag.
 
 * The ``rte_eth_dev_info`` structure has new fields ``nb_rx_queues`` and ``nb_tx_queues``
-  to support number of queues configured by software.
+  to support the number of queues configured by software.
 
-* vhost ABI refactoring has been made: ``virtio_net`` structure is never
-  exported to application any more. Instead, a handle, ``vid``, has been
-  used to represent this structure internally.
+* A Vhost ABI refactoring has been made: the ``virtio_net`` structure is no
+  longer exported directly to the application. Instead, a handle, ``vid``, has
+  been used to represent this structure internally.
 
 
 Shared Library Versions
@@ -321,6 +360,7 @@ The libraries prepended with a plus sign were incremented in this version.
      librte_acl.so.2
      librte_cfgfile.so.2
      librte_cmdline.so.2
+     librte_cryptodev.so.1
      librte_distributor.so.1
      librte_eal.so.2
      librte_hash.so.2
