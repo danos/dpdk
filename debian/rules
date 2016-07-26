@@ -164,6 +164,12 @@ binary-arch:
 	  mkdir -p debian/$${PKG}/$(LIBDIR); \
 	  mv $${lib} debian/$${PKG}/$(LIBDIR); \
 	done
+	# pkg-config
+	mkdir -p debian/libdpdk-dev/$(LIBDIR)/pkgconfig
+	LIBS=$$(sed -e 's/GROUP ( \(.*\) )/\1/' -e 's/lib/-l/g' -e 's/\.so//g' \
+		$(CURDIR)/debian/libdpdk-dev/$(LIBDIR)/libdpdk.so); \
+	sed -e "s/@DPDK_LIBS@/$${LIBS}/" -e "s/@VERSION@/$(VERSION)/" \
+		debian/libdpdk.pc.in > debian/libdpdk-dev/$(LIBDIR)/pkgconfig/libdpdk.pc
 	# Package: dpdk-igb-uio-dkms
 	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(VERSION)
 	cp lib/librte_eal/linuxapp/igb_uio/* \
