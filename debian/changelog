@@ -1,3 +1,9 @@
+dpdk (16.07-rc5-1) UNRELEASED; urgency=medium
+
+  * Merge with upstream DPDK 16.07-rc5 release
+
+ -- Ricardo Salveti de Araujo <rsalveti@rsalveti.net>  Tue, 26 Jul 2016 14:13:38 -0300
+
 dpdk (16.07-rc4-1) UNRELEASED; urgency=medium
 
   * Merge with upstream DPDK 16.07-rc4 release
