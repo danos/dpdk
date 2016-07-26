@@ -5,6 +5,7 @@ dpdk (16.07-rc5-1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * Generate pkgconfig and ship it in libdpdk-dev
+  * Document use of dquilt for patches in debian/README.source
 
  -- Ricardo Salveti de Araujo <rsalveti@rsalveti.net>  Tue, 26 Jul 2016 14:13:38 -0300
 
