@@ -34,32 +34,36 @@ New Features
 
      Refer to the previous release notes for examples.
 
-* **Removed mempool cache if not needed.**
+* **Removed the mempool cache memory if caching is not being used.**
 
   The size of the mempool structure is reduced if the per-lcore cache is disabled.
 
 * **Added mempool external cache for non-EAL thread.**
 
   Added new functions to create, free or flush a user-owned mempool
-  cache for non-EAL threads. Previously the cache was always disabled
+  cache for non-EAL threads. Previously the caching was always disabled
   on these threads.
 
-* **Changed the memory allocation in mempool library.**
+* **Changed the memory allocation scheme in the mempool library.**
 
-  * Added ability to allocate a large mempool in virtually fragmented memory.
+  * Added the ability to allocate a large mempool in fragmented virtual memory.
   * Added new APIs to populate a mempool with memory.
   * Added an API to free a mempool.
   * Modified the API of the ``rte_mempool_obj_iter()`` function.
-  * Dropped specific Xen Dom0 code.
-  * Dropped specific anonymous mempool code in testpmd.
+  * Dropped the specific Xen Dom0 code.
+  * Dropped the specific anonymous mempool code in testpmd.
 
-* **Added new driver for Broadcom NetXtreme-C devices.**
+* **Added a new driver for Broadcom NetXtreme-C devices.**
 
   Added the new bnxt driver for Broadcom NetXtreme-C devices. See the
   "Network Interface Controller Drivers" document for more details on this
   new driver.
 
-* **Added new driver for ThunderX nicvf device.**
+* **Added a new driver for ThunderX nicvf devices.**
+
+  Added the new thunderx net driver for ThunderX nicvf devices. See the
+  "Network Interface Controller Drivers" document for more details on this new
+  driver.
 
 * **Added mailbox interrupt support for ixgbe and igb VFs.**
 
@@ -94,6 +98,21 @@ New Features
   * Added MTU update in non Scattered Rx mode and enabled MTU of up to 9208
     with UCS Software release 2.2 on 1300 series VICs.
 
+* **Updated the mlx5 driver.**
+
+  The mlx5 driver was updated with changes including the following:
+
+  * Data path was refactored to bypass Verbs to improve RX and TX performance.
+  * Removed compilation parameters for inline send, ``MLX5_MAX_INLINE``, and
+    added command line parameter instead, ``txq_inline``.
+  * Improved TX scatter gather support:
+    Removed compilation parameter ``MLX5_PMD_SGE_WR_N``.
+    Scatter-gather elements is set to the maximum value the NIC supports.
+    Removed linearization logic, this decreases the memory consumption of the PMD.
+  * Improved jumbo frames support, by dynamically setting RX scatter gather elements
+    according to the MTU and mbuf size,
+    no need for compilation parameter ``MLX5_PMD_SGE_WR_N``
+
 * **Added support for virtio on IBM POWER8.**
 
   The ioports are mapped in memory when using Linux UIO.
@@ -123,8 +142,8 @@ New Features
 
   DPDK vhost-user will also try to reconnect by default when:
 
-  * The first connect fails (when QEMU is not started yet).
-  * The connection is broken (when QEMU restarts).
+  * The first connect fails (for example when QEMU is not started yet).
+  * The connection is broken (for example when QEMU restarts).
 
   It can be turned off by setting the ``RTE_VHOST_USER_NO_RECONNECT`` flag.
 
@@ -135,7 +154,7 @@ New Features
   Now AESNI MB PMD supports 128/192/256-bit counter mode AES encryption and
   decryption.
 
-* **Added support for AES counter mode with Intel QuickAssist devices.**
+* **Added AES counter mode support for Intel QuickAssist devices.**
 
   Enabled support for the AES CTR algorithm for Intel QuickAssist devices.
   Provided support for algorithm-chaining operations.
@@ -168,7 +187,7 @@ New Features
 
 * **Added keepalive enhancements.**
 
-  Added support for reporting of core states other than dead to
+  Added support for reporting of core states other than "dead" to
   monitoring applications, enabling the support of broader liveness
   reporting to external processes.
 
@@ -400,6 +419,52 @@ Tested Platforms
       - Platform details.
       - Platform details.
 
+#. SuperMicro 1U
+
+   - BIOS: 1.0c
+   - Processor: Intel(R) Atom(TM) CPU C2758 @ 2.40GHz
+
+#. SuperMicro 1U
+
+   - BIOS: 1.0a
+   - Processor: Intel(R) Xeon(R) CPU D-1540 @ 2.00GHz
+   - Onboard NIC: Intel(R) X552/X557-AT (2x10G)
+
+     - Firmware-version: 0x800001cf
+     - Device ID (PF/VF): 8086:15ad /8086:15a8
+
+   - kernel driver version: 4.2.5 (ixgbe)
+
+#. SuperMicro 2U
+
+   - BIOS: 1.0a
+   - Processor: Intel(R) Xeon(R) CPU E5-4667 v3 @ 2.00GHz
+
+#. Intel(R) Server board S2600GZ
+
+   - BIOS: SE5C600.86B.02.02.0002.122320131210
+   - Processor: Intel(R) Xeon(R) CPU E5-2680 v2 @ 2.80GHz
+
+#. Intel(R) Server board W2600CR
+
+   - BIOS: SE5C600.86B.02.01.0002.082220131453
+   - Processor: Intel(R) Xeon(R) CPU E5-2680 v2 @ 2.80GHz
+
+#. Intel(R) Server board S2600CWT
+
+   - BIOS: SE5C610.86B.01.01.0009.060120151350
+   - Processor: Intel(R) Xeon(R) CPU E5-2699 v3 @ 2.30GHz
+
+#. Intel(R) Server board S2600WTT
+
+   - BIOS: SE5C610.86B.01.01.0005.101720141054
+   - Processor: Intel(R) Xeon(R) CPU E5-2699 v3 @ 2.30GHz
+
+#. Intel(R) Server board S2600WTT
+
+   - BIOS: SE5C610.86B.11.01.0044.090120151156
+   - Processor: Intel(R) Xeon(R) CPU E5-2695 v4 @ 2.10GHz
+
 
 Tested NICs
 -----------
@@ -412,3 +477,74 @@ Tested NICs
 
       - NIC details.
       - NIC details.
+
+#. Intel(R) Ethernet Controller X540-AT2
+
+   - Firmware version: 0x80000389
+   - Device id (pf): 8086:1528
+   - Driver version: 3.23.2 (ixgbe)
+
+#. Intel(R) 82599ES 10 Gigabit Ethernet Controller
+
+   - Firmware version: 0x61bf0001
+   - Device id (pf/vf): 8086:10fb / 8086:10ed
+   - Driver version: 4.0.1-k (ixgbe)
+
+#. Intel(R) Corporation Ethernet Connection X552/X557-AT 10GBASE-T
+
+   - Firmware version: 0x800001cf
+   - Device id (pf/vf): 8086:15ad / 8086:15a8
+   - Driver version: 4.2.5 (ixgbe)
+
+#. Intel(R) Ethernet Converged Network Adapter X710-DA4 (4x10G)
+
+   - Firmware version: 5.04
+   - Device id (pf/vf): 8086:1572 / 8086:154c
+   - Driver version: 1.4.26 (i40e)
+
+#. Intel(R) Ethernet Converged Network Adapter X710-DA2 (2x10G)
+
+   - Firmware version: 5.04
+   - Device id (pf/vf): 8086:1572 / 8086:154c
+   - Driver version: 1.4.25 (i40e)
+
+#. Intel(R) Ethernet Converged Network Adapter XL710-QDA1 (1x40G)
+
+   - Firmware version: 5.04
+   - Device id (pf/vf): 8086:1584 / 8086:154c
+   - Driver version: 1.4.25 (i40e)
+
+#. Intel(R) Ethernet Converged Network Adapter XL710-QDA2 (2X40G)
+
+   - Firmware version: 5.04
+   - Device id (pf/vf): 8086:1583 / 8086:154c
+   - Driver version: 1.4.25 (i40e)
+
+#. Intel(R) Corporation I350 Gigabit Network Connection
+
+   - Firmware version: 1.48, 0x800006e7
+   - Device id (pf/vf): 8086:1521 / 8086:1520
+   - Driver version: 5.2.13-k (igb)
+
+#. Intel(R) Ethernet Multi-host Controller FM10000
+
+   - Firmware version: N/A
+   - Device id (pf/vf): 8086:15d0
+   - Driver version: 0.17.0.9 (fm10k)
+
+
+Tested OSes
+-----------
+
+.. This section should contain a list of OSes that were tested with this release.
+
+- CentOS 7.0
+- Fedora 23
+- Fedora 24
+- FreeBSD 10.3
+- Red Hat Enterprise Linux 7.2
+- SUSE Enterprise Linux 12
+- Ubuntu 15.10
+- Ubuntu 16.04 LTS
+- Wind River Linux 8
+
