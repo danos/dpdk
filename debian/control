@@ -29,6 +29,7 @@ Architecture: amd64 arm64 i386
 Homepage: http://www.dpdk.org
 Depends: libdpdk-dev (= ${binary:Version}),
          lsb-base (>= 3.2-14),
+         pciutils,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends}

@@ -1,6 +1,11 @@
 dpdk (16.07-1) UNRELEASED; urgency=medium
 
+  [ Christian Ehrhardt ]
   * Merge with upstream DPDK 16.07 release
+
+  [ Anders Roxell ]
+  * debian/control: add pciutils to the dpdk depends list, since lspci is used
+    by the devbind script
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
