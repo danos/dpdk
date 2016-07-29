@@ -530,6 +530,13 @@ eal_parse_set(const char *input, uint16_t set[], unsigned num)
 		str = end + 1;
 	} while (*end != '\0' && *end != ')');
 
+	/*
+	 * to avoid failure that tail blank makes end character check fail
+	 * in eal_parse_lcores( )
+	 */
+	while (isblank(*str))
+		str++;
+
 	return str - input;
 }
 
@@ -578,13 +585,12 @@ eal_parse_lcores(const char *lcores)
 	struct rte_config *cfg = rte_eal_get_configuration();
 	static uint16_t set[RTE_MAX_LCORE];
 	unsigned idx = 0;
-	int i;
 	unsigned count = 0;
 	const char *lcore_start = NULL;
 	const char *end = NULL;
 	int offset;
 	rte_cpuset_t cpuset;
-	int lflags = 0;
+	int lflags;
 	int ret = -1;
 
 	if (lcores == NULL)
@@ -593,9 +599,6 @@ eal_parse_lcores(const char *lcores)
 	/* Remove all blank characters ahead and after */
 	while (isblank(*lcores))
 		lcores++;
-	i = strlen(lcores);
-	while ((i > 0) && isblank(lcores[i - 1]))
-		i--;
 
 	CPU_ZERO(&cpuset);
 
@@ -612,6 +615,8 @@ eal_parse_lcores(const char *lcores)
 			lcores++;
 		if (*lcores == '\0')
 			goto err;
+
+		lflags = 0;
 
 		/* record lcore_set start point */
 		lcore_start = lcores;
