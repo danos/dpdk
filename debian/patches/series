@@ -1,2 +1,3 @@
 ubuntu-fix-vhost-user-socket-permission.patch
 ubuntu-fix-double-license-info.patch
+ubuntu-fix-unusual-interpreter.patch
