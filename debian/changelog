@@ -22,11 +22,12 @@ dpdk (16.07-1) UNRELEASED; urgency=medium
     examples, fixes Lintian warning about missing python dependencies
   * Fix typo in dpdk-doc.README.Debian, fixes "W: dpdk-doc:
     spelling-error-in-readme-debian to to (duplicate word) to"
-  * Fix upstream rc versions by using "~" instead of "-". 16.07-rc1 evaluates as newer
-    than 16.07 which causes issues with Debian tools and Lintian errors and warnings:
+  * Fix upstream rc versions by using "~" instead of "-". 16.07-rc1 evaluates
+    as newer than 16.07 which causes issues with Debian tools and Lintian
+    errors and warnings:
     - W: libethdev4: latest-debian-changelog-entry-without-new-version
-    - E: libethdev4: symbols-file-contains-current-version-with-debian-revision on
-      symbol DPDK_16.04@DPDK_16.04 and 114 others
+    - E: libethdev4: symbols-file-contains-current-version-with-debian-revision
+      on symbol DPDK_16.04@DPDK_16.04 and 114 others
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
