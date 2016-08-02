@@ -39,13 +39,13 @@ endif
 DPDK_STATIC_DIR = "debian/build/static-root"
 DPDK_SHARED_DIR = "debian/build/shared-root"
 
-clean:
-	dh_testdir
-	rm -rf debian/build debian/tmp
-	dh_clean
+%:
+	dh $@ --with python2,dkms
 
-build-config:
-	dh_testdir
+override_dh_auto_clean:
+	rm -rf debian/build debian/tmp
+
+override_dh_auto_configure:
 	# report dpkg-buildflags status to build log
 	dpkg-buildflags --status
 	echo EXTRA_CFLAGS $$EXTRA_CFLAGS
@@ -58,13 +58,18 @@ build-config:
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
 		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
 		$(DPDK_STATIC_DIR)/.config
+	dh_auto_configure
 
-build-indep: build-config
-	dh_testdir
+override_dh_auto_build-indep:
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
 
-build-arch: build-config
-	dh_testdir
+override_dh_auto_install-indep:
+	# Package: dpdk-doc
+	# All files based on the install-doc rule (includes examples)
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
+		DESTDIR=debian/dpdk-doc install-doc
+
+override_dh_auto_build-arch:
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) build
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
@@ -80,51 +85,14 @@ build-arch: build-config
 		$(DPDK_SHARED_DIR)/.config
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) build
 
-build: build-arch build-indep
-
-binary-indep: PACKAGE_NAME=dpdk-doc
-binary-indep: DOCDIR=usr/share/doc/dpdk
-binary-indep: export DH_OPTIONS=--indep
-binary-indep:
-	dh_testroot
-	dh_prep
-	dh_testdir
-	dh_installdirs
-	dh_install
-	dh_installdocs
-	dh_installchangelogs
-	dh_lintian
-	# Package: dpdk-doc
-	# All files based on the install-doc rule (includes examples)
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
-		DESTDIR=debian/dpdk-doc install-doc
-	dh_link
-	dh_compress
-	dh_fixperms
-	dh_installdeb
-	dh_gencontrol
-	dh_md5sums
-	dh_builddeb
-
-binary-arch: LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
-binary-arch: export DH_OPTIONS=--arch
-binary-arch:
-	dh_testroot
-	dh_prep
-	dh_testdir
-	dh_installdirs
-	dh_install
-	dh_installdocs
-	dh_installchangelogs
-	dh_lintian
-	dh_systemd_enable
-	dh_installinit --no-start --no-restart-on-upgrade
-	dh_systemd_start --no-start --no-restart-on-upgrade
+override_dh_auto_install-arch: LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+override_dh_auto_install-arch:
 	# Package: dpdk (runtime)
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk install-runtime
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk install-runtime
+	mkdir -p debian/dpdk/etc/dpdk
 	cp debian/dpdk.interfaces debian/dpdk/etc/dpdk/interfaces
 	rm debian/dpdk/usr/sbin/dpdk-devbind
 	mkdir -p debian/dpdk/sbin
@@ -178,18 +146,15 @@ binary-arch:
 	mkdir -p debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(VERSION)
 	cp -a lib/librte_eal/linuxapp/kni/* \
 		debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(VERSION)
-	dh_dkms -V $(VERSION)
-	dh_python2
-	dh_perl
-	dh_link
-	dh_compress
-	dh_fixperms
-	dh_strip
-	dh_makeshlibs
-	dh_shlibdeps
-	dh_installdeb
-	dh_gencontrol
-	dh_md5sums
-	dh_builddeb
 
-binary: binary-arch binary-indep
+override_dh_dkms:
+	dh_dkms -V $(VERSION)
+
+override_dh_installinit:
+	dh_installinit --no-start --no-restart-on-upgrade
+
+override_dh_systemd_start:
+	dh_systemd_start --no-start --no-restart-on-upgrade
+
+override_dh_auto_test:
+
