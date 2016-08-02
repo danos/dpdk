@@ -54,7 +54,8 @@ Package: dpdk-doc
 Section: doc
 Architecture: all
 Homepage: http://dpdk.org/doc/guides/index.html
-Depends: libjs-jquery, libjs-underscore, ${misc:Depends}
+Depends: libjs-jquery, libjs-underscore, ${misc:Depends}, ${python:Depends}
+Recommends: python, ${python:Recommends}
 Description: Data Plane Development Kit (documentation)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
