@@ -14,6 +14,9 @@ dpdk (16.07-1) UNRELEASED; urgency=medium
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
     by the devbind script
 
+  [ Luca Boccassi ]
+  * Add ${shlib:Depends} to dpdk-dev dependencies
+
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
 dpdk (16.07-rc5-1) UNRELEASED; urgency=medium

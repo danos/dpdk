@@ -43,7 +43,7 @@ Package: dpdk-dev
 Section: devel
 Architecture: amd64 arm64 i386
 Homepage: http://www.dpdk.org
-Depends: libdpdk-dev (= ${binary:Version}), ${misc:Depends}
+Depends: libdpdk-dev (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: Data Plane Development Kit (development files)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
