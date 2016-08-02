@@ -1,6 +1,6 @@
 librte_eal.so.2 librte-eal2 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
- DPDK_16.07@DPDK_16.07 16.07-rc1
+ DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
  DPDK_2.2@DPDK_2.2 16.04
@@ -11,7 +11,7 @@ librte_eal.so.2 librte-eal2 #MINVER#
  lcore_config@DPDK_2.0 16.04
  pci_device_list@DPDK_2.0 16.04
  pci_driver_list@DPDK_2.0 16.04
- pci_get_sysfs_path@DPDK_16.07 16.07-rc1
+ pci_get_sysfs_path@DPDK_16.07 16.07~rc1
  per_lcore__lcore_id@DPDK_2.0 16.04
  per_lcore__rte_errno@DPDK_2.0 16.04
  rte_calloc@DPDK_2.0 16.04
@@ -90,9 +90,9 @@ librte_eal.so.2 librte-eal2 #MINVER#
  rte_keepalive_create@DPDK_2.2 16.04
  rte_keepalive_dispatch_pings@DPDK_2.2 16.04
  rte_keepalive_mark_alive@DPDK_2.2 16.04
- rte_keepalive_mark_sleep@DPDK_16.07 16.07-rc1
+ rte_keepalive_mark_sleep@DPDK_16.07 16.07~rc1
  rte_keepalive_register_core@DPDK_2.2 16.04
- rte_keepalive_register_relay_callback@DPDK_16.07 16.07-rc1
+ rte_keepalive_register_relay_callback@DPDK_16.07 16.07~rc1
  rte_log@DPDK_2.0 16.04
  rte_log_add_in_history@DPDK_2.0 16.04
  rte_log_cur_msg_loglevel@DPDK_2.0 16.04
@@ -121,7 +121,7 @@ librte_eal.so.2 librte-eal2 #MINVER#
  rte_memzone_walk@DPDK_2.0 16.04
  rte_openlog_stream@DPDK_2.0 16.04
  rte_realloc@DPDK_2.0 16.04
- (arch=!arm64)rte_rtm_supported@DPDK_16.07 16.07-rc3
+ (arch=!arm64)rte_rtm_supported@DPDK_16.07 16.07~rc3
  rte_set_application_usage_hook@DPDK_2.0 16.04
  rte_set_log_level@DPDK_2.0 16.04
  rte_set_log_type@DPDK_2.0 16.04
@@ -131,7 +131,7 @@ librte_eal.so.2 librte-eal2 #MINVER#
  rte_sys_gettid@DPDK_2.0 16.04
  rte_thread_get_affinity@DPDK_2.0 16.04
  rte_thread_set_affinity@DPDK_2.0 16.04
- rte_thread_setname@DPDK_16.07 16.07-rc1
+ rte_thread_setname@DPDK_16.07 16.07~rc1
  rte_vlog@DPDK_2.0 16.04
  rte_zmalloc@DPDK_2.0 16.04
  rte_zmalloc_socket@DPDK_2.0 16.04

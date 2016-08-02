@@ -1,6 +1,6 @@
 librte_cryptodev.so.1 librte-cryptodev1 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
- DPDK_16.07@DPDK_16.07 16.07-rc1
+ DPDK_16.07@DPDK_16.07 16.07~rc1
  rte_crypto_op_pool_create@DPDK_16.04 16.04
  rte_cryptodev_callback_register@DPDK_16.04 16.04
  rte_cryptodev_callback_unregister@DPDK_16.04 16.04
@@ -12,7 +12,7 @@ librte_cryptodev.so.1 librte-cryptodev1 #MINVER#
  rte_cryptodev_get_dev_id@DPDK_16.04 16.04
  rte_cryptodev_get_feature_name@DPDK_16.04 16.04
  rte_cryptodev_info_get@DPDK_16.04 16.04
- rte_cryptodev_parse_vdev_init_params@DPDK_16.07 16.07-rc1
+ rte_cryptodev_parse_vdev_init_params@DPDK_16.07 16.07~rc1
  rte_cryptodev_pmd_allocate@DPDK_16.04 16.04
  rte_cryptodev_pmd_callback_process@DPDK_16.04 16.04
  rte_cryptodev_pmd_driver_register@DPDK_16.04 16.04
