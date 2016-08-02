@@ -20,6 +20,8 @@ dpdk (16.07-1) UNRELEASED; urgency=medium
   * Convert debian/rules to new style DH targets
   * Add Recommends: python to dpdk-doc since it ships python scripts among the
     examples, fixes Lintian warning about missing python dependencies
+  * Fix typo in dpdk-doc.README.Debian, fixes "W: dpdk-doc:
+    spelling-error-in-readme-debian to to (duplicate word) to"
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
