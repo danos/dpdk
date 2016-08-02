@@ -16,6 +16,7 @@ dpdk (16.07-1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * Add ${shlib:Depends} to dpdk-dev dependencies
+  * Install api and guides in dpdk-doc
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 

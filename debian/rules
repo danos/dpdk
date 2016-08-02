@@ -96,7 +96,7 @@ binary-indep:
 	dh_lintian
 	# Package: dpdk-doc
 	# All files based on the install-doc rule (includes examples)
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr \
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk-doc install-doc
 	dh_link
 	dh_compress
