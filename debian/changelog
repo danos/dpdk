@@ -2,6 +2,11 @@ dpdk (16.07-1) UNRELEASED; urgency=medium
 
   [ Christian Ehrhardt ]
   * Merge with upstream DPDK 16.07 release
+  * Cleanup Lintian Warnings
+    - d/p/fix-unusual-interpreter.patch fixes "W: dpdk-doc:
+      unusual-interpreter"
+    - d/p/fix-double-license-info.patch fixes "W: dpdk-rte-kni-dkms:
+      extra-license-file"
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
