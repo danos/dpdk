@@ -13,6 +13,9 @@ dpdk (16.07-1) UNRELEASED; urgency=medium
     These binaries are part of the sdk and meant to be shipped with the sdk.
   * d/p/dpdk-dev-doc-fix-old-dpdk-nic-bind.py-references.patch to fix the
     docs in regard to 16.07 changes renaming dpdk_nic_bind
+  * d/p/make-load-devel-config-not-to-appear-as-executable.patch to avoid
+    accidentially executing as script and to fix unusual-interpreter lintian
+    warning.
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
