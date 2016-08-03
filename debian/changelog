@@ -9,6 +9,8 @@ dpdk (16.07-1) UNRELEASED; urgency=medium
       extra-license-file"
   * Renamed d/p/ubuntu-fix-vhost-user-socket-permission.patch to
     d/p/fix-vhost-user-socket-permission.patch
+  * Add lintian-overrides for: E: dpdk-dev: arch-dependent-file-in-usr-share
+    These binaries are part of the sdk and meant to be shipped with the sdk.
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
