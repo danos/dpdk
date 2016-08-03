@@ -1,3 +1,4 @@
 fix-vhost-user-socket-permission.patch
 fix-double-license-info.patch
 fix-unusual-interpreter.patch
+dpdk-dev-doc-fix-old-dpdk-nic-bind.py-references.patch
