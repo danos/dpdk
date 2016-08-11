@@ -1,4 +1,4 @@
-dpdk (16.07-1) UNRELEASED; urgency=medium
+dpdk (16.07-0) UNRELEASED; urgency=medium
 
   [ Christian Ehrhardt ]
   * Merge with upstream DPDK 16.07 release
