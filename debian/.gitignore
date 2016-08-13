@@ -5,9 +5,12 @@
 *.prerm.debhelper
 *.dkms.debhelper
 build/
+control.modules
+control.orig
 dpdk-dev/
 dpdk-doc/
 dpdk-igb-uio-dkms/
+dpdk-modules-*/
 dpdk-rte-kni-dkms/
 dpdk/
 files
@@ -56,3 +59,4 @@ librte-sched1/
 librte-table2/
 librte-timer1/
 librte-vhost3/
+VERSION

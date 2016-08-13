@@ -36,6 +36,11 @@ dpdk (16.07-0) UNRELEASED; urgency=medium
     - E: libethdev4: symbols-file-contains-current-version-with-debian-revision
       on symbol DPDK_16.04@DPDK_16.04 and 114 others
   * Add lintian-overrides for: "W: dpdk-doc: embedded-javascript-library"
+  * Add optional binary kernel modules package, disabled by default (build with
+    DEB_BUILD_OPTIONS=kernel_modules to enable). If enabled will build kernel
+    modules agains the local, current kernel version (override by adding
+    ksrc=<path/to/kernel/sources> to DEB_BUILD_OPTIONS) into a
+    dpdk-modules-<kernel version> package
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
