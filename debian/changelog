@@ -16,6 +16,7 @@ dpdk (16.07-0) UNRELEASED; urgency=medium
   * d/p/make-load-devel-config-not-to-appear-as-executable.patch to avoid
     accidentially executing as script and to fix unusual-interpreter lintian
     warning.
+  * fix d/t/test-initscripts on more recent systemd environments
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
