@@ -1,3 +1,17 @@
+How to build the package - for CI systems, etc
+
+1 - install all the build-dependencies as listed in the debian/control file.
+    From the repo top-level directory:
+
+apt-get install `dpkg-checkbuilddeps |& sed "s/dpkg-checkbuilddeps: Unmet build dependencies://g"`
+
+2 - run debuild (the flags will avoid signing the built packages):
+    From the repo top-level directory:
+
+debuild -uc -us
+
+***************
+
 quilt patches format
 
 Note that we use the dquilt format for patches as outlined on Debian's wiki:
