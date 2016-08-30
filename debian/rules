@@ -22,8 +22,13 @@ export DEB_CFLAGS_MAINT_APPEND  = -fPIC
 
 include /usr/share/dpkg/buildflags.mk
 export EXTRA_CFLAGS=$(CFLAGS)
+export EXTRA_CPPFLAGS=$(CPPFLAGS)
+export HOST_EXTRA_CFLAGS=$(CFLAGS)
+export HOST_EXTRA_CPPFLAGS=$(CPPFLAGS)
 # need to be stripped as DPDK build system adds them and it would be -Wl,-Wl,opt
 export EXTRA_LDFLAGS=$(shell echo $(LDFLAGS) | sed 's/-Wl,//g')
+# HOST_CC build system does not add -Wl ...
+export EXTRA_HOST_LDFLAGS=$(LDFLAGS)
 
 # People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
 # RTE_TARGET via environment variables if they like
