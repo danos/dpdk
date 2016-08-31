@@ -42,6 +42,15 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
     modules agains the local, current kernel version (override by adding
     ksrc=<path/to/kernel/sources> to DEB_BUILD_OPTIONS) into a
     dpdk-modules-<kernel version> package
+  * Set HOST_/EXTRA/CPP/C/LDFLAGS in d/rules so that all built objects pick up
+    all flags set by the dpkg environment, like hardening flags
+  * Add rte-compile-pre-cppflags.patch to make all DPDK objects pick up the
+    user specified or environment specified CPP/C/LDFLAGS.
+    Fixes Lintian warning:
+    - W: dpdk-dev: hardening-no-relro
+         usr/share/dpdk/x86_64-default-linuxapp-gcc/app/dpdk-pmdinfogen
+  * Add a brief HOWTO to debian/README.source with instructions to build the
+    packages, for CI systems and the like.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
