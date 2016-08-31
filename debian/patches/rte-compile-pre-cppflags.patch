@@ -11,6 +11,11 @@ dpkg-buildpackage environment, like hardening flags, are not
 correctly passed to all objects builds.
 
 Signed-off-by: Luca Boccassi <lboccass@brocade.com>
+
+Forwarded: yes
+Origin: Upstream, http://dpdk.org/dev/patchwork/patch/15549/
+Author:  Luca Boccassi <lboccass@brocade.com>
+Last-Update: 2016-08-30
 ---
  mk/internal/rte.compile-pre.mk | 10 +++++-----
  1 file changed, 5 insertions(+), 5 deletions(-)
