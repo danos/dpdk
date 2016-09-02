@@ -121,7 +121,7 @@ librte_eal.so.2 librte-eal2 #MINVER#
  rte_memzone_walk@DPDK_2.0 16.04
  rte_openlog_stream@DPDK_2.0 16.04
  rte_realloc@DPDK_2.0 16.04
- (arch=!arm64)rte_rtm_supported@DPDK_16.07 16.07~rc3
+ (arch=!arm64 !ppc64el)rte_rtm_supported@DPDK_16.07 16.07~rc3
  rte_set_application_usage_hook@DPDK_2.0 16.04
  rte_set_log_level@DPDK_2.0 16.04
  rte_set_log_type@DPDK_2.0 16.04
