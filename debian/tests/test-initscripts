@@ -14,6 +14,7 @@ EXPECT2MHP=10
 #   We will not check for the 1G alloc, as we know it often fails in small adt's
 # - has no 1G huge page size (HW feature) => we check if it fails gracefully
 EXPECT1GHP=1
+EXPECT16MHP=2
 
 DPDK_CONF="/etc/dpdk/dpdk.conf"
 DPDK_INTERF="/etc/dpdk/interfaces"
@@ -63,6 +64,9 @@ checkstatus() {
         if [ ! -d /sys/kernel/mm/hugepages/hugepages-2048kB ]; then
             EXPMPCOUNT=$((EXPMPCOUNT-1))
         fi
+        if [ ! -d /sys/kernel/mm/hugepages/hugepages-16384kB ]; then
+            EXPMPCOUNT=$((EXPMPCOUNT-1))
+        fi
         if [ ! -d /sys/kernel/mm/hugepages/hugepages-1048576kB ]; then
             EXPMPCOUNT=$((EXPMPCOUNT-1))
         fi
@@ -78,7 +82,8 @@ checkstatus() {
     # check if setting HP worked
     if [ "${EXPMPCOUNT}" -ne "0" ]; then
         checkhp "hugepages-2048kB" "${EXPECT2MHP}"
-        # We do not check 1G alloc, as it is known to be often not available
+        checkhp "hugepages-16384kB" "${EXPECT16MHP}"
+        # We do not check 1G/16M alloc, as it is known to be often not available
     fi
 }
 
@@ -110,14 +115,15 @@ checkinitstyle() {
     checkstatus "${TYPE}-BEGIN" 0 "${PRE}" "${POST}" "inactive"
     echo "### Starting Service ###"
     ${PRE} start "${POST}"
-    checkstatus "${TYPE}-START" 2 "${PRE}" "${POST}" "active"
+    checkstatus "${TYPE}-START" 3 "${PRE}" "${POST}" "active"
     echo "### Restarting Service ###"
     ${PRE} restart "${POST}"
-    checkstatus "${TYPE}-RESTART" 2 "${PRE}" "${POST}" "active"
+    checkstatus "${TYPE}-RESTART" 3 "${PRE}" "${POST}" "active"
 }
 
 echo "NR_2M_PAGES=$EXPECT2MHP" >> ${DPDK_CONF}
 echo "NR_1G_PAGES=$EXPECT1GHP" >> ${DPDK_CONF}
+echo "NR_16M_PAGES=$EXPECT16MHP" >> ${DPDK_CONF}
 
 # We can't rely on any real device for DPDK tests in adt-* environments. But
 # we can expect all kind of broken configuration not to break it (would be
