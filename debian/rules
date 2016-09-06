@@ -81,8 +81,7 @@ build:
 	    exit 1; \
 	fi
 	sh debian/prep-modules $(KSRC)
-	test -f debian/control.orig || cp -v debian/control debian/control.orig
-	cat debian/control.orig debian/control.modules > debian/control
+	cat debian/control.modules >> debian/control
 	dh $@ --with python2,dkms
 endif
 
@@ -92,7 +91,7 @@ endif
 override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
 		debian/control.modules debian/VERSION
-	mv debian/control.orig debian/control || true
+	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 
 override_dh_auto_configure:
 	# report dpkg-buildflags status to build log

@@ -1,4 +1,3 @@
-
 Package: dpdk-modules-#KVERS#
 Section: kernel
 Architecture: amd64 arm64 i386
