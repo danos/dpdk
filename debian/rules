@@ -119,7 +119,7 @@ override_dh_auto_install-indep:
 		DESTDIR=debian/dpdk-doc install-doc
 
 override_dh_auto_build-arch:
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) build
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
 	# (but not both).
