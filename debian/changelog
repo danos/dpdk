@@ -17,6 +17,13 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
     accidentially executing as script and to fix unusual-interpreter lintian
     warning.
   * fix d/t/test-initscripts on more recent systemd environments
+  * enable dpdk for ppc64el
+    - add ppc64el arch to valid dpdk pmds and rte libraries
+    - select power config and machine for dpdk build system
+    - disable xen pmd for ppc64el
+    - d/tests: make tests compatible with ppc64el
+    - d/dpdk.conf, d/dpdk-init add 16M huge page support
+    - d/p/fix-power-default-config.patch enable bond PMD on ppc64el
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
