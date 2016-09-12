@@ -37,9 +37,15 @@ DPDK_CONFIG := "arm64-armv8a-linuxapp-gcc"
 RTE_MACHINE := "armv8a"
 RTE_TARGET := "arm64-armv8a-linuxapp-gcc"
 else
+ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
+DPDK_CONFIG := "ppc_64-power8-linuxapp-gcc"
+RTE_MACHINE := "power8"
+RTE_TARGET := "ppc_64-power8-linuxapp-gcc"
+else
 DPDK_CONFIG := "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
 RTE_MACHINE := "default"
 RTE_TARGET := "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
+endif
 endif
 DPDK_STATIC_DIR = "debian/build/static-root"
 DPDK_SHARED_DIR = "debian/build/shared-root"
@@ -106,6 +112,10 @@ override_dh_auto_configure:
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
 		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
 		$(DPDK_STATIC_DIR)/.config
+	# xen not available on ppc64el
+ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
+	sed -ri -e 's,(LIBRTE_PMD_XENVIRT=).*,\1n,' $(DPDK_STATIC_DIR)/.config
+endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
