@@ -124,6 +124,9 @@ mount_hugetlbfs() {
     if [ -n "${NR_2M_PAGES}" -a -z "$(get_hugetlbfs_mountpoint '2M')" ]; then
         _mount_hugetlbfs 2M
     fi
+    if [ -n "${NR_16M_PAGES}" -a -z "$(get_hugetlbfs_mountpoint '16M')" ]; then
+        _mount_hugetlbfs 16M
+    fi
     if [ -n "${NR_1G_PAGES}" -a -z "$(get_hugetlbfs_mountpoint '1G')" ]; then
         _mount_hugetlbfs 1G
     fi
@@ -166,6 +169,7 @@ setup_hugepages() {
     . /etc/dpdk/dpdk.conf
 
     _setup_hugepages "hugepages-2048kB" "$NR_2M_PAGES"
+    _setup_hugepages "hugepages-16384kB" "$NR_16M_PAGES"
     _setup_hugepages "hugepages-1048576kB" "$NR_1G_PAGES"
 
     # dpdk uses 2*#hugepages mappings, increase for huge systems LP #1507921
