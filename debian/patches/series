@@ -5,3 +5,4 @@ dpdk-dev-doc-fix-old-dpdk-nic-bind.py-references.patch
 make-load-devel-config-not-to-appear-as-executable.patch
 rte-compile-pre-cppflags.patch
 fix-power-default-config.patch
+rte-devel-build-env.patch

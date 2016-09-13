@@ -30,6 +30,8 @@ export EXTRA_LDFLAGS=$(shell echo $(LDFLAGS) | sed 's/-Wl,//g')
 # HOST_CC build system does not add -Wl ...
 export EXTRA_HOST_LDFLAGS=$(LDFLAGS)
 
+export RTE_DEVEL_BUILD=n
+
 # People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
 # RTE_TARGET via environment variables if they like
 ifneq (,$(filter $(DEB_HOST_ARCH), arm64))

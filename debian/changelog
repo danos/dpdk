@@ -58,6 +58,10 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
          usr/share/dpdk/x86_64-default-linuxapp-gcc/app/dpdk-pmdinfogen
   * Add a brief HOWTO to debian/README.source with instructions to build the
     packages, for CI systems and the like.
+  * Build with RTE_DEVEL_BUILD=n to avoid building test pmds with an rpath
+    hardcoded to the package build PATH. Fixes Lintian Error:
+    - E: dpdk: binary-or-shlib-defines-rpath usr/bin/dpdk-pdump
+         /home/lboccass/git/dpdk_deb/debian/build/shared-root/lib
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
