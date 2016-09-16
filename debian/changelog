@@ -14,7 +14,7 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * d/p/dpdk-dev-doc-fix-old-dpdk-nic-bind.py-references.patch to fix the
     docs in regard to 16.07 changes renaming dpdk_nic_bind
   * d/p/make-load-devel-config-not-to-appear-as-executable.patch to avoid
-    accidentially executing as script and to fix unusual-interpreter lintian
+    accidentally executing as script and to fix unusual-interpreter lintian
     warning.
   * fix d/t/test-initscripts on more recent systemd environments
   * enable dpdk for ppc64el
@@ -46,7 +46,7 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * Add lintian-overrides for: "W: dpdk-doc: embedded-javascript-library"
   * Add optional binary kernel modules package, disabled by default (build with
     DEB_BUILD_OPTIONS=kernel_modules to enable). If enabled will build kernel
-    modules agains the local, current kernel version (override by adding
+    modules against the local, current kernel version (override by adding
     ksrc=<path/to/kernel/sources> to DEB_BUILD_OPTIONS) into a
     dpdk-modules-<kernel version> package
   * Set HOST_/EXTRA/CPP/C/LDFLAGS in d/rules so that all built objects pick up
