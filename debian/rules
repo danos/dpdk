@@ -121,7 +121,8 @@ endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
+		doc-guides-man
 
 override_dh_auto_install-indep:
 	# Package: dpdk-doc
