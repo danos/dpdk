@@ -66,6 +66,10 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
     - E: dpdk: binary-or-shlib-defines-rpath usr/bin/dpdk-pdump
          /home/lboccass/git/dpdk_deb/debian/build/shared-root/lib
 
+  [ Santiago RR ]
+  * improve debian/copyright
+  * remove duplicate entries from d/control
+
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
 dpdk (16.07~rc5-1) UNRELEASED; urgency=medium
