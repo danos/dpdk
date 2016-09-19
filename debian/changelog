@@ -27,6 +27,10 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * add man pages for installed binaries
     - add backport of patches from upstream
     - call generation of man pages in d/rules
+  * d/t/test-dkms retain dkms logs for debugging
+  * fix rte_kni dkms build with kernel >= 4.8
+    - d/p/dpdk-dev-v2-kni-fix-build-with-kernel-4.8.patch replaced macro with
+      its value in kni ethtool drivers.
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
