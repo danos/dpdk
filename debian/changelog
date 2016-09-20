@@ -69,6 +69,7 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
     hardcoded to the package build PATH. Fixes Lintian Error:
     - E: dpdk: binary-or-shlib-defines-rpath usr/bin/dpdk-pdump
          /home/lboccass/git/dpdk_deb/debian/build/shared-root/lib
+  * Fix d/watch file to point to fast.dpdk.org/rel
 
   [ Santiago RR ]
   * improve debian/copyright
