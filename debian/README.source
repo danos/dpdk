@@ -3,7 +3,7 @@ How to build the package - for CI systems, etc
 1 - install all the build-dependencies as listed in the debian/control file.
     From the repo top-level directory:
 
-apt-get install `dpkg-checkbuilddeps |& sed "s/dpkg-checkbuilddeps: Unmet build dependencies://g"`
+apt-get install `dpkg-checkbuilddeps |& sed "s/.*://g" |& sed "s/(...[0-9]*)//g"`
 
 2 - run debuild (the flags will avoid signing the built packages):
     From the repo top-level directory:
