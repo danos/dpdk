@@ -95,7 +95,7 @@ Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
          libpcap-dev,
          libethdev4 (= ${binary:Version}),
-         librte-acl2 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-acl2 (= ${binary:Version}),
          librte-cfgfile2 (= ${binary:Version}),
          librte-cmdline2 (= ${binary:Version}),
          librte-cryptodev1 (= ${binary:Version}),
@@ -106,12 +106,12 @@ Depends: ${misc:Depends},
          librte-jobstats1 (= ${binary:Version}),
          librte-kni2 (= ${binary:Version}) [amd64 arm64],
          librte-kvargs1 (= ${binary:Version}),
-         librte-lpm2 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-lpm2 (= ${binary:Version}),
          librte-mbuf2 (= ${binary:Version}),
          librte-mempool2 (= ${binary:Version}),
          librte-meter1 (= ${binary:Version}),
          librte-pdump1 (= ${binary:Version}),
-         librte-pipeline3 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pipeline3 (= ${binary:Version}),
          librte-pmd-af-packet1 (= ${binary:Version}),
          librte-pmd-bnxt1 (= ${binary:Version}),
          librte-pmd-bond1 (= ${binary:Version}),
@@ -130,12 +130,12 @@ Depends: ${misc:Depends},
          librte-pmd-virtio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-port3 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-port3 (= ${binary:Version}),
          librte-power1 (= ${binary:Version}),
          librte-reorder1 (= ${binary:Version}),
          librte-ring1 (= ${binary:Version}),
-         librte-sched1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-table2 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-sched1 (= ${binary:Version}),
+         librte-table2 (= ${binary:Version}),
          librte-timer1 (= ${binary:Version}),
          librte-vhost3 (= ${binary:Version})
 Description: Data Plane Development Kit (basic development files)
@@ -158,7 +158,7 @@ Description: Data Plane Development Kit (libethdev runtime library)
  This package contains the runtime libraries for libethdev
 
 Package: librte-acl2
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__ethdev_8h.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -289,7 +289,7 @@ Description: Data Plane Development Kit (librte-kvargs runtime library)
  This package contains the runtime libraries for librte_kvargs
 
 Package: librte-lpm2
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__lpm_8h.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -337,7 +337,7 @@ Description: Data Plane Development Kit (librte-meter runtime library)
  This package contains the runtime libraries for librte_meter
 
 Package: librte-pipeline3
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__pipeline_8h.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -564,7 +564,7 @@ Description: Data Plane Development Kit (librte-pmd-xenvirt runtime library)
  This package contains the runtime libraries for librte_pmd_xenvirt
 
 Package: librte-port3
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__port_8h.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -612,7 +612,7 @@ Description: Data Plane Development Kit (librte_ring runtime library)
  This package contains the runtime libraries for librte_ring
 
 Package: librte-sched1
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__sched_8h.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -624,7 +624,7 @@ Description: Data Plane Development Kit (librte_sched runtime library)
  This package contains the runtime libraries for librte_sched
 
 Package: librte-table2
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__table_8h.html
 Pre-Depends: ${misc:Pre-Depends}
