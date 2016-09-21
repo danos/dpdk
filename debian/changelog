@@ -77,6 +77,12 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * improve debian/copyright
   * remove duplicate entries from d/control
 
+  [ Gowrishankar Muthukrishnan ]
+  * enable formerly disabled libraries in ppc64le config
+  * d/control provide now supported packages for ppc64le
+  * d/p/dpdk-dev-ppc-enable-* backports from dpdk to enable more features
+    for ppc64le
+
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
 dpdk (16.07~rc5-1) UNRELEASED; urgency=medium
