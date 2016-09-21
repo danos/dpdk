@@ -33,7 +33,17 @@ export EXTRA_HOST_LDFLAGS=$(LDFLAGS)
 export RTE_DEVEL_BUILD=n
 
 # People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
-# RTE_TARGET via environment variables if they like
+# RTE_TARGET via DEB_BUILD_OPTIONS if they like
+ifneq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
+    DPDK_CONFIG ?= $(patsubst dpdk_config=%,%,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
+endif
+ifneq (,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
+    RTE_MACHINE ?= $(patsubst rte_machine=%,%,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
+endif
+ifneq (,$(filter rte_target=%,$(DEB_BUILD_OPTIONS)))
+    RTE_TARGET ?= $(patsubst rte_target=%,%,$(filter rte_target=%,$(DEB_BUILD_OPTIONS)))
+endif
+
 ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
 DPDK_CONFIG ?= "arm64-armv8a-linuxapp-gcc"
 RTE_MACHINE ?= "armv8a"
@@ -100,13 +110,19 @@ override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
+	test -L config/defconfig_$(DPDK_CONFIG) && rm -f config/defconfig_$(DPDK_CONFIG) || true
 
 override_dh_auto_configure:
+	# Add support for a custom defconfig file in the debian directory.
+ifneq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
+	test -e config/defconfig_$(DPDK_CONFIG) || ln -fs ../debian/defconfig_$(DPDK_CONFIG) config/defconfig_$(DPDK_CONFIG)
+endif
 	# report dpkg-buildflags status to build log
 	dpkg-buildflags --status
 	echo EXTRA_CFLAGS $$EXTRA_CFLAGS
 	echo EXTRA_LDFLAGS: $$EXTRA_LDFLAGS
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) T=$(DPDK_CONFIG) config
+ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
 		-e 's,(RTE_NEXT_ABI=).*,\1n,' \
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
@@ -117,6 +133,7 @@ override_dh_auto_configure:
 	# xen not available on ppc64el
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
 	sed -ri -e 's,(LIBRTE_PMD_XENVIRT=).*,\1n,' $(DPDK_STATIC_DIR)/.config
+endif
 endif
 	dh_auto_configure
 
