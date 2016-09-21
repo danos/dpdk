@@ -35,18 +35,18 @@ export RTE_DEVEL_BUILD=n
 # People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
 # RTE_TARGET via environment variables if they like
 ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
-DPDK_CONFIG := "arm64-armv8a-linuxapp-gcc"
-RTE_MACHINE := "armv8a"
-RTE_TARGET := "arm64-armv8a-linuxapp-gcc"
+DPDK_CONFIG ?= "arm64-armv8a-linuxapp-gcc"
+RTE_MACHINE ?= "armv8a"
+RTE_TARGET ?= "arm64-armv8a-linuxapp-gcc"
 else
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
-DPDK_CONFIG := "ppc_64-power8-linuxapp-gcc"
-RTE_MACHINE := "power8"
-RTE_TARGET := "ppc_64-power8-linuxapp-gcc"
+DPDK_CONFIG ?= "ppc_64-power8-linuxapp-gcc"
+RTE_MACHINE ?= "power8"
+RTE_TARGET ?= "ppc_64-power8-linuxapp-gcc"
 else
-DPDK_CONFIG := "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
-RTE_MACHINE := "default"
-RTE_TARGET := "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
+DPDK_CONFIG ?= "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
+RTE_MACHINE ?= "default"
+RTE_TARGET ?= "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
 endif
 endif
 DPDK_STATIC_DIR = "debian/build/static-root"
