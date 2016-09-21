@@ -1,0 +1,536 @@
+From: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+Date: Thu, 8 Sep 2016 22:18:04 +0530
+Subject: [PATCH 2/7] acl: add AltiVec for ppc64
+
+This patch adds port for ACL library in ppc64le.
+
+Signed-off-by: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+Acked-by: Chao Zhu <chaozhu@linux.vnet.ibm.com>
+Acked-by: Konstantin Ananyev <konstantin.ananyev@intel.com>
+
+Origin: Upstream, commit:1d73135f9f1c626def280bd9c7e06a9ae157f660
+Author: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+Last-Update: 2016-09-21
+---
+ app/test-acl/main.c                         |   4 +
+ config/defconfig_ppc_64-power8-linuxapp-gcc |   1 -
+ lib/librte_acl/Makefile                     |   2 +
+ lib/librte_acl/acl.h                        |   4 +
+ lib/librte_acl/acl_run.h                    |   2 +
+ lib/librte_acl/acl_run_altivec.c            |  47 ++++
+ lib/librte_acl/acl_run_altivec.h            | 329 ++++++++++++++++++++++++++++
+ lib/librte_acl/rte_acl.c                    |  13 ++
+ lib/librte_acl/rte_acl.h                    |   1 +
+ 9 files changed, 402 insertions(+), 1 deletion(-)
+ create mode 100644 lib/librte_acl/acl_run_altivec.c
+ create mode 100644 lib/librte_acl/acl_run_altivec.h
+
+diff --git a/app/test-acl/main.c b/app/test-acl/main.c
+index d366981..1b2b176 100644
+--- a/app/test-acl/main.c
++++ b/app/test-acl/main.c
+@@ -105,6 +105,10 @@ static const struct acl_alg acl_alg[] = {
+ 		.name = "neon",
+ 		.alg = RTE_ACL_CLASSIFY_NEON,
+ 	},
++	{
++		.name = "altivec",
++		.alg = RTE_ACL_CLASSIFY_ALTIVEC,
++	},
+ };
+ 
+ static struct {
+diff --git a/config/defconfig_ppc_64-power8-linuxapp-gcc b/config/defconfig_ppc_64-power8-linuxapp-gcc
+index 9ddf3c5..dede34f 100644
+--- a/config/defconfig_ppc_64-power8-linuxapp-gcc
++++ b/config/defconfig_ppc_64-power8-linuxapp-gcc
+@@ -57,7 +57,6 @@ CONFIG_RTE_LIBRTE_ENIC_PMD=n
+ CONFIG_RTE_LIBRTE_FM10K_PMD=n
+ 
+ # This following libraries are not available on Power. So they're turned off.
+-CONFIG_RTE_LIBRTE_ACL=n
+ CONFIG_RTE_LIBRTE_SCHED=n
+ CONFIG_RTE_LIBRTE_PORT=n
+ CONFIG_RTE_LIBRTE_TABLE=n
+diff --git a/lib/librte_acl/Makefile b/lib/librte_acl/Makefile
+index 9803e9d..d05be66 100644
+--- a/lib/librte_acl/Makefile
++++ b/lib/librte_acl/Makefile
+@@ -52,6 +52,8 @@ SRCS-$(CONFIG_RTE_LIBRTE_ACL) += acl_run_scalar.c
+ ifneq ($(filter y,$(CONFIG_RTE_ARCH_ARM) $(CONFIG_RTE_ARCH_ARM64)),)
+ SRCS-$(CONFIG_RTE_LIBRTE_ACL) += acl_run_neon.c
+ CFLAGS_acl_run_neon.o += -flax-vector-conversions -Wno-maybe-uninitialized
++else ifeq ($(CONFIG_RTE_ARCH_PPC_64),y)
++SRCS-$(CONFIG_RTE_LIBRTE_ACL) += acl_run_altivec.c
+ else
+ SRCS-$(CONFIG_RTE_LIBRTE_ACL) += acl_run_sse.c
+ #check if flag for SSE4.1 is already on, if not set it up manually
+diff --git a/lib/librte_acl/acl.h b/lib/librte_acl/acl.h
+index 09d6784..6664a55 100644
+--- a/lib/librte_acl/acl.h
++++ b/lib/librte_acl/acl.h
+@@ -234,6 +234,10 @@ int
+ rte_acl_classify_neon(const struct rte_acl_ctx *ctx, const uint8_t **data,
+ 	uint32_t *results, uint32_t num, uint32_t categories);
+ 
++int
++rte_acl_classify_altivec(const struct rte_acl_ctx *ctx, const uint8_t **data,
++	uint32_t *results, uint32_t num, uint32_t categories);
++
+ #ifdef __cplusplus
+ }
+ #endif /* __cplusplus */
+diff --git a/lib/librte_acl/acl_run.h b/lib/librte_acl/acl_run.h
+index b2fc42c..024f393 100644
+--- a/lib/librte_acl/acl_run.h
++++ b/lib/librte_acl/acl_run.h
+@@ -39,7 +39,9 @@
+ 
+ #define MAX_SEARCHES_AVX16	16
+ #define MAX_SEARCHES_SSE8	8
++#define MAX_SEARCHES_ALTIVEC8	8
+ #define MAX_SEARCHES_SSE4	4
++#define MAX_SEARCHES_ALTIVEC4	4
+ #define MAX_SEARCHES_SCALAR	2
+ 
+ #define GET_NEXT_4BYTES(prm, idx)	\
+diff --git a/lib/librte_acl/acl_run_altivec.c b/lib/librte_acl/acl_run_altivec.c
+new file mode 100644
+index 0000000..3523526
+--- /dev/null
++++ b/lib/librte_acl/acl_run_altivec.c
+@@ -0,0 +1,47 @@
++/*-
++ *   BSD LICENSE
++ *
++ *   Copyright (C) IBM Corporation 2016.
++ *   All rights reserved.
++ *
++ *   Redistribution and use in source and binary forms, with or without
++ *   modification, are permitted provided that the following conditions
++ *   are met:
++ *
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in
++ *       the documentation and/or other materials provided with the
++ *       distribution.
++ *     * Neither the name of Intel Corporation nor the names of its
++ *       contributors may be used to endorse or promote products derived
++ *       from this software without specific prior written permission.
++ *
++ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++ *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++ *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++ *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++ *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "acl_run_altivec.h"
++
++int
++rte_acl_classify_altivec(const struct rte_acl_ctx *ctx, const uint8_t **data,
++	uint32_t *results, uint32_t num, uint32_t categories)
++{
++	if (likely(num >= MAX_SEARCHES_ALTIVEC8))
++		return search_altivec_8(ctx, data, results, num, categories);
++	else if (num >= MAX_SEARCHES_ALTIVEC4)
++		return search_altivec_4(ctx, data, results, num, categories);
++	else
++		return rte_acl_classify_scalar(ctx, data, results, num,
++			categories);
++}
+diff --git a/lib/librte_acl/acl_run_altivec.h b/lib/librte_acl/acl_run_altivec.h
+new file mode 100644
+index 0000000..7d329bc
+--- /dev/null
++++ b/lib/librte_acl/acl_run_altivec.h
+@@ -0,0 +1,329 @@
++/*
++ *   BSD LICENSE
++ *
++ *   Copyright (C) IBM Corporation 2016.
++ *
++ *   Redistribution and use in source and binary forms, with or without
++ *   modification, are permitted provided that the following conditions
++ *   are met:
++ *
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in
++ *       the documentation and/or other materials provided with the
++ *       distribution.
++ *     * Neither the name of IBM Corporation nor the names of its
++ *       contributors may be used to endorse or promote products derived
++ *       from this software without specific prior written permission.
++ *
++ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++ *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++ *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++ *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++ *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++*/
++
++#include "acl_run.h"
++#include "acl_vect.h"
++
++struct _altivec_acl_const {
++	rte_xmm_t xmm_shuffle_input;
++	rte_xmm_t xmm_index_mask;
++	rte_xmm_t xmm_ones_16;
++	rte_xmm_t range_base;
++} altivec_acl_const  __attribute__((aligned(RTE_CACHE_LINE_SIZE))) = {
++	{
++		.u32 = {0x00000000, 0x04040404, 0x08080808, 0x0c0c0c0c}
++	},
++	{
++		.u32 = {RTE_ACL_NODE_INDEX, RTE_ACL_NODE_INDEX,
++		RTE_ACL_NODE_INDEX, RTE_ACL_NODE_INDEX}
++	},
++	{
++		.u16 = {1, 1, 1, 1, 1, 1, 1, 1}
++	},
++	{
++		.u32 = {0xffffff00, 0xffffff04, 0xffffff08, 0xffffff0c}
++	},
++};
++
++/*
++ * Resolve priority for multiple results (altivec version).
++ * This consists comparing the priority of the current traversal with the
++ * running set of results for the packet.
++ * For each result, keep a running array of the result (rule number) and
++ * its priority for each category.
++ */
++static inline void
++resolve_priority_altivec(uint64_t transition, int n,
++	const struct rte_acl_ctx *ctx, struct parms *parms,
++	const struct rte_acl_match_results *p, uint32_t categories)
++{
++	uint32_t x;
++	xmm_t results, priority, results1, priority1;
++	vector bool int selector;
++	xmm_t *saved_results, *saved_priority;
++
++	for (x = 0; x < categories; x += RTE_ACL_RESULTS_MULTIPLIER) {
++
++		saved_results = (xmm_t *)(&parms[n].cmplt->results[x]);
++		saved_priority =
++			(xmm_t *)(&parms[n].cmplt->priority[x]);
++
++		/* get results and priorities for completed trie */
++		results = *(const xmm_t *)&p[transition].results[x];
++		priority = *(const xmm_t *)&p[transition].priority[x];
++
++		/* if this is not the first completed trie */
++		if (parms[n].cmplt->count != ctx->num_tries) {
++
++			/* get running best results and their priorities */
++			results1 = *saved_results;
++			priority1 = *saved_priority;
++
++			/* select results that are highest priority */
++			selector = vec_cmpgt(priority1, priority);
++			results = vec_sel(results, results1, selector);
++			priority = vec_sel(priority, priority1,
++				selector);
++		}
++
++		/* save running best results and their priorities */
++		*saved_results = results;
++		*saved_priority = priority;
++	}
++}
++
++/*
++ * Check for any match in 4 transitions
++ */
++static inline __attribute__((always_inline)) uint32_t
++check_any_match_x4(uint64_t val[])
++{
++	return (val[0] | val[1] | val[2] | val[3]) & RTE_ACL_NODE_MATCH;
++}
++
++static inline __attribute__((always_inline)) void
++acl_match_check_x4(int slot, const struct rte_acl_ctx *ctx, struct parms *parms,
++	struct acl_flow_data *flows, uint64_t transitions[])
++{
++	while (check_any_match_x4(transitions)) {
++		transitions[0] = acl_match_check(transitions[0], slot, ctx,
++			parms, flows, resolve_priority_altivec);
++		transitions[1] = acl_match_check(transitions[1], slot + 1, ctx,
++			parms, flows, resolve_priority_altivec);
++		transitions[2] = acl_match_check(transitions[2], slot + 2, ctx,
++			parms, flows, resolve_priority_altivec);
++		transitions[3] = acl_match_check(transitions[3], slot + 3, ctx,
++			parms, flows, resolve_priority_altivec);
++	}
++}
++
++/*
++ * Process 4 transitions (in 2 XMM registers) in parallel
++ */
++static inline __attribute__((optimize("O2"))) xmm_t
++transition4(xmm_t next_input, const uint64_t *trans,
++	xmm_t *indices1, xmm_t *indices2)
++{
++	xmm_t addr, tr_lo, tr_hi;
++	xmm_t in, node_type, r, t;
++	xmm_t dfa_ofs, quad_ofs;
++	xmm_t *index_mask, *tp;
++	vector bool int dfa_msk;
++	vector signed char zeroes = {};
++	union {
++		uint64_t d64[2];
++		uint32_t d32[4];
++	} v;
++
++	/* Move low 32 into tr_lo and high 32 into tr_hi */
++	tr_lo = (xmm_t){(*indices1)[0], (*indices1)[2],
++			(*indices2)[0], (*indices2)[2]};
++	tr_hi = (xmm_t){(*indices1)[1], (*indices1)[3],
++			(*indices2)[1], (*indices2)[3]};
++
++	 /* Calculate the address (array index) for all 4 transitions. */
++	index_mask = (xmm_t *)&altivec_acl_const.xmm_index_mask.u32;
++	t = vec_xor(*index_mask, *index_mask);
++	in = vec_perm(next_input, (xmm_t){},
++		*(vector unsigned char *)&altivec_acl_const.xmm_shuffle_input);
++
++	/* Calc node type and node addr */
++	node_type = vec_and(vec_nor(*index_mask, *index_mask), tr_lo);
++	addr = vec_and(tr_lo, *index_mask);
++
++	/* mask for DFA type(0) nodes */
++	dfa_msk = vec_cmpeq(node_type, t);
++
++	/* DFA calculations. */
++	r = vec_sr(in, (vector unsigned int){30, 30, 30, 30});
++	tp = (xmm_t *)&altivec_acl_const.range_base.u32;
++	r = vec_add(r, *tp);
++	t = vec_sr(in, (vector unsigned int){24, 24, 24, 24});
++	r = vec_perm(tr_hi, (xmm_t){(uint16_t)0 << 16},
++		(vector unsigned char)r);
++
++	dfa_ofs = vec_sub(t, r);
++
++	/* QUAD/SINGLE caluclations. */
++	t = (xmm_t)vec_cmpgt((vector signed char)in, (vector signed char)tr_hi);
++	t = (xmm_t)vec_sel(
++		vec_sel(
++			(vector signed char)vec_sub(
++				zeroes, (vector signed char)t),
++			(vector signed char)t,
++			vec_cmpgt((vector signed char)t, zeroes)),
++		zeroes,
++		vec_cmpeq((vector signed char)t, zeroes));
++
++	t = (xmm_t)vec_msum((vector signed char)t,
++		(vector unsigned char)t, (xmm_t){});
++	quad_ofs = (xmm_t)vec_msum((vector signed short)t,
++		*(vector signed short *)&altivec_acl_const.xmm_ones_16.u16,
++		(xmm_t){});
++
++	/* blend DFA and QUAD/SINGLE. */
++	t = vec_sel(quad_ofs, dfa_ofs, dfa_msk);
++
++	/* calculate address for next transitions. */
++	addr = vec_add(addr, t);
++
++	v.d64[0] = (uint64_t)trans[addr[0]];
++	v.d64[1] = (uint64_t)trans[addr[1]];
++	*indices1 = (xmm_t){v.d32[0], v.d32[1], v.d32[2], v.d32[3]};
++	v.d64[0] = (uint64_t)trans[addr[2]];
++	v.d64[1] = (uint64_t)trans[addr[3]];
++	*indices2 = (xmm_t){v.d32[0], v.d32[1], v.d32[2], v.d32[3]};
++
++	return vec_sr(next_input,
++		(vector unsigned int){CHAR_BIT, CHAR_BIT, CHAR_BIT, CHAR_BIT});
++}
++
++/*
++ * Execute trie traversal with 8 traversals in parallel
++ */
++static inline int
++search_altivec_8(const struct rte_acl_ctx *ctx, const uint8_t **data,
++	uint32_t *results, uint32_t total_packets, uint32_t categories)
++{
++	int n;
++	struct acl_flow_data flows;
++	uint64_t index_array[MAX_SEARCHES_ALTIVEC8];
++	struct completion cmplt[MAX_SEARCHES_ALTIVEC8];
++	struct parms parms[MAX_SEARCHES_ALTIVEC8];
++	xmm_t input0, input1;
++
++	acl_set_flow(&flows, cmplt, RTE_DIM(cmplt), data, results,
++		total_packets, categories, ctx->trans_table);
++
++	for (n = 0; n < MAX_SEARCHES_ALTIVEC8; n++) {
++		cmplt[n].count = 0;
++		index_array[n] = acl_start_next_trie(&flows, parms, n, ctx);
++	}
++
++	 /* Check for any matches. */
++	acl_match_check_x4(0, ctx, parms, &flows, (uint64_t *)&index_array[0]);
++	acl_match_check_x4(4, ctx, parms, &flows, (uint64_t *)&index_array[4]);
++
++	while (flows.started > 0) {
++
++		/* Gather 4 bytes of input data for each stream. */
++		input0 = (xmm_t){GET_NEXT_4BYTES(parms, 0),
++				GET_NEXT_4BYTES(parms, 1),
++				GET_NEXT_4BYTES(parms, 2),
++				GET_NEXT_4BYTES(parms, 3)};
++
++		input1 = (xmm_t){GET_NEXT_4BYTES(parms, 4),
++				GET_NEXT_4BYTES(parms, 5),
++				GET_NEXT_4BYTES(parms, 6),
++				GET_NEXT_4BYTES(parms, 7)};
++
++		 /* Process the 4 bytes of input on each stream. */
++
++		input0 = transition4(input0, flows.trans,
++			(xmm_t *)&index_array[0], (xmm_t *)&index_array[2]);
++		input1 = transition4(input1, flows.trans,
++			(xmm_t *)&index_array[4], (xmm_t *)&index_array[6]);
++
++		input0 = transition4(input0, flows.trans,
++			(xmm_t *)&index_array[0], (xmm_t *)&index_array[2]);
++		input1 = transition4(input1, flows.trans,
++			(xmm_t *)&index_array[4], (xmm_t *)&index_array[6]);
++
++		input0 = transition4(input0, flows.trans,
++			(xmm_t *)&index_array[0], (xmm_t *)&index_array[2]);
++		input1 = transition4(input1, flows.trans,
++			(xmm_t *)&index_array[4], (xmm_t *)&index_array[6]);
++
++		input0 = transition4(input0, flows.trans,
++			(xmm_t *)&index_array[0], (xmm_t *)&index_array[2]);
++		input1 = transition4(input1, flows.trans,
++			(xmm_t *)&index_array[4], (xmm_t *)&index_array[6]);
++
++		 /* Check for any matches. */
++		acl_match_check_x4(0, ctx, parms, &flows,
++			(uint64_t *)&index_array[0]);
++		acl_match_check_x4(4, ctx, parms, &flows,
++			(uint64_t *)&index_array[4]);
++	}
++
++	return 0;
++}
++
++/*
++ * Execute trie traversal with 4 traversals in parallel
++ */
++static inline int
++search_altivec_4(const struct rte_acl_ctx *ctx, const uint8_t **data,
++	 uint32_t *results, int total_packets, uint32_t categories)
++{
++	int n;
++	struct acl_flow_data flows;
++	uint64_t index_array[MAX_SEARCHES_ALTIVEC4];
++	struct completion cmplt[MAX_SEARCHES_ALTIVEC4];
++	struct parms parms[MAX_SEARCHES_ALTIVEC4];
++	xmm_t input;
++
++	acl_set_flow(&flows, cmplt, RTE_DIM(cmplt), data, results,
++		total_packets, categories, ctx->trans_table);
++
++	for (n = 0; n < MAX_SEARCHES_ALTIVEC4; n++) {
++		cmplt[n].count = 0;
++		index_array[n] = acl_start_next_trie(&flows, parms, n, ctx);
++	}
++
++	/* Check for any matches. */
++	acl_match_check_x4(0, ctx, parms, &flows, index_array);
++
++	while (flows.started > 0) {
++
++		/* Gather 4 bytes of input data for each stream. */
++		input = (xmm_t){GET_NEXT_4BYTES(parms, 0),
++				GET_NEXT_4BYTES(parms, 1),
++				GET_NEXT_4BYTES(parms, 2),
++				GET_NEXT_4BYTES(parms, 3)};
++
++		/* Process the 4 bytes of input on each stream. */
++		input = transition4(input, flows.trans,
++			(xmm_t *)&index_array[0], (xmm_t *)&index_array[2]);
++		input = transition4(input, flows.trans,
++			(xmm_t *)&index_array[0], (xmm_t *)&index_array[2]);
++		input = transition4(input, flows.trans,
++			(xmm_t *)&index_array[0], (xmm_t *)&index_array[2]);
++		input = transition4(input, flows.trans,
++			(xmm_t *)&index_array[0], (xmm_t *)&index_array[2]);
++
++		/* Check for any matches. */
++		acl_match_check_x4(0, ctx, parms, &flows, index_array);
++	}
++
++	return 0;
++}
+diff --git a/lib/librte_acl/rte_acl.c b/lib/librte_acl/rte_acl.c
+index 4ba9786..8b7e92c 100644
+--- a/lib/librte_acl/rte_acl.c
++++ b/lib/librte_acl/rte_acl.c
+@@ -75,12 +75,23 @@ rte_acl_classify_neon(__rte_unused const struct rte_acl_ctx *ctx,
+ 	return -ENOTSUP;
+ }
+ 
++int __attribute__ ((weak))
++rte_acl_classify_altivec(__rte_unused const struct rte_acl_ctx *ctx,
++	__rte_unused const uint8_t **data,
++	__rte_unused uint32_t *results,
++	__rte_unused uint32_t num,
++	__rte_unused uint32_t categories)
++{
++	return -ENOTSUP;
++}
++
+ static const rte_acl_classify_t classify_fns[] = {
+ 	[RTE_ACL_CLASSIFY_DEFAULT] = rte_acl_classify_scalar,
+ 	[RTE_ACL_CLASSIFY_SCALAR] = rte_acl_classify_scalar,
+ 	[RTE_ACL_CLASSIFY_SSE] = rte_acl_classify_sse,
+ 	[RTE_ACL_CLASSIFY_AVX2] = rte_acl_classify_avx2,
+ 	[RTE_ACL_CLASSIFY_NEON] = rte_acl_classify_neon,
++	[RTE_ACL_CLASSIFY_ALTIVEC] = rte_acl_classify_altivec,
+ };
+ 
+ /* by default, use always available scalar code path. */
+@@ -119,6 +130,8 @@ rte_acl_init(void)
+ #elif defined(RTE_ARCH_ARM)
+ 	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_NEON))
+ 		alg =  RTE_ACL_CLASSIFY_NEON;
++#elif defined(RTE_ARCH_PPC_64)
++	alg = RTE_ACL_CLASSIFY_ALTIVEC;
+ #else
+ #ifdef CC_AVX2_SUPPORT
+ 	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2))
+diff --git a/lib/librte_acl/rte_acl.h b/lib/librte_acl/rte_acl.h
+index 0979a09..8d4e2a6 100644
+--- a/lib/librte_acl/rte_acl.h
++++ b/lib/librte_acl/rte_acl.h
+@@ -271,6 +271,7 @@ enum rte_acl_classify_alg {
+ 	RTE_ACL_CLASSIFY_SSE = 2,     /**< requires SSE4.1 support. */
+ 	RTE_ACL_CLASSIFY_AVX2 = 3,    /**< requires AVX2 support. */
+ 	RTE_ACL_CLASSIFY_NEON = 4,    /**< requires NEON support. */
++	RTE_ACL_CLASSIFY_ALTIVEC = 5,    /**< requires ALTIVEC support. */
+ 	RTE_ACL_CLASSIFY_NUM          /* should always be the last one. */
+ };
+ 
+-- 
+1.9.1
+

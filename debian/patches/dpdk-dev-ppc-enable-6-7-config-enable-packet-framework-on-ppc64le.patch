@@ -1,0 +1,33 @@
+From: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+Date: Thu, 8 Sep 2016 22:18:06 +0530
+Subject: [PATCH 6/7] config: enable packet framework on ppc64le
+
+This patch enables librte_port, librte_table, and librte_pipeline
+in ppc64le.
+
+Signed-off-by: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+Acked-by: Chao Zhu <chaozhu@linux.vnet.ibm.com>
+Acked-by: Cristian Dumitrescu <cristian.dumitrescu@intel.com>
+
+Origin: Upstream, commit:81f713ee7bac66221a11f07c8a437e40c1891f70
+Author: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+Last-Update: 2016-09-21
+---
+ config/defconfig_ppc_64-power8-linuxapp-gcc | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/config/defconfig_ppc_64-power8-linuxapp-gcc b/config/defconfig_ppc_64-power8-linuxapp-gcc
+index 45b6077..f953e61 100644
+--- a/config/defconfig_ppc_64-power8-linuxapp-gcc
++++ b/config/defconfig_ppc_64-power8-linuxapp-gcc
+@@ -56,7 +56,3 @@ CONFIG_RTE_LIBRTE_PMD_BOND=n
+ CONFIG_RTE_LIBRTE_ENIC_PMD=n
+ CONFIG_RTE_LIBRTE_FM10K_PMD=n
+ 
+-# This following libraries are not available on Power. So they're turned off.
+-CONFIG_RTE_LIBRTE_PORT=n
+-CONFIG_RTE_LIBRTE_TABLE=n
+-CONFIG_RTE_LIBRTE_PIPELINE=n
+-- 
+1.9.1
+
