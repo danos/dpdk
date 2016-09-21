@@ -127,7 +127,7 @@ Depends: ${misc:Depends},
          librte-pmd-pcap1 (= ${binary:Version}),
          librte-pmd-ring2 (= ${binary:Version}),
          librte-pmd-vhost1 (= ${binary:Version}),
-         librte-pmd-virtio1 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pmd-virtio1 (= ${binary:Version}),
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-port3 (= ${binary:Version}),
@@ -528,7 +528,7 @@ Description: Data Plane Development Kit (librte-pmd-vhost runtime library)
  This package contains the runtime libraries for librte_pmd_vhost
 
 Package: librte-pmd-virtio1
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/guides/nics/virtio.html
 Pre-Depends: ${misc:Pre-Depends}
