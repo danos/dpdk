@@ -70,6 +70,7 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
     - E: dpdk: binary-or-shlib-defines-rpath usr/bin/dpdk-pdump
          /home/lboccass/git/dpdk_deb/debian/build/shared-root/lib
   * Fix d/watch file to point to fast.dpdk.org/rel
+  * Allow DPDK_CONFIG, RTE_MACHINE, RTE_TARGET overrides via DEB_BUILD_OPTIONS
 
   [ Santiago RR ]
   * improve debian/copyright
