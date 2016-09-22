@@ -90,7 +90,6 @@ Package: libdpdk-dev
 Section: libdevel
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
-Homepage: http://www.dpdk.org
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
          libpcap-dev,
