@@ -27,13 +27,13 @@ Vcs-Browser: https://gerrit.fd.io/r/gitweb?p=deb_dpdk.git
 Package: dpdk
 Section: admin
 Architecture: amd64 arm64 i386 ppc64el
-Depends: libdpdk-dev (= ${binary:Version}),
-         lsb-base (>= 3.2-14),
+Depends: lsb-base (>= 3.2-14),
          pciutils,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends}
-Suggests: linux-image-generic
+Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64], dpdk-rte-kni-dkms (= ${binary:Version}) [arm64]
+Suggests: linux-image-generic, dpdk-igb-uio-dkms (= ${binary:Version}), dpdk-rte-kni-dkms (= ${binary:Version})
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
