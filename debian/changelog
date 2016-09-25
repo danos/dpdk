@@ -71,6 +71,7 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
          /home/lboccass/git/dpdk_deb/debian/build/shared-root/lib
   * Fix d/watch file to point to fast.dpdk.org/rel
   * Allow DPDK_CONFIG, RTE_MACHINE, RTE_TARGET overrides via DEB_BUILD_OPTIONS
+  * Initial Debian release. (Closes: #815760)
 
   [ Santiago RR ]
   * improve debian/copyright
