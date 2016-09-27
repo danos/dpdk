@@ -1,4 +1,4 @@
-dpdk (16.07-0~git1) UNRELEASED; urgency=medium
+dpdk (16.07-1) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
   * Merge with upstream DPDK 16.07 release
@@ -73,6 +73,7 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * Allow DPDK_CONFIG, RTE_MACHINE, RTE_TARGET overrides via DEB_BUILD_OPTIONS
   * Initial Debian release. (Closes: #815760)
   * Use ?= to allow env var overrides in d/rules
+  * Finalize changelog for upload to unstable.
 
   [ Santiago RR ]
   * improve debian/copyright
@@ -87,7 +88,7 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * d/p/dpdk-dev-ppc-enable-* backports from dpdk to enable more features
     for ppc64le
 
- -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Tue, 27 Sep 2016 16:40:31 +0100
 
 dpdk (16.07~rc5-1) UNRELEASED; urgency=medium
 
