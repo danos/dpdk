@@ -2,6 +2,7 @@ Source: dpdk
 Priority: optional
 Maintainer: deb_dpdk Packagers <deb-dpdk@lists.fd.io>
 Uploaders: Luca Boccassi <luca.boccassi@gmail.com>,
+           Christian Ehrhardt <christian.ehrhardt@canonical.com>,
 Build-Depends: debhelper (>= 9),
                dh-python,
                dh-systemd (>= 1.5),
