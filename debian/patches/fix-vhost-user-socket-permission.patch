@@ -27,7 +27,7 @@ Fixes LP: #1546565
 
 Forwarded: yes
 Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
-Last-Update: 2016-07-25
+Last-Update: 2016-09-28
 
 diff --git a/doc/guides/testpmd_app_ug/run_app.rst b/doc/guides/testpmd_app_ug/run_app.rst
 index 7712bd2..28776b9 100644
@@ -361,11 +361,11 @@ index b35594d..dbdb8ad 100644
  #define MAX_VIRTIO_BACKLOG 128
  
  static void vhost_user_server_new_connection(int fd, void *data, int *remove);
-@@ -682,6 +684,7 @@ rte_vhost_driver_register(const char *path, uint64_t flags)
- 	if (!vsocket)
- 		goto out;
- 	memset(vsocket, 0, sizeof(struct vhost_user_socket));
+@@ -699,6 +701,7 @@
+ 		vsocket->is_server = true;
+ 		ret = vhost_user_create_server(vsocket);
+ 	}
 +	rte_eal_set_socket_permissions(path);
- 	vsocket->path = strdup(path);
- 	vsocket->connfd = -1;
- 
+ 	if (ret < 0) {
+ 		free(vsocket->path);
+ 		free(vsocket);
