@@ -36,7 +36,25 @@ Depends: lsb-base (>= 3.2-14),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends}
-Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64], dpdk-rte-kni-dkms (= ${binary:Version}) [arm64]
+Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64], dpdk-rte-kni-dkms (= ${binary:Version}) [arm64],
+         librte-pmd-af-packet1 (= ${binary:Version}),
+         librte-pmd-bnxt1 (= ${binary:Version}),
+         librte-pmd-bond1 (= ${binary:Version}),
+         librte-pmd-cxgbe1 (= ${binary:Version}),
+         librte-pmd-e1000-1 (= ${binary:Version}),
+         librte-pmd-ena1 (= ${binary:Version}),
+         librte-pmd-enic1 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
+         librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386],
+         librte-pmd-ixgbe1 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pmd-null-crypto1 (= ${binary:Version}),
+         librte-pmd-null1 (= ${binary:Version}),
+         librte-pmd-pcap1 (= ${binary:Version}),
+         librte-pmd-ring2 (= ${binary:Version}),
+         librte-pmd-vhost1 (= ${binary:Version}),
+         librte-pmd-virtio1 (= ${binary:Version}),
+         librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
 Suggests: linux-image-generic, dpdk-igb-uio-dkms (= ${binary:Version}), dpdk-rte-kni-dkms (= ${binary:Version})
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
