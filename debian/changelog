@@ -33,6 +33,8 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
       its value in kni ethtool drivers.
   * Fix d/p/fix-vhost-user-socket-permission.patch for dpdk 16.07
     server/client sockets.
+  * d/control add python-elftools and hwdata dependencies to dpdk for the tool
+    dpdk-pmdinfo.
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
