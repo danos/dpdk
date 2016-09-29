@@ -31,6 +31,8 @@ Section: admin
 Architecture: amd64 arm64 i386 ppc64el
 Depends: lsb-base (>= 3.2-14),
          pciutils,
+         python-pyelftools,
+         hwdata,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends}
