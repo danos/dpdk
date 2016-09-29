@@ -217,6 +217,9 @@ override_dh_auto_install-arch:
 	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
 	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
 	  fi; \
+	  if [ "$${LIBF#librte_eal}x" != "$${LIBF}x" ]; then \
+	    mkdir -p $${LIBD}/dpdk-pmds; \
+	  fi; \
 	done
 	# pkg-config
 	mkdir -p debian/libdpdk-dev/$(LIBDIR)/pkgconfig
