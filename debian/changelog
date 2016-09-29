@@ -37,6 +37,8 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
     dpdk-pmdinfo.
   * d/rules utilize RTE_EAL_PMD_PATH to autoload pmd drivers
     - d/dpdk-doc.README.Debian document usage of RTE_EAL_PMD_PATH
+    - d/control let the runtime of dpdk recommend the pmd drivers to make them
+      avail for auto-proping devices.
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
