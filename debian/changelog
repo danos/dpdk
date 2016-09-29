@@ -31,6 +31,8 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * fix rte_kni dkms build with kernel >= 4.8
     - d/p/dpdk-dev-v2-kni-fix-build-with-kernel-4.8.patch replaced macro with
       its value in kni ethtool drivers.
+  * Fix d/p/fix-vhost-user-socket-permission.patch for dpdk 16.07
+    server/client sockets.
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
