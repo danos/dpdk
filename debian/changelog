@@ -94,6 +94,8 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * d/control provide now supported packages for ppc64le
   * d/p/dpdk-dev-ppc-enable-* backports from dpdk to enable more features
     for ppc64le
+  * d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch to make
+    ip_pipeline work properly with -d eal parameter
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
 
