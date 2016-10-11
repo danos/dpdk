@@ -62,6 +62,13 @@ endif
 DPDK_STATIC_DIR = "debian/build/static-root"
 DPDK_SHARED_DIR = "debian/build/shared-root"
 
+# now stable with parallel comilation, so support -j
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    PAR := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+else
+    PAR := "1"
+endif
+
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
 # optional binary kernel modules package. By default it will be built against
 # the current kernel, or ksrc can be passed with a path to the target kernel
@@ -139,7 +146,7 @@ endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
 		doc-guides-man
 
 override_dh_auto_install-indep:
@@ -149,7 +156,7 @@ override_dh_auto_install-indep:
 		DESTDIR=debian/dpdk-doc install-doc
 
 override_dh_auto_build-arch:
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
 	# (but not both).
@@ -162,7 +169,7 @@ override_dh_auto_build-arch:
 	cp -a $(DPDK_STATIC_DIR) $(DPDK_SHARED_DIR)
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 		$(DPDK_SHARED_DIR)/.config
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
 
 override_dh_auto_install-arch: LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
