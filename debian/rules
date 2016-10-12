@@ -190,6 +190,10 @@ override_dh_auto_install-arch:
 	cp $(DPDK_SHARED_DIR)/.config debian/dpdk-dev/usr/share/dpdk/config
 	sed -e 's/SDK_TARGET/$(RTE_TARGET)/' debian/dpdk-sdk-env.sh.in > \
 		debian/dpdk-dev/usr/share/dpdk/dpdk-sdk-env.sh
+	# include the bundled autotest suite to be usable from the dpdk-dev package
+	mkdir -p debian/dpdk-dev/usr/share/dpdk/test
+	cp -a app/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
+	cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/
 	# Package: libdpdk-dev (bare headers, static devel libs and linker
 	# script)
 	mkdir -p debian/libdpdk-dev/$(LIBDIR)
