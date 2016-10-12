@@ -42,6 +42,10 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * d/rules support DEB_BUILD_OPTIONS parallel
   * d/rules bundle autotest as it is ready after build into dpdk-dev
     to make it available for autopkgtest and likewise developers.
+  * enable dpdk autotests
+    - d/t/test-autotest enable autotests as dep8 test. These fail in many
+      build environments, so put them in an adt where required characteristics
+      can be specified
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
