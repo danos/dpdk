@@ -1,4 +1,33 @@
-dpdk (16.07-0~git1) UNRELEASED; urgency=medium
+dpdk (16.07-2~git1) UNRELEASED; urgency=medium
+
+  * Team upload.
+
+  [ Christian Ehrhardt ]
+  * Fix d/p/fix-vhost-user-socket-permission.patch for dpdk 16.07
+    server/client sockets.
+  * d/control add python-elftools and hwdata dependencies to dpdk for the tool
+    dpdk-pmdinfo.
+  * d/rules utilize RTE_EAL_PMD_PATH to autoload pmd drivers
+    - d/dpdk-doc.README.Debian document usage of RTE_EAL_PMD_PATH
+    - d/control let the runtime of dpdk recommend the pmd drivers to make them
+      available for auto-probing devices.
+  * d/rules support DEB_BUILD_OPTIONS parallel
+  * d/rules bundle autotest as it is ready after build into dpdk-dev
+    to make it available for autopkgtest and likewise developers.
+  * enable dpdk autotests
+    - d/t/test-autotest enable autotests as dep8 test. These fail in many
+      build environments, so put them in an adt where required characteristics
+      can be specified
+
+  [ Gowrishankar Muthukrishnan ]
+  * d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch to make
+    ip_pipeline work properly with -d eal parameter
+  * Update to d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch
+    fixing dl_open issues.
+
+ -- Santiago Ruano Rincón <santiagorr@riseup.net>  Wed, 09 Nov 2016 16:04:15 +0100
+
+dpdk (16.07-1) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
   * Merge with upstream DPDK 16.07 release
@@ -31,21 +60,6 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * fix rte_kni dkms build with kernel >= 4.8
     - d/p/dpdk-dev-v2-kni-fix-build-with-kernel-4.8.patch replaced macro with
       its value in kni ethtool drivers.
-  * Fix d/p/fix-vhost-user-socket-permission.patch for dpdk 16.07
-    server/client sockets.
-  * d/control add python-elftools and hwdata dependencies to dpdk for the tool
-    dpdk-pmdinfo.
-  * d/rules utilize RTE_EAL_PMD_PATH to autoload pmd drivers
-    - d/dpdk-doc.README.Debian document usage of RTE_EAL_PMD_PATH
-    - d/control let the runtime of dpdk recommend the pmd drivers to make them
-      available for auto-probing devices.
-  * d/rules support DEB_BUILD_OPTIONS parallel
-  * d/rules bundle autotest as it is ready after build into dpdk-dev
-    to make it available for autopkgtest and likewise developers.
-  * enable dpdk autotests
-    - d/t/test-autotest enable autotests as dep8 test. These fail in many
-      build environments, so put them in an adt where required characteristics
-      can be specified
 
   [ Anders Roxell ]
   * debian/control: add pciutils to the dpdk depends list, since lspci is used
@@ -88,6 +102,7 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * Allow DPDK_CONFIG, RTE_MACHINE, RTE_TARGET overrides via DEB_BUILD_OPTIONS
   * Initial Debian release. (Closes: #815760)
   * Use ?= to allow env var overrides in d/rules
+  * Finalize changelog for upload to unstable.
 
   [ Santiago RR ]
   * improve debian/copyright
@@ -101,12 +116,8 @@ dpdk (16.07-0~git1) UNRELEASED; urgency=medium
   * d/control provide now supported packages for ppc64le
   * d/p/dpdk-dev-ppc-enable-* backports from dpdk to enable more features
     for ppc64le
-  * d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch to make
-    ip_pipeline work properly with -d eal parameter
-  * Update to d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch
-    fixing dl_open issues.
 
- -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Jul 2016 08:18:50 +0200
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Tue, 27 Sep 2016 16:40:31 +0100
 
 dpdk (16.07~rc5-1) UNRELEASED; urgency=medium
 
