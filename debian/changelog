@@ -25,6 +25,11 @@ dpdk (16.07-2~git1) UNRELEASED; urgency=medium
   * Update to d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch
     fixing dl_open issues.
 
+  [ Santiago R.R. ]
+  * debian/rules: Only export hardening related building HOST_/EXTRA flags
+    when dpkg-dev < 1.18.11. On newer dpkg-dev versions, dpkg-buildflags
+    handle them directly and are injected by gcc (6.x). Closes: #843685.
+
  -- Santiago Ruano Rincón <santiagorr@riseup.net>  Wed, 09 Nov 2016 16:04:15 +0100
 
 dpdk (16.07-1) unstable; urgency=medium
