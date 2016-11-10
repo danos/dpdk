@@ -33,6 +33,8 @@ dpdk (16.07-2~git1) UNRELEASED; urgency=medium
   [ Luca Boccassi ]
   * Fix DKMS build to use the requested kernel version rather than the running
     one. (Closes: #843864)
+  * Fix kernel modules build failures due to the new -fPIE default by passing
+    -fno-PIE.
 
  -- Santiago Ruano Rincón <santiagorr@riseup.net>  Wed, 09 Nov 2016 16:04:15 +0100
 
