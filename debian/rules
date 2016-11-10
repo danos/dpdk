@@ -91,6 +91,7 @@ endif
 
 KVERS := $(shell perl debian/kernel-version $(KSRC))
 export KVERS
+export MODULE_CFLAGS=-fno-PIE
 
 DPDK_CONFIG_BUILD_KMOD=y
 
