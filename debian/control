@@ -76,6 +76,7 @@ Description: Data Plane Development Kit (development files)
 Package: dpdk-doc
 Section: doc
 Architecture: all
+Multi-Arch: foreign
 Homepage: http://dpdk.org/doc/guides/index.html
 Depends: libjs-jquery, libjs-underscore, ${misc:Depends}, ${python:Depends}
 Recommends: python, ${python:Recommends}
