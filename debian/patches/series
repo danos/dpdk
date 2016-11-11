@@ -19,4 +19,5 @@ dpdk-dev-ppc-enable-5-7-table-fix-verification-on-hash-bucket-header-alignme.pat
 dpdk-dev-ppc-enable-6-7-config-enable-packet-framework-on-ppc64le.patch
 dpdk-dev-ppc-enable-7-7-examples-ip_pipeline-fix-lcore-mapping-for-ppc64.patch
 dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch
+dpdk-dev-kni-fix-build-with-kernel-4.9.patch
 
