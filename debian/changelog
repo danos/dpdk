@@ -37,6 +37,7 @@ dpdk (16.07-2~git1) UNRELEASED; urgency=medium
     -fno-PIE.
   * Backport dpdk-dev-kni-fix-build-with-kernel-4.9.patch to fix kernel modules
     build failures on Linux 4.9.
+  * Mark dpdk-doc as Multi-Arch: foreign
 
  -- Santiago Ruano Rincón <santiagorr@riseup.net>  Wed, 09 Nov 2016 16:04:15 +0100
 
