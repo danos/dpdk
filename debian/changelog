@@ -1,3 +1,46 @@
+dpdk (16.07-2~git1) UNRELEASED; urgency=medium
+
+  * Team upload.
+
+  [ Christian Ehrhardt ]
+  * Fix d/p/fix-vhost-user-socket-permission.patch for dpdk 16.07
+    server/client sockets.
+  * d/control add python-elftools and hwdata dependencies to dpdk for the tool
+    dpdk-pmdinfo.
+  * d/rules utilize RTE_EAL_PMD_PATH to autoload pmd drivers
+    - d/dpdk-doc.README.Debian document usage of RTE_EAL_PMD_PATH
+    - d/control let the runtime of dpdk recommend the pmd drivers to make them
+      available for auto-probing devices.
+  * d/rules support DEB_BUILD_OPTIONS parallel
+  * d/rules bundle autotest as it is ready after build into dpdk-dev
+    to make it available for autopkgtest and likewise developers.
+  * enable dpdk autotests
+    - d/t/test-autotest enable autotests as dep8 test. These fail in many
+      build environments, so put them in an adt where required characteristics
+      can be specified
+
+  [ Gowrishankar Muthukrishnan ]
+  * d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch to make
+    ip_pipeline work properly with -d eal parameter
+  * Update to d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch
+    fixing dl_open issues.
+
+  [ Santiago R.R. ]
+  * debian/rules: Only export hardening related building HOST_/EXTRA flags
+    when dpkg-dev < 1.18.11. On newer dpkg-dev versions, dpkg-buildflags
+    handle them directly and are injected by gcc (6.x). Closes: #843685.
+
+  [ Luca Boccassi ]
+  * Fix DKMS build to use the requested kernel version rather than the running
+    one. (Closes: #843864)
+  * Fix kernel modules build failures due to the new -fPIE default by passing
+    -fno-PIE.
+  * Backport dpdk-dev-kni-fix-build-with-kernel-4.9.patch to fix kernel modules
+    build failures on Linux 4.9.
+  * Mark dpdk-doc as Multi-Arch: foreign
+
+ -- Santiago Ruano Rincón <santiagorr@riseup.net>  Wed, 09 Nov 2016 16:04:15 +0100
+
 dpdk (16.07-1) unstable; urgency=medium
 
   [ Christian Ehrhardt ]

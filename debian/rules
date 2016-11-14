@@ -15,20 +15,26 @@ DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
 
 # see ENVIRONMENT in dpkg-buildflags(1)
-# package maintainers to append CFLAGS
-export DEB_CFLAGS_MAINT_APPEND  = -fPIC
-# package maintainers to append LDFLAGS
-#export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
-
+DPKG_EXPORT_BUILDFLAGS = 1
 include /usr/share/dpkg/buildflags.mk
-export EXTRA_CFLAGS=$(CFLAGS)
-export EXTRA_CPPFLAGS=$(CPPFLAGS)
-export HOST_EXTRA_CFLAGS=$(CFLAGS)
-export HOST_EXTRA_CPPFLAGS=$(CPPFLAGS)
-# need to be stripped as DPDK build system adds them and it would be -Wl,-Wl,opt
-export EXTRA_LDFLAGS=$(shell echo $(LDFLAGS) | sed 's/-Wl,//g')
-# HOST_CC build system does not add -Wl ...
-export EXTRA_HOST_LDFLAGS=$(LDFLAGS)
+
+# Support backporting to jessie
+dpkg_version_lt = $(shell dpkg --compare-versions $$(dpkg --status dpkg-dev | grep Version | cut -d' ' -f2) lt-nl "1.18.11" && echo yes)
+ifeq (yes, $(dpkg_version_lt))
+	# package maintainers to append CFLAGS
+	# For Debian, dpkg-dev >= 1.18.11 and gcc 6.x, dpkg-buildflags and gcc
+	# handle -fPIC and related flags relying on specs files
+	# (/usr/share/dpkg/*specs)
+	export DEB_CFLAGS_MAINT_APPEND  = -fPIC
+	export EXTRA_CFLAGS=$(CFLAGS)
+	export EXTRA_CPPFLAGS=$(CPPFLAGS)
+	export HOST_EXTRA_CFLAGS=$(CFLAGS)
+	export HOST_EXTRA_CPPFLAGS=$(CPPFLAGS)
+	# need to be stripped as DPDK build system adds them and it would be -Wl,-Wl,opt
+	export EXTRA_LDFLAGS=$(shell echo $(LDFLAGS) | sed 's/-Wl,//g')
+	# HOST_CC build system does not add -Wl ...
+	export EXTRA_HOST_LDFLAGS=$(LDFLAGS)
+endif
 
 export RTE_DEVEL_BUILD=n
 
@@ -62,6 +68,13 @@ endif
 DPDK_STATIC_DIR = "debian/build/static-root"
 DPDK_SHARED_DIR = "debian/build/shared-root"
 
+# now stable with parallel comilation, so support -j
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    PAR := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+else
+    PAR := "1"
+endif
+
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
 # optional binary kernel modules package. By default it will be built against
 # the current kernel, or ksrc can be passed with a path to the target kernel
@@ -78,6 +91,7 @@ endif
 
 KVERS := $(shell perl debian/kernel-version $(KSRC))
 export KVERS
+export MODULE_CFLAGS=-fno-PIE
 
 DPDK_CONFIG_BUILD_KMOD=y
 
@@ -129,6 +143,7 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
 		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
+		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)/dpdk-pmds/",' \
 		$(DPDK_STATIC_DIR)/.config
 	# xen not available on ppc64el
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
@@ -138,7 +153,7 @@ endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
 		doc-guides-man
 
 override_dh_auto_install-indep:
@@ -148,7 +163,7 @@ override_dh_auto_install-indep:
 		DESTDIR=debian/dpdk-doc install-doc
 
 override_dh_auto_build-arch:
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
 	# (but not both).
@@ -161,7 +176,7 @@ override_dh_auto_build-arch:
 	cp -a $(DPDK_STATIC_DIR) $(DPDK_SHARED_DIR)
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 		$(DPDK_SHARED_DIR)/.config
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
 
 override_dh_auto_install-arch: LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
@@ -182,6 +197,10 @@ override_dh_auto_install-arch:
 	cp $(DPDK_SHARED_DIR)/.config debian/dpdk-dev/usr/share/dpdk/config
 	sed -e 's/SDK_TARGET/$(RTE_TARGET)/' debian/dpdk-sdk-env.sh.in > \
 		debian/dpdk-dev/usr/share/dpdk/dpdk-sdk-env.sh
+	# include the bundled autotest suite to be usable from the dpdk-dev package
+	mkdir -p debian/dpdk-dev/usr/share/dpdk/test
+	cp -a app/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
+	cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/
 	# Package: libdpdk-dev (bare headers, static devel libs and linker
 	# script)
 	mkdir -p debian/libdpdk-dev/$(LIBDIR)
@@ -206,9 +225,19 @@ override_dh_auto_install-arch:
 	  else \
 	    PKG=$${LN}$${VER}; \
 	  fi; \
+	  LIBF="$$(basename $${lib})"; \
+	  LIBD="debian/$${PKG}/$(LIBDIR)"; \
 	  echo "moving $${lib} for library $${PKG}"; \
-	  mkdir -p debian/$${PKG}/$(LIBDIR); \
-	  mv $${lib} debian/$${PKG}/$(LIBDIR); \
+	  mkdir -p $${LIBD}; \
+	  mv $${lib} $${LIBD}; \
+	  if [ "$${LIBF#librte_pmd_}x" != "$${LIBF}x" ]; then \
+	    mkdir -p $${LIBD}/dpdk-pmds; \
+	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
+	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
+	  fi; \
+	  if [ "$${LIBF#librte_eal}x" != "$${LIBF}x" ]; then \
+	    mkdir -p $${LIBD}/dpdk-pmds; \
+	  fi; \
 	done
 	# pkg-config
 	mkdir -p debian/libdpdk-dev/$(LIBDIR)/pkgconfig
