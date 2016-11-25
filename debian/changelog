@@ -1,3 +1,10 @@
+dpdk (16.07-3) UNRELEASED; urgency=medium
+
+  * Set myself as maintainer until the mailing list ACL problem
+    is resolved. (Closes: #843688)
+
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Fri, 25 Nov 2016 23:00:40 +0000
+
 dpdk (16.07-2) unstable; urgency=low
 
   * Team upload.
