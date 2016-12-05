@@ -429,7 +429,7 @@ rte_mempool_populate_phys_tab(struct rte_mempool *mp, char *vaddr,
 
 		/* populate with the largest group of contiguous pages */
 		for (n = 1; (i + n) < pg_num &&
-			     paddr[i] + pg_sz == paddr[i+n]; n++)
+			     paddr[i + n - 1] + pg_sz == paddr[i + n]; n++)
 			;
 
 		ret = rte_mempool_populate_phys(mp, vaddr + i * pg_sz,
@@ -579,8 +579,10 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 				mz->len, pg_sz,
 				rte_mempool_memchunk_mz_free,
 				(void *)(uintptr_t)mz);
-		if (ret < 0)
+		if (ret < 0) {
+			rte_memzone_free(mz);
 			goto fail;
+		}
 	}
 
 	return mp->size;
@@ -879,7 +881,7 @@ rte_mempool_create(const char *name, unsigned n, unsigned elt_size,
 	 * Since we have 4 combinations of the SP/SC/MP/MC examine the flags to
 	 * set the correct index into the table of ops structs.
 	 */
-	if (flags & (MEMPOOL_F_SP_PUT | MEMPOOL_F_SC_GET))
+	if ((flags & MEMPOOL_F_SP_PUT) && (flags & MEMPOOL_F_SC_GET))
 		rte_mempool_set_ops_byname(mp, "ring_sp_sc", NULL);
 	else if (flags & MEMPOOL_F_SP_PUT)
 		rte_mempool_set_ops_byname(mp, "ring_sp_mc", NULL);

@@ -37,12 +37,14 @@
 /* Verbs header. */
 /* ISO C doesn't support unnamed structs/unions, disabling -pedantic. */
 #ifdef PEDANTIC
-#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <infiniband/mlx5_hw.h>
 #ifdef PEDANTIC
-#pragma GCC diagnostic error "-pedantic"
+#pragma GCC diagnostic error "-Wpedantic"
 #endif
+
+#include "mlx5_autoconf.h"
 
 /* Get CQE owner bit. */
 #define MLX5_CQE_OWNER(op_own) ((op_own) & MLX5_CQE_OWNER_MASK)
@@ -70,6 +72,31 @@
 
 /* Room for inline data in multi-packet WQE. */
 #define MLX5_MWQE64_INL_DATA 28
+
+#ifndef HAVE_VERBS_MLX5_OPCODE_TSO
+#define MLX5_OPCODE_TSO MLX5_OPCODE_LSO_MPW /* Compat with OFED 3.3. */
+#endif
+
+/* IPv4 packet. */
+#define MLX5_CQE_RX_IPV4_PACKET (1u << 2)
+
+/* IPv6 packet. */
+#define MLX5_CQE_RX_IPV6_PACKET (1u << 3)
+
+/* Outer IPv4 packet. */
+#define MLX5_CQE_RX_OUTER_IPV4_PACKET (1u << 7)
+
+/* Outer IPv6 packet. */
+#define MLX5_CQE_RX_OUTER_IPV6_PACKET (1u << 8)
+
+/* Tunnel packet bit in the CQE. */
+#define MLX5_CQE_RX_TUNNEL_PACKET (1u << 4)
+
+/* Outer IP checksum OK. */
+#define MLX5_CQE_RX_OUTER_IP_CSUM_OK (1u << 5)
+
+/* Outer UDP header and checksum OK. */
+#define MLX5_CQE_RX_OUTER_TCP_UDP_CSUM_OK (1u << 6)
 
 /* Subset of struct mlx5_wqe_eth_seg. */
 struct mlx5_wqe_eth_seg_small {

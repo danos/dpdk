@@ -159,7 +159,8 @@ rte_hash_create(const struct rte_hash_parameters *params)
 		num_key_slots = params->entries + 1;
 
 	snprintf(ring_name, sizeof(ring_name), "HT_%s", params->name);
-	r = rte_ring_create(ring_name, rte_align32pow2(num_key_slots),
+	/* Create ring (Dummy slot index is not enqueued) */
+	r = rte_ring_create(ring_name, rte_align32pow2(num_key_slots - 1),
 			params->socket_id, 0);
 	if (r == NULL) {
 		RTE_LOG(ERR, HASH, "memory allocation failed\n");
@@ -408,6 +409,7 @@ rte_hash_reset(struct rte_hash *h)
 static inline int
 make_space_bucket(const struct rte_hash *h, struct rte_hash_bucket *bkt)
 {
+	static unsigned int nr_pushes;
 	unsigned i, j;
 	int ret;
 	uint32_t next_bucket_idx;
@@ -444,11 +446,13 @@ make_space_bucket(const struct rte_hash *h, struct rte_hash_bucket *bkt)
 			break;
 
 	/* All entries have been pushed, so entry cannot be added */
-	if (i == RTE_HASH_BUCKET_ENTRIES)
+	if (i == RTE_HASH_BUCKET_ENTRIES || nr_pushes > RTE_HASH_MAX_PUSHES)
 		return -ENOSPC;
 
 	/* Set flag to indicate that this entry is going to be pushed */
 	bkt->flag[i] = 1;
+
+	nr_pushes++;
 	/* Need room in alternative bucket to insert the pushed entry */
 	ret = make_space_bucket(h, next_bkt[i]);
 	/*
@@ -458,6 +462,7 @@ make_space_bucket(const struct rte_hash *h, struct rte_hash_bucket *bkt)
 	 * or return error
 	 */
 	bkt->flag[i] = 0;
+	nr_pushes = 0;
 	if (ret >= 0) {
 		next_bkt[i]->signatures[ret].alt = bkt->signatures[i].current;
 		next_bkt[i]->signatures[ret].current = bkt->signatures[i].alt;
@@ -814,6 +819,7 @@ __rte_hash_del_key_with_hash(const struct rte_hash *h, const void *key,
 	unsigned i;
 	struct rte_hash_bucket *bkt;
 	struct rte_hash_key *k, *keys = h->key_store;
+	int32_t ret;
 
 	bucket_idx = sig & h->bucket_bitmask;
 	bkt = &h->buckets[bucket_idx];
@@ -831,7 +837,9 @@ __rte_hash_del_key_with_hash(const struct rte_hash *h, const void *key,
 				 * Return index where key is stored,
 				 * substracting the first dummy index
 				 */
-				return bkt->key_idx[i] - 1;
+				ret = bkt->key_idx[i] - 1;
+				bkt->key_idx[i] = 0;
+				return ret;
 			}
 		}
 	}
@@ -854,7 +862,9 @@ __rte_hash_del_key_with_hash(const struct rte_hash *h, const void *key,
 				 * Return index where key is stored,
 				 * substracting the first dummy index
 				 */
-				return bkt->key_idx[i] - 1;
+				ret = bkt->key_idx[i] - 1;
+				bkt->key_idx[i] = 0;
+				return ret;
 			}
 		}
 	}

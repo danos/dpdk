@@ -40,23 +40,23 @@
 /* Verbs header. */
 /* ISO C doesn't support unnamed structs/unions, disabling -pedantic. */
 #ifdef PEDANTIC
-#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <infiniband/verbs.h>
 #ifdef PEDANTIC
-#pragma GCC diagnostic error "-pedantic"
+#pragma GCC diagnostic error "-Wpedantic"
 #endif
 
 /* DPDK headers don't like -pedantic. */
 #ifdef PEDANTIC
-#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <rte_mbuf.h>
 #include <rte_malloc.h>
 #include <rte_ethdev.h>
 #include <rte_common.h>
 #ifdef PEDANTIC
-#pragma GCC diagnostic error "-pedantic"
+#pragma GCC diagnostic error "-Wpedantic"
 #endif
 
 #include "mlx5_utils.h"
@@ -338,9 +338,12 @@ txq_ctrl_setup(struct rte_eth_dev *dev, struct txq_ctrl *txq_ctrl,
 		.comp_mask = (IBV_EXP_QP_INIT_ATTR_PD |
 			      IBV_EXP_QP_INIT_ATTR_RES_DOMAIN),
 	};
-	if (priv->txq_inline && priv->txqs_n >= priv->txqs_inline) {
-		tmpl.txq.max_inline = priv->txq_inline;
-		attr.init.cap.max_inline_data = tmpl.txq.max_inline;
+	if (priv->txq_inline && (priv->txqs_n >= priv->txqs_inline)) {
+		tmpl.txq.max_inline =
+			((priv->txq_inline + (RTE_CACHE_LINE_SIZE - 1)) /
+			 RTE_CACHE_LINE_SIZE);
+		attr.init.cap.max_inline_data =
+			tmpl.txq.max_inline * RTE_CACHE_LINE_SIZE;
 	}
 	tmpl.qp = ibv_exp_create_qp(priv->ctx, &attr.init);
 	if (tmpl.qp == NULL) {

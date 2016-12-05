@@ -282,7 +282,7 @@ _recv_raw_pkts_vec(struct i40e_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 		/* Read desc statuses backwards to avoid race condition */
 		/* A.1 load 4 pkts desc */
 		descs[3] = _mm_loadu_si128((__m128i *)(rxdp + 3));
-
+		rte_compiler_barrier();
 		/* B.2 copy 2 mbuf point into rx_pkts  */
 		_mm_storeu_si128((__m128i *)&rx_pkts[pos], mbp1);
 
@@ -290,8 +290,10 @@ _recv_raw_pkts_vec(struct i40e_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 		mbp2 = _mm_loadu_si128((__m128i *)&sw_ring[pos+2]);
 
 		descs[2] = _mm_loadu_si128((__m128i *)(rxdp + 2));
+		rte_compiler_barrier();
 		/* B.1 load 2 mbuf point */
 		descs[1] = _mm_loadu_si128((__m128i *)(rxdp + 1));
+		rte_compiler_barrier();
 		descs[0] = _mm_loadu_si128((__m128i *)(rxdp));
 
 		/* B.2 copy 2 mbuf point into rx_pkts  */
@@ -692,8 +694,20 @@ i40e_rx_queue_release_mbufs_vec(struct i40e_rx_queue *rxq)
 		return;
 
 	/* free all mbufs that are valid in the ring */
-	for (i = rxq->rx_tail; i != rxq->rxrearm_start; i = (i + 1) & mask)
-		rte_pktmbuf_free_seg(rxq->sw_ring[i].mbuf);
+	if (rxq->rxrearm_nb == 0) {
+		for (i = 0; i < rxq->nb_rx_desc; i++) {
+			if (rxq->sw_ring[i].mbuf != NULL)
+				rte_pktmbuf_free_seg(rxq->sw_ring[i].mbuf);
+		}
+	} else {
+		for (i = rxq->rx_tail;
+		     i != rxq->rxrearm_start;
+		     i = (i + 1) & mask) {
+			if (rxq->sw_ring[i].mbuf != NULL)
+				rte_pktmbuf_free_seg(rxq->sw_ring[i].mbuf);
+		}
+	}
+
 	rxq->rxrearm_nb = rxq->nb_rx_desc;
 
 	/* set all entries to NULL */

@@ -40,25 +40,25 @@
 /* Verbs header. */
 /* ISO C doesn't support unnamed structs/unions, disabling -pedantic. */
 #ifdef PEDANTIC
-#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <infiniband/verbs.h>
 #include <infiniband/arch.h>
 #include <infiniband/mlx5_hw.h>
 #ifdef PEDANTIC
-#pragma GCC diagnostic error "-pedantic"
+#pragma GCC diagnostic error "-Wpedantic"
 #endif
 
 /* DPDK headers don't like -pedantic. */
 #ifdef PEDANTIC
-#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <rte_mbuf.h>
 #include <rte_malloc.h>
 #include <rte_ethdev.h>
 #include <rte_common.h>
 #ifdef PEDANTIC
-#pragma GCC diagnostic error "-pedantic"
+#pragma GCC diagnostic error "-Wpedantic"
 #endif
 
 #include "mlx5.h"
@@ -745,6 +745,8 @@ rxq_cleanup(struct rxq_ctrl *rxq_ctrl)
 
 	DEBUG("cleaning up %p", (void *)rxq_ctrl);
 	rxq_free_elts(rxq_ctrl);
+	if (rxq_ctrl->fdir_queue != NULL)
+		priv_fdir_queue_destroy(rxq_ctrl->priv, rxq_ctrl->fdir_queue);
 	if (rxq_ctrl->if_wq != NULL) {
 		assert(rxq_ctrl->priv != NULL);
 		assert(rxq_ctrl->priv->ctx != NULL);
@@ -943,6 +945,11 @@ rxq_ctrl_setup(struct rte_eth_dev *dev, struct rxq_ctrl *rxq_ctrl,
 	(void)conf; /* Thresholds configuration (ignored). */
 	/* Enable scattered packets support for this queue if necessary. */
 	assert(mb_len >= RTE_PKTMBUF_HEADROOM);
+	/* If smaller than MRU, multi-segment support must be enabled. */
+	if (mb_len < (priv->mtu > dev->data->dev_conf.rxmode.max_rx_pkt_len ?
+		     dev->data->dev_conf.rxmode.max_rx_pkt_len :
+		     priv->mtu))
+		dev->data->dev_conf.rxmode.jumbo_frame = 1;
 	if ((dev->data->dev_conf.rxmode.jumbo_frame) &&
 	    (dev->data->dev_conf.rxmode.max_rx_pkt_len >
 	     (mb_len - RTE_PKTMBUF_HEADROOM))) {
@@ -1259,7 +1266,7 @@ mlx5_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 		      (void *)dev, (void *)rxq_ctrl);
 		(*priv->rxqs)[idx] = &rxq_ctrl->rxq;
 		/* Update receive callback. */
-		dev->rx_pkt_burst = mlx5_rx_burst;
+		priv_select_rx_function(priv);
 	}
 	priv_unlock(priv);
 	return -ret;

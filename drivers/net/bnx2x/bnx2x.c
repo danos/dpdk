@@ -178,7 +178,7 @@ bnx2x_dma_alloc(struct bnx2x_softc *sc, size_t size, struct bnx2x_dma *dma,
 
 	/* Caller must take care that strlen(mz_name) < RTE_MEMZONE_NAMESIZE */
 	z = rte_memzone_reserve_aligned(mz_name, (uint64_t) (size),
-					rte_lcore_to_socket_id(rte_lcore_id()),
+					SOCKET_ID_ANY,
 					0, align);
 	if (z == NULL) {
 		PMD_DRV_LOG(ERR, "DMA alloc failed for %s", msg);
@@ -9556,8 +9556,8 @@ static void bnx2x_init_rte(struct bnx2x_softc *sc)
 		sc->max_rx_queues = min(BNX2X_VF_MAX_QUEUES_PER_VF,
 					sc->igu_sb_cnt);
 	} else {
-		sc->max_tx_queues = 128;
-		sc->max_rx_queues = 128;
+		sc->max_rx_queues = BNX2X_MAX_RSS_COUNT(sc);
+		sc->max_tx_queues = sc->max_rx_queues;
 	}
 }
 
