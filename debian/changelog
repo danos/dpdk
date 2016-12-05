@@ -1,3 +1,28 @@
+dpdk (16.07.2-1~git1) UNRELEASED; urgency=medium
+
+  * Merge stable release 16.07.2 and adapt patches
+    - imported latest stable release from dpdk-16.07.2.tar.gz
+      stable release changelog at
+      http://dpdk.org/doc/guides-16.07/rel_notes/release_16_07.html
+    - Deleted:
+      - d/p/dpdk-dev-v2-kni-fix-build-with-kernel-4.8.patch
+      - d/p/fix-unusual-interpreter.patch
+      - d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch
+      - d/p/dpdk-dev-kni-fix-build-with-kernel-4.9.patch
+      - d/p/dpdk-dev-ppc-enable-7-7-examples-ip_pipeline-fix-lcore-mapping-for-
+        ppc64.patch
+    - Refreshed (only offset changes)
+      - d/p/dpdk-dev-ppc-enable-1-7-lpm-add-AltiVec-for-ppc64.patch
+      - d/p/dpdk-dev-ppc-enable-2-7-acl-add-AltiVec-for-ppc64.patch
+      - d/p/dpdk-dev-ppc-enable-4-7-sched-enable-on-ppc64le.patch
+      - d/p/dpdk-dev-ppc-enable-6-7-config-enable-packet-framework-on-
+        ppc64le.patch
+      - d/p/dpdk-dev-v2-2-4-doc-rendering-and-installation-of-man-pages.patch
+      - d/p/dpdk-dev-v2-3-4-doc-add-basic-invocation-info-for-dpdk-pmdinfo.patch
+      - d/p/dpdk-dev-v2-4-4-doc-add-basic-invocation-info-for-dpdk-devbind.patch
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 05 Dec 2016 07:08:01 +0100
+
 dpdk (16.07-2~git1) UNRELEASED; urgency=medium
 
   * Team upload.
