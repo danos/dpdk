@@ -284,15 +284,12 @@ static int enicpmd_dev_rx_queue_setup(struct rte_eth_dev *eth_dev,
 	eth_dev->data->rx_queues[queue_idx] =
 		(void *)&enic->rq[enic_sop_rq(queue_idx)];
 
-	ret = enic_alloc_rq(enic, queue_idx, socket_id, mp, nb_desc);
+	ret = enic_alloc_rq(enic, queue_idx, socket_id, mp, nb_desc,
+			    rx_conf->rx_free_thresh);
 	if (ret) {
 		dev_err(enic, "error in allocating rq\n");
 		return ret;
 	}
-
-	enic->rq[queue_idx].rx_free_thresh = rx_conf->rx_free_thresh;
-	dev_debug(enic, "Set queue_id:%u free thresh:%u\n", queue_idx,
-			enic->rq[queue_idx].rx_free_thresh);
 
 	return enicpmd_dev_setup_intr(enic);
 }
@@ -443,8 +440,7 @@ static void enicpmd_dev_info_get(struct rte_eth_dev *eth_dev,
 	device_info->max_rx_queues = enic->conf_rq_count / 2;
 	device_info->max_tx_queues = enic->conf_wq_count;
 	device_info->min_rx_bufsize = ENIC_MIN_MTU;
-	device_info->max_rx_pktlen = enic->rte_dev->data->mtu
-				   + ETHER_HDR_LEN + 4;
+	device_info->max_rx_pktlen = enic->max_mtu + ETHER_HDR_LEN + 4;
 	device_info->max_mac_addrs = 1;
 	device_info->rx_offload_capa =
 		DEV_RX_OFFLOAD_VLAN_STRIP |

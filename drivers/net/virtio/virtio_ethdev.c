@@ -125,8 +125,8 @@ static const struct rte_virtio_xstats_name_off rte_virtio_rxq_stat_strings[] = {
 	{"size_128_255_packets",   offsetof(struct virtnet_rx, stats.size_bins[3])},
 	{"size_256_511_packets",   offsetof(struct virtnet_rx, stats.size_bins[4])},
 	{"size_512_1023_packets",  offsetof(struct virtnet_rx, stats.size_bins[5])},
-	{"size_1024_1517_packets", offsetof(struct virtnet_rx, stats.size_bins[6])},
-	{"size_1518_max_packets",  offsetof(struct virtnet_rx, stats.size_bins[7])},
+	{"size_1024_1518_packets", offsetof(struct virtnet_rx, stats.size_bins[6])},
+	{"size_1519_max_packets",  offsetof(struct virtnet_rx, stats.size_bins[7])},
 };
 
 /* [rt]x_qX_ is prepended to the name string here */
@@ -142,8 +142,8 @@ static const struct rte_virtio_xstats_name_off rte_virtio_txq_stat_strings[] = {
 	{"size_128_255_packets",   offsetof(struct virtnet_tx, stats.size_bins[3])},
 	{"size_256_511_packets",   offsetof(struct virtnet_tx, stats.size_bins[4])},
 	{"size_512_1023_packets",  offsetof(struct virtnet_tx, stats.size_bins[5])},
-	{"size_1024_1517_packets", offsetof(struct virtnet_tx, stats.size_bins[6])},
-	{"size_1518_max_packets",  offsetof(struct virtnet_tx, stats.size_bins[7])},
+	{"size_1024_1518_packets", offsetof(struct virtnet_tx, stats.size_bins[6])},
+	{"size_1519_max_packets",  offsetof(struct virtnet_tx, stats.size_bins[7])},
 };
 
 #define VIRTIO_NB_RXQ_XSTATS (sizeof(rte_virtio_rxq_stat_strings) / \
@@ -549,13 +549,11 @@ virtio_dev_close(struct rte_eth_dev *dev)
 
 	PMD_INIT_LOG(DEBUG, "virtio_dev_close");
 
-	if (hw->started == 1)
-		virtio_dev_stop(dev);
-
 	/* reset the NIC */
 	if (dev->data->dev_flags & RTE_ETH_DEV_INTR_LSC)
 		vtpci_irq_config(hw, VIRTIO_MSI_NO_VECTOR);
 	vtpci_reset(hw);
+	hw->started = 0;
 	virtio_dev_free_mbufs(dev);
 	virtio_free_queues(dev);
 }
@@ -1275,9 +1273,10 @@ eth_virtio_dev_uninit(struct rte_eth_dev *eth_dev)
 	if (rte_eal_process_type() == RTE_PROC_SECONDARY)
 		return -EPERM;
 
-	/* Close it anyway since there's no way to know if closed */
-	virtio_dev_close(eth_dev);
-
+	if (hw->started == 1) {
+		virtio_dev_stop(eth_dev);
+		virtio_dev_close(eth_dev);
+	}
 	pci_dev = eth_dev->pci_dev;
 
 	eth_dev->dev_ops = NULL;
@@ -1486,11 +1485,8 @@ static void
 virtio_dev_stop(struct rte_eth_dev *dev)
 {
 	struct rte_eth_link link;
-	struct virtio_hw *hw = dev->data->dev_private;
 
 	PMD_INIT_LOG(DEBUG, "stop");
-
-	hw->started = 0;
 
 	if (dev->data->dev_conf.intr_conf.lsc)
 		rte_intr_disable(&dev->pci_dev->intr_handle);

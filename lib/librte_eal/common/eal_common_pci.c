@@ -344,7 +344,7 @@ rte_eal_pci_probe_one(const struct rte_pci_addr *addr)
 			continue;
 
 		ret = pci_probe_all_drivers(dev);
-		if (ret < 0)
+		if (ret)
 			goto err_return;
 		return 0;
 	}
@@ -378,6 +378,7 @@ rte_eal_pci_detach(const struct rte_pci_addr *addr)
 			goto err_return;
 
 		TAILQ_REMOVE(&pci_device_list, dev, next);
+		free(dev);
 		return 0;
 	}
 	return -1;

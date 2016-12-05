@@ -163,6 +163,12 @@ struct enic {
 
 };
 
+/* Get the CQ index from a Start of Packet(SOP) RQ index */
+static inline unsigned int enic_sop_rq_idx_to_cq_idx(unsigned int sop_idx)
+{
+	return sop_idx / 2;
+}
+
 static inline unsigned int enic_sop_rq(unsigned int rq)
 {
 	return rq * 2;
@@ -244,7 +250,7 @@ extern int enic_stop_rq(struct enic *enic, uint16_t queue_idx);
 extern void enic_free_rq(void *rxq);
 extern int enic_alloc_rq(struct enic *enic, uint16_t queue_idx,
 	unsigned int socket_id, struct rte_mempool *mp,
-	uint16_t nb_desc);
+	uint16_t nb_desc, uint16_t free_thresh);
 extern int enic_set_rss_nic_cfg(struct enic *enic);
 extern int enic_set_vnic_res(struct enic *enic);
 extern void enic_set_hdr_split_size(struct enic *enic, u16 split_hdr_size);

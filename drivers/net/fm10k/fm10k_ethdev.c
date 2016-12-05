@@ -52,6 +52,8 @@
 #define MAX_QUERY_SWITCH_STATE_TIMES 10
 /* Wait interval to get switch status */
 #define WAIT_SWITCH_MSG_US    100000
+/* A period of quiescence for switch */
+#define FM10K_SWITCH_QUIESCE_US 10000
 /* Number of chars per uint32 type */
 #define CHARS_PER_UINT32 (sizeof(uint32_t))
 #define BIT_MASK_PER_UINT32 ((1 << CHARS_PER_UINT32) - 1)
@@ -693,8 +695,9 @@ fm10k_dev_tx_init(struct rte_eth_dev *dev)
 				base_addr >> (CHAR_BIT * sizeof(uint32_t)));
 		FM10K_WRITE_REG(hw, FM10K_TDLEN(i), size);
 
-		/* assign default SGLORT for each TX queue */
-		FM10K_WRITE_REG(hw, FM10K_TX_SGLORT(i), hw->mac.dglort_map);
+		/* assign default SGLORT for each TX queue by PF */
+		if (hw->mac.type == fm10k_mac_pf)
+			FM10K_WRITE_REG(hw, FM10K_TX_SGLORT(i), hw->mac.dglort_map);
 	}
 
 	/* set up vector or scalar TX function as appropriate */
@@ -1232,6 +1235,9 @@ fm10k_dev_close(struct rte_eth_dev *dev)
 	hw->mac.ops.update_lport_state(hw, hw->mac.dglort_map,
 		MAX_LPORT_NUM, false);
 	fm10k_mbx_unlock(hw);
+
+	/* allow 10ms for device to quiesce */
+	rte_delay_us(FM10K_SWITCH_QUIESCE_US);
 
 	/* Stop mailbox service first */
 	fm10k_close_mbx_service(hw);

@@ -40,22 +40,22 @@
 /* Verbs header. */
 /* ISO C doesn't support unnamed structs/unions, disabling -pedantic. */
 #ifdef PEDANTIC
-#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5_hw.h>
 #ifdef PEDANTIC
-#pragma GCC diagnostic error "-pedantic"
+#pragma GCC diagnostic error "-Wpedantic"
 #endif
 
 /* DPDK headers don't like -pedantic. */
 #ifdef PEDANTIC
-#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <rte_mbuf.h>
 #include <rte_mempool.h>
 #ifdef PEDANTIC
-#pragma GCC diagnostic error "-pedantic"
+#pragma GCC diagnostic error "-Wpedantic"
 #endif
 
 #include "mlx5_utils.h"
@@ -87,6 +87,8 @@ struct mlx5_txq_stats {
 struct fdir_queue {
 	struct ibv_qp *qp; /* Associated RX QP. */
 	struct ibv_exp_rwq_ind_table *ind_table; /* Indirection table. */
+	struct ibv_exp_wq *wq; /* Work queue. */
+	struct ibv_cq *cq; /* Completion queue. */
 };
 
 struct priv;
@@ -128,7 +130,7 @@ struct rxq_ctrl {
 	struct ibv_cq *cq; /* Completion Queue. */
 	struct ibv_exp_wq *wq; /* Work Queue. */
 	struct ibv_exp_res_domain *rd; /* Resource Domain. */
-	struct fdir_queue fdir_queue; /* Flow director queue. */
+	struct fdir_queue *fdir_queue; /* Flow director queue. */
 	struct ibv_mr *mr; /* Memory Region (for mp). */
 	struct ibv_exp_wq_family *if_wq; /* WQ burst interface. */
 	struct ibv_exp_cq_family_v1 *if_cq; /* CQ interface. */
@@ -247,7 +249,7 @@ struct txq {
 	uint16_t wqe_n; /* Number of WQ elements. */
 	uint16_t bf_offset; /* Blueflame offset. */
 	uint16_t bf_buf_size; /* Blueflame size. */
-	uint16_t max_inline; /* Maximum size to inline in a WQE. */
+	uint16_t max_inline; /* Multiple of RTE_CACHE_LINE_SIZE to inline. */
 	uint32_t qp_num_8s; /* QP number shifted by 8. */
 	volatile struct mlx5_cqe (*cqes)[]; /* Completion queue. */
 	volatile union mlx5_wqe (*wqes)[]; /* Work queue. */
@@ -312,7 +314,6 @@ uint16_t mlx5_tx_burst_secondary_setup(void *, struct rte_mbuf **, uint16_t);
 /* mlx5_rxtx.c */
 
 uint16_t mlx5_tx_burst(void *, struct rte_mbuf **, uint16_t);
-uint16_t mlx5_tx_burst_inline(void *, struct rte_mbuf **, uint16_t);
 uint16_t mlx5_tx_burst_mpw(void *, struct rte_mbuf **, uint16_t);
 uint16_t mlx5_tx_burst_mpw_inline(void *, struct rte_mbuf **, uint16_t);
 uint16_t mlx5_rx_burst(void *, struct rte_mbuf **, uint16_t);

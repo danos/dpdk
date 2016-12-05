@@ -147,7 +147,7 @@ process_inner_cksums(struct ether_hdr *eth_hdr, union tunnel_offload_info *info)
 		if (tso_segsz != 0) {
 			ol_flags |= PKT_TX_TCP_SEG;
 			info->tso_segsz = tso_segsz;
-			info->l4_len = sizeof(struct tcp_hdr);
+			info->l4_len = (tcp_hdr->data_off & 0xf0) >> 2;
 		}
 
 	} else if (l4_proto == IPPROTO_SCTP) {
@@ -218,7 +218,7 @@ encapsulation(struct rte_mbuf *m, uint8_t queue_id)
 	/* copy in IP header */
 	ip = rte_memcpy(ip, &app_ip_hdr[vport_id],
 		sizeof(struct ipv4_hdr));
-	ip->total_length = rte_cpu_to_be_16(m->data_len
+	ip->total_length = rte_cpu_to_be_16(m->pkt_len
 				- sizeof(struct ether_hdr));
 
 	/* outer IP checksum */

@@ -174,8 +174,7 @@ void enic_dev_stats_get(struct enic *enic, struct rte_eth_stats *r_stats)
 	 * which can make ibytes be slightly higher than it should be.
 	 */
 	rx_packet_errors = rte_atomic64_read(&soft_stats->rx_packet_errors);
-	rx_truncated = rx_packet_errors - stats->rx.rx_errors -
-		stats->rx.rx_no_bufs;
+	rx_truncated = rx_packet_errors - stats->rx.rx_errors;
 
 	r_stats->ipackets = stats->rx.rx_frames_ok - rx_truncated;
 	r_stats->opackets = stats->tx.tx_frames_ok;
@@ -517,7 +516,7 @@ void enic_free_rq(void *rxq)
 	if (rq_data->in_use)
 		vnic_rq_free(rq_data);
 
-	vnic_cq_free(&enic->cq[rq_sop->index]);
+	vnic_cq_free(&enic->cq[enic_sop_rq_idx_to_cq_idx(rq_sop->index)]);
 }
 
 void enic_start_wq(struct enic *enic, uint16_t queue_idx)
@@ -576,7 +575,7 @@ int enic_stop_rq(struct enic *enic, uint16_t queue_idx)
 
 int enic_alloc_rq(struct enic *enic, uint16_t queue_idx,
 	unsigned int socket_id, struct rte_mempool *mp,
-	uint16_t nb_desc)
+	uint16_t nb_desc, uint16_t free_thresh)
 {
 	int rc;
 	uint16_t sop_queue_idx = enic_sop_rq(queue_idx);
@@ -596,6 +595,10 @@ int enic_alloc_rq(struct enic *enic, uint16_t queue_idx,
 	rq_data->socket_id = socket_id;
 	rq_data->mp = mp;
 	rq_sop->in_use = 1;
+	rq_sop->rx_free_thresh = free_thresh;
+	rq_data->rx_free_thresh = free_thresh;
+	dev_debug(enic, "Set queue_id:%u free thresh:%u\n", queue_idx,
+		  free_thresh);
 
 	mbuf_size = (uint16_t)(rte_pktmbuf_data_room_size(mp) -
 			       RTE_PKTMBUF_HEADROOM);
@@ -611,10 +614,13 @@ int enic_alloc_rq(struct enic *enic, uint16_t queue_idx,
 	}
 
 	if (mbufs_per_pkt > 1) {
-		dev_info(enic, "Scatter rx mode in use\n");
+		dev_info(enic, "Rq %u Scatter rx mode in use\n", queue_idx);
+		rq_sop->data_queue_enable = 1;
 		rq_data->in_use = 1;
 	} else {
-		dev_info(enic, "Scatter rx mode not being used\n");
+		dev_info(enic, "Rq %u Scatter rx mode not being used\n",
+			 queue_idx);
+		rq_sop->data_queue_enable = 0;
 		rq_data->in_use = 0;
 	}
 
@@ -1122,6 +1128,15 @@ static int enic_dev_init(struct enic *enic)
 		return err;
 	}
 
+	/* Get available resource counts */
+	enic_get_res_counts(enic);
+	if (enic->conf_rq_count == 1) {
+		dev_err(enic, "Running with only 1 RQ configured in the vNIC is not supported.\n");
+		dev_err(enic, "Please configure 2 RQs in the vNIC for each Rx queue used by DPDK.\n");
+		dev_err(enic, "See the ENIC PMD guide for more information.\n");
+		return -EINVAL;
+	}
+
 	eth_dev->data->mac_addrs = rte_zmalloc("enic_mac_addr", ETH_ALEN, 0);
 	if (!eth_dev->data->mac_addrs) {
 		dev_err(enic, "mac addr storage alloc failed, aborting.\n");
@@ -1129,11 +1144,6 @@ static int enic_dev_init(struct enic *enic)
 	}
 	ether_addr_copy((struct ether_addr *) enic->mac_addr,
 		&eth_dev->data->mac_addrs[0]);
-
-
-	/* Get available resource counts
-	*/
-	enic_get_res_counts(enic);
 
 	vnic_dev_set_reset_flag(enic->vdev, 0);
 
