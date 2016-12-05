@@ -1,8 +1,6 @@
-diff --git a/doc/guides/conf.py b/doc/guides/conf.py
-index 55b6b2f..c45c4be 100644
 --- a/doc/guides/conf.py
 +++ b/doc/guides/conf.py
-@@ -111,7 +111,9 @@ man_pages = [("testpmd_app_ug/run_app", "testpmd",
+@@ -98,7 +98,9 @@
               ("tools/pdump", "dpdk-pdump",
                "enable packet capture on dpdk ports", "", 1),
               ("tools/proc_info", "dpdk-procinfo",
@@ -13,19 +11,14 @@ index 55b6b2f..c45c4be 100644
  
  ######## :numref: fallback ########
  # The following hook functions add some simple handling for the :numref:
-diff --git a/doc/guides/tools/index.rst b/doc/guides/tools/index.rst
-index d7654a2..80f2115 100644
 --- a/doc/guides/tools/index.rst
 +++ b/doc/guides/tools/index.rst
-@@ -37,4 +37,5 @@ Tool User Guides
+@@ -37,4 +37,5 @@
  
      proc_info
      pdump
 +    pmdinfo
  
-diff --git a/doc/guides/tools/pmdinfo.rst b/doc/guides/tools/pmdinfo.rst
-new file mode 100644
-index 0000000..a90c59f
 --- /dev/null
 +++ b/doc/guides/tools/pmdinfo.rst
 @@ -0,0 +1,57 @@

@@ -1,8 +1,6 @@
-diff --git a/doc/guides/conf.py b/doc/guides/conf.py
-index c45c4be..149bcdb 100644
 --- a/doc/guides/conf.py
 +++ b/doc/guides/conf.py
-@@ -113,7 +113,9 @@ man_pages = [("testpmd_app_ug/run_app", "testpmd",
+@@ -100,7 +100,9 @@
               ("tools/proc_info", "dpdk-procinfo",
                "access dpdk port stats and memory info", "", 1),
               ("tools/pmdinfo", "dpdk-pmdinfo",
@@ -13,9 +11,6 @@ index c45c4be..149bcdb 100644
  
  ######## :numref: fallback ########
  # The following hook functions add some simple handling for the :numref:
-diff --git a/doc/guides/tools/devbind.rst b/doc/guides/tools/devbind.rst
-new file mode 100644
-index 0000000..18a8059
 --- /dev/null
 +++ b/doc/guides/tools/devbind.rst
 @@ -0,0 +1,143 @@
@@ -162,21 +157,17 @@ index 0000000..18a8059
 +   Network devices using DPDK-compatible driver
 +   ============================================
 +   0000:0a:00.0 '82599ES 10-Gigabit' drv=igb_uio unused=
-diff --git a/doc/guides/tools/index.rst b/doc/guides/tools/index.rst
-index 80f2115..cbe98b2 100644
 --- a/doc/guides/tools/index.rst
 +++ b/doc/guides/tools/index.rst
-@@ -38,4 +38,5 @@ Tool User Guides
+@@ -38,4 +38,5 @@
      proc_info
      pdump
      pmdinfo
 +    devbind
  
-diff --git a/mk/rte.sdkinstall.mk b/mk/rte.sdkinstall.mk
-index 533d369..b1faf28 100644
 --- a/mk/rte.sdkinstall.mk
 +++ b/mk/rte.sdkinstall.mk
-@@ -139,6 +139,11 @@ ifneq ($(wildcard $O/doc/man/*/*.1),)
+@@ -139,6 +139,11 @@
  	$(Q)$(call rte_mkdir,     $(DESTDIR)$(mandir)/man1)
  	$(Q)cp -a $O/doc/man/*/*.1 $(DESTDIR)$(mandir)/man1
  endif

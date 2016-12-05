@@ -21,11 +21,9 @@ Last-Update: 2016-09-21
  create mode 100644 lib/librte_eal/common/include/arch/ppc_64/rte_vect.h
  create mode 100644 lib/librte_lpm/rte_lpm_altivec.h
 
-diff --git a/app/test/test_xmmt_ops.h b/app/test/test_xmmt_ops.h
-index de9c16f..42174d2 100644
 --- a/app/test/test_xmmt_ops.h
 +++ b/app/test/test_xmmt_ops.h
-@@ -62,6 +62,22 @@ vect_set_epi32(int i3, int i2, int i1, int i0)
+@@ -62,6 +62,22 @@
  /* sets the 4 signed 32-bit integer values and returns the xmm_t variable */
  #define vect_set_epi32(i3, i2, i1, i0) _mm_set_epi32(i3, i2, i1, i0)
  
@@ -48,11 +46,9 @@ index de9c16f..42174d2 100644
  #endif
  
  #endif /* _TEST_XMMT_OPS_H_ */
-diff --git a/config/defconfig_ppc_64-power8-linuxapp-gcc b/config/defconfig_ppc_64-power8-linuxapp-gcc
-index bef8f49..9ddf3c5 100644
 --- a/config/defconfig_ppc_64-power8-linuxapp-gcc
 +++ b/config/defconfig_ppc_64-power8-linuxapp-gcc
-@@ -57,7 +57,6 @@ CONFIG_RTE_LIBRTE_ENIC_PMD=n
+@@ -56,7 +56,6 @@
  CONFIG_RTE_LIBRTE_FM10K_PMD=n
  
  # This following libraries are not available on Power. So they're turned off.
@@ -60,9 +56,6 @@ index bef8f49..9ddf3c5 100644
  CONFIG_RTE_LIBRTE_ACL=n
  CONFIG_RTE_LIBRTE_SCHED=n
  CONFIG_RTE_LIBRTE_PORT=n
-diff --git a/lib/librte_eal/common/include/arch/ppc_64/rte_vect.h b/lib/librte_eal/common/include/arch/ppc_64/rte_vect.h
-new file mode 100644
-index 0000000..05209e5
 --- /dev/null
 +++ b/lib/librte_eal/common/include/arch/ppc_64/rte_vect.h
 @@ -0,0 +1,60 @@
@@ -126,11 +119,9 @@ index 0000000..05209e5
 +#endif
 +
 +#endif /* _RTE_VECT_PPC_64_H_ */
-diff --git a/lib/librte_lpm/Makefile b/lib/librte_lpm/Makefile
-index 656ade2..3dc549d 100644
 --- a/lib/librte_lpm/Makefile
 +++ b/lib/librte_lpm/Makefile
-@@ -51,6 +51,8 @@ ifneq ($(filter y,$(CONFIG_RTE_ARCH_ARM) $(CONFIG_RTE_ARCH_ARM64)),)
+@@ -51,6 +51,8 @@
  SYMLINK-$(CONFIG_RTE_LIBRTE_LPM)-include += rte_lpm_neon.h
  else ifeq ($(CONFIG_RTE_ARCH_X86),y)
  SYMLINK-$(CONFIG_RTE_LIBRTE_LPM)-include += rte_lpm_sse.h
@@ -139,11 +130,9 @@ index 656ade2..3dc549d 100644
  endif
  
  # this lib needs eal
-diff --git a/lib/librte_lpm/rte_lpm.h b/lib/librte_lpm/rte_lpm.h
-index 2df1d67..dbe5483 100644
 --- a/lib/librte_lpm/rte_lpm.h
 +++ b/lib/librte_lpm/rte_lpm.h
-@@ -480,6 +480,8 @@ rte_lpm_lookupx4(const struct rte_lpm *lpm, xmm_t ip, uint32_t hop[4],
+@@ -480,6 +480,8 @@
  
  #if defined(RTE_ARCH_ARM) || defined(RTE_ARCH_ARM64)
  #include "rte_lpm_neon.h"
@@ -152,9 +141,6 @@ index 2df1d67..dbe5483 100644
  #else
  #include "rte_lpm_sse.h"
  #endif
-diff --git a/lib/librte_lpm/rte_lpm_altivec.h b/lib/librte_lpm/rte_lpm_altivec.h
-new file mode 100644
-index 0000000..e26e087
 --- /dev/null
 +++ b/lib/librte_lpm/rte_lpm_altivec.h
 @@ -0,0 +1,154 @@
@@ -312,6 +298,3 @@ index 0000000..e26e087
 +#endif
 +
 +#endif /* _RTE_LPM_ALTIVEC_H_ */
--- 
-1.9.1
-

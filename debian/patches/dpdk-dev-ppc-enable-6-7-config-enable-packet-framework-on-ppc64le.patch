@@ -16,11 +16,9 @@ Last-Update: 2016-09-21
  config/defconfig_ppc_64-power8-linuxapp-gcc | 4 ----
  1 file changed, 4 deletions(-)
 
-diff --git a/config/defconfig_ppc_64-power8-linuxapp-gcc b/config/defconfig_ppc_64-power8-linuxapp-gcc
-index 45b6077..f953e61 100644
 --- a/config/defconfig_ppc_64-power8-linuxapp-gcc
 +++ b/config/defconfig_ppc_64-power8-linuxapp-gcc
-@@ -56,7 +56,3 @@ CONFIG_RTE_LIBRTE_PMD_BOND=n
+@@ -55,7 +55,3 @@
  CONFIG_RTE_LIBRTE_ENIC_PMD=n
  CONFIG_RTE_LIBRTE_FM10K_PMD=n
  
@@ -28,6 +26,3 @@ index 45b6077..f953e61 100644
 -CONFIG_RTE_LIBRTE_PORT=n
 -CONFIG_RTE_LIBRTE_TABLE=n
 -CONFIG_RTE_LIBRTE_PIPELINE=n
--- 
-1.9.1
-

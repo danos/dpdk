@@ -1,6 +1,5 @@
 fix-vhost-user-socket-permission.patch
 fix-double-license-info.patch
-fix-unusual-interpreter.patch
 dpdk-dev-doc-fix-old-dpdk-nic-bind.py-references.patch
 make-load-devel-config-not-to-appear-as-executable.patch
 rte-compile-pre-cppflags.patch
@@ -10,14 +9,10 @@ dpdk-dev-v2-1-4-doc-move-tool-guides-in-their-own-subdirectory.patch
 dpdk-dev-v2-2-4-doc-rendering-and-installation-of-man-pages.patch
 dpdk-dev-v2-3-4-doc-add-basic-invocation-info-for-dpdk-pmdinfo.patch
 dpdk-dev-v2-4-4-doc-add-basic-invocation-info-for-dpdk-devbind.patch
-dpdk-dev-v2-kni-fix-build-with-kernel-4.8.patch
 dpdk-dev-ppc-enable-1-7-lpm-add-AltiVec-for-ppc64.patch
 dpdk-dev-ppc-enable-2-7-acl-add-AltiVec-for-ppc64.patch
 dpdk-dev-ppc-enable-3-7-examples-l3fwd-add-AltiVec-for-ppc64.patch
 dpdk-dev-ppc-enable-4-7-sched-enable-on-ppc64le.patch
 dpdk-dev-ppc-enable-5-7-table-fix-verification-on-hash-bucket-header-alignme.patch
 dpdk-dev-ppc-enable-6-7-config-enable-packet-framework-on-ppc64le.patch
-dpdk-dev-ppc-enable-7-7-examples-ip_pipeline-fix-lcore-mapping-for-ppc64.patch
-dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch
-dpdk-dev-kni-fix-build-with-kernel-4.9.patch
 
