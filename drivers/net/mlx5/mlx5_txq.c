@@ -81,8 +81,8 @@ txq_alloc_elts(struct txq_ctrl *txq_ctrl, unsigned int elts_n)
 
 	for (i = 0; (i != elts_n); ++i)
 		(*txq_ctrl->txq.elts)[i] = NULL;
-	for (i = 0; (i != txq_ctrl->txq.wqe_n); ++i) {
-		volatile union mlx5_wqe *wqe = &(*txq_ctrl->txq.wqes)[i];
+	for (i = 0; (i != (1u << txq_ctrl->txq.wqe_n)); ++i) {
+		volatile struct mlx5_wqe64 *wqe = &(*txq_ctrl->txq.wqes)[i];
 
 		memset((void *)(uintptr_t)wqe, 0x0, sizeof(*wqe));
 	}
@@ -101,7 +101,7 @@ txq_alloc_elts(struct txq_ctrl *txq_ctrl, unsigned int elts_n)
 static void
 txq_free_elts(struct txq_ctrl *txq_ctrl)
 {
-	unsigned int elts_n = txq_ctrl->txq.elts_n;
+	unsigned int elts_n = 1 << txq_ctrl->txq.elts_n;
 	unsigned int elts_head = txq_ctrl->txq.elts_head;
 	unsigned int elts_tail = txq_ctrl->txq.elts_tail;
 	struct rte_mbuf *(*elts)[elts_n] = txq_ctrl->txq.elts;
@@ -212,22 +212,22 @@ txq_setup(struct txq_ctrl *tmpl, struct txq_ctrl *txq_ctrl)
 		      "it should be set to %u", RTE_CACHE_LINE_SIZE);
 		return EINVAL;
 	}
-	tmpl->txq.cqe_n = ibcq->cqe + 1;
+	tmpl->txq.cqe_n = log2above(ibcq->cqe);
 	tmpl->txq.qp_num_8s = qp->ctrl_seg.qp_num << 8;
 	tmpl->txq.wqes =
-		(volatile union mlx5_wqe (*)[])
+		(volatile struct mlx5_wqe64 (*)[])
 		(uintptr_t)qp->gen_data.sqstart;
-	tmpl->txq.wqe_n = qp->sq.wqe_cnt;
+	tmpl->txq.wqe_n = log2above(qp->sq.wqe_cnt);
 	tmpl->txq.qp_db = &qp->gen_data.db[MLX5_SND_DBR];
 	tmpl->txq.bf_reg = qp->gen_data.bf->reg;
 	tmpl->txq.bf_offset = qp->gen_data.bf->offset;
-	tmpl->txq.bf_buf_size = qp->gen_data.bf->buf_size;
+	tmpl->txq.bf_buf_size = log2above(qp->gen_data.bf->buf_size);
 	tmpl->txq.cq_db = cq->dbrec;
 	tmpl->txq.cqes =
 		(volatile struct mlx5_cqe (*)[])
 		(uintptr_t)cq->active_buf->buf;
 	tmpl->txq.elts =
-		(struct rte_mbuf *(*)[tmpl->txq.elts_n])
+		(struct rte_mbuf *(*)[1 << tmpl->txq.elts_n])
 		((uintptr_t)txq_ctrl + sizeof(*txq_ctrl));
 	return 0;
 }
@@ -277,7 +277,7 @@ txq_ctrl_setup(struct rte_eth_dev *dev, struct txq_ctrl *txq_ctrl,
 	}
 	(void)conf; /* Thresholds configuration (ignored). */
 	assert(desc > MLX5_TX_COMP_THRESH);
-	tmpl.txq.elts_n = desc;
+	tmpl.txq.elts_n = log2above(desc);
 	/* MRs will be registered in mp2mr[] later. */
 	attr.rd = (struct ibv_exp_res_domain_init_attr){
 		.comp_mask = (IBV_EXP_RES_DOMAIN_THREAD_MODEL |

@@ -54,6 +54,7 @@
 #endif
 #include <rte_mbuf.h>
 #include <rte_mempool.h>
+#include <rte_common.h>
 #ifdef PEDANTIC
 #pragma GCC diagnostic error "-Wpedantic"
 #endif
@@ -109,16 +110,18 @@ struct rxq {
 	unsigned int vlan_strip:1; /* Enable VLAN stripping. */
 	unsigned int crc_present:1; /* CRC must be subtracted. */
 	unsigned int sges_n:2; /* Log 2 of SGEs (max buffers per packet). */
+	unsigned int cqe_n:4; /* Log 2 of CQ elements. */
+	unsigned int elts_n:4; /* Log 2 of Mbufs. */
+	unsigned int port_id:8;
+	unsigned int rss_hash:1; /* RSS hash result is enabled. */
+	unsigned int :9; /* Remaining bits. */
+	volatile uint32_t *rq_db;
+	volatile uint32_t *cq_db;
 	uint16_t rq_ci;
 	uint16_t cq_ci;
-	uint16_t elts_n;
-	uint16_t cqe_n; /* Number of CQ elements. */
-	uint16_t port_id;
 	volatile struct mlx5_wqe_data_seg(*wqes)[];
 	volatile struct mlx5_cqe(*cqes)[];
 	struct rxq_zip zip; /* Compressed context. */
-	volatile uint32_t *rq_db;
-	volatile uint32_t *cq_db;
 	struct rte_mbuf *(*elts)[];
 	struct rte_mempool *mp;
 	struct mlx5_rxq_stats stats;
@@ -238,21 +241,22 @@ struct hash_rxq {
 };
 
 /* TX queue descriptor. */
+RTE_STD_C11
 struct txq {
 	uint16_t elts_head; /* Current index in (*elts)[]. */
 	uint16_t elts_tail; /* First element awaiting completion. */
 	uint16_t elts_comp; /* Counter since last completion request. */
-	uint16_t elts_n; /* (*elts)[] length. */
 	uint16_t cq_ci; /* Consumer index for completion queue. */
-	uint16_t cqe_n; /* Number of CQ elements. */
 	uint16_t wqe_ci; /* Consumer index for work queue. */
-	uint16_t wqe_n; /* Number of WQ elements. */
+	uint16_t elts_n:4; /* (*elts)[] length (in log2). */
+	uint16_t cqe_n:4; /* Number of CQ elements (in log2). */
+	uint16_t wqe_n:4; /* Number of of WQ elements (in log2). */
+	uint16_t bf_buf_size:4; /* Log2 Blueflame size. */
 	uint16_t bf_offset; /* Blueflame offset. */
-	uint16_t bf_buf_size; /* Blueflame size. */
 	uint16_t max_inline; /* Multiple of RTE_CACHE_LINE_SIZE to inline. */
 	uint32_t qp_num_8s; /* QP number shifted by 8. */
 	volatile struct mlx5_cqe (*cqes)[]; /* Completion queue. */
-	volatile union mlx5_wqe (*wqes)[]; /* Work queue. */
+	volatile struct mlx5_wqe64 (*wqes)[]; /* Work queue. */
 	volatile uint32_t *qp_db; /* Work queue doorbell. */
 	volatile uint32_t *cq_db; /* Completion queue doorbell. */
 	volatile void *bf_reg; /* Blueflame register. */
