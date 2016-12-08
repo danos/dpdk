@@ -1,3 +1,20 @@
+dpdk (16.11-1~git1) UNRELEASED; urgency=medium
+
+  * Merge stable release 16.11 and adapt patches
+    - imported latest stable release from dpdk-16.11.tar.gz
+      stable release changelog at
+      http://dpdk.org/doc/guides-16.11/rel_notes/release_16_11.html
+    - Delete patches that are upstream:
+      - d/p/dpdk-dev-ppc-enable-*
+      - d/p/dpdk-dev-v2-*-4*
+      - d/p/rte-devel-build-env.patch
+      - d/p/rte-compile-pre-cppflags.patch
+      - d/p/make-load-devel-config-not-to-appear-as-executable.patch
+      - d/p/dpdk-dev-doc-fix-old-dpdk-nic-bind.py-references.patch
+      - d/p/fix-double-license-info.patch
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
+
 dpdk (16.07.2-1~git1) UNRELEASED; urgency=medium
 
   * Merge stable release 16.07.2 and adapt patches
