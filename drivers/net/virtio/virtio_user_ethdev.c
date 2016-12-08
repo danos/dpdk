@@ -37,6 +37,7 @@
 
 #include <rte_malloc.h>
 #include <rte_kvargs.h>
+#include <rte_vdev.h>
 
 #include "virtio_ethdev.h"
 #include "virtio_logs.h"
@@ -277,7 +278,7 @@ virtio_user_eth_dev_alloc(const char *name)
 	struct virtio_hw *hw;
 	struct virtio_user_dev *dev;
 
-	eth_dev = rte_eth_dev_allocate(name, RTE_ETH_DEV_VIRTUAL);
+	eth_dev = rte_eth_dev_allocate(name);
 	if (!eth_dev) {
 		PMD_INIT_LOG(ERR, "cannot alloc rte_eth_dev");
 		return NULL;
@@ -303,6 +304,7 @@ virtio_user_eth_dev_alloc(const char *name)
 	hw->vtpci_ops = &virtio_user_ops;
 	hw->use_msix = 0;
 	hw->modern   = 0;
+	hw->use_simple_rxtx = 0;
 	hw->virtio_user_dev = dev;
 	data->dev_private = hw;
 	data->numa_node = SOCKET_ID_ANY;
@@ -329,7 +331,7 @@ virtio_user_eth_dev_free(struct rte_eth_dev *eth_dev)
  * Returns 0 on success.
  */
 static int
-virtio_user_pmd_devinit(const char *name, const char *params)
+virtio_user_pmd_probe(const char *name, const char *params)
 {
 	struct rte_kvargs *kvlist = NULL;
 	struct rte_eth_dev *eth_dev;
@@ -443,7 +445,7 @@ end:
 
 /** Called by rte_eth_dev_detach() */
 static int
-virtio_user_pmd_devuninit(const char *name)
+virtio_user_pmd_remove(const char *name)
 {
 	struct rte_eth_dev *eth_dev;
 	struct virtio_hw *hw;
@@ -471,14 +473,14 @@ virtio_user_pmd_devuninit(const char *name)
 	return 0;
 }
 
-static struct rte_driver virtio_user_driver = {
-	.type   = PMD_VDEV,
-	.init   = virtio_user_pmd_devinit,
-	.uninit = virtio_user_pmd_devuninit,
+static struct rte_vdev_driver virtio_user_driver = {
+	.probe = virtio_user_pmd_probe,
+	.remove = virtio_user_pmd_remove,
 };
 
-PMD_REGISTER_DRIVER(virtio_user_driver, virtio_user);
-DRIVER_REGISTER_PARAM_STRING(virtio_user,
+RTE_PMD_REGISTER_VDEV(net_virtio_user, virtio_user_driver);
+RTE_PMD_REGISTER_ALIAS(net_virtio_user, virtio_user);
+RTE_PMD_REGISTER_PARAM_STRING(net_virtio_user,
 	"path=<path> "
 	"mac=<mac addr> "
 	"cq=<int> "

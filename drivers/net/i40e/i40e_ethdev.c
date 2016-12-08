@@ -418,6 +418,7 @@ static int i40e_dev_filter_ctrl(struct rte_eth_dev *dev,
 				void *arg);
 static int i40e_dev_get_dcb_info(struct rte_eth_dev *dev,
 				  struct rte_eth_dcb_info *dcb_info);
+static int i40e_dev_sync_phy_type(struct i40e_hw *hw);
 static void i40e_configure_registers(struct i40e_hw *hw);
 static void i40e_hw_init(struct rte_eth_dev *dev);
 static int i40e_config_qinq(struct i40e_hw *hw, struct i40e_vsi *vsi);
@@ -481,7 +482,6 @@ static const struct rte_pci_id pci_id_i40e_map[] = {
 	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_1G_BASE_T_X722) },
 	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_10G_BASE_T_X722) },
 	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_SFP_I_X722) },
-	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_QSFP_I_X722) },
 	{ .vendor_id = 0, /* sentinel */ },
 };
 
@@ -670,10 +670,11 @@ static const struct rte_i40e_xstats_name_off rte_i40e_txq_prio_strings[] = {
 
 static struct eth_driver rte_i40e_pmd = {
 	.pci_drv = {
-		.name = "rte_i40e_pmd",
 		.id_table = pci_id_i40e_map,
 		.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC |
 			RTE_PCI_DRV_DETACHABLE,
+		.probe = rte_eth_dev_pci_probe,
+		.remove = rte_eth_dev_pci_remove,
 	},
 	.eth_dev_init = eth_i40e_dev_init,
 	.eth_dev_uninit = eth_i40e_dev_uninit,
@@ -708,28 +709,8 @@ rte_i40e_dev_atomic_write_link_status(struct rte_eth_dev *dev,
 	return 0;
 }
 
-/*
- * Driver initialization routine.
- * Invoked once at EAL init time.
- * Register itself as the [Poll Mode] Driver of PCI IXGBE devices.
- */
-static int
-rte_i40e_pmd_init(const char *name __rte_unused,
-		  const char *params __rte_unused)
-{
-	PMD_INIT_FUNC_TRACE();
-	rte_eth_driver_register(&rte_i40e_pmd);
-
-	return 0;
-}
-
-static struct rte_driver rte_i40e_driver = {
-	.type = PMD_PDEV,
-	.init = rte_i40e_pmd_init,
-};
-
-PMD_REGISTER_DRIVER(rte_i40e_driver, i40e);
-DRIVER_REGISTER_PCI_TABLE(i40e, pci_id_i40e_map);
+RTE_PMD_REGISTER_PCI(net_i40e, rte_i40e_pmd.pci_drv);
+RTE_PMD_REGISTER_PCI_TABLE(net_i40e, pci_id_i40e_map);
 
 #ifndef I40E_GLQF_ORT
 #define I40E_GLQF_ORT(_i)    (0x00268900 + ((_i) * 4))
@@ -933,8 +914,10 @@ config_floating_veb(struct rte_eth_dev *dev)
 	memset(pf->floating_veb_list, 0, sizeof(pf->floating_veb_list));
 
 	if (hw->aq.fw_maj_ver >= FLOATING_VEB_SUPPORTED_FW_MAJ) {
-		pf->floating_veb = is_floating_veb_supported(pci_dev->devargs);
-		config_vf_floating_veb(pci_dev->devargs, pf->floating_veb,
+		pf->floating_veb =
+			is_floating_veb_supported(pci_dev->device.devargs);
+		config_vf_floating_veb(pci_dev->device.devargs,
+				       pf->floating_veb,
 				       pf->floating_veb_list);
 	} else {
 		pf->floating_veb = false;
@@ -1042,7 +1025,11 @@ eth_i40e_dev_init(struct rte_eth_dev *dev)
 	config_floating_veb(dev);
 	/* Clear PXE mode */
 	i40e_clear_pxe_mode(hw);
-
+	ret = i40e_dev_sync_phy_type(hw);
+	if (ret) {
+		PMD_INIT_LOG(ERR, "Failed to sync phy type: %d", ret);
+		goto err_sync_phy_type;
+	}
 	/*
 	 * On X710, performance number is far from the expectation on recent
 	 * firmware versions. The fix for this issue may not be integrated in
@@ -1207,6 +1194,7 @@ err_msix_pool_init:
 err_qp_pool_init:
 err_parameter_init:
 err_get_capabilities:
+err_sync_phy_type:
 	(void)i40e_shutdown_adminq(hw);
 
 	return ret;
@@ -1585,6 +1573,8 @@ i40e_parse_link_speeds(uint16_t link_speeds)
 
 	if (link_speeds & ETH_LINK_SPEED_40G)
 		link_speed |= I40E_LINK_SPEED_40GB;
+	if (link_speeds & ETH_LINK_SPEED_25G)
+		link_speed |= I40E_LINK_SPEED_25GB;
 	if (link_speeds & ETH_LINK_SPEED_20G)
 		link_speed |= I40E_LINK_SPEED_20GB;
 	if (link_speeds & ETH_LINK_SPEED_10G)
@@ -1610,6 +1600,7 @@ i40e_phy_conf_link(struct i40e_hw *hw,
 			I40E_AQ_PHY_FLAG_PAUSE_RX |
 			I40E_AQ_PHY_FLAG_LOW_POWER;
 	const uint8_t advt = I40E_LINK_SPEED_40GB |
+			I40E_LINK_SPEED_25GB |
 			I40E_LINK_SPEED_10GB |
 			I40E_LINK_SPEED_1GB |
 			I40E_LINK_SPEED_100MB;
@@ -1662,13 +1653,14 @@ i40e_apply_link_speed(struct rte_eth_dev *dev)
 	struct rte_eth_conf *conf = &dev->data->dev_conf;
 
 	speed = i40e_parse_link_speeds(conf->link_speeds);
-	abilities |= I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
+	if (!I40E_PHY_TYPE_SUPPORT_25G(hw->phy.phy_types))
+		abilities |= I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
 	if (!(conf->link_speeds & ETH_LINK_SPEED_FIXED))
 		abilities |= I40E_AQ_PHY_AN_ENABLED;
 	abilities |= I40E_AQ_PHY_LINK_ENABLED;
 
 	/* Skip changing speed on 40G interfaces, FW does not support */
-	if (i40e_is_40G_device(hw->device_id)) {
+	if (I40E_PHY_TYPE_SUPPORT_40G(hw->phy.phy_types)) {
 		speed =  I40E_LINK_SPEED_UNKNOWN;
 		abilities |= I40E_AQ_PHY_AN_ENABLED;
 	}
@@ -1764,7 +1756,8 @@ i40e_dev_start(struct rte_eth_dev *dev)
 	/* Apply link configure */
 	if (dev->data->dev_conf.link_speeds & ~(ETH_LINK_SPEED_100M |
 				ETH_LINK_SPEED_1G | ETH_LINK_SPEED_10G |
-				ETH_LINK_SPEED_20G | ETH_LINK_SPEED_40G)) {
+				ETH_LINK_SPEED_20G | ETH_LINK_SPEED_25G |
+				ETH_LINK_SPEED_40G)) {
 		PMD_DRV_LOG(ERR, "Invalid link setting");
 		goto err_up;
 	}
@@ -1994,9 +1987,11 @@ static int
 i40e_dev_set_link_down(struct rte_eth_dev *dev)
 {
 	uint8_t speed = I40E_LINK_SPEED_UNKNOWN;
-	uint8_t abilities = I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
+	uint8_t abilities = 0;
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 
+	if (!I40E_PHY_TYPE_SUPPORT_25G(hw->phy.phy_types))
+		abilities = I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
 	return i40e_phy_conf_link(hw, abilities, speed);
 }
 
@@ -2055,6 +2050,9 @@ i40e_dev_link_update(struct rte_eth_dev *dev,
 		break;
 	case I40E_LINK_SPEED_20GB:
 		link.link_speed = ETH_SPEED_NUM_20G;
+		break;
+	case I40E_LINK_SPEED_25GB:
+		link.link_speed = ETH_SPEED_NUM_25G;
 		break;
 	case I40E_LINK_SPEED_40GB:
 		link.link_speed = ETH_SPEED_NUM_40G;
@@ -2605,7 +2603,11 @@ i40e_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 		DEV_TX_OFFLOAD_TCP_CKSUM |
 		DEV_TX_OFFLOAD_SCTP_CKSUM |
 		DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM |
-		DEV_TX_OFFLOAD_TCP_TSO;
+		DEV_TX_OFFLOAD_TCP_TSO |
+		DEV_TX_OFFLOAD_VXLAN_TNL_TSO |
+		DEV_TX_OFFLOAD_GRE_TNL_TSO |
+		DEV_TX_OFFLOAD_IPIP_TNL_TSO |
+		DEV_TX_OFFLOAD_GENEVE_TNL_TSO;
 	dev_info->hash_key_size = (I40E_PFQF_HKEY_MAX_INDEX + 1) *
 						sizeof(uint32_t);
 	dev_info->reta_size = pf->hash_lut_size;
@@ -2655,9 +2657,12 @@ i40e_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 		dev_info->max_tx_queues += dev_info->vmdq_queue_num;
 	}
 
-	if (i40e_is_40G_device(hw->device_id))
+	if (I40E_PHY_TYPE_SUPPORT_40G(hw->phy.phy_types))
 		/* For XL710 */
 		dev_info->speed_capa = ETH_LINK_SPEED_40G;
+	else if (I40E_PHY_TYPE_SUPPORT_25G(hw->phy.phy_types))
+		/* For XXV710 */
+		dev_info->speed_capa = ETH_LINK_SPEED_25G;
 	else
 		/* For X710 */
 		dev_info->speed_capa = ETH_LINK_SPEED_1G | ETH_LINK_SPEED_10G;
@@ -2903,7 +2908,7 @@ i40e_flow_ctrl_set(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
 	if (err < 0)
 		return -ENOSYS;
 
-	if (i40e_is_40G_device(hw->device_id)) {
+	if (I40E_PHY_TYPE_SUPPORT_40G(hw->phy.phy_types)) {
 		/* Configure flow control refresh threshold,
 		 * the value for stat_tx_pause_refresh_timer[8]
 		 * is used for global pause operation.
@@ -5496,7 +5501,7 @@ i40e_dev_handle_aq_msg(struct rte_eth_dev *dev)
 			if (!ret) {
 				i40e_notify_all_vfs_link_status(dev);
 				_rte_eth_dev_callback_process(dev,
-					RTE_ETH_EVENT_INTR_LSC);
+					RTE_ETH_EVENT_INTR_LSC, NULL);
 			}
 			break;
 		default:
@@ -5564,6 +5569,7 @@ i40e_dev_interrupt_handler(__rte_unused struct rte_intr_handle *handle,
 		PMD_DRV_LOG(INFO, "ICR0: adminq event");
 		i40e_dev_handle_aq_msg(dev);
 	}
+
 done:
 	/* Enable interrupt */
 	i40e_pf_enable_irq0(hw);
@@ -6125,7 +6131,7 @@ DONE:
 
 /* Configure hash enable flags for RSS */
 uint64_t
-i40e_config_hena(uint64_t flags)
+i40e_config_hena(uint64_t flags, enum i40e_mac_type type)
 {
 	uint64_t hena = 0;
 
@@ -6134,20 +6140,42 @@ i40e_config_hena(uint64_t flags)
 
 	if (flags & ETH_RSS_FRAG_IPV4)
 		hena |= 1ULL << I40E_FILTER_PCTYPE_FRAG_IPV4;
-	if (flags & ETH_RSS_NONFRAG_IPV4_TCP)
-		hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_TCP;
-	if (flags & ETH_RSS_NONFRAG_IPV4_UDP)
-		hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_UDP;
+	if (flags & ETH_RSS_NONFRAG_IPV4_TCP) {
+		if (type == I40E_MAC_X722) {
+			hena |= (1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_TCP) |
+			 (1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_TCP_SYN_NO_ACK);
+		} else
+			hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_TCP;
+	}
+	if (flags & ETH_RSS_NONFRAG_IPV4_UDP) {
+		if (type == I40E_MAC_X722) {
+			hena |= (1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_UDP) |
+			 (1ULL << I40E_FILTER_PCTYPE_NONF_UNICAST_IPV4_UDP) |
+			 (1ULL << I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV4_UDP);
+		} else
+			hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_UDP;
+	}
 	if (flags & ETH_RSS_NONFRAG_IPV4_SCTP)
 		hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_SCTP;
 	if (flags & ETH_RSS_NONFRAG_IPV4_OTHER)
 		hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_OTHER;
 	if (flags & ETH_RSS_FRAG_IPV6)
 		hena |= 1ULL << I40E_FILTER_PCTYPE_FRAG_IPV6;
-	if (flags & ETH_RSS_NONFRAG_IPV6_TCP)
-		hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_TCP;
-	if (flags & ETH_RSS_NONFRAG_IPV6_UDP)
-		hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_UDP;
+	if (flags & ETH_RSS_NONFRAG_IPV6_TCP) {
+		if (type == I40E_MAC_X722) {
+			hena |= (1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_TCP) |
+			 (1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_TCP_SYN_NO_ACK);
+		} else
+			hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_TCP;
+	}
+	if (flags & ETH_RSS_NONFRAG_IPV6_UDP) {
+		if (type == I40E_MAC_X722) {
+			hena |= (1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_UDP) |
+			 (1ULL << I40E_FILTER_PCTYPE_NONF_UNICAST_IPV6_UDP) |
+			 (1ULL << I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV6_UDP);
+		} else
+			hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_UDP;
+	}
 	if (flags & ETH_RSS_NONFRAG_IPV6_SCTP)
 		hena |= 1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_SCTP;
 	if (flags & ETH_RSS_NONFRAG_IPV6_OTHER)
@@ -6170,8 +6198,18 @@ i40e_parse_hena(uint64_t flags)
 		rss_hf |= ETH_RSS_FRAG_IPV4;
 	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_TCP))
 		rss_hf |= ETH_RSS_NONFRAG_IPV4_TCP;
+#ifdef X722_SUPPORT
+	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_TCP_SYN_NO_ACK))
+		rss_hf |= ETH_RSS_NONFRAG_IPV4_TCP;
+#endif
 	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_UDP))
 		rss_hf |= ETH_RSS_NONFRAG_IPV4_UDP;
+#ifdef X722_SUPPORT
+	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_UNICAST_IPV4_UDP))
+		rss_hf |= ETH_RSS_NONFRAG_IPV4_UDP;
+	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV4_UDP))
+		rss_hf |= ETH_RSS_NONFRAG_IPV4_UDP;
+#endif
 	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_SCTP))
 		rss_hf |= ETH_RSS_NONFRAG_IPV4_SCTP;
 	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV4_OTHER))
@@ -6180,8 +6218,18 @@ i40e_parse_hena(uint64_t flags)
 		rss_hf |= ETH_RSS_FRAG_IPV6;
 	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_TCP))
 		rss_hf |= ETH_RSS_NONFRAG_IPV6_TCP;
+#ifdef X722_SUPPORT
+	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_TCP_SYN_NO_ACK))
+		rss_hf |= ETH_RSS_NONFRAG_IPV6_TCP;
+#endif
 	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_UDP))
 		rss_hf |= ETH_RSS_NONFRAG_IPV6_UDP;
+#ifdef X722_SUPPORT
+	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_UNICAST_IPV6_UDP))
+		rss_hf |= ETH_RSS_NONFRAG_IPV6_UDP;
+	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV6_UDP))
+		rss_hf |= ETH_RSS_NONFRAG_IPV6_UDP;
+#endif
 	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_SCTP))
 		rss_hf |= ETH_RSS_NONFRAG_IPV6_SCTP;
 	if (flags & (1ULL << I40E_FILTER_PCTYPE_NONF_IPV6_OTHER))
@@ -6201,7 +6249,10 @@ i40e_pf_disable_rss(struct i40e_pf *pf)
 
 	hena = (uint64_t)i40e_read_rx_ctl(hw, I40E_PFQF_HENA(0));
 	hena |= ((uint64_t)i40e_read_rx_ctl(hw, I40E_PFQF_HENA(1))) << 32;
-	hena &= ~I40E_RSS_HENA_ALL;
+	if (hw->mac.type == I40E_MAC_X722)
+		hena &= ~I40E_RSS_HENA_ALL_X722;
+	else
+		hena &= ~I40E_RSS_HENA_ALL;
 	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(0), (uint32_t)hena);
 	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(1), (uint32_t)(hena >> 32));
 	I40E_WRITE_FLUSH(hw);
@@ -6288,8 +6339,11 @@ i40e_hw_rss_hash_set(struct i40e_pf *pf, struct rte_eth_rss_conf *rss_conf)
 	rss_hf = rss_conf->rss_hf;
 	hena = (uint64_t)i40e_read_rx_ctl(hw, I40E_PFQF_HENA(0));
 	hena |= ((uint64_t)i40e_read_rx_ctl(hw, I40E_PFQF_HENA(1))) << 32;
-	hena &= ~I40E_RSS_HENA_ALL;
-	hena |= i40e_config_hena(rss_hf);
+	if (hw->mac.type == I40E_MAC_X722)
+		hena &= ~I40E_RSS_HENA_ALL_X722;
+	else
+		hena &= ~I40E_RSS_HENA_ALL;
+	hena |= i40e_config_hena(rss_hf, hw->mac.type);
 	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(0), (uint32_t)hena);
 	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(1), (uint32_t)(hena >> 32));
 	I40E_WRITE_FLUSH(hw);
@@ -6308,7 +6362,9 @@ i40e_dev_rss_hash_update(struct rte_eth_dev *dev,
 
 	hena = (uint64_t)i40e_read_rx_ctl(hw, I40E_PFQF_HENA(0));
 	hena |= ((uint64_t)i40e_read_rx_ctl(hw, I40E_PFQF_HENA(1))) << 32;
-	if (!(hena & I40E_RSS_HENA_ALL)) { /* RSS disabled */
+	if (!(hena & ((hw->mac.type == I40E_MAC_X722)
+		 ? I40E_RSS_HENA_ALL_X722
+		 : I40E_RSS_HENA_ALL))) { /* RSS disabled */
 		if (rss_hf != 0) /* Enable RSS */
 			return -EINVAL;
 		return 0; /* Nothing to do */
@@ -7045,6 +7101,26 @@ i40e_get_valid_input_set(enum i40e_filter_pctype pctype,
 			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
 			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT |
 			I40E_INSET_FLEX_PAYLOAD,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_UNICAST_IPV4_UDP] =
+			I40E_INSET_DMAC | I40E_INSET_SMAC |
+			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+			I40E_INSET_VLAN_TUNNEL | I40E_INSET_IPV4_TOS |
+			I40E_INSET_IPV4_PROTO | I40E_INSET_IPV4_TTL |
+			I40E_INSET_TUNNEL_DMAC | I40E_INSET_TUNNEL_ID |
+			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT |
+			I40E_INSET_FLEX_PAYLOAD,
+		[I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV4_UDP] =
+			I40E_INSET_DMAC | I40E_INSET_SMAC |
+			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+			I40E_INSET_VLAN_TUNNEL | I40E_INSET_IPV4_TOS |
+			I40E_INSET_IPV4_PROTO | I40E_INSET_IPV4_TTL |
+			I40E_INSET_TUNNEL_DMAC | I40E_INSET_TUNNEL_ID |
+			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT |
+			I40E_INSET_FLEX_PAYLOAD,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV4_TCP] =
 			I40E_INSET_DMAC | I40E_INSET_SMAC |
 			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
@@ -7054,6 +7130,17 @@ i40e_get_valid_input_set(enum i40e_filter_pctype pctype,
 			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
 			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT |
 			I40E_INSET_TCP_FLAGS | I40E_INSET_FLEX_PAYLOAD,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_IPV4_TCP_SYN_NO_ACK] =
+			I40E_INSET_DMAC | I40E_INSET_SMAC |
+			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+			I40E_INSET_VLAN_TUNNEL | I40E_INSET_IPV4_TOS |
+			I40E_INSET_IPV4_PROTO | I40E_INSET_IPV4_TTL |
+			I40E_INSET_TUNNEL_DMAC | I40E_INSET_TUNNEL_ID |
+			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT |
+			I40E_INSET_TCP_FLAGS | I40E_INSET_FLEX_PAYLOAD,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV4_SCTP] =
 			I40E_INSET_DMAC | I40E_INSET_SMAC |
 			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
@@ -7087,6 +7174,26 @@ i40e_get_valid_input_set(enum i40e_filter_pctype pctype,
 			I40E_INSET_IPV6_HOP_LIMIT | I40E_INSET_IPV6_SRC |
 			I40E_INSET_IPV6_DST | I40E_INSET_SRC_PORT |
 			I40E_INSET_DST_PORT | I40E_INSET_FLEX_PAYLOAD,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_UNICAST_IPV6_UDP] =
+			I40E_INSET_DMAC | I40E_INSET_SMAC |
+			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+			I40E_INSET_VLAN_TUNNEL | I40E_INSET_IPV6_TC |
+			I40E_INSET_IPV6_FLOW | I40E_INSET_IPV6_NEXT_HDR |
+			I40E_INSET_IPV6_HOP_LIMIT | I40E_INSET_IPV6_SRC |
+			I40E_INSET_IPV6_DST | I40E_INSET_SRC_PORT |
+			I40E_INSET_DST_PORT | I40E_INSET_TCP_FLAGS |
+			I40E_INSET_FLEX_PAYLOAD,
+		[I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV6_UDP] =
+			I40E_INSET_DMAC | I40E_INSET_SMAC |
+			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+			I40E_INSET_VLAN_TUNNEL | I40E_INSET_IPV6_TC |
+			I40E_INSET_IPV6_FLOW | I40E_INSET_IPV6_NEXT_HDR |
+			I40E_INSET_IPV6_HOP_LIMIT | I40E_INSET_IPV6_SRC |
+			I40E_INSET_IPV6_DST | I40E_INSET_SRC_PORT |
+			I40E_INSET_DST_PORT | I40E_INSET_TCP_FLAGS |
+			I40E_INSET_FLEX_PAYLOAD,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV6_TCP] =
 			I40E_INSET_DMAC | I40E_INSET_SMAC |
 			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
@@ -7096,6 +7203,17 @@ i40e_get_valid_input_set(enum i40e_filter_pctype pctype,
 			I40E_INSET_IPV6_DST | I40E_INSET_SRC_PORT |
 			I40E_INSET_DST_PORT | I40E_INSET_TCP_FLAGS |
 			I40E_INSET_FLEX_PAYLOAD,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_IPV6_TCP_SYN_NO_ACK] =
+			I40E_INSET_DMAC | I40E_INSET_SMAC |
+			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+			I40E_INSET_VLAN_TUNNEL | I40E_INSET_IPV6_TC |
+			I40E_INSET_IPV6_FLOW | I40E_INSET_IPV6_NEXT_HDR |
+			I40E_INSET_IPV6_HOP_LIMIT | I40E_INSET_IPV6_SRC |
+			I40E_INSET_IPV6_DST | I40E_INSET_SRC_PORT |
+			I40E_INSET_DST_PORT | I40E_INSET_TCP_FLAGS |
+			I40E_INSET_FLEX_PAYLOAD,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV6_SCTP] =
 			I40E_INSET_DMAC | I40E_INSET_SMAC |
 			I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
@@ -7135,11 +7253,30 @@ i40e_get_valid_input_set(enum i40e_filter_pctype pctype,
 		I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
 		I40E_INSET_IPV4_TOS | I40E_INSET_IPV4_TTL |
 		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_UNICAST_IPV4_UDP] =
+		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+		I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+		I40E_INSET_IPV4_TOS | I40E_INSET_IPV4_TTL |
+		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+		[I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV4_UDP] =
+		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+		I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+		I40E_INSET_IPV4_TOS | I40E_INSET_IPV4_TTL |
+		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV4_TCP] =
 		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
 		I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
 		I40E_INSET_IPV4_TOS | I40E_INSET_IPV4_TTL |
 		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_IPV4_TCP_SYN_NO_ACK] =
+		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+		I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+		I40E_INSET_IPV4_TOS | I40E_INSET_IPV4_TTL |
+		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV4_SCTP] =
 		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
 		I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
@@ -7161,11 +7298,30 @@ i40e_get_valid_input_set(enum i40e_filter_pctype pctype,
 		I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
 		I40E_INSET_IPV6_TC | I40E_INSET_IPV6_HOP_LIMIT |
 		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_UNICAST_IPV6_UDP] =
+		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+		I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
+		I40E_INSET_IPV6_TC | I40E_INSET_IPV6_HOP_LIMIT |
+		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+		[I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV6_UDP] =
+		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+		I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
+		I40E_INSET_IPV6_TC | I40E_INSET_IPV6_HOP_LIMIT |
+		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV6_TCP] =
 		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
 		I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
 		I40E_INSET_IPV6_TC | I40E_INSET_IPV6_HOP_LIMIT |
 		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_IPV6_TCP_SYN_NO_ACK] =
+		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
+		I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
+		I40E_INSET_IPV6_TC | I40E_INSET_IPV6_HOP_LIMIT |
+		I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV6_SCTP] =
 		I40E_INSET_VLAN_OUTER | I40E_INSET_VLAN_INNER |
 		I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
@@ -7218,9 +7374,22 @@ i40e_get_default_input_set(uint16_t pctype)
 		[I40E_FILTER_PCTYPE_NONF_IPV4_UDP] =
 			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
 			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_UNICAST_IPV4_UDP] =
+			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+		[I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV4_UDP] =
+			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV4_TCP] =
 			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
 			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_IPV4_TCP_SYN_NO_ACK] =
+			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV4_SCTP] =
 			I40E_INSET_IPV4_SRC | I40E_INSET_IPV4_DST |
 			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT |
@@ -7232,9 +7401,22 @@ i40e_get_default_input_set(uint16_t pctype)
 		[I40E_FILTER_PCTYPE_NONF_IPV6_UDP] =
 			I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
 			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_UNICAST_IPV6_UDP] =
+			I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+		[I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV6_UDP] =
+			I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV6_TCP] =
 			I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
 			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_IPV6_TCP_SYN_NO_ACK] =
+			I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
+			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV6_SCTP] =
 			I40E_INSET_IPV6_SRC | I40E_INSET_IPV6_DST |
 			I40E_INSET_SRC_PORT | I40E_INSET_DST_PORT |
@@ -7508,8 +7690,14 @@ i40e_filter_input_set_init(struct i40e_pf *pf)
 
 	for (pctype = I40E_FILTER_PCTYPE_NONF_IPV4_UDP;
 	     pctype <= I40E_FILTER_PCTYPE_L2_PAYLOAD; pctype++) {
-		if (!I40E_VALID_PCTYPE(pctype))
-			continue;
+		if (hw->mac.type == I40E_MAC_X722) {
+			if (!I40E_VALID_PCTYPE_X722(pctype))
+				continue;
+		} else {
+			if (!I40E_VALID_PCTYPE(pctype))
+				continue;
+		}
+
 		input_set = i40e_get_default_input_set(pctype);
 
 		num = i40e_generate_inset_mask_reg(input_set, mask_reg,
@@ -7575,7 +7763,15 @@ i40e_hash_filter_inset_select(struct i40e_hw *hw,
 		PMD_DRV_LOG(ERR, "invalid flow_type input.");
 		return -EINVAL;
 	}
-	pctype = i40e_flowtype_to_pctype(conf->flow_type);
+
+	if (hw->mac.type == I40E_MAC_X722) {
+		/* get translated pctype value in fd pctype register */
+		pctype = (enum i40e_filter_pctype)i40e_read_rx_ctl(hw,
+			I40E_GLQF_FD_PCTYPES((int)i40e_flowtype_to_pctype(
+			conf->flow_type)));
+	} else
+		pctype = i40e_flowtype_to_pctype(conf->flow_type);
+
 	ret = i40e_parse_input_set(&input_set, pctype, conf->field,
 				   conf->inset_size);
 	if (ret) {
@@ -7644,7 +7840,9 @@ i40e_fdir_filter_inset_select(struct i40e_pf *pf,
 		PMD_DRV_LOG(ERR, "invalid flow_type input.");
 		return -EINVAL;
 	}
+
 	pctype = i40e_flowtype_to_pctype(conf->flow_type);
+
 	ret = i40e_parse_input_set(&input_set, pctype, conf->field,
 				   conf->inset_size);
 	if (ret) {
@@ -8017,8 +8215,18 @@ i40e_pctype_to_flowtype(enum i40e_filter_pctype pctype)
 		[I40E_FILTER_PCTYPE_FRAG_IPV4] = RTE_ETH_FLOW_FRAG_IPV4,
 		[I40E_FILTER_PCTYPE_NONF_IPV4_UDP] =
 			RTE_ETH_FLOW_NONFRAG_IPV4_UDP,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_UNICAST_IPV4_UDP] =
+			RTE_ETH_FLOW_NONFRAG_IPV4_UDP,
+		[I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV4_UDP] =
+			RTE_ETH_FLOW_NONFRAG_IPV4_UDP,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV4_TCP] =
 			RTE_ETH_FLOW_NONFRAG_IPV4_TCP,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_IPV4_TCP_SYN_NO_ACK] =
+			RTE_ETH_FLOW_NONFRAG_IPV4_TCP,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV4_SCTP] =
 			RTE_ETH_FLOW_NONFRAG_IPV4_SCTP,
 		[I40E_FILTER_PCTYPE_NONF_IPV4_OTHER] =
@@ -8026,8 +8234,18 @@ i40e_pctype_to_flowtype(enum i40e_filter_pctype pctype)
 		[I40E_FILTER_PCTYPE_FRAG_IPV6] = RTE_ETH_FLOW_FRAG_IPV6,
 		[I40E_FILTER_PCTYPE_NONF_IPV6_UDP] =
 			RTE_ETH_FLOW_NONFRAG_IPV6_UDP,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_UNICAST_IPV6_UDP] =
+			RTE_ETH_FLOW_NONFRAG_IPV6_UDP,
+		[I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV6_UDP] =
+			RTE_ETH_FLOW_NONFRAG_IPV6_UDP,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV6_TCP] =
 			RTE_ETH_FLOW_NONFRAG_IPV6_TCP,
+#ifdef X722_SUPPORT
+		[I40E_FILTER_PCTYPE_NONF_IPV6_TCP_SYN_NO_ACK] =
+			RTE_ETH_FLOW_NONFRAG_IPV6_TCP,
+#endif
 		[I40E_FILTER_PCTYPE_NONF_IPV6_SCTP] =
 			RTE_ETH_FLOW_NONFRAG_IPV6_SCTP,
 		[I40E_FILTER_PCTYPE_NONF_IPV6_OTHER] =
@@ -8063,6 +8281,23 @@ i40e_pctype_to_flowtype(enum i40e_filter_pctype pctype)
 #define I40E_GL_SWR_PM_UP_THR_SF_VALUE   0x06060606
 #define I40E_GL_SWR_PM_UP_THR            0x269FBC
 
+static int
+i40e_dev_sync_phy_type(struct i40e_hw *hw)
+{
+	enum i40e_status_code status;
+	struct i40e_aq_get_phy_abilities_resp phy_ab;
+	int ret = -ENOTSUP;
+
+	status = i40e_aq_get_phy_capabilities(hw, false, true, &phy_ab,
+					      NULL);
+
+	if (status)
+		return ret;
+
+	return 0;
+}
+
+
 static void
 i40e_configure_registers(struct i40e_hw *hw)
 {
@@ -8080,7 +8315,8 @@ i40e_configure_registers(struct i40e_hw *hw)
 
 	for (i = 0; i < RTE_DIM(reg_table); i++) {
 		if (reg_table[i].addr == I40E_GL_SWR_PM_UP_THR) {
-			if (i40e_is_40G_device(hw->device_id)) /* For XL710 */
+			if (I40E_PHY_TYPE_SUPPORT_40G(hw->phy.phy_types) || /* For XL710 */
+			    I40E_PHY_TYPE_SUPPORT_25G(hw->phy.phy_types)) /* For XXV710 */
 				reg_table[i].val =
 					I40E_GL_SWR_PM_UP_THR_SF_VALUE;
 			else /* For X710 */

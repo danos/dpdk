@@ -17,7 +17,7 @@
   51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
 
   The full GNU General Public License is included in this distribution in
-  the file called "COPYING".
+  the file called "LICENSE.GPL".
 
   Contact Information:
   e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
@@ -1562,6 +1562,7 @@ static void igb_check_swap_media(struct igb_adapter *adapter)
 	ctrl_ext = E1000_READ_REG(hw, E1000_CTRL_EXT);
 	connsw = E1000_READ_REG(hw, E1000_CONNSW);
 	link = igb_has_link(adapter);
+	(void) link;
 
 	/* need to live swap if current media is copper and we have fiber/serdes
 	 * to go to.

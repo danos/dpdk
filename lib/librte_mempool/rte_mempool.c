@@ -55,7 +55,6 @@
 #include <rte_per_lcore.h>
 #include <rte_lcore.h>
 #include <rte_branch_prediction.h>
-#include <rte_ring.h>
 #include <rte_errno.h>
 #include <rte_string_fns.h>
 #include <rte_spinlock.h>
@@ -911,9 +910,8 @@ rte_mempool_create(const char *name, unsigned n, unsigned elt_size,
 /*
  * Create the mempool over already allocated chunk of memory.
  * That external memory buffer can consists of physically disjoint pages.
- * Setting vaddr to NULL, makes mempool to fallback to original behaviour
- * and allocate space for mempool and it's elements as one big chunk of
- * physically continuos memory.
+ * Setting vaddr to NULL, makes mempool to fallback to rte_mempool_create()
+ * behavior.
  */
 struct rte_mempool *
 rte_mempool_xmem_create(const char *name, unsigned n, unsigned elt_size,

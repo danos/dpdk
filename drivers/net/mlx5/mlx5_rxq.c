@@ -723,7 +723,7 @@ rxq_free_elts(struct rxq_ctrl *rxq_ctrl)
 	if (rxq_ctrl->rxq.elts == NULL)
 		return;
 
-	for (i = 0; (i != rxq_ctrl->rxq.elts_n); ++i) {
+	for (i = 0; (i != (1u << rxq_ctrl->rxq.elts_n)); ++i) {
 		if ((*rxq_ctrl->rxq.elts)[i] != NULL)
 			rte_pktmbuf_free_seg((*rxq_ctrl->rxq.elts)[i]);
 		(*rxq_ctrl->rxq.elts)[i] = NULL;
@@ -807,7 +807,7 @@ rxq_cleanup(struct rxq_ctrl *rxq_ctrl)
 int
 rxq_rehash(struct rte_eth_dev *dev, struct rxq_ctrl *rxq_ctrl)
 {
-	unsigned int elts_n = rxq_ctrl->rxq.elts_n;
+	unsigned int elts_n = 1 << rxq_ctrl->rxq.elts_n;
 	unsigned int i;
 	struct ibv_exp_wq_attr mod;
 	int err;
@@ -870,7 +870,7 @@ rxq_setup(struct rxq_ctrl *tmpl)
 	struct ibv_cq *ibcq = tmpl->cq;
 	struct mlx5_cq *cq = to_mxxx(cq, cq);
 	struct mlx5_rwq *rwq = container_of(tmpl->wq, struct mlx5_rwq, wq);
-	struct rte_mbuf *(*elts)[tmpl->rxq.elts_n] =
+	struct rte_mbuf *(*elts)[1 << tmpl->rxq.elts_n] =
 		rte_calloc_socket("RXQ", 1, sizeof(*elts), 0, tmpl->socket);
 
 	if (cq->cqe_sz != RTE_CACHE_LINE_SIZE) {
@@ -881,7 +881,7 @@ rxq_setup(struct rxq_ctrl *tmpl)
 	if (elts == NULL)
 		return ENOMEM;
 	tmpl->rxq.rq_db = rwq->rq.db;
-	tmpl->rxq.cqe_n = ibcq->cqe + 1;
+	tmpl->rxq.cqe_n = log2above(ibcq->cqe);
 	tmpl->rxq.cq_ci = 0;
 	tmpl->rxq.rq_ci = 0;
 	tmpl->rxq.cq_db = cq->dbrec;
@@ -924,8 +924,9 @@ rxq_ctrl_setup(struct rte_eth_dev *dev, struct rxq_ctrl *rxq_ctrl,
 		.priv = priv,
 		.socket = socket,
 		.rxq = {
-			.elts_n = desc,
+			.elts_n = log2above(desc),
 			.mp = mp,
+			.rss_hash = priv->rxqs_n > 1,
 		},
 	};
 	struct ibv_exp_wq_attr mod;
@@ -1153,7 +1154,7 @@ rxq_ctrl_setup(struct rte_eth_dev *dev, struct rxq_ctrl *rxq_ctrl,
 	}
 	/* Reuse buffers from original queue if possible. */
 	if (rxq_ctrl->rxq.elts_n) {
-		assert(rxq_ctrl->rxq.elts_n == desc);
+		assert(1 << rxq_ctrl->rxq.elts_n == desc);
 		assert(rxq_ctrl->rxq.elts != tmpl.rxq.elts);
 		ret = rxq_alloc_elts(&tmpl, desc, rxq_ctrl->rxq.elts);
 	} else

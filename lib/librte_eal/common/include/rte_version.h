@@ -45,6 +45,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 #include <rte_common.h>
 
 /**
@@ -60,12 +61,12 @@ extern "C" {
 /**
  * Minor version/month number i.e. the mm in yy.mm.z
  */
-#define RTE_VER_MONTH 7
+#define RTE_VER_MONTH 11
 
 /**
  * Patch level number i.e. the z in yy.mm.z
  */
-#define RTE_VER_MINOR 2
+#define RTE_VER_MINOR 0
 
 /**
  * Extra string to be appended to version number
