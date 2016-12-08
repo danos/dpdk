@@ -1,9 +1,5 @@
 fix-vhost-user-socket-permission.patch
 fix-power-default-config.patch
-dpdk-dev-v2-1-4-doc-move-tool-guides-in-their-own-subdirectory.patch
-dpdk-dev-v2-2-4-doc-rendering-and-installation-of-man-pages.patch
-dpdk-dev-v2-3-4-doc-add-basic-invocation-info-for-dpdk-pmdinfo.patch
-dpdk-dev-v2-4-4-doc-add-basic-invocation-info-for-dpdk-devbind.patch
 dpdk-dev-ppc-enable-1-7-lpm-add-AltiVec-for-ppc64.patch
 dpdk-dev-ppc-enable-2-7-acl-add-AltiVec-for-ppc64.patch
 dpdk-dev-ppc-enable-3-7-examples-l3fwd-add-AltiVec-for-ppc64.patch
