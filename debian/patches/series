@@ -1,9 +1,3 @@
 fix-vhost-user-socket-permission.patch
 fix-power-default-config.patch
-dpdk-dev-ppc-enable-1-7-lpm-add-AltiVec-for-ppc64.patch
-dpdk-dev-ppc-enable-2-7-acl-add-AltiVec-for-ppc64.patch
-dpdk-dev-ppc-enable-3-7-examples-l3fwd-add-AltiVec-for-ppc64.patch
-dpdk-dev-ppc-enable-4-7-sched-enable-on-ppc64le.patch
-dpdk-dev-ppc-enable-5-7-table-fix-verification-on-hash-bucket-header-alignme.patch
-dpdk-dev-ppc-enable-6-7-config-enable-packet-framework-on-ppc64le.patch
 
