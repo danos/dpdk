@@ -1,5 +1,4 @@
 fix-vhost-user-socket-permission.patch
-rte-compile-pre-cppflags.patch
 fix-power-default-config.patch
 rte-devel-build-env.patch
 dpdk-dev-v2-1-4-doc-move-tool-guides-in-their-own-subdirectory.patch
