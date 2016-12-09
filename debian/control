@@ -126,7 +126,7 @@ Depends: ${misc:Depends},
          librte-acl2 (= ${binary:Version}),
          librte-cfgfile2 (= ${binary:Version}),
          librte-cmdline2 (= ${binary:Version}),
-         librte-cryptodev1 (= ${binary:Version}),
+         librte-cryptodev2 (= ${binary:Version}),
          librte-distributor1 (= ${binary:Version}),
          librte-eal3 (= ${binary:Version}),
          librte-hash2 (= ${binary:Version}),
@@ -228,6 +228,14 @@ Description: Data Plane Development Kit (librte-cmdline runtime library)
  This package contains the runtime libraries for librte_cmdline.
 
 Package: librte-cryptodev1
+Depends: librte-cryptodev2, ${misc:Depends}
+Architecture: all
+Priority: extra
+Section: oldlibs
+Description: transitional package
+ This is a transitional package. It can safely be removed.
+
+Package: librte-cryptodev2
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__cryptodev_8h.html
