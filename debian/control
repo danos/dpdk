@@ -128,7 +128,7 @@ Depends: ${misc:Depends},
          librte-cmdline2 (= ${binary:Version}),
          librte-cryptodev1 (= ${binary:Version}),
          librte-distributor1 (= ${binary:Version}),
-         librte-eal2 (= ${binary:Version}),
+         librte-eal3 (= ${binary:Version}),
          librte-hash2 (= ${binary:Version}),
          librte-ip-frag1 (= ${binary:Version}),
          librte-jobstats1 (= ${binary:Version}),
@@ -254,6 +254,14 @@ Description: Data Plane Development Kit (librte-distributor runtime library)
  This package contains the runtime libraries for librte_distributor.
 
 Package: librte-eal2
+Depends: librte-eal3, ${misc:Depends}
+Architecture: all
+Priority: extra
+Section: oldlibs
+Description: transitional package
+ This is a transitional package. It can safely be removed.
+
+Package: librte-eal3
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__eal_8h.html
