@@ -19,6 +19,7 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
     - bump librte-cryptodev version from 1 to 2 as package rename transition
     - bump librte-ethdev version from 4 to 5 and the library rename that was
       made upstream as package rename transition
+    - update symbols files to match the new release
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
 
