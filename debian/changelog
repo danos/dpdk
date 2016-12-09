@@ -12,6 +12,8 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
       - d/p/make-load-devel-config-not-to-appear-as-executable.patch
       - d/p/dpdk-dev-doc-fix-old-dpdk-nic-bind.py-references.patch
       - d/p/fix-double-license-info.patch
+  * Added changes
+    - add qede pmd now built by default
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
 
