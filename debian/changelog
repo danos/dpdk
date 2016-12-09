@@ -16,6 +16,7 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
     - add qede pmd now built by default
     - add new librte-net library
     - bump librte-eal version from 2 to 3 as package rename transition
+    - bump librte-cryptodev version from 1 to 2 as package rename transition
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
 
