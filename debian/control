@@ -55,6 +55,7 @@ Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64], dpdk-rte-kni-dkms (
          librte-pmd-virtio1 (= ${binary:Version}),
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pmd-qede1 (= ${binary:Version}),
 Suggests: linux-image-generic, dpdk-igb-uio-dkms (= ${binary:Version}), dpdk-rte-kni-dkms (= ${binary:Version})
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -157,6 +158,7 @@ Depends: ${misc:Depends},
          librte-pmd-virtio1 (= ${binary:Version}),
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pmd-qede1 (= ${binary:Version}),
          librte-port3 (= ${binary:Version}),
          librte-power1 (= ${binary:Version}),
          librte-reorder1 (= ${binary:Version}),
@@ -625,6 +627,22 @@ Description: Data Plane Development Kit (librte-pmd-xenvirt runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pmd_xenvirt.
+
+Package: librte-pmd-qede1
+Architecture: amd64 arm64 i386 ppc64el
+Multi-Arch: same
+Homepage: http://dpdk.org/doc/guides/nics/qede.html
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-pmd-qede runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_qede which is
+ The base driver is the backend module for the QLogic FastLinQ QL4xxxx
+ 25G/40G CNA family of adapters as well as their virtual functions (VF)
+ in SR-IOV context.
 
 Package: librte-port3
 Architecture: amd64 arm64 i386 ppc64el
