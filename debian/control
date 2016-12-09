@@ -140,6 +140,7 @@ Depends: ${misc:Depends},
          librte-meter1 (= ${binary:Version}),
          librte-pdump1 (= ${binary:Version}),
          librte-pipeline3 (= ${binary:Version}),
+         librte-net1 (= ${binary:Version}),
          librte-pmd-af-packet1 (= ${binary:Version}),
          librte-pmd-bnxt1 (= ${binary:Version}),
          librte-pmd-bond1 (= ${binary:Version}),
@@ -394,6 +395,24 @@ Description: Data Plane Development Kit (librte-pipeline runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pipeline.
+
+Package: librte-net1
+Architecture: amd64 arm64 i386 ppc64el
+Multi-Arch: same
+Homepage: http://dpdk.org/doc/guides/prog_guide/overview.html?highlight=librte_net#librte-net
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-net runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_net.
+ .
+ The librte_net library is a collection of IP protocol definitions and
+ convenience macros. It is based on code from the FreeBSD* IP stack and
+ contains protocol numbers (for use in IP headers), IP-related macros,
+ IPv4/IPv6 header structures and TCP, UDP and SCTP header structures.
 
 Package: librte-pmd-af-packet1
 Architecture: amd64 arm64 i386 ppc64el
