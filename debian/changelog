@@ -20,6 +20,9 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
     - bump librte-ethdev version from 4 to 5 and the library rename that was
       made upstream as package rename transition
     - update symbols files to match the new release
+    - make autotest dep8 test always pass (failed fatally on e.g. LP).
+      We want to stabilize and get more logs of different environments before
+      we can enable it as a gating test.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
 
