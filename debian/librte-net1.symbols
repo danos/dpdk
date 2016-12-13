@@ -1,0 +1,2 @@
+librte_net.so.1 librte-net1 #MINVER#
+ DPDK_16.11@DPDK_16.11 16.11

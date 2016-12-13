@@ -1,4 +1,4 @@
-librte_cryptodev.so.1 librte-cryptodev1 #MINVER#
+librte_cryptodev.so.2 librte-cryptodev2 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
  DPDK_16.07@DPDK_16.07 16.07~rc1
  rte_crypto_op_pool_create@DPDK_16.04 16.04

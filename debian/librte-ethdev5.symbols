@@ -1,4 +1,4 @@
-libethdev.so.4 libethdev4 #MINVER#
+librte_ethdev.so.5 librte-ethdev5 #MINVER#
  DPDK_16.04@DPDK_16.04 16.07~rc1
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_2.2@DPDK_2.2 16.07~rc1
