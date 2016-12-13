@@ -1,6 +1,7 @@
 librte_ethdev.so.5 librte-ethdev5 #MINVER#
  DPDK_16.04@DPDK_16.04 16.07~rc1
  DPDK_16.07@DPDK_16.07 16.07~rc1
+ DPDK_16.11@DPDK_16.11 16.11
  DPDK_2.2@DPDK_2.2 16.07~rc1
  _rte_eth_dev_callback_process@DPDK_2.2 16.07~rc1
  rte_eth_add_first_rx_callback@DPDK_16.07 16.07~rc1
@@ -39,6 +40,8 @@ librte_ethdev.so.5 librte-ethdev5 #MINVER#
  rte_eth_dev_l2_tunnel_offload_set@DPDK_16.04 16.07~rc1
  rte_eth_dev_mac_addr_add@DPDK_2.2 16.07~rc1
  rte_eth_dev_mac_addr_remove@DPDK_2.2 16.07~rc1
+ rte_eth_dev_pci_probe@DPDK_16.11 16.11
+ rte_eth_dev_pci_remove@DPDK_16.11 16.11
  rte_eth_dev_priority_flow_ctrl_set@DPDK_2.2 16.07~rc1
  rte_eth_dev_release_port@DPDK_2.2 16.07~rc1
  rte_eth_dev_rss_hash_conf_get@DPDK_2.2 16.07~rc1
@@ -78,7 +81,6 @@ librte_ethdev.so.5 librte-ethdev5 #MINVER#
  rte_eth_dev_vlan_filter@DPDK_2.2 16.07~rc1
  rte_eth_devices@DPDK_2.2 16.07~rc1
  rte_eth_dma_zone_reserve@DPDK_2.2 16.07~rc1
- rte_eth_driver_register@DPDK_2.2 16.07~rc1
  rte_eth_led_off@DPDK_2.2 16.07~rc1
  rte_eth_led_on@DPDK_2.2 16.07~rc1
  rte_eth_link_get@DPDK_2.2 16.07~rc1

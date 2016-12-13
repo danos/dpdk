@@ -1,6 +1,7 @@
 librte_eal.so.3 librte-eal3 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
  DPDK_16.07@DPDK_16.07 16.07~rc1
+ DPDK_16.11@DPDK_16.11 16.11
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
  DPDK_2.2@DPDK_2.2 16.04
@@ -21,12 +22,16 @@ librte_eal.so.3 librte-eal3 #MINVER#
  rte_cpu_get_flag_name@DPDK_16.04 16.04
  rte_cycles_vmware_tsc_map@DPDK_2.0 16.04
  rte_delay_us@DPDK_2.0 16.04
+ rte_delay_us_block@DPDK_16.11 16.11
+ rte_delay_us_callback_register@DPDK_16.11 16.11
  rte_dump_physmem_layout@DPDK_2.0 16.04
  rte_dump_registers@DPDK_2.0 16.04
  rte_dump_stack@DPDK_2.0 16.04
  rte_dump_tailq@DPDK_2.0 16.04
  rte_eal_alarm_cancel@DPDK_2.0 16.04
  rte_eal_alarm_set@DPDK_2.0 16.04
+ rte_eal_dev_attach@DPDK_16.11 16.11
+ rte_eal_dev_detach@DPDK_16.11 16.11
  rte_eal_dev_init@DPDK_2.0 16.04
  rte_eal_devargs_add@DPDK_2.0 16.04
  rte_eal_devargs_dump@DPDK_2.0 16.04
@@ -67,6 +72,8 @@ librte_eal.so.3 librte-eal3 #MINVER#
  rte_eal_tailq_register@DPDK_2.0 16.04
  rte_eal_vdev_init@DPDK_2.0 16.04
  rte_eal_vdev_uninit@DPDK_2.0 16.04
+ rte_eal_vdrv_register@DPDK_16.11 16.11
+ rte_eal_vdrv_unregister@DPDK_16.11 16.11
  rte_eal_wait_lcore@DPDK_2.0 16.04
  rte_epoll_ctl@DPDK_2.1 16.04
  rte_epoll_wait@DPDK_2.1 16.04
@@ -94,11 +101,8 @@ librte_eal.so.3 librte-eal3 #MINVER#
  rte_keepalive_register_core@DPDK_2.2 16.04
  rte_keepalive_register_relay_callback@DPDK_16.07 16.07~rc1
  rte_log@DPDK_2.0 16.04
- rte_log_add_in_history@DPDK_2.0 16.04
  rte_log_cur_msg_loglevel@DPDK_2.0 16.04
  rte_log_cur_msg_logtype@DPDK_2.0 16.04
- rte_log_dump_history@DPDK_2.0 16.04
- rte_log_set_history@DPDK_2.0 16.04
  rte_logs@DPDK_2.0 16.04
  rte_malloc@DPDK_2.0 16.04
  rte_malloc_dump_stats@DPDK_2.0 16.04
