@@ -1,5 +1,6 @@
-dpdk (16.11-1~git1) UNRELEASED; urgency=medium
+dpdk (16.11-1) unstable; urgency=medium
 
+  [ Christian Ehrhardt ]
   * Merge stable release 16.11 and adapt patches
     - imported latest stable release from dpdk-16.11.tar.gz
       stable release changelog at
@@ -24,7 +25,10 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
       We want to stabilize and get more logs of different environments before
       we can enable it as a gating test.
 
- -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
+  [ Luca Boccassi ]
+  * Set maintainer to pkg-dpdk-dev alioth list
+
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Fri, 16 Dec 2016 18:19:07 +0000
 
 dpdk (16.07.2-1~git1) UNRELEASED; urgency=medium
 
