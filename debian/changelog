@@ -1,3 +1,56 @@
+dpdk (16.11-1~git1) UNRELEASED; urgency=medium
+
+  * Merge stable release 16.11 and adapt patches
+    - imported latest stable release from dpdk-16.11.tar.gz
+      stable release changelog at
+      http://dpdk.org/doc/guides-16.11/rel_notes/release_16_11.html
+    - Delete patches that are upstream:
+      - d/p/dpdk-dev-ppc-enable-*
+      - d/p/dpdk-dev-v2-*-4*
+      - d/p/rte-devel-build-env.patch
+      - d/p/rte-compile-pre-cppflags.patch
+      - d/p/make-load-devel-config-not-to-appear-as-executable.patch
+      - d/p/dpdk-dev-doc-fix-old-dpdk-nic-bind.py-references.patch
+      - d/p/fix-double-license-info.patch
+  * Added changes
+    - add qede pmd now built by default
+    - add new librte-net library
+    - bump librte-eal version from 2 to 3 as package rename transition
+    - bump librte-cryptodev version from 1 to 2 as package rename transition
+    - bump librte-ethdev version from 4 to 5 and the library rename that was
+      made upstream as package rename transition
+    - update symbols files to match the new release
+    - make autotest dep8 test always pass (failed fatally on e.g. LP).
+      We want to stabilize and get more logs of different environments before
+      we can enable it as a gating test.
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
+
+dpdk (16.07.2-1~git1) UNRELEASED; urgency=medium
+
+  * Merge stable release 16.07.2 and adapt patches
+    - imported latest stable release from dpdk-16.07.2.tar.gz
+      stable release changelog at
+      http://dpdk.org/doc/guides-16.07/rel_notes/release_16_07.html
+    - Deleted:
+      - d/p/dpdk-dev-v2-kni-fix-build-with-kernel-4.8.patch
+      - d/p/fix-unusual-interpreter.patch
+      - d/p/dpdk-dev-examples-ip_pipeline-fix-pmd-driver-parameter.patch
+      - d/p/dpdk-dev-kni-fix-build-with-kernel-4.9.patch
+      - d/p/dpdk-dev-ppc-enable-7-7-examples-ip_pipeline-fix-lcore-mapping-for-
+        ppc64.patch
+    - Refreshed (only offset changes)
+      - d/p/dpdk-dev-ppc-enable-1-7-lpm-add-AltiVec-for-ppc64.patch
+      - d/p/dpdk-dev-ppc-enable-2-7-acl-add-AltiVec-for-ppc64.patch
+      - d/p/dpdk-dev-ppc-enable-4-7-sched-enable-on-ppc64le.patch
+      - d/p/dpdk-dev-ppc-enable-6-7-config-enable-packet-framework-on-
+        ppc64le.patch
+      - d/p/dpdk-dev-v2-2-4-doc-rendering-and-installation-of-man-pages.patch
+      - d/p/dpdk-dev-v2-3-4-doc-add-basic-invocation-info-for-dpdk-pmdinfo.patch
+      - d/p/dpdk-dev-v2-4-4-doc-add-basic-invocation-info-for-dpdk-devbind.patch
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 05 Dec 2016 07:08:01 +0100
+
 dpdk (16.07-3) unstable; urgency=medium
 
   * Set myself as maintainer until the mailing list ACL problem

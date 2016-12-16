@@ -54,6 +54,7 @@ Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64], dpdk-rte-kni-dkms (
          librte-pmd-virtio1 (= ${binary:Version}),
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pmd-qede1 (= ${binary:Version}),
 Suggests: linux-image-generic, dpdk-igb-uio-dkms (= ${binary:Version}), dpdk-rte-kni-dkms (= ${binary:Version})
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -120,13 +121,13 @@ Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
          libpcap-dev,
-         libethdev4 (= ${binary:Version}),
+         librte-ethdev5 (= ${binary:Version}),
          librte-acl2 (= ${binary:Version}),
          librte-cfgfile2 (= ${binary:Version}),
          librte-cmdline2 (= ${binary:Version}),
-         librte-cryptodev1 (= ${binary:Version}),
+         librte-cryptodev2 (= ${binary:Version}),
          librte-distributor1 (= ${binary:Version}),
-         librte-eal2 (= ${binary:Version}),
+         librte-eal3 (= ${binary:Version}),
          librte-hash2 (= ${binary:Version}),
          librte-ip-frag1 (= ${binary:Version}),
          librte-jobstats1 (= ${binary:Version}),
@@ -138,6 +139,7 @@ Depends: ${misc:Depends},
          librte-meter1 (= ${binary:Version}),
          librte-pdump1 (= ${binary:Version}),
          librte-pipeline3 (= ${binary:Version}),
+         librte-net1 (= ${binary:Version}),
          librte-pmd-af-packet1 (= ${binary:Version}),
          librte-pmd-bnxt1 (= ${binary:Version}),
          librte-pmd-bond1 (= ${binary:Version}),
@@ -156,6 +158,7 @@ Depends: ${misc:Depends},
          librte-pmd-virtio1 (= ${binary:Version}),
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
+         librte-pmd-qede1 (= ${binary:Version}),
          librte-port3 (= ${binary:Version}),
          librte-power1 (= ${binary:Version}),
          librte-reorder1 (= ${binary:Version}),
@@ -173,6 +176,14 @@ Description: Data Plane Development Kit (basic development files)
  when running.
 
 Package: libethdev4
+Depends: librte-ethdev5, ${misc:Depends}
+Architecture: all
+Priority: extra
+Section: oldlibs
+Description: transitional package
+ This is a transitional package. It can safely be removed.
+
+Package: librte-ethdev5
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__ethdev_8h.html
@@ -224,6 +235,14 @@ Description: Data Plane Development Kit (librte-cmdline runtime library)
  This package contains the runtime libraries for librte_cmdline.
 
 Package: librte-cryptodev1
+Depends: librte-cryptodev2, ${misc:Depends}
+Architecture: all
+Priority: extra
+Section: oldlibs
+Description: transitional package
+ This is a transitional package. It can safely be removed.
+
+Package: librte-cryptodev2
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__cryptodev_8h.html
@@ -250,6 +269,14 @@ Description: Data Plane Development Kit (librte-distributor runtime library)
  This package contains the runtime libraries for librte_distributor.
 
 Package: librte-eal2
+Depends: librte-eal3, ${misc:Depends}
+Architecture: all
+Priority: extra
+Section: oldlibs
+Description: transitional package
+ This is a transitional package. It can safely be removed.
+
+Package: librte-eal3
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__eal_8h.html
@@ -391,6 +418,24 @@ Description: Data Plane Development Kit (librte-pipeline runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pipeline.
+
+Package: librte-net1
+Architecture: amd64 arm64 i386 ppc64el
+Multi-Arch: same
+Homepage: http://dpdk.org/doc/guides/prog_guide/overview.html?highlight=librte_net#librte-net
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-net runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_net.
+ .
+ The librte_net library is a collection of IP protocol definitions and
+ convenience macros. It is based on code from the FreeBSD* IP stack and
+ contains protocol numbers (for use in IP headers), IP-related macros,
+ IPv4/IPv6 header structures and TCP, UDP and SCTP header structures.
 
 Package: librte-pmd-af-packet1
 Architecture: amd64 arm64 i386 ppc64el
@@ -624,6 +669,22 @@ Description: Data Plane Development Kit (librte-pmd-xenvirt runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pmd_xenvirt.
+
+Package: librte-pmd-qede1
+Architecture: amd64 arm64 i386 ppc64el
+Multi-Arch: same
+Homepage: http://dpdk.org/doc/guides/nics/qede.html
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-pmd-qede runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_qede which is
+ The base driver is the backend module for the QLogic FastLinQ QL4xxxx
+ 25G/40G CNA family of adapters as well as their virtual functions (VF)
+ in SR-IOV context.
 
 Package: librte-port3
 Architecture: amd64 arm64 i386 ppc64el
