@@ -56,7 +56,7 @@ Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64], dpdk-rte-kni-dkms (
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-qede1 (= ${binary:Version}),
-Suggests: linux-image-generic, dpdk-igb-uio-dkms (= ${binary:Version}), dpdk-rte-kni-dkms (= ${binary:Version})
+Suggests: linux-image-generic, dpdk-igb-uio-dkms (= ${binary:Version}), dpdk-rte-kni-dkms (= ${binary:Version}), dpdk-doc
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.

@@ -27,6 +27,7 @@ dpdk (16.11-1) unstable; urgency=medium
 
   [ Luca Boccassi ]
   * Set maintainer to pkg-dpdk-dev alioth list
+  * Make dpdk suggest dpdk-doc (Closes: #847626)
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Fri, 16 Dec 2016 18:19:07 +0000
 
