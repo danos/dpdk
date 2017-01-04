@@ -201,6 +201,10 @@ override_dh_auto_install-arch:
 	mkdir -p debian/dpdk-dev/usr/share/dpdk/test
 	cp -a app/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
 	cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/
+	# since we move libs to multiarch dirs update the non aware symlink
+	rm debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
+	ln -rs debian/dpdk-dev/$(LIBDIR)/ \
+		debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
 	# Package: libdpdk-dev (bare headers, static devel libs and linker
 	# script)
 	mkdir -p debian/libdpdk-dev/$(LIBDIR)
