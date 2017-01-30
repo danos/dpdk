@@ -25,6 +25,7 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
       We want to stabilize and get more logs of different environments before
       we can enable it as a gating test.
     - Make dpdk-dev's ${RTE_SDK}/${RTE_TARGET}/lib symlink multiarch aware
+    - d/control: apply wrap and sort
 
   [ Luca Boccassi ]
   * Make dpdk suggest dpdk-doc (Closes: #847626)
