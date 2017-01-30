@@ -27,6 +27,7 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
     - Make dpdk-dev's ${RTE_SDK}/${RTE_TARGET}/lib symlink multiarch aware
     - d/control: apply wrap and sort
     - d/control: Make the python-pyelftools only a Suggests
+    - d/t/test-linkage: fix issues on non-x86 architectures
 
   [ Luca Boccassi ]
   * Make dpdk suggest dpdk-doc (Closes: #847626)
