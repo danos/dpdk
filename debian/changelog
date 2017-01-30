@@ -26,6 +26,7 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
       we can enable it as a gating test.
     - Make dpdk-dev's ${RTE_SDK}/${RTE_TARGET}/lib symlink multiarch aware
     - d/control: apply wrap and sort
+    - d/control: Make the python-pyelftools only a Suggests
 
   [ Luca Boccassi ]
   * Make dpdk suggest dpdk-doc (Closes: #847626)
