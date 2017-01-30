@@ -31,7 +31,6 @@ echo "OK"
 
 printf "\n\nChecking for expected secondary library dependencies\n"
 lddtree testlinkage.bin | grep '^        libpthread.so'
-lddtree testlinkage.bin | grep '^        librt.so'
 echo "OK"
 
 printf "\n\nChecking for expected feature dependent library dependencies\n"
