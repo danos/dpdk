@@ -3,7 +3,7 @@ Priority: optional
 Maintainer: deb_dpdk Packagers <deb-dpdk@lists.fd.io>
 Uploaders: Luca Boccassi <luca.boccassi@gmail.com>,
            Christian Ehrhardt <christian.ehrhardt@canonical.com>,
-           Santiago Ruano Rincón <santiagorr@riseup.net>,
+           Santiago Ruano Rincón <santiagorr@riseup.net>
 Build-Depends: debhelper (>= 9),
                dh-python,
                dh-systemd (>= 1.5),
@@ -29,34 +29,38 @@ Vcs-Browser: https://gerrit.fd.io/r/gitweb?p=deb_dpdk.git
 Package: dpdk
 Section: admin
 Architecture: amd64 arm64 i386 ppc64el
-Depends: lsb-base (>= 3.2-14),
+Depends: hwdata,
+         lsb-base (>= 3.2-14),
          pciutils,
          python-pyelftools,
-         hwdata,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends}
-Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64], dpdk-rte-kni-dkms (= ${binary:Version}) [arm64],
-         librte-pmd-af-packet1 (= ${binary:Version}),
-         librte-pmd-bnxt1 (= ${binary:Version}),
-         librte-pmd-bond1 (= ${binary:Version}),
-         librte-pmd-cxgbe1 (= ${binary:Version}),
-         librte-pmd-e1000-1 (= ${binary:Version}),
-         librte-pmd-ena1 (= ${binary:Version}),
-         librte-pmd-enic1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
-         librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386],
-         librte-pmd-ixgbe1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-null-crypto1 (= ${binary:Version}),
-         librte-pmd-null1 (= ${binary:Version}),
-         librte-pmd-pcap1 (= ${binary:Version}),
-         librte-pmd-ring2 (= ${binary:Version}),
-         librte-pmd-vhost1 (= ${binary:Version}),
-         librte-pmd-virtio1 (= ${binary:Version}),
-         librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-qede1 (= ${binary:Version}),
-Suggests: linux-image-generic, dpdk-igb-uio-dkms (= ${binary:Version}), dpdk-rte-kni-dkms (= ${binary:Version}), dpdk-doc
+Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64],
+            dpdk-rte-kni-dkms (= ${binary:Version}) [arm64],
+            librte-pmd-af-packet1 (= ${binary:Version}),
+            librte-pmd-bnxt1 (= ${binary:Version}),
+            librte-pmd-bond1 (= ${binary:Version}),
+            librte-pmd-cxgbe1 (= ${binary:Version}),
+            librte-pmd-e1000-1 (= ${binary:Version}),
+            librte-pmd-ena1 (= ${binary:Version}),
+            librte-pmd-enic1 (= ${binary:Version}) [amd64 arm64 i386],
+            librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
+            librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386],
+            librte-pmd-ixgbe1 (= ${binary:Version}) [amd64 arm64 i386],
+            librte-pmd-null-crypto1 (= ${binary:Version}),
+            librte-pmd-null1 (= ${binary:Version}),
+            librte-pmd-pcap1 (= ${binary:Version}),
+            librte-pmd-qede1 (= ${binary:Version}),
+            librte-pmd-ring2 (= ${binary:Version}),
+            librte-pmd-vhost1 (= ${binary:Version}),
+            librte-pmd-virtio1 (= ${binary:Version}),
+            librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
+            librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386]
+Suggests: dpdk-doc,
+          dpdk-igb-uio-dkms (= ${binary:Version}),
+          dpdk-rte-kni-dkms (= ${binary:Version}),
+          linux-image-generic
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
@@ -120,15 +124,14 @@ Section: libdevel
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
-Depends: ${misc:Depends},
-         libpcap-dev,
-         librte-ethdev5 (= ${binary:Version}),
+Depends: libpcap-dev,
          librte-acl2 (= ${binary:Version}),
          librte-cfgfile2 (= ${binary:Version}),
          librte-cmdline2 (= ${binary:Version}),
          librte-cryptodev2 (= ${binary:Version}),
          librte-distributor1 (= ${binary:Version}),
          librte-eal3 (= ${binary:Version}),
+         librte-ethdev5 (= ${binary:Version}),
          librte-hash2 (= ${binary:Version}),
          librte-ip-frag1 (= ${binary:Version}),
          librte-jobstats1 (= ${binary:Version}),
@@ -138,9 +141,9 @@ Depends: ${misc:Depends},
          librte-mbuf2 (= ${binary:Version}),
          librte-mempool2 (= ${binary:Version}),
          librte-meter1 (= ${binary:Version}),
+         librte-net1 (= ${binary:Version}),
          librte-pdump1 (= ${binary:Version}),
          librte-pipeline3 (= ${binary:Version}),
-         librte-net1 (= ${binary:Version}),
          librte-pmd-af-packet1 (= ${binary:Version}),
          librte-pmd-bnxt1 (= ${binary:Version}),
          librte-pmd-bond1 (= ${binary:Version}),
@@ -154,12 +157,12 @@ Depends: ${misc:Depends},
          librte-pmd-null-crypto1 (= ${binary:Version}),
          librte-pmd-null1 (= ${binary:Version}),
          librte-pmd-pcap1 (= ${binary:Version}),
+         librte-pmd-qede1 (= ${binary:Version}),
          librte-pmd-ring2 (= ${binary:Version}),
          librte-pmd-vhost1 (= ${binary:Version}),
          librte-pmd-virtio1 (= ${binary:Version}),
          librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-qede1 (= ${binary:Version}),
          librte-port3 (= ${binary:Version}),
          librte-power1 (= ${binary:Version}),
          librte-reorder1 (= ${binary:Version}),
@@ -167,7 +170,8 @@ Depends: ${misc:Depends},
          librte-sched1 (= ${binary:Version}),
          librte-table2 (= ${binary:Version}),
          librte-timer1 (= ${binary:Version}),
-         librte-vhost3 (= ${binary:Version})
+         librte-vhost3 (= ${binary:Version}),
+         ${misc:Depends}
 Description: Data Plane Development Kit (basic development files)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
@@ -802,4 +806,3 @@ Description: Data Plane Development Kit (librte_pdump runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pdump.
-
