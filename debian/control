@@ -32,7 +32,6 @@ Architecture: amd64 arm64 i386 ppc64el
 Depends: hwdata,
          lsb-base (>= 3.2-14),
          pciutils,
-         python-pyelftools,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends}
@@ -60,7 +59,8 @@ Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64],
 Suggests: dpdk-doc,
           dpdk-igb-uio-dkms (= ${binary:Version}),
           dpdk-rte-kni-dkms (= ${binary:Version}),
-          linux-image-generic
+          linux-image-generic,
+          python-pyelftools,
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
