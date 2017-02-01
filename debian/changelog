@@ -16,10 +16,6 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
   * Added changes
     - add qede pmd now built by default
     - add new librte-net library
-    - bump librte-eal version from 2 to 3 as package rename transition
-    - bump librte-cryptodev version from 1 to 2 as package rename transition
-    - bump librte-ethdev version from 4 to 5 and the library rename that was
-      made upstream as package rename transition
     - update symbols files to match the new release
     - make autotest dep8 test always pass (failed fatally on e.g. LP).
       We want to stabilize and get more logs of different environments before
