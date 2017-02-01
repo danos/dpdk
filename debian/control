@@ -180,14 +180,6 @@ Description: Data Plane Development Kit (basic development files)
  build external applications which will also require at least SSE3 support
  when running.
 
-Package: libethdev4
-Depends: librte-ethdev5, ${misc:Depends}
-Architecture: all
-Priority: extra
-Section: oldlibs
-Description: transitional package
- This is a transitional package. It can safely be removed.
-
 Package: librte-ethdev5
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
@@ -239,14 +231,6 @@ Description: Data Plane Development Kit (librte-cmdline runtime library)
  .
  This package contains the runtime libraries for librte_cmdline.
 
-Package: librte-cryptodev1
-Depends: librte-cryptodev2, ${misc:Depends}
-Architecture: all
-Priority: extra
-Section: oldlibs
-Description: transitional package
- This is a transitional package. It can safely be removed.
-
 Package: librte-cryptodev2
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
@@ -272,14 +256,6 @@ Description: Data Plane Development Kit (librte-distributor runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_distributor.
-
-Package: librte-eal2
-Depends: librte-eal3, ${misc:Depends}
-Architecture: all
-Priority: extra
-Section: oldlibs
-Description: transitional package
- This is a transitional package. It can safely be removed.
 
 Package: librte-eal3
 Architecture: amd64 arm64 i386 ppc64el
