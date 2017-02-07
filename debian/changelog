@@ -24,6 +24,10 @@ dpdk (16.11-1~git1) UNRELEASED; urgency=medium
     - d/control: apply wrap and sort
     - d/control: Make the python-pyelftools only a Suggests
     - d/t/test-linkage: fix issues on non-x86 architectures
+    - provide older ABI levels via backward compatibility of new DPDK libraries
+      - d/control: add compat packages for old ABI versions
+      - d/rules: generate and use multiarch aware link files for the soname
+        mapping
 
   [ Luca Boccassi ]
   * Make dpdk suggest dpdk-doc (Closes: #847626)
