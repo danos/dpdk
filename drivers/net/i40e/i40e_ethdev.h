@@ -227,7 +227,7 @@ struct i40e_bw_info {
 	/* Relative credits within same TC with respect to other VSIs or Comps */
 	uint8_t  bw_ets_share_credits[I40E_MAX_TRAFFIC_CLASS];
 	/* Bandwidth limit per TC */
-	uint8_t  bw_ets_credits[I40E_MAX_TRAFFIC_CLASS];
+	uint16_t bw_ets_credits[I40E_MAX_TRAFFIC_CLASS];
 	/* Max bandwidth limit per TC */
 	uint8_t  bw_ets_max[I40E_MAX_TRAFFIC_CLASS];
 };
@@ -527,7 +527,7 @@ struct i40e_vf {
 	enum i40e_aq_link_speed link_speed;
 	bool vf_reset;
 	volatile uint32_t pend_cmd; /* pending command not finished yet */
-	uint32_t cmd_retval; /* return value of the cmd response from PF */
+	int32_t cmd_retval; /* return value of the cmd response from PF */
 	u16 pend_msg; /* flags indicates events from pf not handled yet */
 	uint8_t *aq_resp; /* buffer to store the adminq response from PF */
 

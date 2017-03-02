@@ -138,8 +138,11 @@ i40e_rxd_error_to_pkt_flags(uint64_t qword)
 	uint64_t error_bits = (qword >> I40E_RXD_QW1_ERROR_SHIFT);
 
 #define I40E_RX_ERR_BITS 0x3f
-	if (likely((error_bits & I40E_RX_ERR_BITS) == 0))
+	if (likely((error_bits & I40E_RX_ERR_BITS) == 0)) {
+		flags |= (PKT_RX_IP_CKSUM_GOOD | PKT_RX_L4_CKSUM_GOOD);
 		return flags;
+	}
+
 	if (unlikely(error_bits & (1 << I40E_RX_DESC_ERROR_IPE_SHIFT)))
 		flags |= PKT_RX_IP_CKSUM_BAD;
 	else
@@ -1916,8 +1919,7 @@ i40e_dev_tx_queue_setup(struct rte_eth_dev *dev,
 		return I40E_ERR_PARAM;
 	}
 	if (tx_free_thresh >= (nb_desc - 3)) {
-		PMD_INIT_LOG(ERR, "tx_rs_thresh must be less than the "
-			     "tx_free_thresh must be less than the "
+		PMD_INIT_LOG(ERR, "tx_free_thresh must be less than the "
 			     "number of TX descriptors minus 3. "
 			     "(tx_free_thresh=%u port=%d queue=%d)",
 			     (unsigned int)tx_free_thresh,
