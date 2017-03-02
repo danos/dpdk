@@ -245,7 +245,6 @@ struct virtio_net_config;
 
 struct virtio_hw {
 	struct virtnet_ctl *cvq;
-	struct rte_pci_ioport io;
 	uint64_t    req_guest_features;
 	uint64_t    guest_features;
 	uint32_t    max_queue_pairs;
@@ -254,6 +253,7 @@ struct virtio_hw {
 	uint8_t	    use_msix;
 	uint8_t     modern;
 	uint8_t     use_simple_rxtx;
+	uint8_t     port_id;
 	uint8_t     mac_addr[ETHER_ADDR_LEN];
 	uint32_t    notify_off_multiplier;
 	uint8_t     *isr;
@@ -261,11 +261,27 @@ struct virtio_hw {
 	struct rte_pci_device *dev;
 	struct virtio_pci_common_cfg *common_cfg;
 	struct virtio_net_config *dev_cfg;
-	const struct virtio_pci_ops *vtpci_ops;
 	void	    *virtio_user_dev;
 
 	struct virtqueue **vqs;
 };
+
+
+/*
+ * While virtio_hw is stored in shared memory, this structure stores
+ * some infos that may vary in the multiple process model locally.
+ * For example, the vtpci_ops pointer.
+ */
+struct virtio_hw_internal {
+	const struct virtio_pci_ops *vtpci_ops;
+	struct rte_pci_ioport io;
+};
+
+#define VTPCI_OPS(hw)	(virtio_hw_internal[(hw)->port_id].vtpci_ops)
+#define VTPCI_IO(hw)	(&virtio_hw_internal[(hw)->port_id].io)
+
+extern struct virtio_hw_internal virtio_hw_internal[RTE_MAX_ETHPORTS];
+
 
 /*
  * This structure is just a reference to read
@@ -316,5 +332,9 @@ void vtpci_read_dev_config(struct virtio_hw *, size_t, void *, int);
 uint8_t vtpci_isr(struct virtio_hw *);
 
 uint16_t vtpci_irq_config(struct virtio_hw *, uint16_t);
+
+extern const struct virtio_pci_ops legacy_ops;
+extern const struct virtio_pci_ops modern_ops;
+extern const struct virtio_pci_ops virtio_user_ops;
 
 #endif /* _VIRTIO_PCI_H_ */

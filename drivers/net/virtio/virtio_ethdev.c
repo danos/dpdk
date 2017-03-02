@@ -152,6 +152,8 @@ static const struct rte_virtio_xstats_name_off rte_virtio_txq_stat_strings[] = {
 #define VIRTIO_NB_TXQ_XSTATS (sizeof(rte_virtio_txq_stat_strings) / \
 			    sizeof(rte_virtio_txq_stat_strings[0]))
 
+struct virtio_hw_internal virtio_hw_internal[RTE_MAX_ETHPORTS];
+
 static int
 virtio_send_command(struct virtnet_ctl *cvq, struct virtio_pmd_ctrl *ctrl,
 		int *dlen, int pkt_num)
@@ -360,7 +362,7 @@ virtio_init_queue(struct rte_eth_dev *dev, uint16_t vtpci_queue_idx)
 	 * Read the virtqueue size from the Queue Size field
 	 * Always power of 2 and if 0 virtqueue does not exist
 	 */
-	vq_size = hw->vtpci_ops->get_queue_num(hw, vtpci_queue_idx);
+	vq_size = VTPCI_OPS(hw)->get_queue_num(hw, vtpci_queue_idx);
 	PMD_INIT_LOG(DEBUG, "vq_size: %u", vq_size);
 	if (vq_size == 0) {
 		PMD_INIT_LOG(ERR, "virtqueue does not exist");
@@ -519,7 +521,7 @@ virtio_init_queue(struct rte_eth_dev *dev, uint16_t vtpci_queue_idx)
 		}
 	}
 
-	if (hw->vtpci_ops->setup_queue(hw, vq) < 0) {
+	if (VTPCI_OPS(hw)->setup_queue(hw, vq) < 0) {
 		PMD_INIT_LOG(ERR, "setup_queue failed");
 		return -EINVAL;
 	}
@@ -893,6 +895,7 @@ virtio_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 		for (t = 0; t < VIRTIO_NB_RXQ_XSTATS; t++) {
 			xstats[count].value = *(uint64_t *)(((char *)rxvq) +
 				rte_virtio_rxq_stat_strings[t].offset);
+			xstats[count].id = count;
 			count++;
 		}
 	}
@@ -908,6 +911,7 @@ virtio_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 		for (t = 0; t < VIRTIO_NB_TXQ_XSTATS; t++) {
 			xstats[count].value = *(uint64_t *)(((char *)txvq) +
 				rte_virtio_txq_stat_strings[t].offset);
+			xstats[count].id = count;
 			count++;
 		}
 	}
@@ -1114,7 +1118,7 @@ virtio_negotiate_features(struct virtio_hw *hw, uint64_t req_features)
 		req_features);
 
 	/* Read device(host) feature bits */
-	host_features = hw->vtpci_ops->get_features(hw);
+	host_features = VTPCI_OPS(hw)->get_features(hw);
 	PMD_INIT_LOG(DEBUG, "host_features before negotiate = %" PRIx64,
 		host_features);
 
@@ -1204,13 +1208,13 @@ virtio_init_device(struct rte_eth_dev *eth_dev, uint64_t req_features)
 	if (virtio_negotiate_features(hw, req_features) < 0)
 		return -1;
 
+	rte_eth_copy_pci_info(eth_dev, pci_dev);
+
 	/* If host does not support status then disable LSC */
 	if (!vtpci_with_feature(hw, VIRTIO_NET_F_STATUS))
 		eth_dev->data->dev_flags &= ~RTE_ETH_DEV_INTR_LSC;
 	else
 		eth_dev->data->dev_flags |= RTE_ETH_DEV_INTR_LSC;
-
-	rte_eth_copy_pci_info(eth_dev, pci_dev);
 
 	rx_func_get(eth_dev);
 
@@ -1287,6 +1291,52 @@ virtio_init_device(struct rte_eth_dev *eth_dev, uint64_t req_features)
 }
 
 /*
+ * Remap the PCI device again (IO port map for legacy device and
+ * memory map for modern device), so that the secondary process
+ * could have the PCI initiated correctly.
+ */
+static int
+virtio_remap_pci(struct rte_pci_device *pci_dev, struct virtio_hw *hw)
+{
+	if (hw->modern) {
+		/*
+		 * We don't have to re-parse the PCI config space, since
+		 * rte_eal_pci_map_device() makes sure the mapped address
+		 * in secondary process would equal to the one mapped in
+		 * the primary process: error will be returned if that
+		 * requirement is not met.
+		 *
+		 * That said, we could simply reuse all cap pointers
+		 * (such as dev_cfg, common_cfg, etc.) parsed from the
+		 * primary process, which is stored in shared memory.
+		 */
+		if (rte_eal_pci_map_device(pci_dev)) {
+			PMD_INIT_LOG(DEBUG, "failed to map pci device!");
+			return -1;
+		}
+	} else {
+		if (rte_eal_pci_ioport_map(pci_dev, 0, VTPCI_IO(hw)) < 0)
+			return -1;
+	}
+
+	return 0;
+}
+
+static void
+virtio_set_vtpci_ops(struct virtio_hw *hw)
+{
+#ifdef RTE_VIRTIO_USER
+	if (hw->virtio_user_dev)
+		VTPCI_OPS(hw) = &virtio_user_ops;
+	else
+#endif
+	if (hw->modern)
+		VTPCI_OPS(hw) = &modern_ops;
+	else
+		VTPCI_OPS(hw) = &legacy_ops;
+}
+
+/*
  * This function is based on probe() function in virtio_pci.c
  * It returns 0 on success.
  */
@@ -1304,7 +1354,19 @@ eth_virtio_dev_init(struct rte_eth_dev *eth_dev)
 	eth_dev->tx_pkt_burst = &virtio_xmit_pkts;
 
 	if (rte_eal_process_type() == RTE_PROC_SECONDARY) {
-		rx_func_get(eth_dev);
+		if (!hw->virtio_user_dev) {
+			ret = virtio_remap_pci(eth_dev->pci_dev, hw);
+			if (ret)
+				return ret;
+		}
+
+		virtio_set_vtpci_ops(hw);
+		if (hw->use_simple_rxtx) {
+			eth_dev->tx_pkt_burst = virtio_xmit_pkts_simple;
+			eth_dev->rx_pkt_burst = virtio_recv_pkts_vec;
+		} else {
+			rx_func_get(eth_dev);
+		}
 		return 0;
 	}
 
@@ -1318,6 +1380,7 @@ eth_virtio_dev_init(struct rte_eth_dev *eth_dev)
 	}
 
 	pci_dev = eth_dev->pci_dev;
+	hw->port_id = eth_dev->data->port_id;
 
 	if (pci_dev) {
 		ret = vtpci_init(pci_dev, hw, &dev_flags);

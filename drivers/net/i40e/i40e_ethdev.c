@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2017 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -1628,6 +1628,8 @@ i40e_phy_conf_link(struct i40e_hw *hw,
 
 	/* use get_phy_abilities_resp value for the rest */
 	phy_conf.phy_type = phy_ab.phy_type;
+	phy_conf.phy_type_ext = phy_ab.phy_type_ext;
+	phy_conf.fec_config = phy_ab.mod_type_ext;
 	phy_conf.eee_capability = phy_ab.eee_capability;
 	phy_conf.eeer = phy_ab.eeer_val;
 	phy_conf.low_power_ctrl = phy_ab.d3_lpan;
@@ -1653,8 +1655,7 @@ i40e_apply_link_speed(struct rte_eth_dev *dev)
 	struct rte_eth_conf *conf = &dev->data->dev_conf;
 
 	speed = i40e_parse_link_speeds(conf->link_speeds);
-	if (!I40E_PHY_TYPE_SUPPORT_25G(hw->phy.phy_types))
-		abilities |= I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
+	abilities |= I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
 	if (!(conf->link_speeds & ETH_LINK_SPEED_FIXED))
 		abilities |= I40E_AQ_PHY_AN_ENABLED;
 	abilities |= I40E_AQ_PHY_LINK_ENABLED;
@@ -1875,17 +1876,16 @@ i40e_dev_close(struct rte_eth_dev *dev)
 	/* shutdown and destroy the HMC */
 	i40e_shutdown_lan_hmc(hw);
 
-	/* release all the existing VSIs and VEBs */
-	i40e_fdir_teardown(pf);
-	i40e_vsi_release(pf->main_vsi);
-
 	for (i = 0; i < pf->nb_cfg_vmdq_vsi; i++) {
 		i40e_vsi_release(pf->vmdq[i].vsi);
 		pf->vmdq[i].vsi = NULL;
 	}
-
 	rte_free(pf->vmdq);
 	pf->vmdq = NULL;
+
+	/* release all the existing VSIs and VEBs */
+	i40e_fdir_teardown(pf);
+	i40e_vsi_release(pf->main_vsi);
 
 	/* shutdown the adminq */
 	i40e_aq_queue_shutdown(hw, true);
@@ -1990,8 +1990,7 @@ i40e_dev_set_link_down(struct rte_eth_dev *dev)
 	uint8_t abilities = 0;
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 
-	if (!I40E_PHY_TYPE_SUPPORT_25G(hw->phy.phy_types))
-		abilities = I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
+	abilities = I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
 	return i40e_phy_conf_link(hw, abilities, speed);
 }
 
@@ -2025,11 +2024,11 @@ i40e_dev_link_update(struct rte_eth_dev *dev,
 		}
 
 		link.link_status = link_status.link_info & I40E_AQ_LINK_UP;
-		if (!wait_to_complete)
+		if (!wait_to_complete || link.link_status)
 			break;
 
 		rte_delay_ms(CHECK_INTERVAL);
-	} while (!link.link_status && rep_cnt--);
+	} while (--rep_cnt);
 
 	if (!link.link_status)
 		goto out;
@@ -2532,6 +2531,7 @@ i40e_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 	for (i = 0; i < I40E_NB_ETH_XSTATS; i++) {
 		xstats[count].value = *(uint64_t *)(((char *)&hw_stats->eth) +
 			rte_i40e_stats_strings[i].offset);
+		xstats[count].id = count;
 		count++;
 	}
 
@@ -2539,6 +2539,7 @@ i40e_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 	for (i = 0; i < I40E_NB_HW_PORT_XSTATS; i++) {
 		xstats[count].value = *(uint64_t *)(((char *)hw_stats) +
 			rte_i40e_hw_port_strings[i].offset);
+		xstats[count].id = count;
 		count++;
 	}
 
@@ -2548,6 +2549,7 @@ i40e_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 				*(uint64_t *)(((char *)hw_stats) +
 				rte_i40e_rxq_prio_strings[i].offset +
 				(sizeof(uint64_t) * prio));
+			xstats[count].id = count;
 			count++;
 		}
 	}
@@ -2558,6 +2560,7 @@ i40e_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 				*(uint64_t *)(((char *)hw_stats) +
 				rte_i40e_txq_prio_strings[i].offset +
 				(sizeof(uint64_t) * prio));
+			xstats[count].id = count;
 			count++;
 		}
 	}
@@ -4135,6 +4138,9 @@ i40e_vsi_release(struct i40e_vsi *vsi)
 
 	if (!vsi)
 		return I40E_SUCCESS;
+
+	if (!vsi->adapter)
+		return -EFAULT;
 
 	user_param = vsi->user_param;
 
@@ -5844,7 +5850,7 @@ i40e_find_all_mac_for_vlan(struct i40e_vsi *vsi,
 static int
 i40e_vsi_remove_all_macvlan_filter(struct i40e_vsi *vsi)
 {
-	int i, num;
+	int i, j, num;
 	struct i40e_mac_filter *f;
 	struct i40e_macvlan_filter *mv_f;
 	int ret = I40E_SUCCESS;
@@ -5869,6 +5875,7 @@ i40e_vsi_remove_all_macvlan_filter(struct i40e_vsi *vsi)
 		TAILQ_FOREACH(f, &vsi->mac_list, next) {
 			(void)rte_memcpy(&mv_f[i].macaddr,
 				&f->mac_info.mac_addr, ETH_ADDR_LEN);
+			mv_f[i].filter_type = f->mac_info.filter_type;
 			mv_f[i].vlan_id = 0;
 			i++;
 		}
@@ -5878,6 +5885,8 @@ i40e_vsi_remove_all_macvlan_filter(struct i40e_vsi *vsi)
 					vsi->vlan_num, &f->mac_info.mac_addr);
 			if (ret != I40E_SUCCESS)
 				goto DONE;
+			for (j = i; j < i + vsi->vlan_num; j++)
+				mv_f[j].filter_type = f->mac_info.filter_type;
 			i += vsi->vlan_num;
 		}
 	}
@@ -8275,6 +8284,10 @@ i40e_pctype_to_flowtype(enum i40e_filter_pctype pctype)
 #define I40E_GL_SWR_PRI_JOIN_MAP_2_VALUE 0x011f0200
 #define I40E_GL_SWR_PRI_JOIN_MAP_2       0x26CE08
 
+/* For X722 */
+#define I40E_X722_GL_SWR_PRI_JOIN_MAP_0_VALUE 0x20000200
+#define I40E_X722_GL_SWR_PRI_JOIN_MAP_2_VALUE 0x013F0200
+
 /* For X710 */
 #define I40E_GL_SWR_PM_UP_THR_EF_VALUE   0x03030303
 /* For XL710 */
@@ -8297,7 +8310,6 @@ i40e_dev_sync_phy_type(struct i40e_hw *hw)
 	return 0;
 }
 
-
 static void
 i40e_configure_registers(struct i40e_hw *hw)
 {
@@ -8305,8 +8317,8 @@ i40e_configure_registers(struct i40e_hw *hw)
 		uint32_t addr;
 		uint64_t val;
 	} reg_table[] = {
-		{I40E_GL_SWR_PRI_JOIN_MAP_0, I40E_GL_SWR_PRI_JOIN_MAP_0_VALUE},
-		{I40E_GL_SWR_PRI_JOIN_MAP_2, I40E_GL_SWR_PRI_JOIN_MAP_2_VALUE},
+		{I40E_GL_SWR_PRI_JOIN_MAP_0, 0},
+		{I40E_GL_SWR_PRI_JOIN_MAP_2, 0},
 		{I40E_GL_SWR_PM_UP_THR, 0}, /* Compute value dynamically */
 	};
 	uint64_t reg;
@@ -8314,6 +8326,24 @@ i40e_configure_registers(struct i40e_hw *hw)
 	int ret;
 
 	for (i = 0; i < RTE_DIM(reg_table); i++) {
+		if (reg_table[i].addr == I40E_GL_SWR_PRI_JOIN_MAP_0) {
+			if (hw->mac.type == I40E_MAC_X722) /* For X722 */
+				reg_table[i].val =
+					I40E_X722_GL_SWR_PRI_JOIN_MAP_0_VALUE;
+			else /* For X710/XL710/XXV710 */
+				reg_table[i].val =
+					I40E_GL_SWR_PRI_JOIN_MAP_0_VALUE;
+		}
+
+		if (reg_table[i].addr == I40E_GL_SWR_PRI_JOIN_MAP_2) {
+			if (hw->mac.type == I40E_MAC_X722) /* For X722 */
+				reg_table[i].val =
+					I40E_X722_GL_SWR_PRI_JOIN_MAP_2_VALUE;
+			else /* For X710/XL710/XXV710 */
+				reg_table[i].val =
+					I40E_GL_SWR_PRI_JOIN_MAP_2_VALUE;
+		}
+
 		if (reg_table[i].addr == I40E_GL_SWR_PM_UP_THR) {
 			if (I40E_PHY_TYPE_SUPPORT_40G(hw->phy.phy_types) || /* For XL710 */
 			    I40E_PHY_TYPE_SUPPORT_25G(hw->phy.phy_types)) /* For XXV710 */
