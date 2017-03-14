@@ -258,6 +258,7 @@ override_dh_auto_install-arch:
 	LIBS=$$(sed -e 's/GROUP ( \(.*\) )/\1/' -e 's/lib/-l/g' -e 's/\.so//g' \
 		$(CURDIR)/debian/libdpdk-dev/$(LIBDIR)/libdpdk.so); \
 	sed -e "s/@DPDK_LIBS@/$${LIBS}/" -e "s/@VERSION@/$(VERSION)/" \
+		-e "s|@LIBDIR@|$(LIBDIR)|" \
 		debian/libdpdk.pc.in > debian/libdpdk-dev/$(LIBDIR)/pkgconfig/libdpdk.pc
 	# Package: dpdk-igb-uio-dkms
 	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(VERSION)
