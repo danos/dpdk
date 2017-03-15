@@ -270,9 +270,8 @@ override_dh_auto_install-arch:
 		debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(VERSION)
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
-	mkdir -p debian/dpdk-modules-$(KVERS)/lib/modules/$(KVERS)/kernel/drivers/net
-	cp -a debian/build/shared-root/kmod/* \
-		debian/dpdk-modules-$(KVERS)/lib/modules/$(KVERS)/kernel/drivers/net
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) \
+		DESTDIR=debian/dpdk-modules-$(KVERS) install-kmod
 endif
 
 debian/libethdev4.links: debian/libethdev4.links.in
