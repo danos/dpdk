@@ -271,6 +271,7 @@ override_dh_auto_install-arch:
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) \
+		kerneldir=/lib/modules/$(KVERS)/extra/dpdk \
 		DESTDIR=debian/dpdk-modules-$(KVERS) install-kmod
 endif
 
