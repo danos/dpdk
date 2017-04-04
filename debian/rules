@@ -71,8 +71,7 @@ DPDK_SHARED_DIR = "debian/build/shared-root"
 # now stable with parallel comilation, so support -j
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
     PAR := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-else
-    PAR := "1"
+    MAKEFLAGS += -j$(PAR)
 endif
 
 ifneq (,$(findstring nodoc,$(DEB_BUILD_OPTIONS)))
@@ -172,7 +171,7 @@ endif
 
 override_dh_auto_build-indep:
 ifeq (y,$(BUILD_DOCS))
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
 endif
 
 override_dh_auto_install-indep:
@@ -185,7 +184,7 @@ endif
 
 override_dh_auto_build-arch:
 ifeq (y,$(BUILD_STATIC_LIB))
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
 endif
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
@@ -199,10 +198,10 @@ endif
 	cp -a $(DPDK_STATIC_DIR) $(DPDK_SHARED_DIR)
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 		$(DPDK_SHARED_DIR)/.config
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
 ifeq (y,$(BUILD_DOCS))
 	# need to be around for dh_installman to be picked up
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
 endif
 
 override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
