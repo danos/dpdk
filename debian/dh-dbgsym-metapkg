@@ -1,0 +1,24 @@
+#!/bin/sh -e
+
+PACKAGE=${1:?Missing parameter}
+
+dh_installdocs -p${PACKAGE}
+dh_installchangelogs -p${PACKAGE}
+dh_compress -p${PACKAGE}
+
+install -d debian/${PACKAGE}/DEBIAN
+
+echo -n 'misc:Depends=' > debian/${PACKAGE}.substvars
+grep -E 'lib.*-dbgsym' debian/files | tr '_' ' ' | \
+    awk '{ print $1,"(=",$2 ")" }' | paste -sd ',' - | \
+    sed -e 's/,/, /g' >> debian/${PACKAGE}.substvars
+
+dh_gencontrol -p libdpdk-dev -- \
+	      -Pdebian/${PACKAGE} \
+	      -Tdebian/${PACKAGE}.substvars \
+	      -UPre-Depends -URecommends -USuggests -UEnhances -UProvides \
+	      -UEssential -UConflicts -UReplaces -UBreaks \
+	      -DSection=debug -DPriority=extra \
+	      -DAuto-Built-Package=debug-symbols \
+	      -DPackage=${PACKAGE} "-DDepends=\${misc:Depends}" \
+	      "-DDescription=Debug symbols for libdpdk-dev (meta-package)"

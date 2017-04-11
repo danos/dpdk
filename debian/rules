@@ -5,6 +5,7 @@ export DH_VERBOSE=1
 export DH_OPTIONS=-v
 
 VERSION := $(shell dpkg-parsechangelog | sed -nr '/^Version:/s/Version: (.*:)?(.*)-(.*)/\2/p')
+DPDK_ABI := $(shell echo $(VERSION) | cut -d '.'  -f1-2)
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
 include /usr/share/dpkg/default.mk
@@ -117,6 +118,11 @@ override_dh_gencontrol:
 	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
 		-v`cat debian/VERSION` \
 		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
+	./debian/dh-dbgsym-metapkg libdpdk$(DPDK_ABI)-dbgsym
+
+override_dh_builddeb:
+	dh_builddeb
+	dh_builddeb -plibdpdk$(DPDK_ABI)-dbgsym
 
 build:
 	@if [ x"$(KVERS)" = x ] ; then \
