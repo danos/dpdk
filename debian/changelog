@@ -21,6 +21,8 @@ dpdk (16.11.4-1+deb9u1) UNRELEASED; urgency=medium
   * d/p/igb_uio-switch-to-new-irq-function-for-MSI-X.patch: fix dkms issue
     in kernel 4.12 (LP: #1700768)
   * ensure man pages are bundled with executables on all architectures
+  * dpdk.conf: add info about unwanted effects of multiple hugepage
+    mountpoints
 
   [ Charles (Chas) Williams ]
   * Fix upstream documentation links in d/control.
