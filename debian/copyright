@@ -14,7 +14,9 @@ Copyright: 2008-2014 Cisco Systems, Inc.
            and many other contributors.
 License: BSD-3-clause
 
-Files: lib/librte_eal/linuxapp/*
+Files:
+ lib/librte_eal/linuxapp/igb_uio/*
+ lib/librte_eal/linuxapp/kni/*
 Copyright: 2007-2016, Intel Corporation
            2006-2007 Myricom, Inc. for some LRO specific code
 License: GPL-2
