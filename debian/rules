@@ -225,6 +225,7 @@ ifeq (y,$(BUILD_DOCS))
 	# need to be around for dh_installman to be picked up
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
 endif
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) test-build
 
 override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
@@ -255,9 +256,9 @@ endif
 	if grep -qs 'CONFIG_RTE_APP_TEST=y' $(DPDK_SHARED_DIR)/.config; then \
 		mkdir -p debian/dpdk-dev/usr/share/dpdk/test; \
 		cp -a test/test/autotest* debian/dpdk-dev/usr/share/dpdk/test; \
-		cp -r $(DPDK_SHARED_DIR)/test debian/dpdk-dev/usr/share/dpdk/test; \
-		cp -r $(DPDK_SHARED_DIR)/testacl debian/dpdk-dev/usr/share/dpdk/test; \
-		cp -r $(DPDK_SHARED_DIR)/testpipeline debian/dpdk-dev/usr/share/dpdk/test; \
+		cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/; \
+		cp $(DPDK_SHARED_DIR)/app/testacl debian/dpdk-dev/usr/share/dpdk/test/; \
+		cp $(DPDK_SHARED_DIR)/app/testpipeline debian/dpdk-dev/usr/share/dpdk/test/; \
 	fi
 	# since we move libs to multiarch dirs update the non aware symlink
 	rm debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
