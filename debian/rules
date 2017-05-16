@@ -5,6 +5,7 @@ export DH_VERBOSE=1
 export DH_OPTIONS=-v
 
 VERSION := $(shell dpkg-parsechangelog | sed -nr '/^Version:/s/Version: (.*:)?(.*)-(.*)/\2/p')
+ABIVERSION := "$(VERSION).0"
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
 include /usr/share/dpkg/default.mk
@@ -145,6 +146,7 @@ endif
 ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
 		-e 's,(RTE_NEXT_ABI=).*,\1n,' \
+		-e 's,(CONFIG_RTE_MAJOR_ABI=).*,\1$(ABIVERSION),' \
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
@@ -232,16 +234,15 @@ override_dh_auto_install-arch:
 	# Package(s): libdpdk-<NAME><VER> (bare runtime libs)
 	for lib in $$(ls -1 debian/dpdk/$(LIBDIR)/*.so.*); do \
 	  BN=$$(basename $${lib}); \
-	  VER=$$(echo $${BN} | sed -e 's/^.*\.so\.//'); \
-	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9]*$$//' | tr '_' '-'); \
+	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9\.]*$$//' | tr '_' '-'); \
 	  if echo $${LN} | grep -q ".*[0-9]$$"; then \
-	    PKG=$${LN}-$${VER}; \
+	    PKG=$${LN}-$(VERSION); \
 	  else \
-	    PKG=$${LN}$${VER}; \
+	    PKG=$${LN}$(VERSION); \
 	  fi; \
 	  LIBF="$$(basename $${lib})"; \
 	  LIBD="debian/$${PKG}/$(LIBDIR)"; \
-	  echo "moving $${lib} for library $${PKG}"; \
+	  echo "moving $${lib} to dir $${LIBD} (PKG=$${PKG} BN=$${BN} LN={$${LN} LIBF=$${LIBF} LIBD=$${LIBD})"; \
 	  mkdir -p $${LIBD}; \
 	  mv $${lib} $${LIBD}; \
 	  if [ "$${LIBF#librte_pmd_}x" != "$${LIBF}x" ]; then \
