@@ -2,4 +2,4 @@
 host=gerrit.fd.io
 port=29418
 project=deb_dpdk
-defaultbranch=16.11.x
+defaultbranch=17.05.x
