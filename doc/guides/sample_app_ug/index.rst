@@ -57,10 +57,10 @@ Sample Applications User Guides
     l3_forward_virtual
     link_status_intr
     load_balancer
+    server_node_efd
     multi_process
     qos_metering
     qos_scheduler
-    intel_quickassist
     quota_watermark
     timer
     packet_ordering
@@ -108,8 +108,6 @@ Sample Applications User Guides
 
 :numref:`figure_qos_sched_app_arch` :ref:`figure_qos_sched_app_arch`
 
-:numref:`figure_quickassist_block_diagram` :ref:`figure_quickassist_block_diagram`
-
 :numref:`figure_pipeline_overview` :ref:`figure_pipeline_overview`
 
 :numref:`figure_ring_pipeline_perf_setup` :ref:`figure_ring_pipeline_perf_setup`
@@ -131,6 +129,8 @@ Sample Applications User Guides
 :numref:`figure_tep_termination_arch` :ref:`figure_tep_termination_arch`
 
 :numref:`figure_ptpclient_highlevel` :ref:`figure_ptpclient_highlevel`
+
+:numref:`figure_efd_sample_app_overview` :ref:`figure_efd_sample_app_overview`
 
 **Tables**
 

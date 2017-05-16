@@ -113,6 +113,7 @@ s32 ixgbe_init_ops_generic(struct ixgbe_hw *hw)
 	mac->ops.led_off = ixgbe_led_off_generic;
 	mac->ops.blink_led_start = ixgbe_blink_led_start_generic;
 	mac->ops.blink_led_stop = ixgbe_blink_led_stop_generic;
+	mac->ops.init_led_link_act = ixgbe_init_led_link_act_generic;
 
 	/* RAR, Multicast, VLAN */
 	mac->ops.set_rar = ixgbe_set_rar_generic;
@@ -188,7 +189,10 @@ bool ixgbe_device_supports_autoneg_fc(struct ixgbe_hw *hw)
 
 		break;
 	case ixgbe_media_type_backplane:
-		supported = true;
+		if (hw->device_id == IXGBE_DEV_ID_X550EM_X_XFI)
+			supported = false;
+		else
+			supported = true;
 		break;
 	case ixgbe_media_type_copper:
 		/* only some copper devices support flow control autoneg */
@@ -409,8 +413,10 @@ s32 ixgbe_start_hw_generic(struct ixgbe_hw *hw)
 
 	/* Setup flow control */
 	ret_val = ixgbe_setup_fc(hw);
-	if (ret_val != IXGBE_SUCCESS && ret_val != IXGBE_NOT_IMPLEMENTED)
+	if (ret_val != IXGBE_SUCCESS && ret_val != IXGBE_NOT_IMPLEMENTED) {
+		DEBUGOUT1("Flow control setup failed, returning %d\n", ret_val);
 		return ret_val;
+	}
 
 	/* Cache bit indicating need for crosstalk fix */
 	switch (hw->mac.type) {
@@ -492,10 +498,16 @@ s32 ixgbe_init_hw_generic(struct ixgbe_hw *hw)
 	/* Reset the hardware */
 	status = hw->mac.ops.reset_hw(hw);
 
-	if (status == IXGBE_SUCCESS) {
+	if (status == IXGBE_SUCCESS || status == IXGBE_ERR_SFP_NOT_PRESENT) {
 		/* Start the HW */
 		status = hw->mac.ops.start_hw(hw);
 	}
+
+	/* Initialize the LED link active for LED blink support */
+	hw->mac.ops.init_led_link_act(hw);
+
+	if (status != IXGBE_SUCCESS)
+		DEBUGOUT1("Failed to initialize HW, STATUS = %d\n", status);
 
 	return status;
 }
@@ -1133,6 +1145,47 @@ s32 ixgbe_stop_adapter_generic(struct ixgbe_hw *hw)
 	 * access and verify no pending requests
 	 */
 	return ixgbe_disable_pcie_master(hw);
+}
+
+/**
+ *  ixgbe_init_led_link_act_generic - Store the LED index link/activity.
+ *  @hw: pointer to hardware structure
+ *
+ *  Store the index for the link active LED. This will be used to support
+ *  blinking the LED.
+ **/
+s32 ixgbe_init_led_link_act_generic(struct ixgbe_hw *hw)
+{
+	struct ixgbe_mac_info *mac = &hw->mac;
+	u32 led_reg, led_mode;
+	u8 i;
+
+	led_reg = IXGBE_READ_REG(hw, IXGBE_LEDCTL);
+
+	/* Get LED link active from the LEDCTL register */
+	for (i = 0; i < 4; i++) {
+		led_mode = led_reg >> IXGBE_LED_MODE_SHIFT(i);
+
+		if ((led_mode & IXGBE_LED_MODE_MASK_BASE) ==
+		     IXGBE_LED_LINK_ACTIVE) {
+			mac->led_link_act = i;
+			return IXGBE_SUCCESS;
+		}
+	}
+
+	/*
+	 * If LEDCTL register does not have the LED link active set, then use
+	 * known MAC defaults.
+	 */
+	switch (hw->mac.type) {
+	case ixgbe_mac_X550EM_a:
+	case ixgbe_mac_X550EM_x:
+		mac->led_link_act = 1;
+		break;
+	default:
+		mac->led_link_act = 2;
+	}
+	return IXGBE_SUCCESS;
 }
 
 /**
@@ -3764,7 +3817,8 @@ s32 ixgbe_clear_vmdq_generic(struct ixgbe_hw *hw, u32 rar, u32 vmdq)
 	}
 
 	/* was that the last pool using this rar? */
-	if (mpsar_lo == 0 && mpsar_hi == 0 && rar != 0)
+	if (mpsar_lo == 0 && mpsar_hi == 0 &&
+	    rar != 0 && rar != hw->mac.san_mac_rar_index)
 		hw->mac.ops.clear_rar(hw, rar);
 done:
 	return IXGBE_SUCCESS;
@@ -4184,7 +4238,7 @@ s32 ixgbe_check_mac_link_generic(struct ixgbe_hw *hw, ixgbe_link_speed *speed,
 		break;
 	case IXGBE_LINKS_SPEED_100_82599:
 		*speed = IXGBE_LINK_SPEED_100_FULL;
-		if (hw->mac.type >= ixgbe_mac_X550) {
+		if (hw->mac.type == ixgbe_mac_X550) {
 			if (links_reg & IXGBE_LINKS_SPEED_NON_STD)
 				*speed = IXGBE_LINK_SPEED_5GB_FULL;
 		}
@@ -4595,13 +4649,15 @@ rel_out:
  *  semaphore or IXGBE_ERR_HOST_INTERFACE_COMMAND when command fails.
  **/
 s32 ixgbe_set_fw_drv_ver_generic(struct ixgbe_hw *hw, u8 maj, u8 min,
-				 u8 build, u8 sub)
+				 u8 build, u8 sub, u16 len,
+				 const char *driver_ver)
 {
 	struct ixgbe_hic_drv_info fw_cmd;
 	int i;
 	s32 ret_val = IXGBE_SUCCESS;
 
 	DEBUGFUNC("ixgbe_set_fw_drv_ver_generic");
+	UNREFERENCED_2PARAMETER(len, driver_ver);
 
 	fw_cmd.hdr.cmd = FW_CEM_CMD_DRIVER_INFO;
 	fw_cmd.hdr.buf_len = FW_CEM_CMD_DRIVER_INFO_LEN;

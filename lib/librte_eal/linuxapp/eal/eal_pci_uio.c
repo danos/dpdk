@@ -38,6 +38,7 @@
 #include <inttypes.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/sysmacros.h>
 #include <linux/pci_regs.h>
 
 #if defined(RTE_ARCH_X86)
@@ -230,7 +231,7 @@ pci_uio_free_resource(struct rte_pci_device *dev,
 		close(dev->intr_handle.uio_cfg_fd);
 		dev->intr_handle.uio_cfg_fd = -1;
 	}
-	if (dev->intr_handle.fd) {
+	if (dev->intr_handle.fd >= 0) {
 		close(dev->intr_handle.fd);
 		dev->intr_handle.fd = -1;
 		dev->intr_handle.type = RTE_INTR_HANDLE_UNKNOWN;

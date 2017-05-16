@@ -71,8 +71,14 @@ struct rte_mbuf;
 /**
  * Return the physical address (or virtual address in case of
  * virtio-user) of mbuf data buffer.
+ *
+ * The address is firstly casted to the word size (sizeof(uintptr_t))
+ * before casting it to uint64_t. This is to make it work with different
+ * combination of word size (64 bit and 32 bit) and virtio device
+ * (virtio-pci and virtio-user).
  */
-#define VIRTIO_MBUF_ADDR(mb, vq) (*(uint64_t *)((uintptr_t)(mb) + (vq)->offset))
+#define VIRTIO_MBUF_ADDR(mb, vq) \
+	((uint64_t)(*(uintptr_t *)((uintptr_t)(mb) + (vq)->offset)))
 #else
 #define VIRTIO_MBUF_ADDR(mb, vq) ((mb)->buf_physaddr)
 #endif
@@ -274,7 +280,21 @@ vring_desc_init(struct vring_desc *dp, uint16_t n)
 /**
  * Tell the backend not to interrupt us.
  */
-void virtqueue_disable_intr(struct virtqueue *vq);
+static inline void
+virtqueue_disable_intr(struct virtqueue *vq)
+{
+	vq->vq_ring.avail->flags |= VRING_AVAIL_F_NO_INTERRUPT;
+}
+
+/**
+ * Tell the backend to interrupt us.
+ */
+static inline void
+virtqueue_enable_intr(struct virtqueue *vq)
+{
+	vq->vq_ring.avail->flags &= (~VRING_AVAIL_F_NO_INTERRUPT);
+}
+
 /**
  *  Dump virtqueue internal structures, for debug purpose only.
  */

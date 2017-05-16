@@ -1,6 +1,6 @@
 #   BSD LICENSE
 #
-#   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
+#   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
 #   All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or without
@@ -41,18 +41,20 @@ CFLAGS += $(WERROR_FLAGS)
 
 EXPORT_MAP := rte_ether_version.map
 
-LIBABIVER := 5
+LIBABIVER := 6
 
 SRCS-y += rte_ethdev.c
+SRCS-y += rte_flow.c
 
 #
 # Export include files
 #
 SYMLINK-y-include += rte_ethdev.h
+SYMLINK-y-include += rte_ethdev_pci.h
+SYMLINK-y-include += rte_ethdev_vdev.h
 SYMLINK-y-include += rte_eth_ctrl.h
 SYMLINK-y-include += rte_dev_info.h
-
-# this lib depends upon:
-DEPDIRS-y += lib/librte_net lib/librte_eal lib/librte_mempool lib/librte_ring lib/librte_mbuf
+SYMLINK-y-include += rte_flow.h
+SYMLINK-y-include += rte_flow_driver.h
 
 include $(RTE_SDK)/mk/rte.lib.mk
