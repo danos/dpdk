@@ -68,7 +68,7 @@ Last-Update: 2016-09-28
  	{0,                     0, NULL, 0                        }
  };
  
-@@ -166,6 +168,8 @@
+@@ -161,6 +163,8 @@
  #endif
  	internal_cfg->vmware_tsc_map = 0;
  	internal_cfg->create_uio_dev = 0;
@@ -79,7 +79,7 @@ Last-Update: 2016-09-28
  static int
 --- a/lib/librte_eal/common/eal_internal_cfg.h
 +++ b/lib/librte_eal/common/eal_internal_cfg.h
-@@ -83,6 +83,8 @@
+@@ -82,6 +82,8 @@
  	volatile enum rte_intr_mode vfio_intr_mode;
  	const char *hugefile_prefix;      /**< the base filename of hugetlbfs files */
  	const char *hugepage_dir;         /**< specific hugetlbfs directory to use */
@@ -103,7 +103,7 @@ Last-Update: 2016-09-28
  
 --- a/lib/librte_eal/common/include/rte_eal.h
 +++ b/lib/librte_eal/common/include/rte_eal.h
-@@ -256,6 +256,11 @@
+@@ -286,6 +286,11 @@
  #define RTE_INIT(func) \
  static void __attribute__((constructor, used)) func(void)
  
@@ -127,7 +127,7 @@ Last-Update: 2016-09-28
  
  #include <rte_common.h>
  #include <rte_debug.h>
-@@ -354,6 +357,8 @@
+@@ -356,6 +359,8 @@
  	       "  --"OPT_CREATE_UIO_DEV"    Create /dev/uioX (usually done by hotplug)\n"
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
  	       "  --"OPT_XEN_DOM0"          Support running on Xen dom0 without hugetlbfs\n"
@@ -151,7 +151,7 @@ Last-Update: 2016-09-28
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -943,3 +956,172 @@
+@@ -995,3 +1008,172 @@
  	/* Module has been found */
  	return 1;
  }
@@ -326,7 +326,7 @@ Last-Update: 2016-09-28
 +}
 --- a/lib/librte_eal/linuxapp/eal/rte_eal_version.map
 +++ b/lib/librte_eal/linuxapp/eal/rte_eal_version.map
-@@ -139,6 +139,7 @@
+@@ -120,6 +120,7 @@
  	rte_keepalive_register_core;
  	rte_xen_dom0_supported;
  	rte_xen_mem_phy2mch;
@@ -336,7 +336,7 @@ Last-Update: 2016-09-28
  
 --- a/lib/librte_vhost/socket.c
 +++ b/lib/librte_vhost/socket.c
-@@ -78,6 +78,8 @@
+@@ -98,6 +98,8 @@
  	pthread_mutex_t mutex;
  };
  
@@ -345,11 +345,11 @@ Last-Update: 2016-09-28
  #define MAX_VIRTIO_BACKLOG 128
  
  static void vhost_user_server_new_connection(int fd, void *data, int *remove);
-@@ -519,6 +521,7 @@
+@@ -645,6 +647,7 @@
  		vsocket->is_server = true;
- 		ret = vhost_user_create_server(vsocket);
  	}
-+    rte_eal_set_socket_permissions(path);
+ 	ret = create_unix_socket(vsocket);
++	rte_eal_set_socket_permissions(path);
  	if (ret < 0) {
  		free(vsocket->path);
  		free(vsocket);
