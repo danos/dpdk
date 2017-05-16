@@ -185,6 +185,7 @@ override_dh_auto_build-arch:
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 		$(DPDK_SHARED_DIR)/.config
 	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) test-build
 
 override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
@@ -211,8 +212,10 @@ override_dh_auto_install-arch:
 		debian/dpdk-dev/usr/share/dpdk/dpdk-sdk-env.sh
 	# include the bundled autotest suite to be usable from the dpdk-dev package
 	mkdir -p debian/dpdk-dev/usr/share/dpdk/test
-	cp -a app/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
+	cp -a test/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
 	cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/
+	cp $(DPDK_SHARED_DIR)/app/testacl debian/dpdk-dev/usr/share/dpdk/test/
+	cp $(DPDK_SHARED_DIR)/app/testpipeline debian/dpdk-dev/usr/share/dpdk/test/
 	# since we move libs to multiarch dirs update the non aware symlink
 	rm debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
 	ln -rs debian/dpdk-dev/$(LIBDIR)/ \
