@@ -77,7 +77,7 @@ rte_mkdir = test -d $1 || mkdir -p $1
 
 # Create the relative symbolic link $2 -> $1
 # May be replaced with --relative option of ln from coreutils-8.16
-rte_symlink = ln -snf $$($(RTE_SDK)/scripts/relpath.sh $1 $(dir $2)) $2
+rte_symlink = ln -snf $$($(RTE_SDK)/buildtools/relpath.sh $1 $(dir $2)) $2
 
 .PHONY: pre_install
 pre_install:
@@ -124,15 +124,11 @@ install-runtime:
 	    tar -xf -      -C $(DESTDIR)$(bindir) --strip-components=1 \
 		--keep-newer-files
 	$(Q)$(call rte_mkdir,      $(DESTDIR)$(datadir))
-	$(Q)cp -a $(RTE_SDK)/tools $(DESTDIR)$(datadir)
-	$(Q)$(call rte_symlink,    $(DESTDIR)$(datadir)/tools/dpdk-setup.sh, \
-	                           $(DESTDIR)$(datadir)/tools/setup.sh)
-	$(Q)$(call rte_symlink,    $(DESTDIR)$(datadir)/tools/dpdk-devbind.py, \
-	                           $(DESTDIR)$(datadir)/tools/dpdk_nic_bind.py)
+	$(Q)cp -a $(RTE_SDK)/usertools $(DESTDIR)$(datadir)
 	$(Q)$(call rte_mkdir,      $(DESTDIR)$(sbindir))
-	$(Q)$(call rte_symlink,    $(DESTDIR)$(datadir)/tools/dpdk-devbind.py, \
+	$(Q)$(call rte_symlink,    $(DESTDIR)$(datadir)/usertools/dpdk-devbind.py, \
 	                           $(DESTDIR)$(sbindir)/dpdk-devbind)
-	$(Q)$(call rte_symlink,    $(DESTDIR)$(datadir)/tools/dpdk-pmdinfo.py, \
+	$(Q)$(call rte_symlink,    $(DESTDIR)$(datadir)/usertools/dpdk-pmdinfo.py, \
 	                           $(DESTDIR)$(bindir)/dpdk-pmdinfo)
 ifneq ($(wildcard $O/doc/man/*/*.1),)
 	$(Q)$(call rte_mkdir,      $(DESTDIR)$(mandir)/man1)
@@ -156,7 +152,7 @@ install-sdk:
 		--keep-newer-files
 	$(Q)$(call rte_mkdir,                            $(DESTDIR)$(sdkdir))
 	$(Q)cp -a               $(RTE_SDK)/mk            $(DESTDIR)$(sdkdir)
-	$(Q)cp -a               $(RTE_SDK)/scripts       $(DESTDIR)$(sdkdir)
+	$(Q)cp -a               $(RTE_SDK)/buildtools    $(DESTDIR)$(sdkdir)
 	$(Q)$(call rte_mkdir,                            $(DESTDIR)$(targetdir)/app)
 	$(Q)cp -a               $O/.config               $(DESTDIR)$(targetdir)
 	$(Q)cp -a               $O/app/dpdk-pmdinfogen   $(DESTDIR)$(targetdir)/app

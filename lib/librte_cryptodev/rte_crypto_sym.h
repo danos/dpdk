@@ -105,8 +105,30 @@ enum rte_crypto_cipher_algorithm {
 	RTE_CRYPTO_CIPHER_ZUC_EEA3,
 	/**< ZUC algorithm in EEA3 mode */
 
+	RTE_CRYPTO_CIPHER_DES_CBC,
+	/**< DES algorithm in CBC mode */
+
+	RTE_CRYPTO_CIPHER_AES_DOCSISBPI,
+	/**< AES algorithm using modes required by
+	 * DOCSIS Baseline Privacy Plus Spec.
+	 * Chained mbufs are not supported in this mode, i.e. rte_mbuf.next
+	 * for m_src and m_dst in the rte_crypto_sym_op must be NULL.
+	 */
+
+	RTE_CRYPTO_CIPHER_DES_DOCSISBPI,
+	/**< DES algorithm using modes required by
+	 * DOCSIS Baseline Privacy Plus Spec.
+	 * Chained mbufs are not supported in this mode, i.e. rte_mbuf.next
+	 * for m_src and m_dst in the rte_crypto_sym_op must be NULL.
+	 */
+
 	RTE_CRYPTO_CIPHER_LIST_END
+
 };
+
+/** Cipher algorithm name strings */
+extern const char *
+rte_crypto_cipher_algorithm_strings[];
 
 /** Symmetric Cipher Direction */
 enum rte_crypto_cipher_operation {
@@ -115,6 +137,10 @@ enum rte_crypto_cipher_operation {
 	RTE_CRYPTO_CIPHER_OP_DECRYPT
 	/**< Decrypt cipher operation */
 };
+
+/** Cipher operation name strings */
+extern const char *
+rte_crypto_cipher_operation_strings[];
 
 /**
  * Symmetric Cipher Setup Data.
@@ -241,11 +267,19 @@ enum rte_crypto_auth_algorithm {
 	RTE_CRYPTO_AUTH_LIST_END
 };
 
+/** Authentication algorithm name strings */
+extern const char *
+rte_crypto_auth_algorithm_strings[];
+
 /** Symmetric Authentication / Hash Operations */
 enum rte_crypto_auth_operation {
 	RTE_CRYPTO_AUTH_OP_VERIFY,	/**< Verify authentication digest */
 	RTE_CRYPTO_AUTH_OP_GENERATE	/**< Generate authentication digest */
 };
+
+/** Authentication operation name strings */
+extern const char *
+rte_crypto_auth_operation_strings[];
 
 /**
  * Authentication / Hash transform data.
@@ -276,17 +310,16 @@ struct rte_crypto_auth_xform {
 	 * this specifies the length of the digest to be compared for the
 	 * session.
 	 *
+	 * It is the caller's responsibility to ensure that the
+	 * digest length is compliant with the hash algorithm being used.
 	 * If the value is less than the maximum length allowed by the hash,
-	 * the result shall be truncated.  If the value is greater than the
-	 * maximum length allowed by the hash then an error will be generated
-	 * by *rte_cryptodev_sym_session_create* or by the
-	 * *rte_cryptodev_sym_enqueue_burst* if using session-less APIs.
+	 * the result shall be truncated.
 	 */
 
 	uint32_t add_auth_data_length;
 	/**< The length of the additional authenticated data (AAD) in bytes.
-	 * The maximum permitted value is 240 bytes, unless otherwise specified
-	 * below.
+	 * The maximum permitted value is 65535 (2^16 - 1) bytes, unless
+	 * otherwise specified below.
 	 *
 	 * This field must be specified when the hash algorithm is one of the
 	 * following:
@@ -541,8 +574,7 @@ struct rte_crypto_sym_op {
 
 		struct {
 			uint8_t *data;
-			/**< If this member of this structure is set this is a
-			 * pointer to the location where the digest result
+			/**< This points to the location where the digest result
 			 * should be inserted (in the case of digest generation)
 			 * or where the purported digest exists (in the case of
 			 * digest verification).
@@ -560,18 +592,13 @@ struct rte_crypto_sym_op {
 			 * @note
 			 * For GCM (@ref RTE_CRYPTO_AUTH_AES_GCM), for
 			 * "digest result" read "authentication tag T".
-			 *
-			 * If this member is not set the digest result is
-			 * understood to be in the destination buffer for
-			 * digest generation, and in the source buffer for
-			 * digest verification. The location of the digest
-			 * result in this case is immediately following the
-			 * region over which the digest is computed.
 			 */
 			phys_addr_t phys_addr;
 			/**< Physical address of digest */
 			uint16_t length;
-			/**< Length of digest */
+			/**< Length of digest. This must be the same value as
+			 * @ref rte_crypto_auth_xform.digest_length.
+			 */
 		} digest; /**< Digest parameters */
 
 		struct {
@@ -586,7 +613,7 @@ struct rte_crypto_sym_op {
 			 * set up for the session in the @ref
 			 * rte_crypto_auth_xform structure as part of the @ref
 			 * rte_cryptodev_sym_session_create function call.
-			 * This length must not exceed 240 bytes.
+			 * This length must not exceed 65535 (2^16-1) bytes.
 			 *
 			 * Specifically for CCM (@ref RTE_CRYPTO_AUTH_AES_CCM),
 			 * the caller should setup this field as follows:
@@ -619,7 +646,10 @@ struct rte_crypto_sym_op {
 			 * operation, this field is used to pass plaintext.
 			 */
 			phys_addr_t phys_addr;	/**< physical address */
-			uint16_t length;	/**< Length of digest */
+			uint16_t length;
+			/**< Length of additional authenticated data (AAD)
+			 * in bytes
+			 */
 		} aad;
 		/**< Additional authentication parameters */
 	} auth;

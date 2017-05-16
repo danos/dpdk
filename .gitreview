@@ -1,5 +1,0 @@
-[gerrit]
-host=gerrit.fd.io
-port=29418
-project=deb_dpdk
-defaultbranch=17.05.x

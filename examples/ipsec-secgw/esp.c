@@ -78,7 +78,7 @@ esp_inbound(struct rte_mbuf *m, struct ipsec_sa *sa,
 		sizeof(struct esp_hdr) - sa->iv_len - sa->digest_len;
 
 	if ((payload_len & (sa->block_size - 1)) || (payload_len <= 0)) {
-		RTE_LOG(DEBUG, IPSEC_ESP, "payload %d not multiple of %u\n",
+		RTE_LOG_DP(DEBUG, IPSEC_ESP, "payload %d not multiple of %u\n",
 				payload_len, sa->block_size);
 		return -EINVAL;
 	}
@@ -122,6 +122,7 @@ esp_inbound(struct rte_mbuf *m, struct ipsec_sa *sa,
 	switch (sa->auth_algo) {
 	case RTE_CRYPTO_AUTH_NULL:
 	case RTE_CRYPTO_AUTH_SHA1_HMAC:
+	case RTE_CRYPTO_AUTH_SHA256_HMAC:
 		sym_cop->auth.data.offset = ip_hdr_len;
 		sym_cop->auth.data.length = sizeof(struct esp_hdr) +
 			sa->iv_len + payload_len;
@@ -354,6 +355,7 @@ esp_outbound(struct rte_mbuf *m, struct ipsec_sa *sa,
 	switch (sa->auth_algo) {
 	case RTE_CRYPTO_AUTH_NULL:
 	case RTE_CRYPTO_AUTH_SHA1_HMAC:
+	case RTE_CRYPTO_AUTH_SHA256_HMAC:
 		sym_cop->auth.data.offset = ip_hdr_len;
 		sym_cop->auth.data.length = sizeof(struct esp_hdr) +
 			sa->iv_len + pad_payload_len;

@@ -47,27 +47,6 @@
 #define KASUMI_MAX_BURST 4
 #define BYTE_LEN 8
 
-/**
- * Global static parameter used to create a unique name for each KASUMI
- * crypto device.
- */
-static unsigned unique_name_id;
-
-static inline int
-create_unique_device_name(char *name, size_t size)
-{
-	int ret;
-
-	if (name == NULL)
-		return -EINVAL;
-
-	ret = snprintf(name, size, "%s_%u", RTE_STR(CRYPTODEV_NAME_KASUMI_PMD),
-			unique_name_id++);
-	if (ret < 0)
-		return ret;
-	return 0;
-}
-
 /** Get xform chain order. */
 static enum kasumi_operation
 kasumi_get_mode(const struct rte_crypto_sym_xform *xform)
@@ -380,7 +359,7 @@ process_ops(struct rte_crypto_op **ops, struct kasumi_session *session,
 	}
 
 	enqueued_ops = rte_ring_enqueue_burst(qp->processed_ops,
-				(void **)ops, processed_ops);
+				(void **)ops, processed_ops, NULL);
 	qp->qp_stats.enqueued_count += enqueued_ops;
 	*accumulated_enqueued_ops += enqueued_ops;
 
@@ -431,7 +410,7 @@ process_op_bit(struct rte_crypto_op *op, struct kasumi_session *session,
 	}
 
 	enqueued_op = rte_ring_enqueue_burst(qp->processed_ops, (void **)&op,
-				processed_op);
+				processed_op, NULL);
 	qp->qp_stats.enqueued_count += enqueued_op;
 	*accumulated_enqueued_ops += enqueued_op;
 
@@ -454,6 +433,19 @@ kasumi_pmd_enqueue_burst(void *queue_pair, struct rte_crypto_op **ops,
 
 	for (i = 0; i < nb_ops; i++) {
 		curr_c_op = ops[i];
+
+#ifdef RTE_LIBRTE_PMD_KASUMI_DEBUG
+		if (!rte_pktmbuf_is_contiguous(curr_c_op->sym->m_src) ||
+				(curr_c_op->sym->m_dst != NULL &&
+				!rte_pktmbuf_is_contiguous(
+						curr_c_op->sym->m_dst))) {
+			KASUMI_LOG_ERR("PMD supports only contiguous mbufs, "
+				"op (%p) provides noncontiguous mbuf as "
+				"source/destination buffer.\n", curr_c_op);
+			curr_c_op->status = RTE_CRYPTO_OP_STATUS_INVALID_ARGS;
+			break;
+		}
+#endif
 
 		/* Set status as enqueued (not processed yet) by default. */
 		curr_c_op->status = RTE_CRYPTO_OP_STATUS_NOT_PROCESSED;
@@ -550,22 +542,26 @@ kasumi_pmd_dequeue_burst(void *queue_pair,
 	unsigned nb_dequeued;
 
 	nb_dequeued = rte_ring_dequeue_burst(qp->processed_ops,
-			(void **)c_ops, nb_ops);
+			(void **)c_ops, nb_ops, NULL);
 	qp->qp_stats.dequeued_count += nb_dequeued;
 
 	return nb_dequeued;
 }
 
-static int cryptodev_kasumi_remove(const char *name);
+static int cryptodev_kasumi_remove(struct rte_vdev_device *vdev);
 
 static int
 cryptodev_kasumi_create(const char *name,
-		struct rte_crypto_vdev_init_params *init_params)
+			struct rte_vdev_device *vdev,
+			struct rte_crypto_vdev_init_params *init_params)
 {
 	struct rte_cryptodev *dev;
-	char crypto_dev_name[RTE_CRYPTODEV_NAME_MAX_LEN];
 	struct kasumi_private *internals;
 	uint64_t cpu_flags = 0;
+
+	if (init_params->name[0] == '\0')
+		snprintf(init_params->name, sizeof(init_params->name),
+				"%s", name);
 
 	/* Check CPU for supported vector instruction set */
 	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX))
@@ -577,14 +573,7 @@ cryptodev_kasumi_create(const char *name,
 		return -EFAULT;
 	}
 
-	/* Create a unique device name. */
-	if (create_unique_device_name(crypto_dev_name,
-			RTE_CRYPTODEV_NAME_MAX_LEN) != 0) {
-		KASUMI_LOG_ERR("failed to create unique cryptodev name");
-		return -EINVAL;
-	}
-
-	dev = rte_cryptodev_pmd_virtual_dev_init(crypto_dev_name,
+	dev = rte_cryptodev_pmd_virtual_dev_init(init_params->name,
 			sizeof(struct kasumi_private), init_params->socket_id);
 	if (dev == NULL) {
 		KASUMI_LOG_ERR("failed to create cryptodev vdev");
@@ -609,37 +598,51 @@ cryptodev_kasumi_create(const char *name,
 
 	return 0;
 init_error:
-	KASUMI_LOG_ERR("driver %s: cryptodev_kasumi_create failed", name);
+	KASUMI_LOG_ERR("driver %s: cryptodev_kasumi_create failed",
+			init_params->name);
 
-	cryptodev_kasumi_remove(crypto_dev_name);
+	cryptodev_kasumi_remove(vdev);
 	return -EFAULT;
 }
 
 static int
-cryptodev_kasumi_probe(const char *name,
-		const char *input_args)
+cryptodev_kasumi_probe(struct rte_vdev_device *vdev)
 {
 	struct rte_crypto_vdev_init_params init_params = {
 		RTE_CRYPTODEV_VDEV_DEFAULT_MAX_NB_QUEUE_PAIRS,
 		RTE_CRYPTODEV_VDEV_DEFAULT_MAX_NB_SESSIONS,
-		rte_socket_id()
+		rte_socket_id(),
+		{0}
 	};
+	const char *name;
+	const char *input_args;
+
+	name = rte_vdev_device_name(vdev);
+	if (name == NULL)
+		return -EINVAL;
+	input_args = rte_vdev_device_args(vdev);
 
 	rte_cryptodev_parse_vdev_init_params(&init_params, input_args);
 
 	RTE_LOG(INFO, PMD, "Initialising %s on NUMA node %d\n", name,
 			init_params.socket_id);
+	if (init_params.name[0] != '\0')
+		RTE_LOG(INFO, PMD, "  User defined name = %s\n",
+			init_params.name);
 	RTE_LOG(INFO, PMD, "  Max number of queue pairs = %d\n",
 			init_params.max_nb_queue_pairs);
 	RTE_LOG(INFO, PMD, "  Max number of sessions = %d\n",
 			init_params.max_nb_sessions);
 
-	return cryptodev_kasumi_create(name, &init_params);
+	return cryptodev_kasumi_create(name, vdev, &init_params);
 }
 
 static int
-cryptodev_kasumi_remove(const char *name)
+cryptodev_kasumi_remove(struct rte_vdev_device *vdev)
 {
+	const char *name;
+
+	name = rte_vdev_device_name(vdev);
 	if (name == NULL)
 		return -EINVAL;
 

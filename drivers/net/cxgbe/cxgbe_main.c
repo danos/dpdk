@@ -57,6 +57,7 @@
 #include <rte_alarm.h>
 #include <rte_ether.h>
 #include <rte_ethdev.h>
+#include <rte_ethdev_pci.h>
 #include <rte_atomic.h>
 #include <rte_malloc.h>
 #include <rte_random.h>
@@ -1163,16 +1164,13 @@ int cxgbe_probe(struct adapter *adapter)
 		pi->eth_dev->data = data;
 
 allocate_mac:
-		pi->eth_dev->pci_dev = adapter->pdev;
+		pi->eth_dev->device = &adapter->pdev->device;
 		pi->eth_dev->data->dev_private = pi;
-		pi->eth_dev->driver = adapter->eth_dev->driver;
 		pi->eth_dev->dev_ops = adapter->eth_dev->dev_ops;
 		pi->eth_dev->tx_pkt_burst = adapter->eth_dev->tx_pkt_burst;
 		pi->eth_dev->rx_pkt_burst = adapter->eth_dev->rx_pkt_burst;
 
-		rte_eth_copy_pci_info(pi->eth_dev, pi->eth_dev->pci_dev);
-
-		TAILQ_INIT(&pi->eth_dev->link_intr_cbs);
+		rte_eth_copy_pci_info(pi->eth_dev, adapter->pdev);
 
 		pi->eth_dev->data->mac_addrs = rte_zmalloc(name,
 							   ETHER_ADDR_LEN, 0);

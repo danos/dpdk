@@ -45,8 +45,8 @@ First, uncompress the archive and move to the uncompressed DPDK source directory
 
 .. code-block:: console
 
-    unzip DPDK-<version>.zip
-    cd DPDK-<version>
+    tar xJf dpdk-<version>.tar.xz
+    cd dpdk-<version>
 
 The DPDK is composed of several directories:
 
@@ -58,7 +58,7 @@ The DPDK is composed of several directories:
 
 *   examples: Source code of DPDK application examples
 
-*   config, tools, scripts, mk: Framework-related makefiles, scripts and configuration
+*   config, buildtools, mk: Framework-related makefiles, scripts and configuration
 
 Installation of DPDK Target Environments
 ----------------------------------------
@@ -155,6 +155,10 @@ can provide the uio capability. This module can be loaded using the command
 
     sudo modprobe uio_pci_generic
 
+.. note::
+
+    ``uio_pci_generic`` module doesn't support the creation of virtual functions.
+
 As an alternative to the ``uio_pci_generic``, the DPDK also includes the igb_uio
 module which can be found in the kmod subdirectory referred to above. It can
 be loaded as shown below:
@@ -187,8 +191,12 @@ however please consult your distributions documentation to make sure that is the
 
 Also, to use VFIO, both kernel and BIOS must support and be configured to use IO virtualization (such as Intel® VT-d).
 
+.. note::
+
+    ``vfio-pci`` module doesn't support the creation of virtual functions.
+
 For proper operation of VFIO when running DPDK applications as a non-privileged user, correct permissions should also be set up.
-This can be done by using the DPDK setup script (called dpdk-setup.sh and located in the tools directory).
+This can be done by using the DPDK setup script (called dpdk-setup.sh and located in the usertools directory).
 
 .. _linux_gsg_binding_kernel:
 
@@ -208,7 +216,7 @@ Any network ports under Linux* control will be ignored by the DPDK poll-mode dri
 
 To bind ports to the ``uio_pci_generic``, ``igb_uio`` or ``vfio-pci`` module for DPDK use,
 and then subsequently return ports to Linux* control,
-a utility script called dpdk_nic _bind.py is provided in the tools subdirectory.
+a utility script called dpdk-devbind.py is provided in the usertools subdirectory.
 This utility can be used to provide a view of the current state of the network ports on the system,
 and to bind and unbind those ports from the different kernel modules, including the uio and vfio modules.
 The following are some examples of how the script can be used.
@@ -235,7 +243,7 @@ To see the status of all network ports on the system:
 
 .. code-block:: console
 
-    ./tools/dpdk-devbind.py --status
+    ./usertools/dpdk-devbind.py --status
 
     Network devices using DPDK-compatible driver
     ============================================
@@ -257,16 +265,16 @@ To bind device ``eth1``,``04:00.1``, to the ``uio_pci_generic`` driver:
 
 .. code-block:: console
 
-    ./tools/dpdk-devbind.py --bind=uio_pci_generic 04:00.1
+    ./usertools/dpdk-devbind.py --bind=uio_pci_generic 04:00.1
 
 or, alternatively,
 
 .. code-block:: console
 
-    ./tools/dpdk-devbind.py --bind=uio_pci_generic eth1
+    ./usertools/dpdk-devbind.py --bind=uio_pci_generic eth1
 
 To restore device ``82:00.0`` to its original kernel binding:
 
 .. code-block:: console
 
-    ./tools/dpdk-devbind.py --bind=ixgbe 82:00.0
+    ./usertools/dpdk-devbind.py --bind=ixgbe 82:00.0
