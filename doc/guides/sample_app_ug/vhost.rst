@@ -75,7 +75,7 @@ Start the vswitch example
 
 .. code-block:: console
 
-        ./vhost-switch -c f -n 4 --socket-mem 1024  \
+        ./vhost-switch -l 0-3 -n 4 --socket-mem 1024  \
              -- --socket-file /tmp/sock0 --client \
              ...
 
@@ -115,13 +115,13 @@ could be done by:
 .. code-block:: console
 
    modprobe uio_pci_generic
-   $RTE_SDK/tools/dpdk-devbind.py -b=uio_pci_generic 0000:00:04.0
+   $RTE_SDK/usertools/dpdk-devbind.py -b=uio_pci_generic 0000:00:04.0
 
 Then start testpmd for packet forwarding testing.
 
 .. code-block:: console
 
-    ./x86_64-native-gcc/app/testpmd -c 0x3 -- -i
+    ./x86_64-native-gcc/app/testpmd -l 0-1 -- -i
     > start tx_first
 
 Inject packets

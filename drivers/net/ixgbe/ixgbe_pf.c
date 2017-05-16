@@ -61,7 +61,9 @@
 static inline uint16_t
 dev_num_vf(struct rte_eth_dev *eth_dev)
 {
-	return eth_dev->pci_dev->max_vfs;
+	struct rte_pci_device *pci_dev = IXGBE_DEV_TO_PCI(eth_dev);
+
+	return pci_dev->max_vfs;
 }
 
 static inline
@@ -176,6 +178,7 @@ ixgbe_add_tx_flow_control_drop_filter(struct rte_eth_dev *eth_dev)
 		IXGBE_DEV_PRIVATE_TO_FILTER_INFO(eth_dev->data->dev_private);
 	uint16_t vf_num;
 	int i;
+	struct ixgbe_ethertype_filter ethertype_filter;
 
 	if (!hw->mac.ops.set_ethertype_anti_spoofing) {
 		RTE_LOG(INFO, PMD, "ether type anti-spoofing is not"
@@ -183,16 +186,23 @@ ixgbe_add_tx_flow_control_drop_filter(struct rte_eth_dev *eth_dev)
 		return;
 	}
 
-	/* occupy an entity of ether type filter */
-	for (i = 0; i < IXGBE_MAX_ETQF_FILTERS; i++) {
-		if (!(filter_info->ethertype_mask & (1 << i))) {
-			filter_info->ethertype_mask |= 1 << i;
-			filter_info->ethertype_filters[i] =
-				IXGBE_ETHERTYPE_FLOW_CTRL;
-			break;
-		}
+	i = ixgbe_ethertype_filter_lookup(filter_info,
+					  IXGBE_ETHERTYPE_FLOW_CTRL);
+	if (i >= 0) {
+		RTE_LOG(ERR, PMD, "A ether type filter"
+			" entity for flow control already exists!\n");
+		return;
 	}
-	if (i == IXGBE_MAX_ETQF_FILTERS) {
+
+	ethertype_filter.ethertype = IXGBE_ETHERTYPE_FLOW_CTRL;
+	ethertype_filter.etqf = IXGBE_ETQF_FILTER_EN |
+				IXGBE_ETQF_TX_ANTISPOOF |
+				IXGBE_ETHERTYPE_FLOW_CTRL;
+	ethertype_filter.etqs = 0;
+	ethertype_filter.conf = TRUE;
+	i = ixgbe_ethertype_filter_insert(filter_info,
+					  &ethertype_filter);
+	if (i < 0) {
 		RTE_LOG(ERR, PMD, "Cannot find an unused ether type filter"
 			" entity for flow control.\n");
 		return;
@@ -387,15 +397,27 @@ ixgbe_vf_reset_msg(struct rte_eth_dev *dev, uint16_t vf)
 	uint32_t reg_offset, vf_shift;
 	const uint8_t VFRE_SHIFT = 5;  /* VFRE 32 bits per slot */
 	const uint8_t VFRE_MASK = (uint8_t)((1U << VFRE_SHIFT) - 1);
+	uint8_t  nb_q_per_pool;
+	int i;
 
 	vf_shift = vf & VFRE_MASK;
 	reg_offset = (vf >> VFRE_SHIFT) > 0 ? 1 : 0;
 
-	/* enable transmit and receive for vf */
+	/* enable transmit for vf */
 	reg = IXGBE_READ_REG(hw, IXGBE_VFTE(reg_offset));
 	reg |= (reg | (1 << vf_shift));
 	IXGBE_WRITE_REG(hw, IXGBE_VFTE(reg_offset), reg);
 
+	/* enable all queue drop for IOV */
+	nb_q_per_pool = RTE_ETH_DEV_SRIOV(dev).nb_q_per_pool;
+	for (i = vf * nb_q_per_pool; i < (vf + 1) * nb_q_per_pool; i++) {
+		IXGBE_WRITE_FLUSH(hw);
+		reg = IXGBE_QDE_ENABLE | IXGBE_QDE_WRITE;
+		reg |= i << IXGBE_QDE_IDX_SHIFT;
+		IXGBE_WRITE_REG(hw, IXGBE_QDE, reg);
+	}
+
+	/* enable receive for vf */
 	reg = IXGBE_READ_REG(hw, IXGBE_VFRE(reg_offset));
 	reg |= (reg | (1 << vf_shift));
 	IXGBE_WRITE_REG(hw, IXGBE_VFRE(reg_offset), reg);

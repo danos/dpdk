@@ -1,6 +1,6 @@
 /*-
  *
- *   Copyright(c) 2015-2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2015-2017 Intel Corporation. All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -66,6 +66,12 @@ extern "C" {
 /**< KASUMI PMD device name */
 #define CRYPTODEV_NAME_ZUC_PMD		crypto_zuc
 /**< KASUMI PMD device name */
+#define CRYPTODEV_NAME_ARMV8_PMD	crypto_armv8
+/**< ARMv8 Crypto PMD device name */
+#define CRYPTODEV_NAME_SCHEDULER_PMD	crypto_scheduler
+/**< Scheduler Crypto PMD device name */
+#define CRYPTODEV_NAME_DPAA2_SEC_PMD	cryptodev_dpaa2_sec_pmd
+/**< NXP DPAA2 - SEC PMD device name */
 
 /** Crypto device type */
 enum rte_cryptodev_type {
@@ -77,6 +83,9 @@ enum rte_cryptodev_type {
 	RTE_CRYPTODEV_KASUMI_PMD,	/**< KASUMI PMD */
 	RTE_CRYPTODEV_ZUC_PMD,		/**< ZUC PMD */
 	RTE_CRYPTODEV_OPENSSL_PMD,    /**<  OpenSSL PMD */
+	RTE_CRYPTODEV_ARMV8_PMD,	/**< ARMv8 crypto PMD */
+	RTE_CRYPTODEV_SCHEDULER_PMD,	/**< Crypto Scheduler PMD */
+	RTE_CRYPTODEV_DPAA2_SEC_PMD,    /**< NXP DPAA2 - SEC PMD */
 };
 
 extern const char **rte_cyptodev_names;
@@ -110,6 +119,20 @@ extern const char **rte_cyptodev_names;
 #endif
 
 /**
+ * Crypto parameters range description
+ */
+struct rte_crypto_param_range {
+	uint16_t min;	/**< minimum size */
+	uint16_t max;	/**< maximum size */
+	uint16_t increment;
+	/**< if a range of sizes are supported,
+	 * this parameter is used to indicate
+	 * increments in byte size that are supported
+	 * between the minimum and maximum
+	 */
+};
+
+/**
  * Symmetric Crypto Capability
  */
 struct rte_cryptodev_symmetric_capability {
@@ -122,35 +145,11 @@ struct rte_cryptodev_symmetric_capability {
 			/**< authentication algorithm */
 			uint16_t block_size;
 			/**< algorithm block size */
-			struct {
-				uint16_t min;	/**< minimum key size */
-				uint16_t max;	/**< maximum key size */
-				uint16_t increment;
-				/**< if a range of sizes are supported,
-				 * this parameter is used to indicate
-				 * increments in byte size that are supported
-				 * between the minimum and maximum */
-			} key_size;
+			struct rte_crypto_param_range key_size;
 			/**< auth key size range */
-			struct {
-				uint16_t min;	/**< minimum digest size */
-				uint16_t max;	/**< maximum digest size */
-				uint16_t increment;
-				/**< if a range of sizes are supported,
-				 * this parameter is used to indicate
-				 * increments in byte size that are supported
-				 * between the minimum and maximum */
-			} digest_size;
+			struct rte_crypto_param_range digest_size;
 			/**< digest size range */
-			struct {
-				uint16_t min;	/**< minimum aad size */
-				uint16_t max;	/**< maximum aad size */
-				uint16_t increment;
-				/**< if a range of sizes are supported,
-				 * this parameter is used to indicate
-				 * increments in byte size that are supported
-				 * between the minimum and maximum */
-			} aad_size;
+			struct rte_crypto_param_range aad_size;
 			/**< Additional authentication data size range */
 		} auth;
 		/**< Symmetric Authentication transform capabilities */
@@ -159,25 +158,9 @@ struct rte_cryptodev_symmetric_capability {
 			/**< cipher algorithm */
 			uint16_t block_size;
 			/**< algorithm block size */
-			struct {
-				uint16_t min;	/**< minimum key size */
-				uint16_t max;	/**< maximum key size */
-				uint16_t increment;
-				/**< if a range of sizes are supported,
-				 * this parameter is used to indicate
-				 * increments in byte size that are supported
-				 * between the minimum and maximum */
-			} key_size;
+			struct rte_crypto_param_range key_size;
 			/**< cipher key size range */
-			struct {
-				uint16_t min;	/**< minimum iv size */
-				uint16_t max;	/**< maximum iv size */
-				uint16_t increment;
-				/**< if a range of sizes are supported,
-				 * this parameter is used to indicate
-				 * increments in byte size that are supported
-				 * between the minimum and maximum */
-			} iv_size;
+			struct rte_crypto_param_range iv_size;
 			/**< Initialisation vector data size range */
 		} cipher;
 		/**< Symmetric Cipher transform capabilities */
@@ -195,6 +178,94 @@ struct rte_cryptodev_capabilities {
 		/**< Symmetric operation capability parameters */
 	};
 };
+
+/** Structure used to describe crypto algorithms */
+struct rte_cryptodev_sym_capability_idx {
+	enum rte_crypto_sym_xform_type type;
+	union {
+		enum rte_crypto_cipher_algorithm cipher;
+		enum rte_crypto_auth_algorithm auth;
+	} algo;
+};
+
+/**
+ *  Provide capabilities available for defined device and algorithm
+ *
+ * @param	dev_id		The identifier of the device.
+ * @param	idx		Description of crypto algorithms.
+ *
+ * @return
+ *   - Return description of the symmetric crypto capability if exist.
+ *   - Return NULL if the capability not exist.
+ */
+const struct rte_cryptodev_symmetric_capability *
+rte_cryptodev_sym_capability_get(uint8_t dev_id,
+		const struct rte_cryptodev_sym_capability_idx *idx);
+
+/**
+ * Check if key size and initial vector are supported
+ * in crypto cipher capability
+ *
+ * @param	capability	Description of the symmetric crypto capability.
+ * @param	key_size	Cipher key size.
+ * @param	iv_size		Cipher initial vector size.
+ *
+ * @return
+ *   - Return 0 if the parameters are in range of the capability.
+ *   - Return -1 if the parameters are out of range of the capability.
+ */
+int
+rte_cryptodev_sym_capability_check_cipher(
+		const struct rte_cryptodev_symmetric_capability *capability,
+		uint16_t key_size, uint16_t iv_size);
+
+/**
+ * Check if key size and initial vector are supported
+ * in crypto auth capability
+ *
+ * @param	capability	Description of the symmetric crypto capability.
+ * @param	key_size	Auth key size.
+ * @param	digest_size	Auth digest size.
+ * @param	aad_size	Auth aad size.
+ *
+ * @return
+ *   - Return 0 if the parameters are in range of the capability.
+ *   - Return -1 if the parameters are out of range of the capability.
+ */
+int
+rte_cryptodev_sym_capability_check_auth(
+		const struct rte_cryptodev_symmetric_capability *capability,
+		uint16_t key_size, uint16_t digest_size, uint16_t aad_size);
+
+/**
+ * Provide the cipher algorithm enum, given an algorithm string
+ *
+ * @param	algo_enum	A pointer to the cipher algorithm
+ *				enum to be filled
+ * @param	algo_string	Authentication algo string
+ *
+ * @return
+ * - Return -1 if string is not valid
+ * - Return 0 is the string is valid
+ */
+int
+rte_cryptodev_get_cipher_algo_enum(enum rte_crypto_cipher_algorithm *algo_enum,
+		const char *algo_string);
+
+/**
+ * Provide the authentication algorithm enum, given an algorithm string
+ *
+ * @param	algo_enum	A pointer to the authentication algorithm
+ *				enum to be filled
+ * @param	algo_string	Authentication algo string
+ *
+ * @return
+ * - Return -1 if string is not valid
+ * - Return 0 is the string is valid
+ */
+int
+rte_cryptodev_get_auth_algo_enum(enum rte_crypto_auth_algorithm *algo_enum,
+		const char *algo_string);
 
 /** Macro used at end of crypto PMD list */
 #define RTE_CRYPTODEV_END_OF_CAPABILITIES_LIST() \
@@ -225,6 +296,14 @@ struct rte_cryptodev_capabilities {
 /**< Utilises CPU AES-NI instructions */
 #define	RTE_CRYPTODEV_FF_HW_ACCELERATED		(1ULL << 7)
 /**< Operations are off-loaded to an external hardware accelerator */
+#define	RTE_CRYPTODEV_FF_CPU_AVX512		(1ULL << 8)
+/**< Utilises CPU SIMD AVX512 instructions */
+#define	RTE_CRYPTODEV_FF_MBUF_SCATTER_GATHER	(1ULL << 9)
+/**< Scatter-gather mbufs are supported */
+#define	RTE_CRYPTODEV_FF_CPU_NEON		(1ULL << 10)
+/**< Utilises CPU NEON instructions */
+#define	RTE_CRYPTODEV_FF_CPU_ARM_CE		(1ULL << 11)
+/**< Utilises ARM CPU Cryptographic Extensions */
 
 
 /**
@@ -256,6 +335,10 @@ struct rte_cryptodev_info {
 	struct {
 		unsigned max_nb_sessions;
 		/**< Maximum number of sessions supported by device. */
+		unsigned int max_nb_sessions_per_qp;
+		/**< Maximum number of sessions per queue pair.
+		 * Default 0 for infinite sessions
+		 */
 	} sym;
 };
 
@@ -300,6 +383,8 @@ struct rte_cryptodev_stats {
 	/**< Total error count on operations dequeued */
 };
 
+#define RTE_CRYPTODEV_NAME_MAX_LEN	(64)
+/**< Max length of name of crypto PMD */
 #define RTE_CRYPTODEV_VDEV_DEFAULT_MAX_NB_QUEUE_PAIRS	8
 #define RTE_CRYPTODEV_VDEV_DEFAULT_MAX_NB_SESSIONS	2048
 
@@ -311,6 +396,7 @@ struct rte_crypto_vdev_init_params {
 	unsigned max_nb_queue_pairs;
 	unsigned max_nb_sessions;
 	uint8_t socket_id;
+	char name[RTE_CRYPTODEV_NAME_MAX_LEN];
 };
 
 /**
@@ -365,8 +451,30 @@ rte_cryptodev_get_dev_id(const char *name);
 extern uint8_t
 rte_cryptodev_count(void);
 
+/**
+ * Get number of crypto device defined type.
+ *
+ * @param	type	type of device.
+ *
+ * @return
+ *   Returns number of crypto device.
+ */
 extern uint8_t
 rte_cryptodev_count_devtype(enum rte_cryptodev_type type);
+
+/**
+ * Get number and identifiers of attached crypto device.
+ *
+ * @param	dev_name	device name.
+ * @param	devices		output devices identifiers.
+ * @param	nb_devices	maximal number of devices.
+ *
+ * @return
+ *   Returns number of attached crypto device.
+ */
+uint8_t
+rte_cryptodev_devices_get(const char *dev_name, uint8_t *devices,
+		uint8_t nb_devices);
 /*
  * Return the NUMA socket to which a device is connected
  *
@@ -621,8 +729,8 @@ struct rte_cryptodev {
 	/**< Functions exported by PMD */
 	uint64_t feature_flags;
 	/**< Supported features */
-	struct rte_pci_device *pci_dev;
-	/**< PCI info. supplied by probing */
+	struct rte_device *device;
+	/**< Backing device */
 
 	enum rte_cryptodev_type dev_type;
 	/**< Crypto device type */
@@ -634,10 +742,6 @@ struct rte_cryptodev {
 	uint8_t attached : 1;
 	/**< Flag indicating the device is attached */
 } __rte_cache_aligned;
-
-
-#define RTE_CRYPTODEV_NAME_MAX_LEN	(64)
-/**< Max length of name of crypto PMD */
 
 /**
  *
@@ -816,6 +920,36 @@ rte_cryptodev_sym_session_create(uint8_t dev_id,
  */
 extern struct rte_cryptodev_sym_session *
 rte_cryptodev_sym_session_free(uint8_t dev_id,
+		struct rte_cryptodev_sym_session *session);
+
+/**
+ * Attach queue pair with sym session.
+ *
+ * @param	qp_id		Queue pair to which session will be attached.
+ * @param	session		Session pointer previously allocated by
+ *				*rte_cryptodev_sym_session_create*.
+ *
+ * @return
+ *  - On success, zero.
+ *  - On failure, a negative value.
+ */
+int
+rte_cryptodev_queue_pair_attach_sym_session(uint16_t qp_id,
+		struct rte_cryptodev_sym_session *session);
+
+/**
+ * Detach queue pair with sym session.
+ *
+ * @param	qp_id		Queue pair to which session is attached.
+ * @param	session		Session pointer previously allocated by
+ *				*rte_cryptodev_sym_session_create*.
+ *
+ * @return
+ *  - On success, zero.
+ *  - On failure, a negative value.
+ */
+int
+rte_cryptodev_queue_pair_detach_sym_session(uint16_t qp_id,
 		struct rte_cryptodev_sym_session *session);
 
 
