@@ -5,12 +5,11 @@ dpdk (17.05-1~git1) UNRELEASED; urgency=medium
     - adapt to use MAJOR_ABI configuration to avoid the sub-lib abi
       version breakage of the past.
     - add d/update-helper* to update d/control and d/*.symbols for new versions
-    - adapt build and new location of tests; that will provide further
-      test tools (testacl, testpipeline) and unify them with the already
-      provided test in the /usr/share/dpdk/test/ directory of dpdk-dev.
-      Note: that testpmd is still installed by install-sdk and therefore stays
-      separate from other test tools in PATH and package dpdk.
-      a test/dev tool that is correct.
+    - adapt to new build trigger and location of tests; provide further
+      test tools (testacl, testpipeline) together with the already
+      provided "test" tool in /usr/share/dpdk/test/ of dpdk-dev.
+      Note: testpmd is installed "officially" by install-sdk and therefore
+      stays separate from other test tools.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 16 May 2017 15:38:17 +0200
 
