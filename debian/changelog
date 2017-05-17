@@ -4,6 +4,7 @@ dpdk (17.05-1~git1) UNRELEASED; urgency=medium
     see http://dpdk.org/doc/guides/rel_notes/release_17_05.html
     - adapt to use MAJOR_ABI configuration to avoid the sub-lib abi
       version breakage of the past.
+    - add d/update-helper* to update d/control and d/*.symbols for new versions
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 16 May 2017 15:38:17 +0200
 
