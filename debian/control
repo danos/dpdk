@@ -45,7 +45,7 @@ Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64],
             librte-pmd-ena17.05 (= ${binary:Version}),
             librte-pmd-enic17.05 (= ${binary:Version}) [amd64 arm64 i386],
             librte-pmd-fm10k17.05 (= ${binary:Version}) [amd64 i386],
-            librte-pmd-i40e17.05 (= ${binary:Version}) [amd64 i386],
+            librte-pmd-i40e17.05 (= ${binary:Version}),
             librte-pmd-ixgbe17.05 (= ${binary:Version}) [amd64 arm64 i386],
             librte-pmd-null-crypto17.05 (= ${binary:Version}),
             librte-pmd-null17.05 (= ${binary:Version}),
@@ -135,7 +135,7 @@ Depends: libpcap-dev,
          librte-hash17.05 (= ${binary:Version}),
          librte-ip-frag17.05 (= ${binary:Version}),
          librte-jobstats17.05 (= ${binary:Version}),
-         librte-kni17.05 (= ${binary:Version}) [amd64 arm64],
+         librte-kni17.05 (= ${binary:Version}) [amd64 arm64 ppc64el],
          librte-kvargs17.05 (= ${binary:Version}),
          librte-lpm17.05 (= ${binary:Version}),
          librte-mbuf17.05 (= ${binary:Version}),
@@ -152,7 +152,7 @@ Depends: libpcap-dev,
          librte-pmd-ena17.05 (= ${binary:Version}),
          librte-pmd-enic17.05 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-fm10k17.05 (= ${binary:Version}) [amd64 i386],
-         librte-pmd-i40e17.05 (= ${binary:Version}) [amd64 i386],
+         librte-pmd-i40e17.05 (= ${binary:Version}),
          librte-pmd-ixgbe17.05 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-null-crypto17.05 (= ${binary:Version}),
          librte-pmd-null17.05 (= ${binary:Version}),
@@ -509,7 +509,7 @@ Description: Data Plane Development Kit (librte-pmd-enic runtime library)
  This package contains the runtime libraries for librte_pmd_enic.
 
 Package: librte-pmd-fm10k17.05
-Architecture: amd64 i386 ppc64el
+Architecture: amd64 i386
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/guides/nics/fm10k.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -522,7 +522,7 @@ Description: Data Plane Development Kit (librte-pmd-fm10k runtime library)
  This package contains the runtime libraries for librte_pmd_fm10k.
 
 Package: librte-pmd-i40e17.05
-Architecture: amd64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/guides/nics/i40e.html
 Pre-Depends: ${misc:Pre-Depends}
