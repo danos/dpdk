@@ -10,6 +10,9 @@ dpdk (17.05-1~git1) UNRELEASED; urgency=medium
       provided "test" tool in /usr/share/dpdk/test/ of dpdk-dev.
       Note: testpmd is installed "officially" by install-sdk and therefore
       stays separate from other test tools.
+    - updated library arch availability/dependency: librte-kni is
+      available on ppc64el; librte-pmd-i40e on all arches;
+      librte-pmd-fm10k gone on ppc64el
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 16 May 2017 15:38:17 +0200
 
