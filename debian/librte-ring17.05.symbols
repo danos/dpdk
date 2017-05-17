@@ -8,4 +8,3 @@ librte_ring.so.17.05.0 librte-ring17.05 #MINVER#
  rte_ring_init@DPDK_2.0 16.04
  rte_ring_list_dump@DPDK_2.0 16.04
  rte_ring_lookup@DPDK_2.0 16.04
- rte_ring_set_water_mark@DPDK_2.0 16.04

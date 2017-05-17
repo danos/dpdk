@@ -1,7 +1,6 @@
 librte_ethdev.so.17.05.0 librte-ethdev17.05 #MINVER#
  DPDK_16.04@DPDK_16.04 16.07~rc1
  DPDK_16.07@DPDK_16.07 16.07~rc1
- DPDK_16.11@DPDK_16.11 16.11
  DPDK_17.02@DPDK_17.02 17.05
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_2.2@DPDK_2.2 16.07~rc1
@@ -13,7 +12,6 @@ librte_ethdev.so.17.05.0 librte-ethdev17.05 #MINVER#
  rte_eth_allmulticast_disable@DPDK_2.2 16.07~rc1
  rte_eth_allmulticast_enable@DPDK_2.2 16.07~rc1
  rte_eth_allmulticast_get@DPDK_2.2 16.07~rc1
- rte_eth_copy_pci_info@DPDK_2.2 16.07~rc1
  rte_eth_dev_allocate@DPDK_2.2 16.07~rc1
  rte_eth_dev_allocated@DPDK_2.2 16.07~rc1
  rte_eth_dev_attach@DPDK_2.2 16.07~rc1
@@ -45,8 +43,6 @@ librte_ethdev.so.17.05.0 librte-ethdev17.05 #MINVER#
  rte_eth_dev_l2_tunnel_offload_set@DPDK_16.04 16.07~rc1
  rte_eth_dev_mac_addr_add@DPDK_2.2 16.07~rc1
  rte_eth_dev_mac_addr_remove@DPDK_2.2 16.07~rc1
- rte_eth_dev_pci_probe@DPDK_16.11 16.11
- rte_eth_dev_pci_remove@DPDK_16.11 16.11
  rte_eth_dev_priority_flow_ctrl_set@DPDK_2.2 16.07~rc1
  rte_eth_dev_release_port@DPDK_2.2 16.07~rc1
  rte_eth_dev_rss_hash_conf_get@DPDK_2.2 16.07~rc1
@@ -66,10 +62,6 @@ librte_ethdev.so.17.05.0 librte-ethdev17.05 #MINVER#
  rte_eth_dev_set_mtu@DPDK_2.2 16.07~rc1
  rte_eth_dev_set_rx_queue_stats_mapping@DPDK_2.2 16.07~rc1
  rte_eth_dev_set_tx_queue_stats_mapping@DPDK_2.2 16.07~rc1
- rte_eth_dev_set_vf_rx@DPDK_2.2 16.07~rc1
- rte_eth_dev_set_vf_rxmode@DPDK_2.2 16.07~rc1
- rte_eth_dev_set_vf_tx@DPDK_2.2 16.07~rc1
- rte_eth_dev_set_vf_vlan_filter@DPDK_2.2 16.07~rc1
  rte_eth_dev_set_vlan_ether_type@DPDK_16.04 16.07~rc1
  rte_eth_dev_set_vlan_offload@DPDK_2.2 16.07~rc1
  rte_eth_dev_set_vlan_pvid@DPDK_2.2 16.07~rc1
@@ -102,7 +94,6 @@ librte_ethdev.so.17.05.0 librte-ethdev17.05 #MINVER#
  rte_eth_rx_queue_info_get@DPDK_2.2 16.07~rc1
  rte_eth_rx_queue_setup@DPDK_2.2 16.07~rc1
  rte_eth_set_queue_rate_limit@DPDK_2.2 16.07~rc1
- rte_eth_set_vf_rate_limit@DPDK_2.2 16.07~rc1
  rte_eth_speed_bitflag@DPDK_16.04 16.07~rc1
  rte_eth_stats_get@DPDK_2.2 16.07~rc1
  rte_eth_stats_reset@DPDK_2.2 16.07~rc1

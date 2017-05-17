@@ -7,7 +7,6 @@ librte_mempool.so.17.05.0 librte-mempool17.05 #MINVER#
  rte_mempool_cache_free@DPDK_16.07 16.07~rc1
  rte_mempool_calc_obj_size@DPDK_2.0 16.07~rc1
  rte_mempool_check_cookies@DPDK_16.07 16.07~rc1
- rte_mempool_count@DPDK_2.0 16.07~rc1
  rte_mempool_create@DPDK_2.0 16.07~rc1
  rte_mempool_create_empty@DPDK_16.07 16.07~rc1
  rte_mempool_dump@DPDK_2.0 16.07~rc1

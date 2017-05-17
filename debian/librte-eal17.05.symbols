@@ -12,8 +12,6 @@ librte_eal.so.17.05.0 librte-eal17.05 #MINVER#
  eal_parse_sysfs_value@DPDK_2.0 16.04
  eal_timer_source@DPDK_2.0 16.04
  lcore_config@DPDK_2.0 16.04
- pci_device_list@DPDK_2.0 16.04
- pci_driver_list@DPDK_2.0 16.04
  pci_get_sysfs_path@DPDK_16.07 16.07~rc1
  per_lcore__lcore_id@DPDK_2.0 16.04
  per_lcore__rte_errno@DPDK_2.0 16.04
@@ -40,12 +38,9 @@ librte_eal.so.17.05.0 librte-eal17.05 #MINVER#
  rte_eal_alarm_set@DPDK_2.0 16.04
  rte_eal_dev_attach@DPDK_16.11 16.11
  rte_eal_dev_detach@DPDK_16.11 16.11
- rte_eal_dev_init@DPDK_2.0 16.04
  rte_eal_devargs_add@DPDK_2.0 16.04
  rte_eal_devargs_dump@DPDK_2.0 16.04
  rte_eal_devargs_type_count@DPDK_2.0 16.04
- rte_eal_driver_register@DPDK_2.0 16.04
- rte_eal_driver_unregister@DPDK_2.0 16.04
  rte_eal_get_configuration@DPDK_2.0 16.04
  rte_eal_get_lcore_state@DPDK_2.0 16.04
  rte_eal_get_physmem_layout@DPDK_2.0 16.04
@@ -57,31 +52,12 @@ librte_eal.so.17.05.0 librte-eal17.05 #MINVER#
  rte_eal_mp_remote_launch@DPDK_2.0 16.04
  rte_eal_mp_wait_lcore@DPDK_2.0 16.04
  rte_eal_parse_devargs_str@DPDK_2.0 16.04
- rte_eal_pci_detach@DPDK_2.1 16.04
- rte_eal_pci_dump@DPDK_2.0 16.04
- rte_eal_pci_ioport_map@DPDK_16.04 16.04
- rte_eal_pci_ioport_read@DPDK_16.04 16.04
- rte_eal_pci_ioport_unmap@DPDK_16.04 16.04
- rte_eal_pci_ioport_write@DPDK_16.04 16.04
- rte_eal_pci_map_device@DPDK_16.04 16.04
- rte_eal_pci_probe@DPDK_2.0 16.04
- rte_eal_pci_probe_one@DPDK_2.0 16.04
- rte_eal_pci_read_config@DPDK_2.1 16.04
- rte_eal_pci_register@DPDK_2.0 16.04
- rte_eal_pci_scan@DPDK_2.0 16.04
- rte_eal_pci_unmap_device@DPDK_16.04 16.04
- rte_eal_pci_unregister@DPDK_2.0 16.04
- rte_eal_pci_write_config@DPDK_2.1 16.04
  rte_eal_primary_proc_alive@DPDK_16.04 16.04
  rte_eal_process_type@DPDK_2.0 16.04
  rte_eal_remote_launch@DPDK_2.0 16.04
  rte_eal_set_socket_permissions@DPDK_2.2 16.04
  rte_eal_tailq_lookup@DPDK_2.0 16.04
  rte_eal_tailq_register@DPDK_2.0 16.04
- rte_eal_vdev_init@DPDK_2.0 16.04
- rte_eal_vdev_uninit@DPDK_2.0 16.04
- rte_eal_vdrv_register@DPDK_16.11 16.11
- rte_eal_vdrv_unregister@DPDK_16.11 16.11
  rte_eal_wait_lcore@DPDK_2.0 16.04
  rte_epoll_ctl@DPDK_2.1 16.04
  rte_epoll_wait@DPDK_2.1 16.04
