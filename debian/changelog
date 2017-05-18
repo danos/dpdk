@@ -1,6 +1,6 @@
 dpdk (17.05-1~git1) UNRELEASED; urgency=medium
 
-  * New Upstream release 17.05; For a full list of changes
+  * New Upstream release 17.05; For a full list of changes (LP: #1691661)
     see http://dpdk.org/doc/guides/rel_notes/release_17_05.html
     - adapt to use MAJOR_ABI configuration to avoid the sub-lib abi
       version breakage of the past.
