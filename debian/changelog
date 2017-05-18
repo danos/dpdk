@@ -5,6 +5,9 @@ dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
     see http://dpdk.org/ml/archives/dev/2017-March/058930.html
   * dpdk.conf: add info about unwanted effects of multiple hugepage
     mountpoints
+  * d/p/dpdk-dev-v3-eal-sPAPR-IOMMU-support-in-pci-probing-for-vfio-pci-
+    in-ppc64le.patch: sPAPR IOMMU based pci probing enabled for vfio-pci
+    devices.
 
   [ Luca Boccassi ]
   * Simplify debian/rules by using upstream's install target
