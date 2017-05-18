@@ -12,6 +12,10 @@ dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
     - debian/control: enable arch onpackage
     - d/p/dpdk-dev-v4-i40e-implement-vector-PMD-for-altivec.patch: add i40e
       PMD / vector PMD implementation and enable by default on ppc64el
+  * fix library availability/dependency
+    - librte-kni is built on ppc64el, fix dependency from libdpdk-dev
+    - librte-pmd-fm10k1 is not built on ppc64el (empty pkg atm) adapt arch
+    - librte-pmd-i40e is built on all architectures now
 
   [ Luca Boccassi ]
   * Simplify debian/rules by using upstream's install target
