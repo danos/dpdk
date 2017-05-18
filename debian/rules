@@ -81,6 +81,12 @@ else
 BUILD_DOCS=y
 endif
 
+ifneq (,$(findstring nostatic,$(DEB_BUILD_OPTIONS)))
+BUILD_STATIC_LIB=n
+else
+BUILD_STATIC_LIB=y
+endif
+
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
 # optional binary kernel modules package. By default it will be built against
 # the current kernel, or ksrc can be passed with a path to the target kernel
@@ -179,7 +185,9 @@ ifeq (y,$(BUILD_DOCS))
 endif
 
 override_dh_auto_build-arch:
+ifeq (y,$(BUILD_STATIC_LIB))
 	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
+endif
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
 	# (but not both).
@@ -197,8 +205,10 @@ override_dh_auto_build-arch:
 override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
 	# Package: dpdk (runtime)
+ifeq (y,$(BUILD_STATIC_LIB))
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr libdir=$(LIBDIR) \
 		DESTDIR=debian/dpdk install-runtime
+endif
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr libdir=$(LIBDIR) \
 		DESTDIR=debian/dpdk install-runtime
 	mkdir -p debian/dpdk/etc/dpdk
@@ -234,7 +244,9 @@ override_dh_auto_install-arch:
 	mkdir -p debian/libdpdk-dev/usr/include
 	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
 	# all static libs are in the dev package
+ifeq (y,$(BUILD_STATIC_LIB))
 	mv debian/dpdk/$(LIBDIR)/lib*.a debian/libdpdk-dev/$(LIBDIR)/
+endif
 	# symlinks to last .so's are in the non versioned libdpdk-dev as well
 	# this allows multiple libdpdk-<NAME><VER> at different VER concurrently
 	# libdpdk-dev depends on all sublibs so symlinks are never broken
