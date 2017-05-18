@@ -1,0 +1,71 @@
+From ab338eb44ebb79840dab1de2742c07070ae3bf0e Mon Sep 17 00:00:00 2001
+From: Olivier Matz <olivier.matz@6wind.com>
+Date: Thu, 6 Apr 2017 16:14:55 +0200
+Subject: [PATCH] mk: fix lib filtering when linking app
+
+I get the following error when linking the test application:
+  build/lib/librte_pmd_thunderx_nicvf.a(nicvf_hw.o):
+  In function `nicvf_qsize_regbit':
+  drivers/net/thunderx/base/nicvf_hw.c:451: undefined reference to `log2'
+  build/lib/librte_pmd_thunderx_nicvf.a(nicvf_hw.o):
+  In function `nicvf_rss_reta_update':
+  drivers/net/thunderx/base/nicvf_hw.c:804: undefined reference to `log2'
+  build/lib/librte_pmd_thunderx_nicvf.a(nicvf_hw.o):
+  In function `nicvf_rss_reta_query':
+  drivers/net/thunderx/base/nicvf_hw.c:825: undefined reference to `log2'
+
+While I don't know why it does not happen for a default build, the error
+can be explained. The link command line is:
+
+   gcc -o test ... *.o ... -Wl,-lm ... -Wl,-lrte_pmd_thunderx_nicvf ...
+
+rte_pmd_thunderx_nicvf needs the math library, and it should be
+added after. This is not the case because the test application also
+adds the math library.
+
+The makefile already filters the libraries, but it keeps the first
+occurrence of the lib. Instead, the last one should be kept.
+
+Fixes: edf4d331dcdb ("mk: eliminate duplicates from libraries list")
+Cc: stable@dpdk.org
+
+Signed-off-by: Olivier Matz <olivier.matz@6wind.com>
+Acked-by: Thomas Monjalon <thomas.monjalon@6wind.com>
+---
+ mk/rte.app.mk | 19 +++++++++++++++----
+ 1 file changed, 15 insertions(+), 4 deletions(-)
+
+Origin: http://dpdk.org/browse/dpdk/commit/?id=ab338eb44ebb79840dab1de2742c07070ae3bf0e
+Original-Author: Olivier Matz <olivier.matz@6wind.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/dpdk/+bug/1691659
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Last-Update: 2017-05-18
+
+--- a/mk/rte.app.mk
++++ b/mk/rte.app.mk
+@@ -168,10 +168,21 @@
+ 
+ LDLIBS += $(_LDLIBS-y) $(CPU_LDLIBS) $(EXTRA_LDLIBS)
+ 
+-# Eliminate duplicates without sorting
+-LDLIBS := $(shell echo $(LDLIBS) | \
+-	awk '{for (i = 1; i <= NF; i++) { \
+-		if ($$i !~ /^-l.*/ || !seen[$$i]++) print $$i }}')
++# all the words except the first one
++allbutfirst = $(wordlist 2,$(words $(1)),$(1))
++
++# Eliminate duplicates without sorting, only keep the last occurrence
++filter-libs = \
++	$(if $(1),$(strip\
++		$(if \
++			$(and \
++				$(filter $(firstword $(1)),$(call allbutfirst,$(1))),\
++				$(filter -l%,$(firstword $(1)))),\
++			,\
++			$(firstword $(1))) \
++		$(call filter-libs,$(call allbutfirst,$(1)))))
++
++LDLIBS := $(call filter-libs,$(LDLIBS))
+ 
+ ifeq ($(RTE_DEVEL_BUILD)$(CONFIG_RTE_BUILD_SHARED_LIB),yy)
+ LDFLAGS += -rpath=$(RTE_SDK_BIN)/lib
