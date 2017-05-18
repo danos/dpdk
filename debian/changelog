@@ -11,6 +11,8 @@ dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
     and Debian's multiarch dir. Thanks Jan Blunck!
   * Clarify that only the kni and igb_uio kernel modules are
     distributed exclusively under the GPL2 in debian/copyright
+  * Add new DEB_BUILD_OPTIONS "nodocs" to allow users to avoid
+    building the DPDK documentation
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
 
