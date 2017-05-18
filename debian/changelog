@@ -18,6 +18,7 @@ dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
     - librte-pmd-i40e is built on all architectures now
   * Fix up thunderx to make arm support useful on more devices (LP: #1691659)
     - d/p/nicvf-00[01-10]* backports of 17.02/17.05 fixes for thunderx
+    - d/control: dependencies and package for librte-pmd-thunderx-nicvf
 
   [ Luca Boccassi ]
   * Simplify debian/rules by using upstream's install target
