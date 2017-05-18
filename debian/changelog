@@ -8,6 +8,10 @@ dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
   * d/p/dpdk-dev-v3-eal-sPAPR-IOMMU-support-in-pci-probing-for-vfio-pci-
     in-ppc64le.patch: sPAPR IOMMU based pci probing enabled for vfio-pci
     devices.
+  * enable librte-pmd-i40e1 for ppc64el
+    - debian/control: enable arch onpackage
+    - d/p/dpdk-dev-v4-i40e-implement-vector-PMD-for-altivec.patch: add i40e
+      PMD / vector PMD implementation and enable by default on ppc64el
 
   [ Luca Boccassi ]
   * Simplify debian/rules by using upstream's install target
