@@ -45,7 +45,7 @@ Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64],
             librte-pmd-ena1 (= ${binary:Version}),
             librte-pmd-enic1 (= ${binary:Version}) [amd64 arm64 i386],
             librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
-            librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386],
+            librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386 ppc64el],
             librte-pmd-ixgbe1 (= ${binary:Version}) [amd64 arm64 i386],
             librte-pmd-null-crypto1 (= ${binary:Version}),
             librte-pmd-null1 (= ${binary:Version}),
@@ -152,7 +152,7 @@ Depends: libpcap-dev,
          librte-pmd-ena1 (= ${binary:Version}),
          librte-pmd-enic1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
-         librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386],
+         librte-pmd-i40e1 (= ${binary:Version}) [amd64 i386 ppc64el],
          librte-pmd-ixgbe1 (= ${binary:Version}) [amd64 arm64 i386],
          librte-pmd-null-crypto1 (= ${binary:Version}),
          librte-pmd-null1 (= ${binary:Version}),
@@ -522,7 +522,7 @@ Description: Data Plane Development Kit (librte-pmd-fm10k runtime library)
  This package contains the runtime libraries for librte_pmd_fm10k.
 
 Package: librte-pmd-i40e1
-Architecture: amd64 i386
+Architecture: amd64 i386 ppc64el
 Multi-Arch: same
 Homepage: http://dpdk.org/doc/guides/nics/i40e.html
 Pre-Depends: ${misc:Pre-Depends}
