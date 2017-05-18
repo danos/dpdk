@@ -75,6 +75,12 @@ else
     PAR := "1"
 endif
 
+ifneq (,$(findstring nodocs,$(DEB_BUILD_OPTIONS)))
+BUILD_DOCS=n
+else
+BUILD_DOCS=y
+endif
+
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
 # optional binary kernel modules package. By default it will be built against
 # the current kernel, or ksrc can be passed with a path to the target kernel
@@ -159,14 +165,18 @@ endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
+ifeq (y,$(BUILD_DOCS))
 	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
 		doc-guides-man
+endif
 
 override_dh_auto_install-indep:
 	# Package: dpdk-doc
 	# All files based on the install-doc rule (includes examples)
+ifeq (y,$(BUILD_DOCS))
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk-doc install-doc
+endif
 
 override_dh_auto_build-arch:
 	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
