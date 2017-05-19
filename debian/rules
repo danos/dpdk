@@ -172,8 +172,7 @@ endif
 
 override_dh_auto_build-indep:
 ifeq (y,$(BUILD_DOCS))
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
-		doc-guides-man
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
 endif
 
 override_dh_auto_install-indep:
@@ -201,6 +200,10 @@ endif
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 		$(DPDK_SHARED_DIR)/.config
 	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
+ifeq (y,$(BUILD_DOCS))
+	# need to be around for dh_installman to be picked up
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
+endif
 
 override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
