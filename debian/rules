@@ -153,8 +153,7 @@ endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
-		doc-guides-man
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
 
 override_dh_auto_install-indep:
 	# Package: dpdk-doc
@@ -177,6 +176,8 @@ override_dh_auto_build-arch:
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 		$(DPDK_SHARED_DIR)/.config
 	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
+	# need to be around for dh_installman to be picked up
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
 
 override_dh_auto_install-arch: LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
