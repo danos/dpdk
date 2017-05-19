@@ -20,6 +20,9 @@ dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
     - d/p/nicvf-00[01-10]* backports of 17.02/17.05 fixes for thunderx
     - d/control: dependencies and package for librte-pmd-thunderx-nicvf
     - d/librte-pmd-thunderx-nicvf1.symbols: tracking library symbols
+  * fix dpdk-rte-kni dkms issues with kernel 4.11 (LP: #1691830)
+    - d/p/kni-fix-build-with-kernel-4.11.patch: fix pci_enable_msix usage
+    - d/p/kni-fix-ethtool-build-with-kernel-4.11.patch: Use new signal header
 
   [ Luca Boccassi ]
   * Simplify debian/rules by using upstream's install target
