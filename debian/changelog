@@ -24,6 +24,8 @@ dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
     - d/p/kni-fix-build-with-kernel-4.11.patch: fix pci_enable_msix usage
     - d/p/kni-fix-ethtool-build-with-kernel-4.11.patch: Use new signal header
   * ensure man pages are bundled with executables on all architectures
+  * d/p/fix-vhost-user-socket-permission.patch: updated to work with newer
+    openvswitch versions
 
   [ Luca Boccassi ]
   * Simplify debian/rules by using upstream's install target
