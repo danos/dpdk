@@ -1,0 +1,5 @@
+librte_pmd_thunderx_nicvf.so.1 librte-pmd-thunderx-nicvf1 #MINVER#
+# was not built before 16.11 plus updates
+ DPDK_16.07@DPDK_16.07 16.11
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

@@ -31,13 +31,11 @@ echo "OK"
 
 printf "\n\nChecking for expected secondary library dependencies\n"
 lddtree testlinkage.bin | grep '^        libpthread.so'
-lddtree testlinkage.bin | grep '^        librt.so'
 echo "OK"
 
 printf "\n\nChecking for expected feature dependent library dependencies\n"
 # features only used by the lib that we enabled
 ldd /usr/lib/*/librte_pmd_pcap.so | grep libpcap
-ldd /usr/lib/*/librte_pmd_xenvirt.so | grep libxenstore
 echo "OK"
 
 printf "\n\nChecking test execution\n"

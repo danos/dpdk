@@ -25,9 +25,17 @@ Fixes LP: #1546565
  So over time we have to check when we can drop it at the price of a config
  transition - likely OVS 2.6 won't need it anymore.
 
+*Update*
+ - the handling and lifecycle of this changed in Openvswitch 2.7 so we can no
+   more use internal_config.
+ - Also the upstreaming was aborted as that now clearly goes towards client
+   mode vhost sockets for this (and other issues).
+ - But until that is fully working we have to carry the workaround.
+ - Updated to work with Openvswitch 2.7 (and backward compatible to 2.6)
+
 Forwarded: yes
 Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
-Last-Update: 2016-09-28
+Last-Update: 2017-05-23
 
 --- a/doc/guides/testpmd_app_ug/run_app.rst
 +++ b/doc/guides/testpmd_app_ug/run_app.rst
@@ -68,26 +76,6 @@ Last-Update: 2016-09-28
  	{0,                     0, NULL, 0                        }
  };
  
-@@ -166,6 +168,8 @@
- #endif
- 	internal_cfg->vmware_tsc_map = 0;
- 	internal_cfg->create_uio_dev = 0;
-+	internal_cfg->vhost_sock_owner = NULL;
-+	internal_cfg->vhost_sock_perm = NULL;
- }
- 
- static int
---- a/lib/librte_eal/common/eal_internal_cfg.h
-+++ b/lib/librte_eal/common/eal_internal_cfg.h
-@@ -83,6 +83,8 @@
- 	volatile enum rte_intr_mode vfio_intr_mode;
- 	const char *hugefile_prefix;      /**< the base filename of hugetlbfs files */
- 	const char *hugepage_dir;         /**< specific hugetlbfs directory to use */
-+	const char *vhost_sock_owner;     /**< owner:group of vhost_user sockets */
-+	const char *vhost_sock_perm;      /**< permissions of vhost_user sockets */
- 
- 	unsigned num_hugepage_sizes;      /**< how many sizes on this system */
- 	struct hugepage_info hugepage_info[MAX_HUGEPAGE_SIZES];
 --- a/lib/librte_eal/common/eal_options.h
 +++ b/lib/librte_eal/common/eal_options.h
 @@ -83,6 +83,10 @@
@@ -127,7 +115,20 @@ Last-Update: 2016-09-28
  
  #include <rte_common.h>
  #include <rte_debug.h>
-@@ -354,6 +357,8 @@
+@@ -117,6 +120,12 @@
+ /* internal configuration */
+ struct internal_config internal_config;
+ 
++/* workaround to be able to create the sockets under a certain set of
++ * owner/permissions as specified to EAL until solved upstream */
++static uid_t debian_vhost_sock_uid = (uid_t)-1;
++static gid_t debian_vhost_sock_gid = (gid_t)-1;
++static mode_t debian_vhost_sock_perm = 0;
++
+ /* used by rte_rdtsc() */
+ int rte_cycles_vmware_tsc_map;
+ 
+@@ -354,6 +363,8 @@
  	       "  --"OPT_CREATE_UIO_DEV"    Create /dev/uioX (usually done by hotplug)\n"
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
  	       "  --"OPT_XEN_DOM0"          Support running on Xen dom0 without hugetlbfs\n"
@@ -136,26 +137,10 @@ Last-Update: 2016-09-28
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -611,6 +616,14 @@
- 			internal_config.create_uio_dev = 1;
- 			break;
- 
-+		case OPT_VHOST_OWNER_NUM:
-+			internal_config.vhost_sock_owner = optarg;
-+			break;
-+
-+		case OPT_VHOST_PERM_NUM:
-+			internal_config.vhost_sock_perm = optarg;
-+			break;
-+
- 		default:
- 			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
- 				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -943,3 +956,172 @@
- 	/* Module has been found */
- 	return 1;
+@@ -515,6 +526,121 @@
+ 	optarg = old_optarg;
  }
-+
+ 
 +/* Try to double the size of '*buf', return true
 + * if successful, and '*sizep' will be updated with
 + * the new size. Otherwise, return false.  */
@@ -271,56 +256,81 @@ Last-Update: 2016-09-28
 +	return e;
 +}
 +
+ /* Parse the argument given in the command line of the application */
+ static int
+ eal_parse_args(int argc, char **argv)
+@@ -611,6 +737,26 @@
+ 			internal_config.create_uio_dev = 1;
+ 			break;
+ 
++		case OPT_VHOST_OWNER_NUM:
++			if (get_owners_from_str(optarg, &debian_vhost_sock_uid,
++									&debian_vhost_sock_gid)) {
++				RTE_LOG(ERR, EAL,"vhost-user socket unable to get"
++					" specified user/group: %s\n", optarg);
++				debian_vhost_sock_uid = (uid_t)-1;
++				debian_vhost_sock_gid = (gid_t)-1;
++			}
++			else {
++				RTE_LOG(INFO, EAL,"socket owner specified as %s (%d:%d)\n",
++					optarg, debian_vhost_sock_uid, debian_vhost_sock_gid);
++			}
++			break;
++
++		case OPT_VHOST_PERM_NUM:
++			debian_vhost_sock_perm = (mode_t)strtoul(optarg, NULL, 0);
++			RTE_LOG(INFO, EAL,"socket perm specified as '%#o' from '%s'\n",
++					debian_vhost_sock_perm, optarg);
++			break;
++
+ 		default:
+ 			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
+ 				RTE_LOG(ERR, EAL, "Option %c is not supported "
+@@ -943,3 +1089,47 @@
+ 	/* Module has been found */
+ 	return 1;
+ }
++
 +static void
 +vhost_set_permissions(const char *vhost_sock_location)
 +{
-+	unsigned long int mode = strtoul(internal_config.vhost_sock_perm, NULL, 0);
-+	int err = chmod(vhost_sock_location, (mode_t)mode);
++	int err = chmod(vhost_sock_location, debian_vhost_sock_perm);
 +	if (err) {
 +		RTE_LOG(ERR, EAL,"vhost-user socket cannot set"
-+			" permissions to %s (%s).\n",
-+			internal_config.vhost_sock_perm, strerror(err));
++			" permissions to %#o (%s).\n",
++			debian_vhost_sock_perm, strerror(err));
 +		return;
 +	}
 +	RTE_LOG(INFO, EAL,"Socket %s changed permissions"
-+			" to %s\n", vhost_sock_location,
-+			internal_config.vhost_sock_perm);
++			" to %#o\n", vhost_sock_location,
++			debian_vhost_sock_perm);
 +}
 +
 +static void
 +vhost_set_ownership(const char *vhost_sock_location)
 +{
-+	uid_t vhuid=0;
-+	gid_t vhgid=0;
-+
-+	if (get_owners_from_str(internal_config.vhost_sock_owner, &vhuid, &vhgid)) {
-+		RTE_LOG(ERR, EAL,"vhost-user socket unable to get"
-+			" specified user/group: %s\n",
-+			internal_config.vhost_sock_owner);
-+		return;
-+	}
-+
-+	int err = chown(vhost_sock_location, vhuid, vhgid);
++	int err = chown(vhost_sock_location, debian_vhost_sock_uid, debian_vhost_sock_gid);
 +	if (err) {
 +		RTE_LOG(ERR, EAL,"vhost-user socket unable to set"
-+			" ownership to %s (%s).\n",
-+			internal_config.vhost_sock_owner, strerror(err));
++			" ownership to %d:%d (%s).\n",
++			debian_vhost_sock_uid, debian_vhost_sock_gid,
++			strerror(err));
 +		return;
 +	}
 +
 +	RTE_LOG(INFO, EAL,"Socket %s changed ownership"
-+			" to %s.\n", vhost_sock_location,
-+			internal_config.vhost_sock_owner);
++			" to %d:%d.\n", vhost_sock_location,
++			debian_vhost_sock_uid, debian_vhost_sock_gid);
 +}
 +
 +void
 +rte_eal_set_socket_permissions(const char *path)
 +{
-+	if (internal_config.vhost_sock_perm) {
++	if (debian_vhost_sock_perm != 0) {
 +		vhost_set_permissions(path);
 +	}
 +
-+	if (internal_config.vhost_sock_owner) {
++	if (debian_vhost_sock_uid != (uid_t)-1 || debian_vhost_sock_gid != (gid_t)-1) {
 +		vhost_set_ownership(path);
 +	}
 +}

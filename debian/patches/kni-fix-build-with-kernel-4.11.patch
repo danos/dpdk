@@ -1,0 +1,82 @@
+From d4d2380cbb02980bf0334601d9ce6ec5400413f9 Mon Sep 17 00:00:00 2001
+From: Ferruh Yigit <ferruh.yigit@intel.com>
+Date: Tue, 21 Mar 2017 09:54:48 +0000
+Subject: [PATCH] kni: fix build with kernel 4.11
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+compile error:
+.../build/build/lib/librte_eal/linuxapp/kni/kni_net.c:124:6:
+error: implicit declaration of function ‘signal_pending’
+[-Werror=implicit-function-declaration]
+  if (signal_pending(current) || ret_val <= 0) {
+      ^~~~~~~~~~~~~~
+
+Linux 4.11 moves signal function declarations to its own header file:
+Linux: 174cd4b1e5fb ("sched/headers: Prepare to move signal wakeup &
+sigpending methods from <linux/sched.h> into <linux/sched/signal.h>")
+
+Use new header file "linux/sched/signal.h" to fix the build error.
+
+Cc: stable@dpdk.org
+
+Reported-by: Jerin Jacob <jerin.jacob@caviumnetworks.com>
+Signed-off-by: Ferruh Yigit <ferruh.yigit@intel.com>
+Tested-by: Jerin Jacob <jerin.jacob@caviumnetworks.com>
+Tested-by: Pankaj Gupta <pagupta@redhat.com>
+---
+ lib/librte_eal/linuxapp/kni/compat.h  | 6 ++++++
+ lib/librte_eal/linuxapp/kni/kni_dev.h | 6 ++++++
+ 2 files changed, 12 insertions(+)
+
+Origin: http://dpdk.org/browse/dpdk/commit/?id=d4d2380cbb02980bf0334601d9ce6ec5400413f9
+Original-Author: Ferruh Yigit <ferruh.yigit@intel.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/dpdk/+bug/1691830
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Last-Update: 2017-05-19
+
+diff --git a/lib/librte_eal/linuxapp/kni/compat.h b/lib/librte_eal/linuxapp/kni/compat.h
+index 78da08e..d96275a 100644
+--- a/lib/librte_eal/linuxapp/kni/compat.h
++++ b/lib/librte_eal/linuxapp/kni/compat.h
+@@ -2,6 +2,8 @@
+  * Minimal wrappers to allow compiling kni on older kernels.
+  */
+ 
++#include <linux/version.h>
++
+ #ifndef RHEL_RELEASE_VERSION
+ #define RHEL_RELEASE_VERSION(a, b) (((a) << 8) + (b))
+ #endif
+@@ -67,3 +69,7 @@
+ 	(LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 34)))
+ #undef NET_NAME_UNKNOWN
+ #endif
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
++#define HAVE_SIGNAL_FUNCTIONS_OWN_HEADER
++#endif
+diff --git a/lib/librte_eal/linuxapp/kni/kni_dev.h b/lib/librte_eal/linuxapp/kni/kni_dev.h
+index 002e5fa..72385ab 100644
+--- a/lib/librte_eal/linuxapp/kni/kni_dev.h
++++ b/lib/librte_eal/linuxapp/kni/kni_dev.h
+@@ -30,9 +30,15 @@
+ #endif
+ #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+ 
++#include "compat.h"
++
+ #include <linux/if.h>
+ #include <linux/wait.h>
++#ifdef HAVE_SIGNAL_FUNCTIONS_OWN_HEADER
++#include <linux/sched/signal.h>
++#else
+ #include <linux/sched.h>
++#endif
+ #include <linux/netdevice.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+-- 
+2.7.4
+

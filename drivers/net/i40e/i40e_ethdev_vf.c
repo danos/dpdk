@@ -176,11 +176,11 @@ static const struct rte_i40evf_xstats_name_off rte_i40evf_stats_strings[] = {
 	{"rx_unknown_protocol_packets", offsetof(struct i40e_eth_stats,
 		rx_unknown_protocol)},
 	{"tx_bytes", offsetof(struct i40e_eth_stats, tx_bytes)},
-	{"tx_unicast_packets", offsetof(struct i40e_eth_stats, tx_bytes)},
-	{"tx_multicast_packets", offsetof(struct i40e_eth_stats, tx_bytes)},
-	{"tx_broadcast_packets", offsetof(struct i40e_eth_stats, tx_bytes)},
-	{"tx_dropped_packets", offsetof(struct i40e_eth_stats, tx_bytes)},
-	{"tx_error_packets", offsetof(struct i40e_eth_stats, tx_bytes)},
+	{"tx_unicast_packets", offsetof(struct i40e_eth_stats, tx_unicast)},
+	{"tx_multicast_packets", offsetof(struct i40e_eth_stats, tx_multicast)},
+	{"tx_broadcast_packets", offsetof(struct i40e_eth_stats, tx_broadcast)},
+	{"tx_dropped_packets", offsetof(struct i40e_eth_stats, tx_discards)},
+	{"tx_error_packets", offsetof(struct i40e_eth_stats, tx_errors)},
 };
 
 #define I40EVF_NB_XSTATS (sizeof(rte_i40evf_stats_strings) / \
@@ -361,6 +361,7 @@ i40evf_execute_vf_cmd(struct rte_eth_dev *dev, struct vf_cmd_info *args)
 		err = -1;
 		do {
 			ret = i40evf_read_pfmsg(dev, &info);
+			vf->cmd_retval = info.result;
 			if (ret == I40EVF_MSG_CMD) {
 				err = 0;
 				break;
@@ -965,7 +966,7 @@ i40evf_get_statics(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 						pstats->rx_broadcast;
 	stats->opackets = pstats->tx_broadcast + pstats->tx_multicast +
 						pstats->tx_unicast;
-	stats->ierrors = pstats->rx_discards;
+	stats->imissed = pstats->rx_discards;
 	stats->oerrors = pstats->tx_errors + pstats->tx_discards;
 	stats->ibytes = pstats->rx_bytes;
 	stats->obytes = pstats->tx_bytes;
@@ -1336,8 +1337,9 @@ i40evf_handle_aq_msg(struct rte_eth_dev *dev)
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
 	struct i40e_arq_event_info info;
-	struct i40e_virtchnl_msg *v_msg;
-	uint16_t pending, opcode;
+	uint16_t pending, aq_opc;
+	enum i40e_virtchnl_ops msg_opc;
+	enum i40e_status_code msg_ret;
 	int ret;
 
 	info.buf_len = I40E_AQ_BUF_SZ;
@@ -1346,7 +1348,6 @@ i40evf_handle_aq_msg(struct rte_eth_dev *dev)
 		return;
 	}
 	info.msg_buf = vf->aq_resp;
-	v_msg = (struct i40e_virtchnl_msg *)&info.desc;
 
 	pending = 1;
 	while (pending) {
@@ -1357,32 +1358,39 @@ i40evf_handle_aq_msg(struct rte_eth_dev *dev)
 				    "ret: %d", ret);
 			break;
 		}
-		opcode = rte_le_to_cpu_16(info.desc.opcode);
-
-		switch (opcode) {
+		aq_opc = rte_le_to_cpu_16(info.desc.opcode);
+		/* For the message sent from pf to vf, opcode is stored in
+		 * cookie_high of struct i40e_aq_desc, while return error code
+		 * are stored in cookie_low, Which is done by
+		 * i40e_aq_send_msg_to_vf in PF driver.*/
+		msg_opc = (enum i40e_virtchnl_ops)rte_le_to_cpu_32(
+						  info.desc.cookie_high);
+		msg_ret = (enum i40e_status_code)rte_le_to_cpu_32(
+						  info.desc.cookie_low);
+		switch (aq_opc) {
 		case i40e_aqc_opc_send_msg_to_vf:
-			if (v_msg->v_opcode == I40E_VIRTCHNL_OP_EVENT)
+			if (msg_opc == I40E_VIRTCHNL_OP_EVENT)
 				/* process event*/
 				i40evf_handle_pf_event(dev, info.msg_buf,
 						       info.msg_len);
 			else {
 				/* read message and it's expected one */
-				if (v_msg->v_opcode == vf->pend_cmd) {
-					vf->cmd_retval = v_msg->v_retval;
+				if (msg_opc == vf->pend_cmd) {
+					vf->cmd_retval = msg_ret;
 					/* prevent compiler reordering */
 					rte_compiler_barrier();
 					_clear_cmd(vf);
 				} else
 					PMD_DRV_LOG(ERR, "command mismatch,"
 						"expect %u, get %u",
-						vf->pend_cmd, v_msg->v_opcode);
+						vf->pend_cmd, msg_opc);
 				PMD_DRV_LOG(DEBUG, "adminq response is received,"
-					     " opcode = %d\n", v_msg->v_opcode);
+					     " opcode = %d\n", msg_opc);
 			}
 			break;
 		default:
 			PMD_DRV_LOG(ERR, "Request %u is not supported yet",
-				    opcode);
+				    aq_opc);
 			break;
 		}
 	}

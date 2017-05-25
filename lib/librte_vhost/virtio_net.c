@@ -195,6 +195,8 @@ copy_mbuf_to_desc(struct virtio_net *dev, struct vring_desc *descs,
 	struct vring_desc *desc;
 	uint64_t desc_addr;
 	struct virtio_net_hdr_mrg_rxbuf virtio_hdr = {{0, 0, 0, 0, 0, 0}, 0};
+	/* A counter to avoid desc dead loop chain */
+	uint16_t nr_desc = 1;
 
 	desc = &descs[desc_idx];
 	desc_addr = gpa_to_vva(dev, desc->addr);
@@ -233,7 +235,7 @@ copy_mbuf_to_desc(struct virtio_net *dev, struct vring_desc *descs,
 				/* Room in vring buffer is not enough */
 				return -1;
 			}
-			if (unlikely(desc->next >= size))
+			if (unlikely(desc->next >= size || ++nr_desc > size))
 				return -1;
 
 			desc = &descs[desc->next];
@@ -677,6 +679,7 @@ parse_ethernet(struct rte_mbuf *m, uint16_t *l4_proto, void **l4_hdr)
 	default:
 		m->l3_len = 0;
 		*l4_proto = 0;
+		*l4_hdr = NULL;
 		break;
 	}
 }
@@ -713,7 +716,7 @@ vhost_dequeue_offload(struct virtio_net_hdr *hdr, struct rte_mbuf *m)
 		}
 	}
 
-	if (hdr->gso_type != VIRTIO_NET_HDR_GSO_NONE) {
+	if (l4_hdr && hdr->gso_type != VIRTIO_NET_HDR_GSO_NONE) {
 		switch (hdr->gso_type & ~VIRTIO_NET_HDR_GSO_ECN) {
 		case VIRTIO_NET_HDR_GSO_TCPV4:
 		case VIRTIO_NET_HDR_GSO_TCPV6:

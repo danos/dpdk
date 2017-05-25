@@ -1,3 +1,44 @@
+dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * Merge stable update to 16.11.1; For a list of changes
+    see http://dpdk.org/ml/archives/dev/2017-March/058930.html
+  * dpdk.conf: add info about unwanted effects of multiple hugepage
+    mountpoints
+  * d/p/dpdk-dev-v3-eal-sPAPR-IOMMU-support-in-pci-probing-for-vfio-pci-
+    in-ppc64le.patch: sPAPR IOMMU based pci probing enabled for vfio-pci
+    devices.
+  * enable librte-pmd-i40e1 for ppc64el
+    - debian/control: enable arch onpackage
+    - d/p/dpdk-dev-v4-i40e-implement-vector-PMD-for-altivec.patch: add i40e
+      PMD / vector PMD implementation and enable by default on ppc64el
+  * fix library availability/dependency
+    - librte-kni is built on ppc64el, fix dependency from libdpdk-dev
+    - librte-pmd-fm10k1 is not built on ppc64el (empty pkg atm) adapt arch
+    - librte-pmd-i40e is built on all architectures now
+  * Fix up thunderx to make arm support useful on more devices (LP: #1691659)
+    - d/p/nicvf-00[01-10]* backports of 17.02/17.05 fixes for thunderx
+    - d/control: dependencies and package for librte-pmd-thunderx-nicvf
+    - d/librte-pmd-thunderx-nicvf1.symbols: tracking library symbols
+  * fix dpdk-rte-kni dkms issues with kernel 4.11 (LP: #1691830)
+    - d/p/kni-fix-build-with-kernel-4.11.patch: fix pci_enable_msix usage
+    - d/p/kni-fix-ethtool-build-with-kernel-4.11.patch: Use new signal header
+  * ensure man pages are bundled with executables on all architectures
+  * d/p/fix-vhost-user-socket-permission.patch: updated to work with newer
+    openvswitch versions
+
+  [ Luca Boccassi ]
+  * Simplify debian/rules by using upstream's install target
+    and Debian's multiarch dir. Thanks Jan Blunck!
+  * Clarify that only the kni and igb_uio kernel modules are
+    distributed exclusively under the GPL2 in debian/copyright
+  * Add new DEB_BUILD_OPTIONS "nodocs" to allow users to avoid
+    building the DPDK documentation
+  * Add new DEB_BUILD_OPTIONS "nostatic" to allow users to avoid
+    building the DPDK static libraries
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
+
 dpdk (16.11-1) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
@@ -16,14 +57,21 @@ dpdk (16.11-1) unstable; urgency=medium
   * Added changes
     - add qede pmd now built by default
     - add new librte-net library
-    - bump librte-eal version from 2 to 3 as package rename transition
-    - bump librte-cryptodev version from 1 to 2 as package rename transition
-    - bump librte-ethdev version from 4 to 5 and the library rename that was
-      made upstream as package rename transition
     - update symbols files to match the new release
     - make autotest dep8 test always pass (failed fatally on e.g. LP).
       We want to stabilize and get more logs of different environments before
       we can enable it as a gating test.
+    - Make dpdk-dev's ${RTE_SDK}/${RTE_TARGET}/lib symlink multiarch aware
+    - d/control: apply wrap and sort
+    - d/control: Make the python-pyelftools only a Suggests
+    - d/t/test-linkage: fix issues on non-x86 architectures
+    - provide older ABI levels via backward compatibility of new DPDK libraries
+      - d/control: add compat packages for old ABI versions
+      - d/rules: generate and use multiarch aware link files for the soname
+        mapping
+
+  [ Luca Boccassi ]
+  * Make dpdk suggest dpdk-doc (Closes: #847626)
 
   [ Luca Boccassi ]
   * Set maintainer to pkg-dpdk-dev alioth list

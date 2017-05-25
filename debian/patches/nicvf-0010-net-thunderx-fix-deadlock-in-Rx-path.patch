@@ -1,0 +1,58 @@
+From b31eb105463fa1844c19fde382dd6bd294329831 Mon Sep 17 00:00:00 2001
+From: Jerin Jacob <jerin.jacob@caviumnetworks.com>
+Date: Tue, 2 May 2017 00:11:55 +0530
+Subject: [PATCH] net/thunderx: fix deadlock in Rx path
+
+RBDR buffers are refilled when SW consumes the buffers from CQ.
+This creates deadlock case when CQ buffers exhausted due to lack
+of RBDR buffers. Fix is to refill the RBDR when rx_free_thresh
+meet, irrespective of the number of CQ buffers consumed.
+
+Fixes: e2d7fc9f0a24 ("net/thunderx: add single and multi-segment Rx")
+Cc: stable@dpdk.org
+
+Signed-off-by: Jerin Jacob <jerin.jacob@caviumnetworks.com>
+---
+ drivers/net/thunderx/nicvf_rxtx.c | 18 ++++++++----------
+ 1 file changed, 8 insertions(+), 10 deletions(-)
+
+Origin: http://dpdk.org/browse/dpdk/commit/?id=b31eb105463fa1844c19fde382dd6bd294329831
+Original-Author: Jerin Jacob <jerin.jacob@caviumnetworks.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/dpdk/+bug/1691659
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Last-Update: 2017-05-18
+
+--- a/drivers/net/thunderx/nicvf_rxtx.c
++++ b/drivers/net/thunderx/nicvf_rxtx.c
+@@ -469,11 +469,10 @@
+ 		rxq->head = cqe_head;
+ 		nicvf_addr_write(rxq->cq_door, to_process);
+ 		rxq->recv_buffers += to_process;
+-		if (rxq->recv_buffers > rxq->rx_free_thresh) {
+-			rxq->recv_buffers -= nicvf_fill_rbdr(rxq,
+-						rxq->rx_free_thresh);
+-			NICVF_RX_ASSERT(rxq->recv_buffers >= 0);
+-		}
++	}
++	if (rxq->recv_buffers > rxq->rx_free_thresh) {
++		rxq->recv_buffers -= nicvf_fill_rbdr(rxq, rxq->rx_free_thresh);
++		NICVF_RX_ASSERT(rxq->recv_buffers >= 0);
+ 	}
+ 
+ 	return to_process;
+@@ -563,11 +562,10 @@
+ 		rxq->head = cqe_head;
+ 		nicvf_addr_write(rxq->cq_door, to_process);
+ 		rxq->recv_buffers += buffers_consumed;
+-		if (rxq->recv_buffers > rxq->rx_free_thresh) {
+-			rxq->recv_buffers -=
+-				nicvf_fill_rbdr(rxq, rxq->rx_free_thresh);
+-			NICVF_RX_ASSERT(rxq->recv_buffers >= 0);
+-		}
++	}
++	if (rxq->recv_buffers > rxq->rx_free_thresh) {
++		rxq->recv_buffers -= nicvf_fill_rbdr(rxq, rxq->rx_free_thresh);
++		NICVF_RX_ASSERT(rxq->recv_buffers >= 0);
+ 	}
+ 
+ 	return to_process;

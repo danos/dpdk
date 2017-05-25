@@ -75,6 +75,18 @@ else
     PAR := "1"
 endif
 
+ifneq (,$(findstring nodocs,$(DEB_BUILD_OPTIONS)))
+BUILD_DOCS=n
+else
+BUILD_DOCS=y
+endif
+
+ifneq (,$(findstring nostatic,$(DEB_BUILD_OPTIONS)))
+BUILD_STATIC_LIB=n
+else
+BUILD_STATIC_LIB=y
+endif
+
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
 # optional binary kernel modules package. By default it will be built against
 # the current kernel, or ksrc can be passed with a path to the target kernel
@@ -126,6 +138,12 @@ override_dh_auto_clean:
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	test -L config/defconfig_$(DPDK_CONFIG) && rm -f config/defconfig_$(DPDK_CONFIG) || true
 
+override_dh_clean:
+	dh_clean
+	rm -f debian/libethdev4.links
+	rm -f debian/librte-cryptodev1.links
+	rm -f debian/librte-eal2.links
+
 override_dh_auto_configure:
 	# Add support for a custom defconfig file in the debian directory.
 ifneq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
@@ -153,17 +171,22 @@ endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
-		doc-guides-man
+ifeq (y,$(BUILD_DOCS))
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
+endif
 
 override_dh_auto_install-indep:
 	# Package: dpdk-doc
 	# All files based on the install-doc rule (includes examples)
+ifeq (y,$(BUILD_DOCS))
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk-doc install-doc
+endif
 
 override_dh_auto_build-arch:
+ifeq (y,$(BUILD_STATIC_LIB))
 	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
+endif
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
 	# (but not both).
@@ -177,13 +200,19 @@ override_dh_auto_build-arch:
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 		$(DPDK_SHARED_DIR)/.config
 	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
+ifeq (y,$(BUILD_DOCS))
+	# need to be around for dh_installman to be picked up
+	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
+endif
 
-override_dh_auto_install-arch: LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
 	# Package: dpdk (runtime)
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
+ifeq (y,$(BUILD_STATIC_LIB))
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr libdir=$(LIBDIR) \
 		DESTDIR=debian/dpdk install-runtime
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr \
+endif
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr libdir=$(LIBDIR) \
 		DESTDIR=debian/dpdk install-runtime
 	mkdir -p debian/dpdk/etc/dpdk
 	cp debian/dpdk.interfaces debian/dpdk/etc/dpdk/interfaces
@@ -192,8 +221,12 @@ override_dh_auto_install-arch:
 	ln -s /usr/share/dpdk/tools/dpdk-devbind.py \
 		debian/dpdk/sbin/dpdk-devbind
 	# Package: dpdk-dev (build environment)
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr \
+	# workaround to fix symbolic link creation
+	mkdir -p debian/dpdk-dev/$(LIBDIR)
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr libdir=$(LIBDIR) \
 		DESTDIR=debian/dpdk-dev install-sdk
+	# remove workaround
+	rm -fr debian/dpdk-dev/usr/lib
 	cp $(DPDK_SHARED_DIR)/.config debian/dpdk-dev/usr/share/dpdk/config
 	sed -e 's/SDK_TARGET/$(RTE_TARGET)/' debian/dpdk-sdk-env.sh.in > \
 		debian/dpdk-dev/usr/share/dpdk/dpdk-sdk-env.sh
@@ -201,22 +234,28 @@ override_dh_auto_install-arch:
 	mkdir -p debian/dpdk-dev/usr/share/dpdk/test
 	cp -a app/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
 	cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/
+	# since we move libs to multiarch dirs update the non aware symlink
+	rm debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
+	ln -rs debian/dpdk-dev/$(LIBDIR)/ \
+		debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
 	# Package: libdpdk-dev (bare headers, static devel libs and linker
 	# script)
 	mkdir -p debian/libdpdk-dev/$(LIBDIR)
 	# linker script
-	mv debian/dpdk/usr/lib/libdpdk.so debian/libdpdk-dev/$(LIBDIR)/
+	mv debian/dpdk/$(LIBDIR)/libdpdk.so debian/libdpdk-dev/$(LIBDIR)/
 	# includes
 	mkdir -p debian/libdpdk-dev/usr/include
 	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
 	# all static libs are in the dev package
-	mv debian/dpdk/usr/lib/lib*.a debian/libdpdk-dev/$(LIBDIR)/
+ifeq (y,$(BUILD_STATIC_LIB))
+	mv debian/dpdk/$(LIBDIR)/lib*.a debian/libdpdk-dev/$(LIBDIR)/
+endif
 	# symlinks to last .so's are in the non versioned libdpdk-dev as well
 	# this allows multiple libdpdk-<NAME><VER> at different VER concurrently
 	# libdpdk-dev depends on all sublibs so symlinks are never broken
-	mv debian/dpdk/usr/lib/*.so debian/libdpdk-dev/$(LIBDIR)/
+	mv debian/dpdk/$(LIBDIR)/*.so debian/libdpdk-dev/$(LIBDIR)/
 	# Package(s): libdpdk-<NAME><VER> (bare runtime libs)
-	for lib in $$(ls -1 debian/dpdk/usr/lib/*.so.*); do \
+	for lib in $$(ls -1 debian/dpdk/$(LIBDIR)/*.so.*); do \
 	  BN=$$(basename $${lib}); \
 	  VER=$$(echo $${BN} | sed -e 's/^.*\.so\.//'); \
 	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9]*$$//' | tr '_' '-'); \
@@ -244,6 +283,7 @@ override_dh_auto_install-arch:
 	LIBS=$$(sed -e 's/GROUP ( \(.*\) )/\1/' -e 's/lib/-l/g' -e 's/\.so//g' \
 		$(CURDIR)/debian/libdpdk-dev/$(LIBDIR)/libdpdk.so); \
 	sed -e "s/@DPDK_LIBS@/$${LIBS}/" -e "s/@VERSION@/$(VERSION)/" \
+		-e "s|@LIBDIR@|$(LIBDIR)|" \
 		debian/libdpdk.pc.in > debian/libdpdk-dev/$(LIBDIR)/pkgconfig/libdpdk.pc
 	# Package: dpdk-igb-uio-dkms
 	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(VERSION)
@@ -255,10 +295,19 @@ override_dh_auto_install-arch:
 		debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(VERSION)
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
-	mkdir -p debian/dpdk-modules-$(KVERS)/lib/modules/$(KVERS)/kernel/drivers/net
-	cp -a debian/build/shared-root/kmod/* \
-		debian/dpdk-modules-$(KVERS)/lib/modules/$(KVERS)/kernel/drivers/net
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) \
+		kerneldir=/lib/modules/$(KVERS)/extra/dpdk \
+		DESTDIR=debian/dpdk-modules-$(KVERS) install-kmod
 endif
+
+debian/libethdev4.links: debian/libethdev4.links.in
+	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
+debian/librte-cryptodev1.links: debian/librte-cryptodev1.links.in
+	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
+debian/librte-eal2.links: debian/librte-eal2.links.in
+	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
+override_dh_link: debian/libethdev4.links debian/librte-cryptodev1.links debian/librte-eal2.links
+	dh_link
 
 override_dh_dkms:
 	dh_dkms -V $(VERSION)
