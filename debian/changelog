@@ -37,6 +37,7 @@ dpdk (16.11.1-1~git1) UNRELEASED; urgency=medium
   * Add new DEB_BUILD_OPTIONS "nostatic" to allow users to avoid
     building the DPDK static libraries
   * Add try-restart to dpdk.init script
+  * Update Standards-Version to 4.0.0
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Dec 2016 16:58:37 +0100
 
