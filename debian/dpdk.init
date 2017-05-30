@@ -35,7 +35,7 @@ start)
     ;;
 stop)
     ;;
-restart|force-reload)
+try-restart|restart|force-reload)
     ;;
 status)
     output=$(/lib/dpdk/dpdk-init --status 2>&1) || error="$?"
