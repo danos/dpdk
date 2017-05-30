@@ -75,7 +75,7 @@ else
     PAR := "1"
 endif
 
-ifneq (,$(findstring nodocs,$(DEB_BUILD_OPTIONS)))
+ifneq (,$(findstring nodoc,$(DEB_BUILD_OPTIONS)))
 BUILD_DOCS=n
 else
 BUILD_DOCS=y
