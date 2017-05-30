@@ -841,7 +841,7 @@ Description: Data Plane Development Kit (librte-cryptodev runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains an ABI compatibility link for an older version of the
- the runtime libraries for librte_cryptodev.
+ runtime libraries for librte_cryptodev.
 
 Package: librte-eal2
 Architecture: amd64 arm64 i386 ppc64el
