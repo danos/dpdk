@@ -431,7 +431,8 @@ mlx5_tx_burst(void *dpdk_txq, struct rte_mbuf **pkts, uint16_t pkts_n)
 #ifdef MLX5_PMD_SOFT_COUNTERS
 		total_length = length;
 #endif
-		assert(length >= MLX5_WQE_DWORD_SIZE);
+		if (length < (MLX5_WQE_DWORD_SIZE + 2))
+			break;
 		/* Update element. */
 		(*txq->elts)[elts_head] = buf;
 		elts_head = (elts_head + 1) & (elts_n - 1);
@@ -1290,7 +1291,7 @@ mlx5_rx_burst(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 		&(*rxq->cqes)[rxq->cq_ci & cqe_cnt];
 	unsigned int i = 0;
 	unsigned int rq_ci = rxq->rq_ci << sges_n;
-	int len; /* keep its value across iterations. */
+	int len = 0; /* keep its value across iterations. */
 
 	while (pkts_n) {
 		unsigned int idx = rq_ci & wqe_cnt;
@@ -1356,7 +1357,7 @@ mlx5_rx_burst(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 					pkt->ol_flags |=
 						rxq_cq_to_ol_flags(rxq, cqe);
 				}
-				if (cqe->hdr_type_etc &
+				if (ntohs(cqe->hdr_type_etc) &
 				    MLX5_CQE_VLAN_STRIPPED) {
 					pkt->ol_flags |= PKT_RX_VLAN_PKT |
 						PKT_RX_VLAN_STRIPPED;
