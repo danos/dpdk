@@ -460,6 +460,7 @@ static void i40e_set_default_mac_addr(struct rte_eth_dev *dev,
 				      struct ether_addr *mac_addr);
 
 static int i40e_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu);
+static void i40e_notify_all_vfs_link_status(struct rte_eth_dev *dev);
 
 static const struct rte_pci_id pci_id_i40e_map[] = {
 	{ RTE_PCI_DEVICE(I40E_INTEL_VENDOR_ID, I40E_DEV_ID_SFP_XL710) },
@@ -2068,6 +2069,8 @@ out:
 	rte_i40e_dev_atomic_write_link_status(dev, &link);
 	if (link.link_status == old.link_status)
 		return -1;
+
+	i40e_notify_all_vfs_link_status(dev);
 
 	return 0;
 }
@@ -4105,6 +4108,7 @@ i40e_veb_setup(struct i40e_pf *pf, struct i40e_vsi *vsi)
 			    hw->aq.asq_last_status);
 		goto fail;
 	}
+	veb->enabled_tc = I40E_DEFAULT_TCMAP;
 
 	/* get statistics index */
 	ret = i40e_aq_get_veb_parameters(hw, veb->seid, NULL, NULL,
@@ -5504,11 +5508,9 @@ i40e_dev_handle_aq_msg(struct rte_eth_dev *dev)
 			break;
 		case i40e_aqc_opc_get_link_status:
 			ret = i40e_dev_link_update(dev, 0);
-			if (!ret) {
-				i40e_notify_all_vfs_link_status(dev);
+			if (!ret)
 				_rte_eth_dev_callback_process(dev,
 					RTE_ETH_EVENT_INTR_LSC, NULL);
-			}
 			break;
 		default:
 			PMD_DRV_LOG(ERR, "Request %u is not supported yet",
@@ -7051,7 +7053,44 @@ i40e_set_hash_filter_global_config(struct i40e_hw *hw,
 		pctype = i40e_flowtype_to_pctype(i);
 		reg = (g_cfg->sym_hash_enable_mask[0] & (1UL << i)) ?
 				I40E_GLQF_HSYM_SYMH_ENA_MASK : 0;
-		i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(pctype), reg);
+		if (hw->mac.type == I40E_MAC_X722) {
+			if (pctype == I40E_FILTER_PCTYPE_NONF_IPV4_UDP) {
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_IPV4_UDP), reg);
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_UNICAST_IPV4_UDP),
+				  reg);
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV4_UDP),
+				  reg);
+			} else if (pctype == I40E_FILTER_PCTYPE_NONF_IPV4_TCP) {
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_IPV4_TCP), reg);
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_IPV4_TCP_SYN_NO_ACK),
+				  reg);
+			} else if (pctype == I40E_FILTER_PCTYPE_NONF_IPV6_UDP) {
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_IPV6_UDP), reg);
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_UNICAST_IPV6_UDP),
+				  reg);
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_MULTICAST_IPV6_UDP),
+				  reg);
+			} else if (pctype == I40E_FILTER_PCTYPE_NONF_IPV6_TCP) {
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_IPV6_TCP), reg);
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(
+				  I40E_FILTER_PCTYPE_NONF_IPV6_TCP_SYN_NO_ACK),
+				  reg);
+			} else {
+				i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(pctype),
+				  reg);
+			}
+		} else {
+			i40e_write_rx_ctl(hw, I40E_GLQF_HSYM(pctype), reg);
+		}
 	}
 
 	reg = i40e_read_rx_ctl(hw, I40E_GLQF_CTL);
