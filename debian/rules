@@ -128,6 +128,13 @@ endif
 
 override_dh_gencontrol:
 	dh_gencontrol
+	# debian/files will not exist until dh_gencontrol has ran at least once,
+	# so we need to run gencontrol for libdpdk-dev and libdpdk-dbgsym after.
+	# The list of libraries and PMDs is everchanging, so generate the dependency
+	# list for libdpdk-dev to avoid having to maintain it manually.
+	# Same for the recommends list for dpdk, were we want the PMDs and the mempools.
+	dh_gencontrol -p libdpdk-dev -- -V"librte:Depends=`grep -E 'librte-*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p dpdk -- -V"librte:Recommends=`grep -E 'librte-(pmd|mempool).*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
 ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
 	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
 		-v`cat debian/VERSION` \
