@@ -15,6 +15,9 @@ dpdk (16.11.2-1~git1) UNRELEASED; urgency=medium
     librte/PMD binary package's dbgsym. Keep it disabled by default, and
     let users choose to enable it by passing dbgsym_meta via DEB_BUILD_OPTIONS.
     Thanks Jan Blunck for the patch!
+  * Generate dependency list of libdpdk-dev to all librte and PMDs packages
+    dynamically at build time.
+  * Generate list of recommends for dpdk dynamically at build time.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Jun 2017 10:05:44 -0600
 
