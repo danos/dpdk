@@ -273,6 +273,11 @@ endif
 	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
 	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
 	  fi; \
+	  if [ "$${LIBF#librte_mempool_}x" != "$${LIBF}x" ]; then \
+	    mkdir -p $${LIBD}/dpdk-pmds; \
+	    echo "MEMPOOL: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
+	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
+	  fi; \
 	  if [ "$${LIBF#librte_eal}x" != "$${LIBF}x" ]; then \
 	    mkdir -p $${LIBD}/dpdk-pmds; \
 	  fi; \
