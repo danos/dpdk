@@ -113,17 +113,6 @@ DPDK_CONFIG_BUILD_KMOD=y
 # dpkg-genchanges, and also would require a lot of overrides for debhelpers.
 get_built_using	?= $(filter-out (=),$(shell dpkg-query -f='$${source:Package} (=$${source:Version})' -W $1))
 
-override_dh_gencontrol:
-	dh_gencontrol
-	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
-		-v`cat debian/VERSION` \
-		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
-	./debian/dh-dbgsym-metapkg libdpdk$(DPDK_ABI)-dbgsym
-
-override_dh_builddeb:
-	dh_builddeb
-	dh_builddeb -plibdpdk$(DPDK_ABI)-dbgsym
-
 build:
 	@if [ x"$(KVERS)" = x ] ; then \
 	    echo 'No version in $(KSRC)/include/linux/version.h' >&2; \
@@ -136,6 +125,29 @@ endif
 
 %:
 	dh $@ --with python2,dkms
+
+override_dh_gencontrol:
+	dh_gencontrol
+ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
+	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
+		-v`cat debian/VERSION` \
+		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
+endif
+ifneq (,$(findstring dbgsym_meta,$(DEB_BUILD_OPTIONS)))
+	./debian/dh-dbgsym-metapkg libdpdk$(DPDK_ABI)-dbgsym
+endif
+
+# dbgsym_meta can be passed via DEB_BUILD_OPTIONS to enable building the
+# optional dbgsym meta package libdpdk<ABI>-dbgsym.
+# This is not built by default as it would go in main but depend on
+# packages in the debian-debug archive.
+# Debian Developers and FTP masters strongly discourage this.
+# We provide this optional flag as a convenience for rebuilders.
+ifneq (,$(findstring dbgsym_meta,$(DEB_BUILD_OPTIONS)))
+override_dh_builddeb:
+	dh_builddeb
+	dh_builddeb -plibdpdk$(DPDK_ABI)-dbgsym
+endif
 
 override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
