@@ -162,12 +162,6 @@ override_dh_auto_clean:
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	test -L config/defconfig_$(DPDK_CONFIG) && rm -f config/defconfig_$(DPDK_CONFIG) || true
 
-override_dh_clean:
-	dh_clean
-	rm -f debian/libethdev4.links
-	rm -f debian/librte-cryptodev1.links
-	rm -f debian/librte-eal2.links
-
 override_dh_auto_configure:
 	# Add support for a custom defconfig file in the debian directory.
 ifneq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
@@ -328,15 +322,6 @@ ifneq (,$(KVERS))
 		kerneldir=/lib/modules/$(KVERS)/extra/dpdk \
 		DESTDIR=debian/dpdk-modules-$(KVERS) install-kmod
 endif
-
-debian/libethdev4.links: debian/libethdev4.links.in
-	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
-debian/librte-cryptodev1.links: debian/librte-cryptodev1.links.in
-	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
-debian/librte-eal2.links: debian/librte-eal2.links.in
-	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
-override_dh_link: debian/libethdev4.links debian/librte-cryptodev1.links debian/librte-eal2.links
-	dh_link
 
 override_dh_dkms:
 	dh_dkms -V $(VERSION)
