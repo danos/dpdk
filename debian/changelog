@@ -24,6 +24,8 @@ dpdk (16.11.2-1~git1) UNRELEASED; urgency=medium
     In 17.05 and newer a mempool framework was added, that has to be loaded
     like a PMD. So any "plugin" will be linked in RTE_EAL_PMD_PATH just like
     the PMDs. No mempool plugins are built for now, so it is currently a no-op.
+  * Drop libethdev4, librte-cryptodev1 and librte-eal2 transitional packages,
+    no longer needed.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Jun 2017 10:05:44 -0600
 
