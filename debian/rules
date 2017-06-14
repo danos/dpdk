@@ -38,6 +38,7 @@ ifeq (yes, $(dpkg_version_lt))
 endif
 
 export RTE_DEVEL_BUILD=n
+export EXTRA_CFLAGS+=-g
 
 # People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
 # RTE_TARGET via DEB_BUILD_OPTIONS if they like
