@@ -200,7 +200,7 @@ Description: Data Plane Development Kit (libethdev runtime library)
 Package: librte-acl2
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__ethdev_8h.html
+Homepage: http://dpdk.org/doc/api/rte__acl_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -226,6 +226,7 @@ Description: Data Plane Development Kit (librte-cfgfile runtime library)
 Package: librte-cmdline2
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
+Homepage: http://dpdk.org/doc/api/cmdline_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -454,6 +455,7 @@ Description: Data Plane Development Kit (librte-pmd-af-packet runtime library)
 Package: librte-pmd-bnxt1
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
+Homepage: http://dpdk.org/doc/guides/nics/bnxt.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -781,7 +783,7 @@ Description: Data Plane Development Kit (librte_timer runtime library)
 Package: librte-vhost3
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__virtio__net_8h.html
+Homepage: http://dpdk.org/doc/api/rte__vhost_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0

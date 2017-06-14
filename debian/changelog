@@ -19,6 +19,9 @@ dpdk (16.11.4-1+deb9u1) UNRELEASED; urgency=medium
   * d/p/igb_uio-switch-to-new-irq-function-for-MSI-X.patch: fix dkms issue
     in kernel 4.12 (LP: #1700768)
 
+  [ Charles (Chas) Williams ]
+  * Fix upstream documentation links in d/control.
+
  -- Luca Boccassi <bluca@debian.org>  Sun, 14 Jan 2018 16:41:37 +0000
 
 dpdk (16.11-1) unstable; urgency=medium
