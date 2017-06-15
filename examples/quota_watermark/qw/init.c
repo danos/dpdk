@@ -57,7 +57,7 @@ static const struct rte_eth_conf port_conf = {
 		.hw_ip_checksum = 0, /**< IP checksum offload disabled */
 		.hw_vlan_filter = 0, /**< VLAN filtering disabled */
 		.jumbo_frame    = 0, /**< Jumbo Frame Support disabled */
-		.hw_strip_crc   = 0, /**< CRC stripped by hardware */
+		.hw_strip_crc   = 1, /**< CRC stripped by hardware */
 	},
 	.txmode = {
 		.mq_mode = ETH_DCB_NONE,
@@ -165,7 +165,7 @@ setup_shared_variables(void)
     const struct rte_memzone *qw_memzone;
 
     qw_memzone = rte_memzone_reserve(QUOTA_WATERMARK_MEMZONE_NAME, 2 * sizeof(int),
-                                     rte_socket_id(), RTE_MEMZONE_2MB);
+                                     rte_socket_id(), 0);
     if (qw_memzone == NULL)
         rte_exit(EXIT_FAILURE, "%s\n", rte_strerror(rte_errno));
 

@@ -31,10 +31,10 @@
 #    in the Debian kernel package names (in other words, the ABI version, not
 #    the package version).
 #
-#  * Make the package recommend linux-image-$(KVERS) as appropriate for the
-#    kernel version that we're building against.  Use recommend rather than
-#    depends since the user may have built their own kernel outside of the
-#    Debian package infrastructure.
+#  * Make the package depend on linux-image-$(KVERS) (= version) as appropriate
+#    for the kernel version that we're building against.  Use depend as the
+#    kernel ABI is not stable and it's not guaranteed that a module built
+#    against a version of the headers will work under a different kernel.
 #
 #  * Save the version number of the binary package in debian/VERSION for later
 #    use by dh_gencontrol.  This will be the version number of the source
@@ -79,7 +79,12 @@ elif [ ! -f "$changelog" ] ; then
         dpdk_kvers=`perl debian/kernel-version "$1"`
     fi
     if [ -z "$KDREV" ] ; then
-        dpdk_kdrev="${dpdk_kvers}-1"
+        set +e
+        dpdk_kdrev=`dpkg-query -W -f='${Version}\n' linux-headers-${dpdk_kvers} 2> /dev/null`
+        if [ $? -ne 0 ] ; then
+            dpdk_kdrev="${dpdk_kvers}-1"
+        fi
+        set -e
     else
         dpdk_kvers="${dpdk_kvers}${INT_SUBARCH}"
         dpdk_kdrev="${KDREV}"
@@ -101,7 +106,7 @@ dpdk_kdrev="$(echo "$dpdk_kdrev" | tr _ -)"
 
 # Generate the control file from the template.
 
-sed "s/#KVERS#/${dpdk_kvers}/g" debian/control.modules.in > debian/control.modules
+sed -e "s/#KVERS#/${dpdk_kvers}/g" -e "s/#KDREV#/(= ${dpdk_kdrev})/g" debian/control.modules.in > debian/control.modules
 
 # Now, calcuate the binary package version.  Extract the epoch from the kernel
 # package revision and add it to the beginning of the binary package version

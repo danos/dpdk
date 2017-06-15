@@ -545,6 +545,9 @@ virtio_free_queues(struct virtio_hw *hw)
 	int queue_type;
 	uint16_t i;
 
+	if (hw->vqs == NULL)
+		return;
+
 	for (i = 0; i < nr_vq; i++) {
 		vq = hw->vqs[i];
 		if (!vq)
@@ -563,9 +566,11 @@ virtio_free_queues(struct virtio_hw *hw)
 		}
 
 		rte_free(vq);
+		hw->vqs[i] = NULL;
 	}
 
 	rte_free(hw->vqs);
+	hw->vqs = NULL;
 }
 
 static int
@@ -1210,11 +1215,11 @@ virtio_init_device(struct rte_eth_dev *eth_dev, uint64_t req_features)
 
 	rte_eth_copy_pci_info(eth_dev, pci_dev);
 
-	/* If host does not support status then disable LSC */
-	if (!vtpci_with_feature(hw, VIRTIO_NET_F_STATUS))
-		eth_dev->data->dev_flags &= ~RTE_ETH_DEV_INTR_LSC;
-	else
+	/* If host does not support both status and MSI-X then disable LSC */
+	if (vtpci_with_feature(hw, VIRTIO_NET_F_STATUS) && hw->use_msix)
 		eth_dev->data->dev_flags |= RTE_ETH_DEV_INTR_LSC;
+	else
+		eth_dev->data->dev_flags &= ~RTE_ETH_DEV_INTR_LSC;
 
 	rx_func_get(eth_dev);
 
@@ -1550,9 +1555,6 @@ virtio_dev_start(struct rte_eth_dev *dev)
 		}
 	}
 
-	/* Initialize Link state */
-	virtio_dev_link_update(dev, 0);
-
 	/*Notify the backend
 	 *Otherwise the tap backend might already stop its queue due to fullness.
 	 *vhost backend will have no chance to be waked up
@@ -1581,6 +1583,11 @@ virtio_dev_start(struct rte_eth_dev *dev)
 		txvq = dev->data->tx_queues[i];
 		VIRTQUEUE_DUMP(txvq->vq);
 	}
+
+	hw->started = 1;
+
+	/* Initialize Link state */
+	virtio_dev_link_update(dev, 0);
 
 	return 0;
 }
@@ -1636,6 +1643,7 @@ static void virtio_dev_free_mbufs(struct rte_eth_dev *dev)
 static void
 virtio_dev_stop(struct rte_eth_dev *dev)
 {
+	struct virtio_hw *hw = dev->data->dev_private;
 	struct rte_eth_link link;
 
 	PMD_INIT_LOG(DEBUG, "stop");
@@ -1643,6 +1651,7 @@ virtio_dev_stop(struct rte_eth_dev *dev)
 	if (dev->data->dev_conf.intr_conf.lsc)
 		rte_intr_disable(&dev->pci_dev->intr_handle);
 
+	hw->started = 0;
 	memset(&link, 0, sizeof(link));
 	virtio_dev_atomic_write_link_status(dev, &link);
 }
@@ -1659,7 +1668,9 @@ virtio_dev_link_update(struct rte_eth_dev *dev, __rte_unused int wait_to_complet
 	link.link_duplex = ETH_LINK_FULL_DUPLEX;
 	link.link_speed  = SPEED_10G;
 
-	if (vtpci_with_feature(hw, VIRTIO_NET_F_STATUS)) {
+	if (hw->started == 0) {
+		link.link_status = ETH_LINK_DOWN;
+	} else if (vtpci_with_feature(hw, VIRTIO_NET_F_STATUS)) {
 		PMD_INIT_LOG(DEBUG, "Get link status from hw");
 		vtpci_read_dev_config(hw,
 				offsetof(struct virtio_net_config, status),

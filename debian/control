@@ -20,7 +20,7 @@ Build-Depends: debhelper (>= 9),
                python-sphinx-rtd-theme,
                texlive-fonts-recommended,
                texlive-latex-extra
-Standards-Version: 3.9.8
+Standards-Version: 4.0.0
 Section: libs
 Homepage: http://www.dpdk.org
 Vcs-Git: https://gerrit.fd.io/r/deb_dpdk
@@ -35,26 +35,7 @@ Depends: hwdata,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends}
-Recommends: librte-pmd-af-packet1 (= ${binary:Version}),
-            librte-pmd-bnxt1 (= ${binary:Version}),
-            librte-pmd-bond1 (= ${binary:Version}),
-            librte-pmd-cxgbe1 (= ${binary:Version}),
-            librte-pmd-e1000-1 (= ${binary:Version}),
-            librte-pmd-ena1 (= ${binary:Version}),
-            librte-pmd-enic1 (= ${binary:Version}) [amd64 arm64 i386],
-            librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
-            librte-pmd-i40e1 (= ${binary:Version}),
-            librte-pmd-ixgbe1 (= ${binary:Version}) [amd64 arm64 i386],
-            librte-pmd-null-crypto1 (= ${binary:Version}),
-            librte-pmd-null1 (= ${binary:Version}),
-            librte-pmd-pcap1 (= ${binary:Version}),
-            librte-pmd-qede1 (= ${binary:Version}),
-            librte-pmd-ring2 (= ${binary:Version}),
-            librte-pmd-thunderx-nicvf1 (= ${binary:Version}),
-            librte-pmd-vhost1 (= ${binary:Version}),
-            librte-pmd-virtio1 (= ${binary:Version}),
-            librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
-            librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386]
+Recommends: ${librte:Recommends},
 Suggests: dpdk-doc,
           dpdk-igb-uio-dkms (= ${binary:Version}),
           dpdk-rte-kni-dkms (= ${binary:Version}),
@@ -124,53 +105,7 @@ Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libpcap-dev,
-         librte-acl2 (= ${binary:Version}),
-         librte-cfgfile2 (= ${binary:Version}),
-         librte-cmdline2 (= ${binary:Version}),
-         librte-cryptodev2 (= ${binary:Version}),
-         librte-distributor1 (= ${binary:Version}),
-         librte-eal3 (= ${binary:Version}),
-         librte-ethdev5 (= ${binary:Version}),
-         librte-hash2 (= ${binary:Version}),
-         librte-ip-frag1 (= ${binary:Version}),
-         librte-jobstats1 (= ${binary:Version}),
-         librte-kni2 (= ${binary:Version}) [amd64 arm64 ppc64el],
-         librte-kvargs1 (= ${binary:Version}),
-         librte-lpm2 (= ${binary:Version}),
-         librte-mbuf2 (= ${binary:Version}),
-         librte-mempool2 (= ${binary:Version}),
-         librte-meter1 (= ${binary:Version}),
-         librte-net1 (= ${binary:Version}),
-         librte-pdump1 (= ${binary:Version}),
-         librte-pipeline3 (= ${binary:Version}),
-         librte-pmd-af-packet1 (= ${binary:Version}),
-         librte-pmd-bnxt1 (= ${binary:Version}),
-         librte-pmd-bond1 (= ${binary:Version}),
-         librte-pmd-cxgbe1 (= ${binary:Version}),
-         librte-pmd-e1000-1 (= ${binary:Version}),
-         librte-pmd-ena1 (= ${binary:Version}),
-         librte-pmd-enic1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-fm10k1 (= ${binary:Version}) [amd64 i386],
-         librte-pmd-i40e1 (= ${binary:Version}),
-         librte-pmd-ixgbe1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-null-crypto1 (= ${binary:Version}),
-         librte-pmd-null1 (= ${binary:Version}),
-         librte-pmd-pcap1 (= ${binary:Version}),
-         librte-pmd-qede1 (= ${binary:Version}),
-         librte-pmd-ring2 (= ${binary:Version}),
-         librte-pmd-thunderx-nicvf1 (= ${binary:Version}),
-         librte-pmd-vhost1 (= ${binary:Version}),
-         librte-pmd-virtio1 (= ${binary:Version}),
-         librte-pmd-vmxnet3-uio1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-xenvirt1 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-port3 (= ${binary:Version}),
-         librte-power1 (= ${binary:Version}),
-         librte-reorder1 (= ${binary:Version}),
-         librte-ring1 (= ${binary:Version}),
-         librte-sched1 (= ${binary:Version}),
-         librte-table2 (= ${binary:Version}),
-         librte-timer1 (= ${binary:Version}),
-         librte-vhost3 (= ${binary:Version}),
+         ${librte:Depends},
          ${misc:Depends}
 Description: Data Plane Development Kit (basic development files)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -196,7 +131,7 @@ Description: Data Plane Development Kit (libethdev runtime library)
 Package: librte-acl2
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__ethdev_8h.html
+Homepage: http://dpdk.org/doc/api/rte__acl_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -222,6 +157,7 @@ Description: Data Plane Development Kit (librte-cfgfile runtime library)
 Package: librte-cmdline2
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
+Homepage: http://dpdk.org/doc/api/cmdline_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -434,6 +370,7 @@ Description: Data Plane Development Kit (librte-pmd-af-packet runtime library)
 Package: librte-pmd-bnxt1
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
+Homepage: http://dpdk.org/doc/guides/nics/bnxt.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -761,7 +698,7 @@ Description: Data Plane Development Kit (librte_timer runtime library)
 Package: librte-vhost3
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__virtio__net_8h.html
+Homepage: http://dpdk.org/doc/api/rte__vhost_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -794,66 +731,4 @@ Description: Data Plane Development Kit (librte_pmd_thunderx_nicvf runtime libra
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pmd_thunderx_nicvf.
-
-# All following packages are for ABI compatibility to older releases.
-# Newer DPDK versions are ABI compatible to older ones for at least one release
-# and more if maintainable.
-#
-# The cross dependencies in DPDK libraries would otherwise force us to conflict
-# with older ABI versions to avoid double ld.so resolution
-# (https://lists.ubuntu.com/archives/ubuntu-devel/2017-February/039659.html).
-#
-# But the conflicts in debian/control would make the old versions and thereby
-# the dependent applications non-installable until there is a rebuild (as other
-# updates would do).
-# But for our case that would deny most benefits of version named libraries
-# (e.g. the ability to have both).
-#
-# Instead of adding conflicts fields - whenever possible - provide a backward
-# compatible wrapper symlinking to the new (ABI compatible) implementation.
-#
-# Still as soon as (all) dependendent packages are rebuilt these compat
-# wrappers can be autoremoved (apt will take care of that)
-
-Package: libethdev4
-Architecture: amd64 arm64 i386 ppc64el
-Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__ethdev_8h.html
-Pre-Depends: ${misc:Pre-Depends}
-Depends: librte-ethdev5, ${misc:Depends}, ${shlibs:Depends}
-Conflicts: libdpdk0
-Description: Data Plane Development Kit (libethdev runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains an ABI compatibility link for an older version of the
- runtime libraries for libethdev.
-
-Package: librte-cryptodev1
-Architecture: amd64 arm64 i386 ppc64el
-Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__cryptodev_8h.html
-Pre-Depends: ${misc:Pre-Depends}
-Depends: librte-cryptodev2, ${misc:Depends}, ${shlibs:Depends}
-Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte-cryptodev runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains an ABI compatibility link for an older version of the
- runtime libraries for librte_cryptodev.
-
-Package: librte-eal2
-Architecture: amd64 arm64 i386 ppc64el
-Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__eal_8h.html
-Pre-Depends: ${misc:Pre-Depends}
-Depends: librte-eal3, ${misc:Depends}, ${shlibs:Depends}
-Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte-eal runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains an ABI compatibility link for an older version of the
- runtime libraries for librte_eal.
 
