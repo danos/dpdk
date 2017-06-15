@@ -1,3 +1,10 @@
+dpdk (16.11.2-2) experimental; urgency=medium
+
+  * Restore fixes by Santiago RR for typos in debian/control, accidentally
+    dropped in 16.11.2-1.
+
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Thu, 15 Jun 2017 13:36:30 +0100
+
 dpdk (16.11.2-1) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
