@@ -1,4 +1,4 @@
-dpdk (16.11.2-1~git1) UNRELEASED; urgency=medium
+dpdk (16.11.2-1) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
   * Merge stable update to 16.11.2; For a list of changes
@@ -30,7 +30,7 @@ dpdk (16.11.2-1~git1) UNRELEASED; urgency=medium
     Thanks Chas Williams!
   * Fix building debugging symbols for -dbgsym packages. Thanks Chas Williams!
 
- -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Jun 2017 10:05:44 -0600
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Thu, 15 Jun 2017 11:30:23 +0100
 
 dpdk (16.11.1-2) experimental; urgency=medium
 
