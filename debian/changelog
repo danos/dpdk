@@ -1,5 +1,6 @@
 dpdk (17.05-1~git1) UNRELEASED; urgency=medium
 
+  [ Christian Ehrhardt ]
   * New Upstream release 17.05; For a full list of changes (LP: #1691661)
     see http://dpdk.org/doc/guides/rel_notes/release_17_05.html
     - adapt to use MAJOR_ABI configuration to avoid the sub-lib abi
@@ -15,6 +16,9 @@ dpdk (17.05-1~git1) UNRELEASED; urgency=medium
       librte-pmd-fm10k gone on ppc64el
     - package the 19 new sub-libs / pmds that are now built by default
     - rename and update symbols files to match the update to DPDK 17.05
+
+  [ Luca Boccassi ]
+  * Rename libraries after ABI major version rather than source version.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 16 May 2017 15:38:17 +0200
 
