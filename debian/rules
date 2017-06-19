@@ -176,7 +176,6 @@ endif
 ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
 		-e 's,(RTE_NEXT_ABI=).*,\1n,' \
-		-e 's,(CONFIG_RTE_MAJOR_ABI=).*,\1$(DPDK_ABI),' \
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
@@ -188,6 +187,8 @@ ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
 	sed -ri -e 's,(LIBRTE_PMD_XENVIRT=).*,\1n,' $(DPDK_STATIC_DIR)/.config
 endif
 endif
+	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
+		$(DPDK_STATIC_DIR)/.config
 	dh_auto_configure
 
 override_dh_auto_build-indep:
