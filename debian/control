@@ -20,7 +20,7 @@ Build-Depends: debhelper (>= 9),
                python-sphinx-rtd-theme,
                texlive-fonts-recommended,
                texlive-latex-extra
-Standards-Version: 3.9.8
+Standards-Version: 4.0.0
 Section: libs
 Homepage: http://www.dpdk.org
 Vcs-Git: https://gerrit.fd.io/r/deb_dpdk
@@ -35,39 +35,7 @@ Depends: hwdata,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends}
-Recommends: dpdk-igb-uio-dkms (= ${binary:Version}) [arm64],
-            dpdk-rte-kni-dkms (= ${binary:Version}) [arm64],
-            librte-pmd-af-packet17.05 (= ${binary:Version}),
-            librte-pmd-ark17.05 (= ${binary:Version}),
-            librte-pmd-avp17.05 (= ${binary:Version}) [amd64],
-            librte-pmd-bnxt17.05 (= ${binary:Version}),
-            librte-pmd-bond17.05 (= ${binary:Version}),
-            librte-pmd-crypto-scheduler17.05 (= ${binary:Version}),
-            librte-pmd-cxgbe17.05 (= ${binary:Version}),
-            librte-pmd-e1000-17.05 (= ${binary:Version}),
-            librte-pmd-ena17.05 (= ${binary:Version}),
-            librte-pmd-enic17.05 (= ${binary:Version}) [amd64 arm64 i386],
-            librte-pmd-fm10k17.05 (= ${binary:Version}) [amd64 i386],
-            librte-pmd-i40e17.05 (= ${binary:Version}),
-            librte-pmd-ixgbe17.05 (= ${binary:Version}) [amd64 arm64 i386],
-            librte-pmd-kni17.05 (= ${binary:Version}) [amd64 arm64 ppc64el],
-            librte-pmd-lio17.05 (= ${binary:Version}),
-            librte-pmd-nfp17.05 (= ${binary:Version}),
-            librte-pmd-null-crypto17.05 (= ${binary:Version}),
-            librte-pmd-null17.05 (= ${binary:Version}),
-            librte-pmd-octeontx-ssovf17.05 (= ${binary:Version}),
-            librte-pmd-pcap17.05 (= ${binary:Version}),
-            librte-pmd-qede17.05 (= ${binary:Version}),
-            librte-pmd-ring17.05 (= ${binary:Version}),
-            librte-pmd-sfc-efx17.05 (= ${binary:Version}) [amd64],
-            librte-pmd-skeleton-event17.05 (= ${binary:Version}),
-            librte-pmd-sw-event17.05 (= ${binary:Version}),
-            librte-pmd-tap17.05 (= ${binary:Version}),
-            librte-pmd-thunderx-nicvf17.05 (= ${binary:Version}),
-            librte-pmd-vhost17.05 (= ${binary:Version}),
-            librte-pmd-virtio17.05 (= ${binary:Version}),
-            librte-pmd-vmxnet3-uio17.05 (= ${binary:Version}) [amd64 arm64 i386],
-            librte-pmd-xenvirt17.05 (= ${binary:Version}) [amd64 arm64 i386]
+Recommends: ${librte:Recommends},
 Suggests: dpdk-doc,
           dpdk-igb-uio-dkms (= ${binary:Version}),
           dpdk-rte-kni-dkms (= ${binary:Version}),
@@ -137,71 +105,7 @@ Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libpcap-dev,
-         librte-acl17.05 (= ${binary:Version}),
-         librte-bitratestats17.05 (= ${binary:Version}),
-         librte-cfgfile17.05 (= ${binary:Version}),
-         librte-cmdline17.05 (= ${binary:Version}),
-         librte-cryptodev17.05 (= ${binary:Version}),
-         librte-distributor17.05 (= ${binary:Version}),
-         librte-eal17.05 (= ${binary:Version}),
-         librte-efd17.05 (= ${binary:Version}),
-         librte-ethdev17.05 (= ${binary:Version}),
-         librte-eventdev17.05 (= ${binary:Version}),
-         librte-hash17.05 (= ${binary:Version}),
-         librte-ip-frag17.05 (= ${binary:Version}),
-         librte-jobstats17.05 (= ${binary:Version}),
-         librte-kni17.05 (= ${binary:Version}) [amd64 arm64 ppc64el],
-         librte-kvargs17.05 (= ${binary:Version}),
-         librte-latencystats17.05 (= ${binary:Version}),
-         librte-lpm17.05 (= ${binary:Version}),
-         librte-mbuf17.05 (= ${binary:Version}),
-         librte-mempool-ring17.05 (= ${binary:Version}),
-         librte-mempool17.05 (= ${binary:Version}),
-         librte-mempool-stack17.05 (= ${binary:Version}),
-         librte-meter17.05 (= ${binary:Version}),
-         librte-metrics17.05 (= ${binary:Version}),
-         librte-net17.05 (= ${binary:Version}),
-         librte-pdump17.05 (= ${binary:Version}),
-         librte-pipeline17.05 (= ${binary:Version}),
-         librte-pmd-af-packet17.05 (= ${binary:Version}),
-         librte-pmd-ark17.05 (= ${binary:Version}),
-         librte-pmd-avp17.05 (= ${binary:Version}) [amd64],
-         librte-pmd-bnxt17.05 (= ${binary:Version}),
-         librte-pmd-bond17.05 (= ${binary:Version}),
-         librte-pmd-crypto-scheduler17.05 (= ${binary:Version}),
-         librte-pmd-cxgbe17.05 (= ${binary:Version}),
-         librte-pmd-e1000-17.05 (= ${binary:Version}),
-         librte-pmd-ena17.05 (= ${binary:Version}),
-         librte-pmd-enic17.05 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-fm10k17.05 (= ${binary:Version}) [amd64 i386],
-         librte-pmd-i40e17.05 (= ${binary:Version}),
-         librte-pmd-ixgbe17.05 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-kni17.05 (= ${binary:Version}) [amd64 arm64 ppc64el],
-         librte-pmd-lio17.05 (= ${binary:Version}),
-         librte-pmd-nfp17.05 (= ${binary:Version}),
-         librte-pmd-null-crypto17.05 (= ${binary:Version}),
-         librte-pmd-null17.05 (= ${binary:Version}),
-         librte-pmd-octeontx-ssovf17.05 (= ${binary:Version}),
-         librte-pmd-pcap17.05 (= ${binary:Version}),
-         librte-pmd-qede17.05 (= ${binary:Version}),
-         librte-pmd-ring17.05 (= ${binary:Version}),
-         librte-pmd-sfc-efx17.05 (= ${binary:Version}) [amd64],
-         librte-pmd-skeleton-event17.05 (= ${binary:Version}),
-         librte-pmd-sw-event17.05 (= ${binary:Version}),
-         librte-pmd-tap17.05 (= ${binary:Version}),
-         librte-pmd-thunderx-nicvf17.05 (= ${binary:Version}),
-         librte-pmd-vhost17.05 (= ${binary:Version}),
-         librte-pmd-virtio17.05 (= ${binary:Version}),
-         librte-pmd-vmxnet3-uio17.05 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-pmd-xenvirt17.05 (= ${binary:Version}) [amd64 arm64 i386],
-         librte-port17.05 (= ${binary:Version}),
-         librte-power17.05 (= ${binary:Version}),
-         librte-reorder17.05 (= ${binary:Version}),
-         librte-ring17.05 (= ${binary:Version}),
-         librte-sched17.05 (= ${binary:Version}),
-         librte-table17.05 (= ${binary:Version}),
-         librte-timer17.05 (= ${binary:Version}),
-         librte-vhost17.05 (= ${binary:Version}),
+         ${librte:Depends},
          ${misc:Depends}
 Description: Data Plane Development Kit (basic development files)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -227,7 +131,7 @@ Description: Data Plane Development Kit (libethdev runtime library)
 Package: librte-acl17.05
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__ethdev_8h.html
+Homepage: http://dpdk.org/doc/api/rte__acl_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -792,7 +696,7 @@ Description: Data Plane Development Kit (librte_timer runtime library)
 Package: librte-vhost17.05
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
-Homepage: http://dpdk.org/doc/api/rte__virtio__net_8h.html
+Homepage: http://dpdk.org/doc/api/rte__vhost_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -1041,3 +945,4 @@ Description: Data Plane Development Kit (librte_pmd_thunderx_nicvf runtime libra
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pmd_thunderx_nicvf.
+

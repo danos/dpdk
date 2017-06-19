@@ -1,8 +1,8 @@
 Package: dpdk-modules-#KVERS#
 Section: kernel
 Architecture: amd64 arm64 i386
+Depends: linux-image-#KVERS# #KDREV#
 Provides: dpdk-modules
-Recommends: linux-image-#KVERS#
 Conflicts: dpdk-igb-uio-dkms, dpdk-rte-kni-dkms
 Built-Using: ${built:using:kernel}
 Description: Data Plane Development Kit (rte kni, igb uio modules)

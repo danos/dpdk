@@ -5,7 +5,7 @@ export DH_VERBOSE=1
 export DH_OPTIONS=-v
 
 VERSION := $(shell dpkg-parsechangelog | sed -nr '/^Version:/s/Version: (.*:)?(.*)-(.*)/\2/p')
-ABIVERSION := "$(VERSION).0"
+DPDK_ABI := $(shell echo $(VERSION) | cut -d '.'  -f1-2)
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
 include /usr/share/dpkg/default.mk
@@ -38,6 +38,7 @@ ifeq (yes, $(dpkg_version_lt))
 endif
 
 export RTE_DEVEL_BUILD=n
+export EXTRA_CFLAGS+=-g
 
 # People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
 # RTE_TARGET via DEB_BUILD_OPTIONS if they like
@@ -72,8 +73,19 @@ DPDK_SHARED_DIR = "debian/build/shared-root"
 # now stable with parallel comilation, so support -j
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
     PAR := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    MAKEFLAGS += -j$(PAR)
+endif
+
+ifneq (,$(findstring nodoc,$(DEB_BUILD_OPTIONS)))
+BUILD_DOCS=n
 else
-    PAR := "1"
+BUILD_DOCS=y
+endif
+
+ifneq (,$(findstring nostatic,$(DEB_BUILD_OPTIONS)))
+BUILD_STATIC_LIB=n
+else
+BUILD_STATIC_LIB=y
 endif
 
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
@@ -102,12 +114,6 @@ DPDK_CONFIG_BUILD_KMOD=y
 # dpkg-genchanges, and also would require a lot of overrides for debhelpers.
 get_built_using	?= $(filter-out (=),$(shell dpkg-query -f='$${source:Package} (=$${source:Version})' -W $1))
 
-override_dh_gencontrol:
-	dh_gencontrol
-	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
-		-v`cat debian/VERSION` \
-		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
-
 build:
 	@if [ x"$(KVERS)" = x ] ; then \
 	    echo 'No version in $(KSRC)/include/linux/version.h' >&2; \
@@ -121,17 +127,41 @@ endif
 %:
 	dh $@ --with python2,dkms
 
+override_dh_gencontrol:
+	dh_gencontrol
+	# debian/files will not exist until dh_gencontrol has ran at least once,
+	# so we need to run gencontrol for libdpdk-dev and libdpdk-dbgsym after.
+	# The list of libraries and PMDs is everchanging, so generate the dependency
+	# list for libdpdk-dev to avoid having to maintain it manually.
+	# Same for the recommends list for dpdk, were we want the PMDs and the mempools.
+	dh_gencontrol -p libdpdk-dev -- -V"librte:Depends=`grep -E 'librte-*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p dpdk -- -V"librte:Recommends=`grep -E 'librte-(pmd|mempool).*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
+	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
+		-v`cat debian/VERSION` \
+		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
+endif
+ifneq (,$(findstring dbgsym_meta,$(DEB_BUILD_OPTIONS)))
+	./debian/dh-dbgsym-metapkg libdpdk$(DPDK_ABI)-dbgsym
+endif
+
+# dbgsym_meta can be passed via DEB_BUILD_OPTIONS to enable building the
+# optional dbgsym meta package libdpdk<ABI>-dbgsym.
+# This is not built by default as it would go in main but depend on
+# packages in the debian-debug archive.
+# Debian Developers and FTP masters strongly discourage this.
+# We provide this optional flag as a convenience for rebuilders.
+ifneq (,$(findstring dbgsym_meta,$(DEB_BUILD_OPTIONS)))
+override_dh_builddeb:
+	dh_builddeb
+	dh_builddeb -plibdpdk$(DPDK_ABI)-dbgsym
+endif
+
 override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	test -L config/defconfig_$(DPDK_CONFIG) && rm -f config/defconfig_$(DPDK_CONFIG) || true
-
-override_dh_clean:
-	dh_clean
-	rm -f debian/libethdev4.links
-	rm -f debian/librte-cryptodev1.links
-	rm -f debian/librte-eal2.links
 
 override_dh_auto_configure:
 	# Add support for a custom defconfig file in the debian directory.
@@ -146,7 +176,7 @@ endif
 ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
 		-e 's,(RTE_NEXT_ABI=).*,\1n,' \
-		-e 's,(CONFIG_RTE_MAJOR_ABI=).*,\1$(ABIVERSION),' \
+		-e 's,(CONFIG_RTE_MAJOR_ABI=).*,\1$(DPDK_ABI),' \
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
@@ -161,17 +191,22 @@ endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html \
-		doc-guides-man
+ifeq (y,$(BUILD_DOCS))
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
+endif
 
 override_dh_auto_install-indep:
 	# Package: dpdk-doc
 	# All files based on the install-doc rule (includes examples)
+ifeq (y,$(BUILD_DOCS))
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
 		DESTDIR=debian/dpdk-doc install-doc
+endif
 
 override_dh_auto_build-arch:
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
+ifeq (y,$(BUILD_STATIC_LIB))
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
+endif
 	# Unfortunately the decision about having static or shared libraries is
 	# made for the whole build, which then produces only .a or .so files
 	# (but not both).
@@ -184,14 +219,19 @@ override_dh_auto_build-arch:
 	cp -a $(DPDK_STATIC_DIR) $(DPDK_SHARED_DIR)
 	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
 		$(DPDK_SHARED_DIR)/.config
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
-	$(MAKE) -j $(PAR) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) test-build
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
+ifeq (y,$(BUILD_DOCS))
+	# need to be around for dh_installman to be picked up
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
+endif
 
 override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
 	# Package: dpdk (runtime)
+ifeq (y,$(BUILD_STATIC_LIB))
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr libdir=$(LIBDIR) \
 		DESTDIR=debian/dpdk install-runtime
+endif
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr libdir=$(LIBDIR) \
 		DESTDIR=debian/dpdk install-runtime
 	mkdir -p debian/dpdk/etc/dpdk
@@ -229,7 +269,9 @@ override_dh_auto_install-arch:
 	mkdir -p debian/libdpdk-dev/usr/include
 	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
 	# all static libs are in the dev package
+ifeq (y,$(BUILD_STATIC_LIB))
 	mv debian/dpdk/$(LIBDIR)/lib*.a debian/libdpdk-dev/$(LIBDIR)/
+endif
 	# symlinks to last .so's are in the non versioned libdpdk-dev as well
 	# this allows multiple libdpdk-<NAME><VER> at different VER concurrently
 	# libdpdk-dev depends on all sublibs so symlinks are never broken
@@ -251,6 +293,11 @@ override_dh_auto_install-arch:
 	  if [ "$${LIBF#librte_pmd_}x" != "$${LIBF}x" ]; then \
 	    mkdir -p $${LIBD}/dpdk-pmds; \
 	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
+	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
+	  fi; \
+	  if [ "$${LIBF#librte_mempool_}x" != "$${LIBF}x" ]; then \
+	    mkdir -p $${LIBD}/dpdk-pmds; \
+	    echo "MEMPOOL: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
 	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
 	  fi; \
 	  if [ "$${LIBF#librte_eal}x" != "$${LIBF}x" ]; then \
@@ -278,15 +325,6 @@ ifneq (,$(KVERS))
 		kerneldir=/lib/modules/$(KVERS)/extra/dpdk \
 		DESTDIR=debian/dpdk-modules-$(KVERS) install-kmod
 endif
-
-debian/libethdev4.links: debian/libethdev4.links.in
-	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
-debian/librte-cryptodev1.links: debian/librte-cryptodev1.links.in
-	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
-debian/librte-eal2.links: debian/librte-eal2.links.in
-	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' < $< > $@
-override_dh_link: debian/libethdev4.links debian/librte-cryptodev1.links debian/librte-eal2.links
-	dh_link
 
 override_dh_dkms:
 	dh_dkms -V $(VERSION)
