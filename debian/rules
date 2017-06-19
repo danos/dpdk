@@ -252,11 +252,13 @@ endif
 	sed -e 's/SDK_TARGET/$(RTE_TARGET)/' debian/dpdk-sdk-env.sh.in > \
 		debian/dpdk-dev/usr/share/dpdk/dpdk-sdk-env.sh
 	# include the bundled autotest suite to be usable from the dpdk-dev package
-	mkdir -p debian/dpdk-dev/usr/share/dpdk/test
-	cp -a test/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
-	cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/
-	cp $(DPDK_SHARED_DIR)/app/testacl debian/dpdk-dev/usr/share/dpdk/test/
-	cp $(DPDK_SHARED_DIR)/app/testpipeline debian/dpdk-dev/usr/share/dpdk/test/
+	if grep -qs 'CONFIG_RTE_APP_TEST=y' $(DPDK_SHARED_DIR)/.config; then \
+		mkdir -p debian/dpdk-dev/usr/share/dpdk/test; \
+		cp -a test/test/autotest* debian/dpdk-dev/usr/share/dpdk/test; \
+		cp -r $(DPDK_SHARED_DIR)/test debian/dpdk-dev/usr/share/dpdk/test; \
+		cp -r $(DPDK_SHARED_DIR)/testacl debian/dpdk-dev/usr/share/dpdk/test; \
+		cp -r $(DPDK_SHARED_DIR)/testpipeline debian/dpdk-dev/usr/share/dpdk/test; \
+	fi
 	# since we move libs to multiarch dirs update the non aware symlink
 	rm debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
 	ln -rs debian/dpdk-dev/$(LIBDIR)/ \
