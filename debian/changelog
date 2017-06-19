@@ -19,6 +19,8 @@ dpdk (17.05-1~git1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * Rename libraries after ABI major version rather than source version.
+  * Always set CONFIG_RTE_MAJOR_ABI, even for custom config files as all the
+    packaging is tuned around it.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 16 May 2017 15:38:17 +0200
 
