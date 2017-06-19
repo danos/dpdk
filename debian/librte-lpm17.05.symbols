@@ -1,4 +1,4 @@
-librte_lpm.so.17.05.0 librte-lpm17.05 #MINVER#
+librte_lpm.so.17.05 librte-lpm17.05 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_2.0@DPDK_2.0 16.04

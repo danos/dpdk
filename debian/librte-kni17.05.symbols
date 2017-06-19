@@ -1,4 +1,4 @@
-librte_kni.so.17.05.0 librte-kni17.05 #MINVER#
+librte_kni.so.17.05 librte-kni17.05 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  rte_kni_alloc@DPDK_2.0 16.04
  rte_kni_close@DPDK_2.0 16.04

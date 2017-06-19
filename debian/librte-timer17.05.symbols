@@ -1,4 +1,4 @@
-librte_timer.so.17.05.0 librte-timer17.05 #MINVER#
+librte_timer.so.17.05 librte-timer17.05 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  rte_timer_dump_stats@DPDK_2.0 16.04
  rte_timer_init@DPDK_2.0 16.04

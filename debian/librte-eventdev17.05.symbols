@@ -1,4 +1,4 @@
-librte_eventdev.so.17.05.0 librte-eventdev17.05 #MINVER#
+librte_eventdev.so.17.05 librte-eventdev17.05 #MINVER#
  DPDK_17.05@DPDK_17.05 17.05
  rte_event_dequeue_timeout_ticks@DPDK_17.05 17.05
  rte_event_dev_close@DPDK_17.05 17.05

@@ -1,4 +1,4 @@
-librte_power.so.17.05.0 librte-power17.05 #MINVER#
+librte_power.so.17.05 librte-power17.05 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  rte_power_exit@DPDK_2.0 16.04
  rte_power_freq_down@DPDK_2.0 16.04

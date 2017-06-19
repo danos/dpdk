@@ -1,4 +1,4 @@
-librte_metrics.so.17.05.0 librte-metrics17.05 #MINVER#
+librte_metrics.so.17.05 librte-metrics17.05 #MINVER#
  DPDK_17.05@DPDK_17.05 17.05
  rte_metrics_get_names@DPDK_17.05 17.05
  rte_metrics_get_values@DPDK_17.05 17.05

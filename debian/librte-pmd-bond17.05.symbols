@@ -1,4 +1,4 @@
-librte_pmd_bond.so.17.05.0 librte-pmd-bond17.05 #MINVER#
+librte_pmd_bond.so.17.05 librte-pmd-bond17.05 #MINVER#
  DPDK_16.04@DPDK_16.04 16.07~rc1
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_2.0@DPDK_2.0 16.04

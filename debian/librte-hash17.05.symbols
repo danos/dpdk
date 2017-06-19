@@ -1,4 +1,4 @@
-librte_hash.so.17.05.0 librte-hash17.05 #MINVER#
+librte_hash.so.17.05 librte-hash17.05 #MINVER#
  DPDK_16.07@DPDK_16.07 16.07~rc3
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04

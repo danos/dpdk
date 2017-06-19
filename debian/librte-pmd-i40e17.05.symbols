@@ -1,4 +1,4 @@
-librte_pmd_i40e.so.17.05.0 librte-pmd-i40e17.05 #MINVER#
+librte_pmd_i40e.so.17.05 librte-pmd-i40e17.05 #MINVER#
  DPDK_17.02@DPDK_17.02 17.05
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_2.0@DPDK_2.0 16.04

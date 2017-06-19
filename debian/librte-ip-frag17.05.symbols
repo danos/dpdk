@@ -1,4 +1,4 @@
-librte_ip_frag.so.17.05.0 librte-ip-frag17.05 #MINVER#
+librte_ip_frag.so.17.05 librte-ip-frag17.05 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  rte_ip_frag_free_death_row@DPDK_2.0 16.04
  rte_ip_frag_table_create@DPDK_2.0 16.04

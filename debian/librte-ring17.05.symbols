@@ -1,4 +1,4 @@
-librte_ring.so.17.05.0 librte-ring17.05 #MINVER#
+librte_ring.so.17.05 librte-ring17.05 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.2@DPDK_2.2 16.04
  rte_ring_create@DPDK_2.0 16.04

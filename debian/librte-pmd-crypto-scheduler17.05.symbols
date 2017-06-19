@@ -1,4 +1,4 @@
-librte_pmd_crypto_scheduler.so.17.05.0 librte-pmd-crypto-scheduler17.05 #MINVER#
+librte_pmd_crypto_scheduler.so.17.05 librte-pmd-crypto-scheduler17.05 #MINVER#
  DPDK_17.02@DPDK_17.02 17.05
  DPDK_17.05@DPDK_17.05 17.05
  failover_scheduler@Base 17.05

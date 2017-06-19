@@ -1,4 +1,4 @@
-librte_table.so.17.05.0 librte-table17.05 #MINVER#
+librte_table.so.17.05 librte-table17.05 #MINVER#
  DPDK_16.07@DPDK_16.07 16.11
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.2@DPDK_2.2 16.04

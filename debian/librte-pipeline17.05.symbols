@@ -1,4 +1,4 @@
-librte_pipeline.so.17.05.0 librte-pipeline17.05 #MINVER#
+librte_pipeline.so.17.05 librte-pipeline17.05 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04

@@ -1,4 +1,4 @@
-librte_efd.so.17.05.0 librte-efd17.05 #MINVER#
+librte_efd.so.17.05 librte-efd17.05 #MINVER#
  DPDK_17.02@DPDK_17.02 17.05
  rte_efd_create@DPDK_17.02 17.05
  rte_efd_delete@DPDK_17.02 17.05

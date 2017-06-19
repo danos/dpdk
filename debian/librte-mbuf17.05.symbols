@@ -1,4 +1,4 @@
-librte_mbuf.so.17.05.0 librte-mbuf17.05 #MINVER#
+librte_mbuf.so.17.05 librte-mbuf17.05 #MINVER#
  DPDK_16.11@DPDK_16.11 16.11
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
