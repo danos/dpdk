@@ -6,6 +6,7 @@
 *.dkms.debhelper
 build/
 control.modules
+debhelper-build-stamp
 dpdk-dev/
 dpdk-doc/
 dpdk-igb-uio-dkms/
