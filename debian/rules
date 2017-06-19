@@ -281,9 +281,9 @@ endif
 	  BN=$$(basename $${lib}); \
 	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9\.]*$$//' | tr '_' '-'); \
 	  if echo $${LN} | grep -q ".*[0-9]$$"; then \
-	    PKG=$${LN}-$(VERSION); \
+	    PKG=$${LN}-$(DPDK_ABI); \
 	  else \
-	    PKG=$${LN}$(VERSION); \
+	    PKG=$${LN}$(DPDK_ABI); \
 	  fi; \
 	  LIBF="$$(basename $${lib})"; \
 	  LIBD="debian/$${PKG}/$(LIBDIR)"; \
