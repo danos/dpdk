@@ -1,0 +1,5 @@
+librte_pmd_vhost.so.17.05 librte-pmd-vhost17.05 #MINVER#
+ DPDK_16.04@DPDK_16.04 16.04
+ DPDK_16.11@DPDK_16.11 16.11
+ rte_eth_vhost_get_queue_event@DPDK_16.04 16.04
+ rte_eth_vhost_get_vid_from_port_id@DPDK_16.11 16.11

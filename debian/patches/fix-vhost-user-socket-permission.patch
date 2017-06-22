@@ -39,7 +39,7 @@ Last-Update: 2017-05-23
 
 --- a/doc/guides/testpmd_app_ug/run_app.rst
 +++ b/doc/guides/testpmd_app_ug/run_app.rst
-@@ -156,6 +156,25 @@
+@@ -156,6 +156,25 @@ See the DPDK Getting Started Guides for
  
      Use malloc instead of hugetlbfs.
  
@@ -67,7 +67,7 @@ Last-Update: 2017-05-23
  ----------------------------
 --- a/lib/librte_eal/common/eal_common_options.c
 +++ b/lib/librte_eal/common/eal_common_options.c
-@@ -95,6 +95,8 @@
+@@ -95,6 +95,8 @@ eal_long_options[] = {
  	{OPT_VFIO_INTR,         1, NULL, OPT_VFIO_INTR_NUM        },
  	{OPT_VMWARE_TSC_MAP,    0, NULL, OPT_VMWARE_TSC_MAP_NUM   },
  	{OPT_XEN_DOM0,          0, NULL, OPT_XEN_DOM0_NUM         },
@@ -78,7 +78,7 @@ Last-Update: 2017-05-23
  
 --- a/lib/librte_eal/common/eal_options.h
 +++ b/lib/librte_eal/common/eal_options.h
-@@ -83,6 +83,10 @@
+@@ -83,6 +83,10 @@ enum {
  	OPT_VMWARE_TSC_MAP_NUM,
  #define OPT_XEN_DOM0          "xen-dom0"
  	OPT_XEN_DOM0_NUM,
@@ -91,7 +91,7 @@ Last-Update: 2017-05-23
  
 --- a/lib/librte_eal/common/include/rte_eal.h
 +++ b/lib/librte_eal/common/include/rte_eal.h
-@@ -256,6 +256,11 @@
+@@ -286,6 +286,11 @@ static inline int rte_gettid(void)
  #define RTE_INIT(func) \
  static void __attribute__((constructor, used)) func(void)
  
@@ -115,7 +115,7 @@ Last-Update: 2017-05-23
  
  #include <rte_common.h>
  #include <rte_debug.h>
-@@ -117,6 +120,12 @@
+@@ -119,6 +122,12 @@ struct lcore_config lcore_config[RTE_MAX
  /* internal configuration */
  struct internal_config internal_config;
  
@@ -128,7 +128,7 @@ Last-Update: 2017-05-23
  /* used by rte_rdtsc() */
  int rte_cycles_vmware_tsc_map;
  
-@@ -354,6 +363,8 @@
+@@ -356,6 +365,8 @@ eal_usage(const char *prgname)
  	       "  --"OPT_CREATE_UIO_DEV"    Create /dev/uioX (usually done by hotplug)\n"
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
  	       "  --"OPT_XEN_DOM0"          Support running on Xen dom0 without hugetlbfs\n"
@@ -137,7 +137,7 @@ Last-Update: 2017-05-23
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -515,6 +526,121 @@
+@@ -515,6 +526,121 @@ eal_log_level_parse(int argc, char **arg
  	optarg = old_optarg;
  }
  
@@ -259,7 +259,7 @@ Last-Update: 2017-05-23
  /* Parse the argument given in the command line of the application */
  static int
  eal_parse_args(int argc, char **argv)
-@@ -611,6 +737,26 @@
+@@ -611,6 +737,26 @@ eal_parse_args(int argc, char **argv)
  			internal_config.create_uio_dev = 1;
  			break;
  
@@ -286,7 +286,7 @@ Last-Update: 2017-05-23
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -943,3 +1089,47 @@
+@@ -995,3 +1141,47 @@ rte_eal_check_module(const char *module_
  	/* Module has been found */
  	return 1;
  }
@@ -336,7 +336,7 @@ Last-Update: 2017-05-23
 +}
 --- a/lib/librte_eal/linuxapp/eal/rte_eal_version.map
 +++ b/lib/librte_eal/linuxapp/eal/rte_eal_version.map
-@@ -139,6 +139,7 @@
+@@ -120,6 +120,7 @@ DPDK_2.2 {
  	rte_keepalive_register_core;
  	rte_xen_dom0_supported;
  	rte_xen_mem_phy2mch;
@@ -346,7 +346,7 @@ Last-Update: 2017-05-23
  
 --- a/lib/librte_vhost/socket.c
 +++ b/lib/librte_vhost/socket.c
-@@ -78,6 +78,8 @@
+@@ -98,6 +98,8 @@ struct vhost_user {
  	pthread_mutex_t mutex;
  };
  
@@ -355,11 +355,12 @@ Last-Update: 2017-05-23
  #define MAX_VIRTIO_BACKLOG 128
  
  static void vhost_user_server_new_connection(int fd, void *data, int *remove);
-@@ -519,6 +521,7 @@
+@@ -644,7 +646,7 @@ rte_vhost_driver_register(const char *pa
+ 	} else {
  		vsocket->is_server = true;
- 		ret = vhost_user_create_server(vsocket);
  	}
-+    rte_eal_set_socket_permissions(path);
+-	ret = create_unix_socket(vsocket);
++	rte_eal_set_socket_permissions(path);
  	if (ret < 0) {
  		free(vsocket->path);
  		free(vsocket);

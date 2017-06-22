@@ -1,0 +1,6 @@
+librte_net.so.17.05 librte-net17.05 #MINVER#
+ DPDK_16.11@DPDK_16.11 16.11
+ DPDK_17.05@DPDK_17.05 17.05
+ rte_net_crc_calc@DPDK_17.05 17.05
+ rte_net_crc_set_alg@DPDK_17.05 17.05
+ rte_net_get_ptype@DPDK_16.11 16.11

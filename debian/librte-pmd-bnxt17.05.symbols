@@ -1,0 +1,4 @@
+librte_pmd_bnxt.so.17.05 librte-pmd-bnxt17.05 #MINVER#
+ DPDK_16.04@DPDK_16.04 16.07~rc3
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

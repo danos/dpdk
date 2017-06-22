@@ -234,6 +234,23 @@ try_dev_id:
 }
 
 /**
+ * Check if the counter is located on ib counters file.
+ *
+ * @param[in] cntr
+ *   Counter name.
+ *
+ * @return
+ *   1 if counter is located on ib counters file , 0 otherwise.
+ */
+int
+priv_is_ib_cntr(const char *cntr)
+{
+	if (!strcmp(cntr, "out_of_buffer"))
+		return 1;
+	return 0;
+}
+
+/**
  * Read from sysfs entry.
  *
  * @param[in] priv
@@ -260,10 +277,15 @@ priv_sysfs_read(const struct priv *priv, const char *entry,
 	if (priv_get_ifname(priv, &ifname))
 		return -1;
 
-	MKSTR(path, "%s/device/net/%s/%s", priv->ctx->device->ibdev_path,
-	      ifname, entry);
-
-	file = fopen(path, "rb");
+	if (priv_is_ib_cntr(entry)) {
+		MKSTR(path, "%s/ports/1/hw_counters/%s",
+		      priv->ctx->device->ibdev_path, entry);
+		file = fopen(path, "rb");
+	} else {
+		MKSTR(path, "%s/device/net/%s/%s",
+		      priv->ctx->device->ibdev_path, ifname, entry);
+		file = fopen(path, "rb");
+	}
 	if (file == NULL)
 		return -1;
 	ret = fread(buf, 1, size, file);
@@ -469,6 +491,30 @@ priv_get_mtu(struct priv *priv, uint16_t *mtu)
 }
 
 /**
+ * Read device counter from sysfs.
+ *
+ * @param priv
+ *   Pointer to private structure.
+ * @param name
+ *   Counter name.
+ * @param[out] cntr
+ *   Counter output buffer.
+ *
+ * @return
+ *   0 on success, -1 on failure and errno is set.
+ */
+int
+priv_get_cntr_sysfs(struct priv *priv, const char *name, uint64_t *cntr)
+{
+	unsigned long ulong_ctr;
+
+	if (priv_get_sysfs_ulong(priv, name, &ulong_ctr) == -1)
+		return -1;
+	*cntr = ulong_ctr;
+	return 0;
+}
+
+/**
  * Set device MTU.
  *
  * @param priv
@@ -615,6 +661,8 @@ mlx5_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *info)
 	unsigned int max;
 	char ifname[IF_NAMESIZE];
 
+	info->pci_dev = RTE_DEV_TO_PCI(dev->device);
+
 	priv_lock(priv);
 	/* FIXME: we should ask the device for these values. */
 	info->min_rx_bufsize = 32;
@@ -645,14 +693,16 @@ mlx5_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *info)
 			(DEV_TX_OFFLOAD_IPV4_CKSUM |
 			 DEV_TX_OFFLOAD_UDP_CKSUM |
 			 DEV_TX_OFFLOAD_TCP_CKSUM);
+	if (priv->tso)
+		info->tx_offload_capa |= DEV_TX_OFFLOAD_TCP_TSO;
+	if (priv->tunnel_en)
+		info->tx_offload_capa |= (DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM |
+					  DEV_TX_OFFLOAD_VXLAN_TNL_TSO |
+					  DEV_TX_OFFLOAD_GRE_TNL_TSO);
 	if (priv_get_ifname(priv, &ifname) == 0)
 		info->if_index = if_nametoindex(ifname);
-	/* FIXME: RETA update/query API expects the callee to know the size of
-	 * the indirection table, for this PMD the size varies depending on
-	 * the number of RX queues, it becomes impossible to find the correct
-	 * size if it is not fixed.
-	 * The API should be updated to solve this problem. */
-	info->reta_size = priv->ind_table_max_size;
+	info->reta_size = priv->reta_idx_n ?
+		priv->reta_idx_n : priv->ind_table_max_size;
 	info->hash_key_size = ((*priv->rss_conf) ?
 			       (*priv->rss_conf)[0]->rss_key_len :
 			       0);
@@ -679,7 +729,7 @@ mlx5_dev_supported_ptypes_get(struct rte_eth_dev *dev)
 }
 
 /**
- * Retrieve physical link information (unlocked version using legacy ioctl).
+ * DPDK callback to retrieve physical link information.
  *
  * @param dev
  *   Pointer to Ethernet device structure.
@@ -696,6 +746,8 @@ mlx5_link_update_unlocked_gset(struct rte_eth_dev *dev, int wait_to_complete)
 	struct ifreq ifr;
 	struct rte_eth_link dev_link;
 	int link_speed = 0;
+
+	/* priv_lock() is not taken to allow concurrent calls. */
 
 	(void)wait_to_complete;
 	if (priv_ifreq(priv, SIOCGIFFLAGS, &ifr)) {
@@ -827,28 +879,6 @@ mlx5_link_update_unlocked_gs(struct rte_eth_dev *dev, int wait_to_complete)
 }
 
 /**
- * DPDK callback to retrieve physical link information (unlocked version).
- *
- * @param dev
- *   Pointer to Ethernet device structure.
- * @param wait_to_complete
- *   Wait for request completion (ignored).
- */
-int
-mlx5_link_update_unlocked(struct rte_eth_dev *dev, int wait_to_complete)
-{
-	struct utsname utsname;
-	int ver[3];
-
-	if (uname(&utsname) == -1 ||
-	    sscanf(utsname.release, "%d.%d.%d",
-		   &ver[0], &ver[1], &ver[2]) != 3 ||
-	    KERNEL_VERSION(ver[0], ver[1], ver[2]) < KERNEL_VERSION(4, 9, 0))
-		return mlx5_link_update_unlocked_gset(dev, wait_to_complete);
-	return mlx5_link_update_unlocked_gs(dev, wait_to_complete);
-}
-
-/**
  * DPDK callback to retrieve physical link information.
  *
  * @param dev
@@ -859,13 +889,15 @@ mlx5_link_update_unlocked(struct rte_eth_dev *dev, int wait_to_complete)
 int
 mlx5_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 {
-	struct priv *priv = mlx5_get_priv(dev);
-	int ret;
+	struct utsname utsname;
+	int ver[3];
 
-	priv_lock(priv);
-	ret = mlx5_link_update_unlocked(dev, wait_to_complete);
-	priv_unlock(priv);
-	return ret;
+	if (uname(&utsname) == -1 ||
+	    sscanf(utsname.release, "%d.%d.%d",
+		   &ver[0], &ver[1], &ver[2]) != 3 ||
+	    KERNEL_VERSION(ver[0], ver[1], ver[2]) < KERNEL_VERSION(4, 9, 0))
+		return mlx5_link_update_unlocked_gset(dev, wait_to_complete);
+	return mlx5_link_update_unlocked_gs(dev, wait_to_complete);
 }
 
 /**
@@ -959,7 +991,6 @@ recover:
 		struct rxq *rxq = (*priv->rxqs)[i];
 		struct rxq_ctrl *rxq_ctrl =
 			container_of(rxq, struct rxq_ctrl, rxq);
-		int sp;
 		unsigned int mb_len;
 		unsigned int tmp;
 
@@ -967,10 +998,9 @@ recover:
 			continue;
 		mb_len = rte_pktmbuf_data_room_size(rxq->mp);
 		assert(mb_len >= RTE_PKTMBUF_HEADROOM);
-		/* Toggle scattered support (sp) if necessary. */
-		sp = (max_frame_len > (mb_len - RTE_PKTMBUF_HEADROOM));
 		/* Provide new values to rxq_setup(). */
-		dev->data->dev_conf.rxmode.jumbo_frame = sp;
+		dev->data->dev_conf.rxmode.jumbo_frame =
+			(max_frame_len > ETHER_MAX_LEN);
 		dev->data->dev_conf.rxmode.max_rx_pkt_len = max_frame_len;
 		if (rehash)
 			ret = rxq_rehash(dev, rxq_ctrl);
@@ -1244,13 +1274,12 @@ mlx5_dev_link_status_handler(void *arg)
  *   Callback argument.
  */
 void
-mlx5_dev_interrupt_handler(struct rte_intr_handle *intr_handle, void *cb_arg)
+mlx5_dev_interrupt_handler(void *cb_arg)
 {
 	struct rte_eth_dev *dev = cb_arg;
 	struct priv *priv = dev->data->dev_private;
 	int ret;
 
-	(void)intr_handle;
 	priv_lock(priv);
 	ret = priv_dev_link_status_handler(priv, dev);
 	priv_unlock(priv);
@@ -1553,14 +1582,15 @@ void
 priv_select_tx_function(struct priv *priv)
 {
 	priv->dev->tx_pkt_burst = mlx5_tx_burst;
-	/* Display warning for unsupported configurations. */
-	if (priv->sriov && priv->mps)
-		WARN("multi-packet send WQE cannot be used on a SR-IOV setup");
 	/* Select appropriate TX function. */
-	if ((priv->sriov == 0) && priv->mps && priv->txq_inline) {
+	if (priv->mps == MLX5_MPW_ENHANCED) {
+		priv->dev->tx_pkt_burst =
+			mlx5_tx_burst_empw;
+		DEBUG("selected Enhanced MPW TX function");
+	} else if (priv->mps && priv->txq_inline) {
 		priv->dev->tx_pkt_burst = mlx5_tx_burst_mpw_inline;
 		DEBUG("selected MPW inline TX function");
-	} else if ((priv->sriov == 0) && priv->mps) {
+	} else if (priv->mps) {
 		priv->dev->tx_pkt_burst = mlx5_tx_burst_mpw;
 		DEBUG("selected MPW TX function");
 	}

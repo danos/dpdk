@@ -1,0 +1,4 @@
+librte_mempool_ring.so.17.05 librte-mempool-ring17.05 #MINVER#
+ DPDK_17.05@DPDK_17.05 17.05
+# INFO: this library exports no symbols, essentially it is a subelement
+# of mempool

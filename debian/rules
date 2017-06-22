@@ -187,6 +187,8 @@ ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
 	sed -ri -e 's,(LIBRTE_PMD_XENVIRT=).*,\1n,' $(DPDK_STATIC_DIR)/.config
 endif
 endif
+	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
+		$(DPDK_STATIC_DIR)/.config
 	dh_auto_configure
 
 override_dh_auto_build-indep:
@@ -223,6 +225,7 @@ ifeq (y,$(BUILD_DOCS))
 	# need to be around for dh_installman to be picked up
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
 endif
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) test-build
 
 override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
@@ -250,9 +253,13 @@ endif
 	sed -e 's/SDK_TARGET/$(RTE_TARGET)/' debian/dpdk-sdk-env.sh.in > \
 		debian/dpdk-dev/usr/share/dpdk/dpdk-sdk-env.sh
 	# include the bundled autotest suite to be usable from the dpdk-dev package
-	mkdir -p debian/dpdk-dev/usr/share/dpdk/test
-	cp -a app/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
-	cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/
+	if grep -qs 'CONFIG_RTE_APP_TEST=y' $(DPDK_SHARED_DIR)/.config; then \
+		mkdir -p debian/dpdk-dev/usr/share/dpdk/test; \
+		cp -a test/test/autotest* debian/dpdk-dev/usr/share/dpdk/test; \
+		cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/; \
+		cp $(DPDK_SHARED_DIR)/app/testacl debian/dpdk-dev/usr/share/dpdk/test/; \
+		cp $(DPDK_SHARED_DIR)/app/testpipeline debian/dpdk-dev/usr/share/dpdk/test/; \
+	fi
 	# since we move libs to multiarch dirs update the non aware symlink
 	rm debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
 	ln -rs debian/dpdk-dev/$(LIBDIR)/ \
@@ -276,16 +283,15 @@ endif
 	# Package(s): libdpdk-<NAME><VER> (bare runtime libs)
 	for lib in $$(ls -1 debian/dpdk/$(LIBDIR)/*.so.*); do \
 	  BN=$$(basename $${lib}); \
-	  VER=$$(echo $${BN} | sed -e 's/^.*\.so\.//'); \
-	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9]*$$//' | tr '_' '-'); \
+	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9\.]*$$//' | tr '_' '-'); \
 	  if echo $${LN} | grep -q ".*[0-9]$$"; then \
-	    PKG=$${LN}-$${VER}; \
+	    PKG=$${LN}-$(DPDK_ABI); \
 	  else \
-	    PKG=$${LN}$${VER}; \
+	    PKG=$${LN}$(DPDK_ABI); \
 	  fi; \
 	  LIBF="$$(basename $${lib})"; \
 	  LIBD="debian/$${PKG}/$(LIBDIR)"; \
-	  echo "moving $${lib} for library $${PKG}"; \
+	  echo "moving $${lib} to dir $${LIBD} (PKG=$${PKG} BN=$${BN} LN={$${LN} LIBF=$${LIBF} LIBD=$${LIBD})"; \
 	  mkdir -p $${LIBD}; \
 	  mv $${lib} $${LIBD}; \
 	  if [ "$${LIBF#librte_pmd_}x" != "$${LIBF}x" ]; then \

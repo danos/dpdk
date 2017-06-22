@@ -1,0 +1,5 @@
+librte_pmd_octeontx_ssovf.so.17.05 librte-pmd-octeontx-ssovf17.05 #MINVER#
+ DPDK_17.05@DPDK_17.05 17.05
+ octeontx_ssovf_bar@DPDK_17.05 17.05
+ octeontx_ssovf_info@DPDK_17.05 17.05
+ octeontx_ssovf_mbox_send@DPDK_17.05 17.05

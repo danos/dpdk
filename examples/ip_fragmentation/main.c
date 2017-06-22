@@ -168,7 +168,7 @@ struct lcore_queue_conf {
 } __rte_cache_aligned;
 struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
 
-static const struct rte_eth_conf port_conf = {
+static struct rte_eth_conf port_conf = {
 	.rxmode = {
 		.max_rx_pkt_len = JUMBO_FRAME_MAX_SIZE,
 		.split_hdr_size = 0,
@@ -265,8 +265,8 @@ l3fwd_simple_forward(struct rte_mbuf *m, struct lcore_queue_conf *qconf,
 		uint8_t queueid, uint8_t port_in)
 {
 	struct rx_queue *rxq;
-	uint32_t i, len, next_hop_ipv4;
-	uint8_t next_hop_ipv6, port_out, ipv6;
+	uint32_t i, len, next_hop;
+	uint8_t port_out, ipv6;
 	int32_t len2;
 
 	ipv6 = 0;
@@ -290,9 +290,9 @@ l3fwd_simple_forward(struct rte_mbuf *m, struct lcore_queue_conf *qconf,
 		ip_dst = rte_be_to_cpu_32(ip_hdr->dst_addr);
 
 		/* Find destination port */
-		if (rte_lpm_lookup(rxq->lpm, ip_dst, &next_hop_ipv4) == 0 &&
-				(enabled_port_mask & 1 << next_hop_ipv4) != 0) {
-			port_out = next_hop_ipv4;
+		if (rte_lpm_lookup(rxq->lpm, ip_dst, &next_hop) == 0 &&
+				(enabled_port_mask & 1 << next_hop) != 0) {
+			port_out = next_hop;
 
 			/* Build transmission burst for new port */
 			len = qconf->tx_mbufs[port_out].len;
@@ -326,9 +326,10 @@ l3fwd_simple_forward(struct rte_mbuf *m, struct lcore_queue_conf *qconf,
 		ip_hdr = rte_pktmbuf_mtod(m, struct ipv6_hdr *);
 
 		/* Find destination port */
-		if (rte_lpm6_lookup(rxq->lpm6, ip_hdr->dst_addr, &next_hop_ipv6) == 0 &&
-				(enabled_port_mask & 1 << next_hop_ipv6) != 0) {
-			port_out = next_hop_ipv6;
+		if (rte_lpm6_lookup(rxq->lpm6, ip_hdr->dst_addr,
+						&next_hop) == 0 &&
+				(enabled_port_mask & 1 << next_hop) != 0) {
+			port_out = next_hop;
 
 			/* Build transmission burst for new port */
 			len = qconf->tx_mbufs[port_out].len;
@@ -586,7 +587,7 @@ parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 0; /* reset getopt lib */
+	optind = 1; /* reset getopt lib */
 	return ret;
 }
 
@@ -914,6 +915,11 @@ main(int argc, char **argv)
 
 		qconf = &lcore_queue_conf[rx_lcore_id];
 
+		/* limit the frame size to the maximum supported by NIC */
+		rte_eth_dev_info_get(portid, &dev_info);
+		port_conf.rxmode.max_rx_pkt_len = RTE_MIN(
+		    dev_info.max_rx_pktlen, port_conf.rxmode.max_rx_pkt_len);
+
 		/* get the lcore_id for this port */
 		while (rte_lcore_is_enabled(rx_lcore_id) == 0 ||
 		       qconf->n_rx_queue == (unsigned)rx_queue_per_lcore) {
@@ -979,7 +985,6 @@ main(int argc, char **argv)
 			printf("txq=%u,%d ", lcore_id, queueid);
 			fflush(stdout);
 
-			rte_eth_dev_info_get(portid, &dev_info);
 			txconf = &dev_info.default_txconf;
 			txconf->txq_flags = 0;
 			ret = rte_eth_tx_queue_setup(portid, queueid, nb_txd,

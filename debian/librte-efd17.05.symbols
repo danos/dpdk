@@ -1,0 +1,9 @@
+librte_efd.so.17.05 librte-efd17.05 #MINVER#
+ DPDK_17.02@DPDK_17.02 17.05
+ rte_efd_create@DPDK_17.02 17.05
+ rte_efd_delete@DPDK_17.02 17.05
+ rte_efd_find_existing@DPDK_17.02 17.05
+ rte_efd_free@DPDK_17.02 17.05
+ rte_efd_lookup@DPDK_17.02 17.05
+ rte_efd_lookup_bulk@DPDK_17.02 17.05
+ rte_efd_update@DPDK_17.02 17.05

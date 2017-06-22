@@ -42,6 +42,20 @@
 #include <rte_ethdev.h>
 
 /**
+ * Notify VF when PF link status changes.
+ *
+ * @param port
+ *   The port identifier of the Ethernet device.
+ * @param vf
+ *   VF id.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENODEV) if *port* invalid.
+ *   - (-EINVAL) if *vf* invalid.
+ */
+int rte_pmd_ixgbe_ping_vf(uint8_t port, uint16_t vf);
+
+/**
  * Set the VF MAC address.
  *
  * @param port
@@ -181,6 +195,237 @@ int rte_pmd_ixgbe_set_vf_split_drop_en(uint8_t port, uint16_t vf, uint8_t on);
  */
 int
 rte_pmd_ixgbe_set_vf_vlan_stripq(uint8_t port, uint16_t vf, uint8_t on);
+
+/**
+ * Enable MACsec offload.
+ *
+ * @param port
+ *   The port identifier of the Ethernet device.
+ * @param en
+ *    1 - Enable encryption (encrypt and add integrity signature).
+ *    0 - Disable encryption (only add integrity signature).
+ * @param rp
+ *    1 - Enable replay protection.
+ *    0 - Disable replay protection.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENODEV) if *port* invalid.
+ *   - (-ENOTSUP) if hardware doesn't support this feature.
+ */
+int rte_pmd_ixgbe_macsec_enable(uint8_t port, uint8_t en, uint8_t rp);
+
+/**
+ * Disable MACsec offload.
+ *
+ * @param port
+ *   The port identifier of the Ethernet device.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENODEV) if *port* invalid.
+ *   - (-ENOTSUP) if hardware doesn't support this feature.
+ */
+int rte_pmd_ixgbe_macsec_disable(uint8_t port);
+
+/**
+ * Configure Tx SC (Secure Connection).
+ *
+ * @param port
+ *   The port identifier of the Ethernet device.
+ * @param mac
+ *   The MAC address on the local side.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENODEV) if *port* invalid.
+ *   - (-ENOTSUP) if hardware doesn't support this feature.
+ */
+int rte_pmd_ixgbe_macsec_config_txsc(uint8_t port, uint8_t *mac);
+
+/**
+ * Configure Rx SC (Secure Connection).
+ *
+ * @param port
+ *   The port identifier of the Ethernet device.
+ * @param mac
+ *   The MAC address on the remote side.
+ * @param pi
+ *   The PI (port identifier) on the remote side.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENODEV) if *port* invalid.
+ *   - (-ENOTSUP) if hardware doesn't support this feature.
+ */
+int rte_pmd_ixgbe_macsec_config_rxsc(uint8_t port, uint8_t *mac, uint16_t pi);
+
+/**
+ * Enable Tx SA (Secure Association).
+ *
+ * @param port
+ *   The port identifier of the Ethernet device.
+ * @param idx
+ *   The SA to be enabled (0 or 1).
+ * @param an
+ *   The association number on the local side.
+ * @param pn
+ *   The packet number on the local side.
+ * @param key
+ *   The key on the local side.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENODEV) if *port* invalid.
+ *   - (-ENOTSUP) if hardware doesn't support this feature.
+ *   - (-EINVAL) if bad parameter.
+ */
+int rte_pmd_ixgbe_macsec_select_txsa(uint8_t port, uint8_t idx, uint8_t an,
+		uint32_t pn, uint8_t *key);
+
+/**
+ * Enable Rx SA (Secure Association).
+ *
+ * @param port
+ *   The port identifier of the Ethernet device.
+ * @param idx
+ *   The SA to be enabled (0 or 1)
+ * @param an
+ *   The association number on the remote side.
+ * @param pn
+ *   The packet number on the remote side.
+ * @param key
+ *   The key on the remote side.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENODEV) if *port* invalid.
+ *   - (-ENOTSUP) if hardware doesn't support this feature.
+ *   - (-EINVAL) if bad parameter.
+ */
+int rte_pmd_ixgbe_macsec_select_rxsa(uint8_t port, uint8_t idx, uint8_t an,
+		uint32_t pn, uint8_t *key);
+
+/**
+* Set RX L2 Filtering mode of a VF of an Ethernet device.
+*
+* @param port
+*   The port identifier of the Ethernet device.
+* @param vf
+*   VF id.
+* @param rx_mask
+*    The RX mode mask, which is one or more of accepting Untagged Packets,
+*    packets that match the PFUTA table, Broadcast and Multicast Promiscuous.
+*    ETH_VMDQ_ACCEPT_UNTAG,ETH_VMDQ_ACCEPT_HASH_UC,
+*    ETH_VMDQ_ACCEPT_BROADCAST and ETH_VMDQ_ACCEPT_MULTICAST will be used
+*    in rx_mode.
+* @param on
+*    1 - Enable a VF RX mode.
+*    0 - Disable a VF RX mode.
+* @return
+*   - (0) if successful.
+*   - (-ENOTSUP) if hardware doesn't support.
+*   - (-ENODEV) if *port_id* invalid.
+*   - (-EINVAL) if bad parameter.
+*/
+int
+rte_pmd_ixgbe_set_vf_rxmode(uint8_t port, uint16_t vf, uint16_t rx_mask, uint8_t on);
+
+/**
+* Enable or disable a VF traffic receive of an Ethernet device.
+*
+* @param port
+*   The port identifier of the Ethernet device.
+* @param vf
+*   VF id.
+* @param on
+*    1 - Enable a VF traffic receive.
+*    0 - Disable a VF traffic receive.
+* @return
+*   - (0) if successful.
+*   - (-ENOTSUP) if hardware doesn't support.
+*   - (-ENODEV) if *port_id* invalid.
+*   - (-EINVAL) if bad parameter.
+*/
+int
+rte_pmd_ixgbe_set_vf_rx(uint8_t port, uint16_t vf, uint8_t on);
+
+/**
+* Enable or disable a VF traffic transmit of the Ethernet device.
+*
+* @param port
+*   The port identifier of the Ethernet device.
+* @param vf
+*   VF id.
+* @param on
+*    1 - Enable a VF traffic transmit.
+*    0 - Disable a VF traffic transmit.
+* @return
+*   - (0) if successful.
+*   - (-ENODEV) if *port_id* invalid.
+*   - (-ENOTSUP) if hardware doesn't support.
+*   - (-EINVAL) if bad parameter.
+*/
+int
+rte_pmd_ixgbe_set_vf_tx(uint8_t port, uint16_t vf, uint8_t on);
+
+/**
+* Enable/Disable hardware VF VLAN filtering by an Ethernet device of
+* received VLAN packets tagged with a given VLAN Tag Identifier.
+*
+* @param port
+*   The port identifier of the Ethernet device.
+* @param vlan
+*   The VLAN Tag Identifier whose filtering must be enabled or disabled.
+* @param vf_mask
+*    Bitmap listing which VFs participate in the VLAN filtering.
+* @param vlan_on
+*    1 - Enable VFs VLAN filtering.
+*    0 - Disable VFs VLAN filtering.
+* @return
+*   - (0) if successful.
+*   - (-ENOTSUP) if hardware doesn't support.
+*   - (-ENODEV) if *port_id* invalid.
+*   - (-EINVAL) if bad parameter.
+*/
+int
+rte_pmd_ixgbe_set_vf_vlan_filter(uint8_t port, uint16_t vlan, uint64_t vf_mask, uint8_t vlan_on);
+
+/**
+ * Set the rate limitation for a vf on an Ethernet device.
+ *
+ * @param port
+ *   The port identifier of the Ethernet device.
+ * @param vf
+ *   VF id.
+ * @param tx_rate
+ *   The tx rate allocated from the total link speed for this VF id.
+ * @param q_msk
+ *   The queue mask which need to set the rate.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENOTSUP) if hardware doesn't support this feature.
+ *   - (-ENODEV) if *port_id* invalid.
+ *   - (-EINVAL) if bad parameter.
+ */
+int rte_pmd_ixgbe_set_vf_rate_limit(uint8_t port, uint16_t vf, uint16_t tx_rate, uint64_t q_msk);
+
+/**
+ * Set all the TCs' bandwidth weight.
+ *
+ * The bw_weight means the percentage occupied by the TC.
+ * It can be taken as the relative min bandwidth setting.
+ *
+ * @param port
+ *    The port identifier of the Ethernet device.
+ * @param tc_num
+ *    Number of TCs.
+ * @param bw_weight
+ *    An array of relative bandwidth weight for all the TCs.
+ *    The summary of the bw_weight should be 100.
+ * @return
+ *   - (0) if successful.
+ *   - (-ENODEV) if *port* invalid.
+ *   - (-EINVAL) if bad parameter.
+ *   - (-ENOTSUP) not supported by firmware.
+ */
+int rte_pmd_ixgbe_set_tc_bw_alloc(uint8_t port,
+				  uint8_t tc_num,
+				  uint8_t *bw_weight);
 
 /**
  * Response sent back to ixgbe driver from user app after callback

@@ -1,0 +1,9 @@
+librte_metrics.so.17.05 librte-metrics17.05 #MINVER#
+ DPDK_17.05@DPDK_17.05 17.05
+ rte_metrics_get_names@DPDK_17.05 17.05
+ rte_metrics_get_values@DPDK_17.05 17.05
+ rte_metrics_init@DPDK_17.05 17.05
+ rte_metrics_reg_name@DPDK_17.05 17.05
+ rte_metrics_reg_names@DPDK_17.05 17.05
+ rte_metrics_update_value@DPDK_17.05 17.05
+ rte_metrics_update_values@DPDK_17.05 17.05

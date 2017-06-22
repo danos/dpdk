@@ -1,0 +1,4 @@
+librte_pmd_sfc_efx.so.17.05 librte-pmd-sfc-efx17.05 #MINVER#
+ DPDK_17.02@DPDK_17.02 17.05
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

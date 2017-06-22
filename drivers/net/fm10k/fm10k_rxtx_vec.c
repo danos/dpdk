@@ -324,9 +324,6 @@ fm10k_rxq_rearm(struct fm10k_rx_queue *rxq)
 
 		/* Flush mbuf with pkt template.
 		 * Data to be rearmed is 6 bytes long.
-		 * Though, RX will overwrite ol_flags that are coming next
-		 * anyway. So overwrite whole 8 bytes with one load:
-		 * 6 bytes of rearm_data plus first 2 bytes of ol_flags.
 		 */
 		p0 = (uintptr_t)&mb0->rearm_data;
 		*(uint64_t *)p0 = rxq->mbuf_initializer;
@@ -762,12 +759,12 @@ fm10k_tx_free_bufs(struct fm10k_tx_queue *txq)
 	 * next_dd - (rs_thresh-1)
 	 */
 	txep = &txq->sw_ring[txq->next_dd - (n - 1)];
-	m = __rte_pktmbuf_prefree_seg(txep[0]);
+	m = rte_pktmbuf_prefree_seg(txep[0]);
 	if (likely(m != NULL)) {
 		free[0] = m;
 		nb_free = 1;
 		for (i = 1; i < n; i++) {
-			m = __rte_pktmbuf_prefree_seg(txep[i]);
+			m = rte_pktmbuf_prefree_seg(txep[i]);
 			if (likely(m != NULL)) {
 				if (likely(m->pool == free[0]->pool))
 					free[nb_free++] = m;
@@ -782,7 +779,7 @@ fm10k_tx_free_bufs(struct fm10k_tx_queue *txq)
 		rte_mempool_put_bulk(free[0]->pool, (void **)free, nb_free);
 	} else {
 		for (i = 1; i < n; i++) {
-			m = __rte_pktmbuf_prefree_seg(txep[i]);
+			m = rte_pktmbuf_prefree_seg(txep[i]);
 			if (m != NULL)
 				rte_mempool_put(m->pool, m);
 		}
@@ -808,8 +805,8 @@ tx_backlog_entry(struct rte_mbuf **txep,
 }
 
 uint16_t
-fm10k_xmit_pkts_vec(void *tx_queue, struct rte_mbuf **tx_pkts,
-			uint16_t nb_pkts)
+fm10k_xmit_fixed_burst_vec(void *tx_queue, struct rte_mbuf **tx_pkts,
+			   uint16_t nb_pkts)
 {
 	struct fm10k_tx_queue *txq = (struct fm10k_tx_queue *)tx_queue;
 	volatile struct fm10k_tx_desc *txdp;

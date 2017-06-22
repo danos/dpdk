@@ -1,0 +1,5 @@
+librte_pmd_nfp.so.17.05 librte-pmd-nfp17.05 #MINVER#
+# was not built before 17.05
+ DPDK_2.2@DPDK_2.2 17.05
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

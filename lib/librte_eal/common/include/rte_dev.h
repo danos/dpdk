@@ -123,40 +123,6 @@ struct rte_mem_resource {
 	void *addr;         /**< Virtual address, NULL when not mapped. */
 };
 
-/** Double linked list of device drivers. */
-TAILQ_HEAD(rte_driver_list, rte_driver);
-/** Double linked list of devices. */
-TAILQ_HEAD(rte_device_list, rte_device);
-
-/* Forward declaration */
-struct rte_driver;
-
-/**
- * A structure describing a generic device.
- */
-struct rte_device {
-	TAILQ_ENTRY(rte_device) next; /**< Next device */
-	struct rte_driver *driver;    /**< Associated driver */
-	int numa_node;                /**< NUMA node connection */
-	struct rte_devargs *devargs;  /**< Device user arguments */
-};
-
-/**
- * Insert a device detected by a bus scanning.
- *
- * @param dev
- *   A pointer to a rte_device structure describing the detected device.
- */
-void rte_eal_device_insert(struct rte_device *dev);
-
-/**
- * Remove a device (e.g. when being unplugged).
- *
- * @param dev
- *   A pointer to a rte_device structure describing the device to be removed.
- */
-void rte_eal_device_remove(struct rte_device *dev);
-
 /**
  * A structure describing a device driver.
  */
@@ -167,27 +133,15 @@ struct rte_driver {
 };
 
 /**
- * Register a device driver.
- *
- * @param driver
- *   A pointer to a rte_dev structure describing the driver
- *   to be registered.
+ * A structure describing a generic device.
  */
-void rte_eal_driver_register(struct rte_driver *driver);
-
-/**
- * Unregister a device driver.
- *
- * @param driver
- *   A pointer to a rte_dev structure describing the driver
- *   to be unregistered.
- */
-void rte_eal_driver_unregister(struct rte_driver *driver);
-
-/**
- * Initalize all the registered drivers in this process
- */
-int rte_eal_dev_init(void);
+struct rte_device {
+	TAILQ_ENTRY(rte_device) next; /**< Next device */
+	const char *name;             /**< Device name */
+	const struct rte_driver *driver;/**< Associated driver */
+	int numa_node;                /**< NUMA node connection */
+	struct rte_devargs *devargs;  /**< Device user arguments */
+};
 
 /**
  * Initialize a driver specified by name.
@@ -199,7 +153,7 @@ int rte_eal_dev_init(void);
  * @return
  *  0 on success, negative on error
  */
-int rte_eal_vdev_init(const char *name, const char *args);
+int rte_vdev_init(const char *name, const char *args);
 
 /**
  * Uninitalize a driver specified by name.
@@ -209,7 +163,7 @@ int rte_eal_vdev_init(const char *name, const char *args);
  * @return
  *  0 on success, negative on error
  */
-int rte_eal_vdev_uninit(const char *name);
+int rte_vdev_uninit(const char *name);
 
 /**
  * Attach a device to a registered driver.
@@ -251,6 +205,31 @@ RTE_STR(table)
 
 #define RTE_PMD_REGISTER_PARAM_STRING(name, str) \
 static const char DRV_EXP_TAG(name, param_string_export)[] \
+__attribute__((used)) = str
+
+/**
+ * Advertise the list of kernel modules required to run this driver
+ *
+ * This string lists the kernel modules required for the devices
+ * associated to a PMD. The format of each line of the string is:
+ * "<device-pattern> <kmod-expression>".
+ *
+ * The possible formats for the device pattern are:
+ *   "*"                     all devices supported by this driver
+ *   "pci:*"                 all PCI devices supported by this driver
+ *   "pci:v8086:d*:sv*:sd*"  all PCI devices supported by this driver
+ *                           whose vendor id is 0x8086.
+ *
+ * The format of the kernel modules list is a parenthesed expression
+ * containing logical-and (&) and logical-or (|).
+ *
+ * The device pattern and the kmod expression are separated by a space.
+ *
+ * Example:
+ * - "* igb_uio | uio_pci_generic | vfio"
+ */
+#define RTE_PMD_REGISTER_KMOD_DEP(name, str) \
+static const char DRV_EXP_TAG(name, kmod_dep_export)[] \
 __attribute__((used)) = str
 
 #ifdef __cplusplus
