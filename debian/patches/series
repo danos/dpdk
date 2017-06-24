@@ -13,3 +13,7 @@ igb_uio-switch-to-new-irq-function-for-MSI-X.patch
 mk-use-make-silent-flag-to-print-HTML-doc-version.patch
 mk-fix-excluding-.doctrees-when-installing-docs.patch
 mk-sort-list-of-shared-objects-in-linker-script.patch
+mk-sort-headers-before-wildcard-inclusion.patch
+mk-sort-source-files-before-passing-them-to-the-comp.patch
+mk-sort-object-files-when-building-deps-lists.patch
+mk-always-rebuild-in-the-same-order.patch

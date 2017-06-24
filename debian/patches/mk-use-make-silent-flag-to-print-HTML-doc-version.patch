@@ -10,10 +10,10 @@ piped to doxygen. This causes the following to be written:
 
 Use -s (--silent) to prevent echoing.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25631/
+Origin: http://dpdk.org/dev/patchwork/patch/25673/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-06-22
+Last-Update: 2017-06-24
 ---
  mk/rte.sdkdoc.mk | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

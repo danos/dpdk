@@ -1,0 +1,54 @@
+Description: mk: always rebuild in the same order
+
+In order to achieve reproducible builds, always check dependencies in
+the same order.
+
+Origin: http://dpdk.org/dev/patchwork/patch/25679/
+Forwarded: yes
+Author: Luca Boccassi <luca.boccassi@gmail.com>
+Last-Update: 2017-06-24
+---
+ mk/internal/rte.compile-pre.mk | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/mk/internal/rte.compile-pre.mk b/mk/internal/rte.compile-pre.mk
+index da8dda498..5d519100c 100644
+--- a/mk/internal/rte.compile-pre.mk
++++ b/mk/internal/rte.compile-pre.mk
+@@ -108,13 +108,13 @@ C_TO_O_DO = @set -e; \
+ compare = $(strip $(subst $(1),,$(2)) $(subst $(2),,$(1)))
+ 
+ # return a non-empty string if the dst file does not exist
+-file_missing = $(call compare,$(wildcard $@),$@)
++file_missing = $(call compare,$(sort $(wildcard $@)),$@)
+ 
+ # return a non-empty string if cmdline changed
+ cmdline_changed = $(call compare,$(strip $(cmd_$@)),$(strip $(1)))
+ 
+ # return a non-empty string if a dependency file does not exist
+-depfile_missing = $(call compare,$(wildcard $(dep_$@)),$(dep_$@))
++depfile_missing = $(call compare,$(sort $(wildcard $(dep_$@))),$(dep_$@))
+ 
+ # return an empty string if no prereq is newer than target
+ #     - $^ -> names of all the prerequisites
+@@ -123,7 +123,7 @@ depfile_missing = $(call compare,$(wildcard $(dep_$@)),$(dep_$@))
+ #       exist (filter-out removes existing ones from the list)
+ #     - $? -> names of all the prerequisites newer than target
+ depfile_newer = $(strip $(filter-out FORCE,$? \
+-	$(filter-out $(wildcard $^),$^)))
++	$(filter-out $(sort $(wildcard $^)),$^)))
+ 
+ # return 1 if parameter is a non-empty string, else 0
+ boolean = $(if $1,1,0)
+@@ -134,7 +134,7 @@ boolean = $(if $1,1,0)
+ # user (by default it is empty)
+ #
+ .SECONDEXPANSION:
+-%.o: %.c $$(wildcard $$(dep_$$@)) $$(DEP_$$(@)) FORCE
++%.o: %.c $$(sort $$(wildcard $$(dep_$$@))) $$(DEP_$$(@)) FORCE
+ 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+ 	$(if $(D),\
+ 		@echo -n "$< -> $@ " ; \
+-- 
+2.11.0
+
