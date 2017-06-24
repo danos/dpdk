@@ -4,10 +4,10 @@ The --exclude parameter must be passed before the input directory to
 tar, otherwise it's silently ignored and the .doctrees directory is
 installed by make install-doc.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25632/
+Origin: http://dpdk.org/dev/patchwork/patch/25674/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-06-22
+Last-Update: 2017-06-24
 ---
  mk/rte.sdkinstall.mk | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
