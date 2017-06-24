@@ -24,8 +24,10 @@ dpdk (17.05-1~git1) UNRELEASED; urgency=medium
   * Drop patches merged upstream and refresh
     fix-vhost-user-socket-permission.patch
   * Add patches to make the documentation and linker script builds fully
-    reproducible. There are still reproducibility issues due to the use
-    of __FILE__ and absolute paths.
+    reproducible.
+  * Add patches to make the libraries and PMDs builds fully reproducible,
+    by making the listing order of headers, source files and objects in
+    the makefiles stable (via sorting).
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 16 May 2017 15:38:17 +0200
 
