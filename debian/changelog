@@ -9,6 +9,8 @@ dpdk (16.11.2-1~git1) UNRELEASED; urgency=medium
     - d/p/nicvf-0006-mk-fix-lib-filtering-when-linking-app.patch
     - d/p/nicvf-0008-net-thunderx-fix-stats-access-out-of-bounds.patch
     - d/p/nicvf-0010-net-thunderx-fix-deadlock-in-Rx-path.patch
+  * d/p/igb_uio-switch-to-new-irq-function-for-MSI-X.patch: fix dkms issue
+    in kernel 4.12 (LP: #1700768)
 
   [ Luca Boccassi ]
   * Optionally generate libdpdk-dbgsym metapackage that depends on every
