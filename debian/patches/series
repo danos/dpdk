@@ -1,3 +1,4 @@
 fix-vhost-user-socket-permission.patch
 fix-power-default-config.patch
 dpdk-dev-v3-eal-sPAPR-IOMMU-support-in-pci-probing-for-vfio-pci-in-ppc64le.patch
+igb_uio-switch-to-new-irq-function-for-MSI-X.patch
