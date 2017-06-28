@@ -7,4 +7,4 @@ mk-sort-list-of-files-in-examples.dox.patch
 mk-sort-headers-before-wildcard-inclusion.patch
 mk-sort-source-files-before-passing-them-to-the-comp.patch
 mk-sort-object-files-when-building-deps-lists.patch
-mk-always-rebuild-in-the-same-order.patch
+mk-order-CFLAGS-so-that-ISCDIR-comes-before-IRTE_OUT.patch
