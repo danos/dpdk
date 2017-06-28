@@ -6,7 +6,7 @@ This means the content libdpdk.so linker script might change between
 builds from the same sources.
 Run the list through sort to ensure reproducibility.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25675/
+Origin: http://dpdk.org/dev/patchwork/patch/25861/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
 Last-Update: 2017-06-24

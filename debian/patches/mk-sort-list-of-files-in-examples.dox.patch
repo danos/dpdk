@@ -5,7 +5,7 @@ conditions.
 Pipe it through LC_ALL=C sort to ensure reproducible results when
 generating examples.dox.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25676/
+Origin: http://dpdk.org/dev/patchwork/patch/25862/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
 Last-Update: 2017-06-24

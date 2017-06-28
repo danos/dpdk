@@ -3,7 +3,7 @@ Description: mk: sort object files when building deps lists
 In order to achieve reproducible builds, always use the same
 order when listing object files to build dependencies lists.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25680/
+Origin: http://dpdk.org/dev/patchwork/patch/25865/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
 Last-Update: 2017-06-24
