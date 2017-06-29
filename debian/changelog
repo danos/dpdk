@@ -31,6 +31,11 @@ dpdk (16.11.2-1~git1) UNRELEASED; urgency=medium
   * Fix some upstream documentation links in the packages metadata.
     Thanks Chas Williams!
   * Fix building debugging symbols for -dbgsym packages. Thanks Chas Williams!
+  * Add patches to make the documentation and linker script builds fully
+    reproducible.
+  * Add patches to make the libraries and PMDs builds fully reproducible,
+    by making the listing order of headers, source files and objects in
+    the makefiles stable (via sorting).
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Jun 2017 10:05:44 -0600
 
