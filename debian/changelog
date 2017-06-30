@@ -1,4 +1,4 @@
-dpdk (16.11.2-4) UNRELEASED; urgency=medium
+dpdk (16.11.2-4) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
   * d/p/igb_uio-switch-to-new-irq-function-for-MSI-X.patch: fix dkms issue
@@ -11,7 +11,7 @@ dpdk (16.11.2-4) UNRELEASED; urgency=medium
     by making the listing order of headers, source files and objects in
     the makefiles stable (via sorting).
 
- -- Luca Boccassi <luca.boccassi@gmail.com>  Fri, 30 Jun 2017 12:05:57 +0100
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Fri, 30 Jun 2017 12:09:59 +0100
 
 dpdk (16.11.2-3) unstable; urgency=medium
 
