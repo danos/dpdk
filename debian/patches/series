@@ -9,3 +9,11 @@ nicvf-0005-net-thunderx-wait-to-complete-during-link-update.patch
 nicvf-0007-net-thunderx-disable-PMD-for-old-compilers.patch
 nicvf-0009-config-set-cache-line-as-128B-for-generic-arm64.patch
 kni-fix-ethtool-build-with-kernel-4.11.patch
+igb_uio-switch-to-new-irq-function-for-MSI-X.patch
+mk-use-make-silent-flag-to-print-HTML-doc-version.patch
+mk-fix-excluding-.doctrees-when-installing-docs.patch
+mk-sort-list-of-shared-objects-in-linker-script.patch
+mk-sort-headers-before-wildcard-inclusion.patch
+mk-sort-source-files-before-passing-them-to-the-comp.patch
+mk-sort-object-files-when-building-deps-lists.patch
+mk-order-CFLAGS-so-that-ISCDIR-comes-before-IRTE_OUT.patch

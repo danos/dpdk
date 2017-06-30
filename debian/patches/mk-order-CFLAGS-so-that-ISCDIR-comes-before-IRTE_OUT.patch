@@ -1,0 +1,371 @@
+Description: mk: set -ISCDIR before -IRTE_OUT/include in CFLAGS
+
+A race condition can happen during parallel builds, where a header
+might be installed in RTE_OUT/include before CFLAGS is recursively
+expanded. This causes GCC to sometimes pick the header path as
+SRCDIR/... and sometimes as RTE_OUT/include/... making the build
+unreproducible, as the full path is used for the expansion of
+__FILE__ and in the DWARF directory listing.
+Always pass -ISRCDIR first to CFLAGS so that it's deterministic.
+
+Origin: http://dpdk.org/dev/patchwork/patch/25866/
+Forwarded: yes
+Author: Luca Boccassi <luca.boccassi@gmail.com>
+Last-Update: 2017-06-28
+---
+ lib/librte_acl/Makefile          | 10 ++++++++--
+ lib/librte_bitratestats/Makefile |  9 ++++++++-
+ lib/librte_cmdline/Makefile      |  9 ++++++++-
+ lib/librte_distributor/Makefile  | 10 ++++++++--
+ lib/librte_efd/Makefile          | 10 ++++++++--
+ lib/librte_hash/Makefile         | 10 ++++++++--
+ lib/librte_ip_frag/Makefile      | 10 ++++++++--
+ lib/librte_jobstats/Makefile     | 10 ++++++++--
+ lib/librte_kni/Makefile          |  9 ++++++++-
+ lib/librte_kvargs/Makefile       |  9 ++++++++-
+ lib/librte_latencystats/Makefile |  9 ++++++++-
+ lib/librte_lpm/Makefile          | 10 ++++++++--
+ lib/librte_mbuf/Makefile         |  9 ++++++++-
+ lib/librte_mempool/Makefile      |  9 ++++++++-
+ lib/librte_metrics/Makefile      |  9 ++++++++-
+ lib/librte_net/Makefile          |  9 ++++++++-
+ lib/librte_pdump/Makefile        | 10 ++++++++--
+ lib/librte_power/Makefile        |  9 ++++++++-
+ lib/librte_reorder/Makefile      | 10 ++++++++--
+ lib/librte_ring/Makefile         |  9 ++++++++-
+ lib/librte_timer/Makefile        |  9 ++++++++-
+ lib/librte_vhost/Makefile        |  9 ++++++++-
+ 22 files changed, 176 insertions(+), 31 deletions(-)
+
+--- a/lib/librte_acl/Makefile
++++ b/lib/librte_acl/Makefile
+@@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_acl.a
+ 
+-CFLAGS += -O3
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR)
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_acl_version.map
+ 
+--- a/lib/librte_cmdline/Makefile
++++ b/lib/librte_cmdline/Makefile
+@@ -34,7 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_cmdline.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_cmdline_version.map
+ 
+--- a/lib/librte_distributor/Makefile
++++ b/lib/librte_distributor/Makefile
+@@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_distributor.a
+ 
+-CFLAGS += -O3
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR)
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_distributor_version.map
+ 
+--- a/lib/librte_hash/Makefile
++++ b/lib/librte_hash/Makefile
+@@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_hash.a
+ 
+-CFLAGS += -O3
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR)
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_hash_version.map
+ 
+--- a/lib/librte_ip_frag/Makefile
++++ b/lib/librte_ip_frag/Makefile
+@@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_ip_frag.a
+ 
+-CFLAGS += -O3
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR)
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_ipfrag_version.map
+ 
+--- a/lib/librte_jobstats/Makefile
++++ b/lib/librte_jobstats/Makefile
+@@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_jobstats.a
+ 
+-CFLAGS += -O3
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR)
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_jobstats_version.map
+ 
+--- a/lib/librte_kni/Makefile
++++ b/lib/librte_kni/Makefile
+@@ -34,7 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_kni.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3 -fno-strict-aliasing
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3 -fno-strict-aliasing
+ 
+ EXPORT_MAP := rte_kni_version.map
+ 
+--- a/lib/librte_kvargs/Makefile
++++ b/lib/librte_kvargs/Makefile
+@@ -36,7 +36,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_kvargs.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_kvargs_version.map
+ 
+--- a/lib/librte_lpm/Makefile
++++ b/lib/librte_lpm/Makefile
+@@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_lpm.a
+ 
+-CFLAGS += -O3
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR)
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_lpm_version.map
+ 
+--- a/lib/librte_mbuf/Makefile
++++ b/lib/librte_mbuf/Makefile
+@@ -34,7 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_mbuf.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_mbuf_version.map
+ 
+--- a/lib/librte_mempool/Makefile
++++ b/lib/librte_mempool/Makefile
+@@ -34,7 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_mempool.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_mempool_version.map
+ 
+--- a/lib/librte_net/Makefile
++++ b/lib/librte_net/Makefile
+@@ -33,7 +33,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ 
+ LIB = librte_net.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_net_version.map
+ LIBABIVER := 1
+--- a/lib/librte_pdump/Makefile
++++ b/lib/librte_pdump/Makefile
+@@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_pdump.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
+-CFLAGS += -D_GNU_SOURCE
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3 -D_GNU_SOURCE
+ LDLIBS += -lpthread
+ 
+ EXPORT_MAP := rte_pdump_version.map
+--- a/lib/librte_power/Makefile
++++ b/lib/librte_power/Makefile
+@@ -34,7 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_power.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3 -fno-strict-aliasing
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3 -fno-strict-aliasing
+ 
+ EXPORT_MAP := rte_power_version.map
+ 
+--- a/lib/librte_reorder/Makefile
++++ b/lib/librte_reorder/Makefile
+@@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_reorder.a
+ 
+-CFLAGS += -O3
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR)
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_reorder_version.map
+ 
+--- a/lib/librte_ring/Makefile
++++ b/lib/librte_ring/Makefile
+@@ -34,7 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_ring.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_ring_version.map
+ 
+--- a/lib/librte_timer/Makefile
++++ b/lib/librte_timer/Makefile
+@@ -34,7 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_timer.a
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during parallel
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3
+ 
+ EXPORT_MAP := rte_timer_version.map
+ 
+--- a/lib/librte_vhost/Makefile
++++ b/lib/librte_vhost/Makefile
+@@ -38,7 +38,14 @@ EXPORT_MAP := rte_vhost_version.map
+ 
+ LIBABIVER := 3
+ 
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3 -D_FILE_OFFSET_BITS=64
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during parallel
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
++CFLAGS += $(WERROR_FLAGS) -O3 -D_FILE_OFFSET_BITS=64
+ CFLAGS += -I vhost_user
+ LDLIBS += -lpthread
+ 

@@ -1,3 +1,18 @@
+dpdk (16.11.2-4) unstable; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * d/p/igb_uio-switch-to-new-irq-function-for-MSI-X.patch: fix dkms issue
+    in kernel 4.12 (LP: #1700768)
+
+  [ Luca Boccassi ]
+  * Add patches to make the documentation and linker script builds fully
+    reproducible.
+  * Add patches to make the libraries and PMDs builds fully reproducible,
+    by making the listing order of headers, source files and objects in
+    the makefiles stable (via sorting).
+
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Fri, 30 Jun 2017 12:09:59 +0100
+
 dpdk (16.11.2-3) unstable; urgency=medium
 
   * Upload to unstable.
