@@ -11,6 +11,7 @@ DPDK_ABI := $(shell echo $(VERSION) | cut -d '.'  -f1-2)
 include /usr/share/dpkg/default.mk
 
 DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
+DEB_HOST_MULTIARCH := $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 # see FEATURE AREAS in dpkg-buildflags(1)
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
@@ -56,15 +57,18 @@ ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
 DPDK_CONFIG ?= "arm64-armv8a-linuxapp-gcc"
 RTE_MACHINE ?= "armv8a"
 RTE_TARGET ?= "arm64-armv8a-linuxapp-gcc"
+INCLUDE_ARCH := arm
 else
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
 DPDK_CONFIG ?= "ppc_64-power8-linuxapp-gcc"
 RTE_MACHINE ?= "power8"
 RTE_TARGET ?= "ppc_64-power8-linuxapp-gcc"
+INCLUDE_ARCH := ppc_64
 else
 DPDK_CONFIG ?= "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
 RTE_MACHINE ?= "default"
 RTE_TARGET ?= "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
+INCLUDE_ARCH := x86
 endif
 endif
 DPDK_STATIC_DIR = "debian/build/static-root"
@@ -180,7 +184,7 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
 		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
-		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)/dpdk-pmds/",' \
+		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/dpdk-pmds/",' \
 		$(DPDK_STATIC_DIR)/.config
 	# xen not available on ppc64el
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
@@ -224,7 +228,7 @@ ifeq (y,$(BUILD_DOCS))
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
 endif
 
-override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+override_dh_auto_install-arch: LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
 	# Package: dpdk (runtime)
 ifeq (y,$(BUILD_STATIC_LIB))
@@ -263,7 +267,14 @@ endif
 	# linker script
 	mv debian/dpdk/$(LIBDIR)/libdpdk.so debian/libdpdk-dev/$(LIBDIR)/
 	# includes
-	mkdir -p debian/libdpdk-dev/usr/include
+	# Some headers have architecture-specific content, but the upstream build
+	# system installs them in the same directory, breaking multiarch.
+	# Move them in /usr/include/<arch>/dpdk instead.
+	mkdir -p debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk
+	mv $(addprefix debian/dpdk-dev/usr/include/dpdk/,$(notdir $(wildcard lib/librte_eal/common/include/arch/$(INCLUDE_ARCH)/*.h))) \
+		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
+	mv debian/dpdk-dev/usr/include/dpdk/rte_config.h \
+		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
 	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
 	# all static libs are in the dev package
 ifeq (y,$(BUILD_STATIC_LIB))
@@ -307,7 +318,7 @@ endif
 	LIBS=$$(sed -e 's/GROUP ( \(.*\) )/\1/' -e 's/lib/-l/g' -e 's/\.so//g' \
 		$(CURDIR)/debian/libdpdk-dev/$(LIBDIR)/libdpdk.so); \
 	sed -e "s/@DPDK_LIBS@/$${LIBS}/" -e "s/@VERSION@/$(VERSION)/" \
-		-e "s|@LIBDIR@|$(LIBDIR)|" \
+		-e "s|@DEB_HOST_MULTIARCH@|$(DEB_HOST_MULTIARCH)|g" \
 		debian/libdpdk.pc.in > debian/libdpdk-dev/$(LIBDIR)/pkgconfig/libdpdk.pc
 	# Package: dpdk-igb-uio-dkms
 	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(VERSION)
