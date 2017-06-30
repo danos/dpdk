@@ -1,3 +1,18 @@
+dpdk (16.11.2-4) UNRELEASED; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * d/p/igb_uio-switch-to-new-irq-function-for-MSI-X.patch: fix dkms issue
+    in kernel 4.12 (LP: #1700768)
+
+  [ Luca Boccassi ]
+  * Add patches to make the documentation and linker script builds fully
+    reproducible.
+  * Add patches to make the libraries and PMDs builds fully reproducible,
+    by making the listing order of headers, source files and objects in
+    the makefiles stable (via sorting).
+
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Fri, 30 Jun 2017 12:05:57 +0100
+
 dpdk (16.11.2-3) unstable; urgency=medium
 
   * Upload to unstable.
@@ -22,8 +37,6 @@ dpdk (16.11.2-1) experimental; urgency=medium
     - d/p/nicvf-0006-mk-fix-lib-filtering-when-linking-app.patch
     - d/p/nicvf-0008-net-thunderx-fix-stats-access-out-of-bounds.patch
     - d/p/nicvf-0010-net-thunderx-fix-deadlock-in-Rx-path.patch
-  * d/p/igb_uio-switch-to-new-irq-function-for-MSI-X.patch: fix dkms issue
-    in kernel 4.12 (LP: #1700768)
 
   [ Luca Boccassi ]
   * Optionally generate libdpdk-dbgsym metapackage that depends on every
@@ -44,11 +57,6 @@ dpdk (16.11.2-1) experimental; urgency=medium
   * Fix some upstream documentation links in the packages metadata.
     Thanks Chas Williams!
   * Fix building debugging symbols for -dbgsym packages. Thanks Chas Williams!
-  * Add patches to make the documentation and linker script builds fully
-    reproducible.
-  * Add patches to make the libraries and PMDs builds fully reproducible,
-    by making the listing order of headers, source files and objects in
-    the makefiles stable (via sorting).
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Thu, 15 Jun 2017 11:30:23 +0100
 
