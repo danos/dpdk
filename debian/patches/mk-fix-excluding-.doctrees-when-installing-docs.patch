@@ -1,0 +1,30 @@
+Description: mk: fix excluding .doctrees when installing docs
+
+The --exclude parameter must be passed before the input directory to
+tar, otherwise it's silently ignored and the .doctrees directory is
+installed by make install-doc.
+
+Origin: http://dpdk.org/dev/patchwork/patch/25674/
+Forwarded: yes
+Author: Luca Boccassi <luca.boccassi@gmail.com>
+Last-Update: 2017-06-24
+---
+ mk/rte.sdkinstall.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mk/rte.sdkinstall.mk b/mk/rte.sdkinstall.mk
+index dbac2a277..4e97feff9 100644
+--- a/mk/rte.sdkinstall.mk
++++ b/mk/rte.sdkinstall.mk
+@@ -162,7 +162,7 @@ install-sdk:
+ install-doc:
+ ifneq ($(wildcard $O/doc/html),)
+ 	$(Q)$(call rte_mkdir, $(DESTDIR)$(docdir))
+-	$(Q)tar -cf -      -C $O/doc html --exclude 'html/guides/.*' | \
++	$(Q)tar -cf -      -C $O/doc --exclude 'html/guides/.*' html | \
+ 	    tar -xf -      -C $(DESTDIR)$(docdir) --strip-components=1 \
+ 		--keep-newer-files
+ endif
+-- 
+2.11.0
+

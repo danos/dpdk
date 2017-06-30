@@ -1,0 +1,49 @@
+Description: mk: sort headers before wildcard inclusion
+
+In order to achieve fully reproducible builds, always use the same
+inclusion order for headers in the Makefiles.
+
+Origin: http://dpdk.org/dev/patchwork/patch/25863/
+Forwarded: yes
+Author: Luca Boccassi <luca.boccassi@gmail.com>
+Last-Update: 2017-06-24
+---
+ examples/ip_pipeline/Makefile                              | 2 +-
+ examples/multi_process/client_server_mp/mp_server/Makefile | 2 +-
+ examples/server_node_efd/server/Makefile                   | 2 +-
+ lib/librte_eal/common/Makefile                             | 2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+--- a/examples/ip_pipeline/Makefile
++++ b/examples/ip_pipeline/Makefile
+@@ -45,7 +45,7 @@ APP = ip_pipeline
+ 
+ VPATH += $(SRCDIR)/pipeline
+ 
+-INC += $(wildcard *.h) $(wildcard pipeline/*.h)
++INC += $(sort $(wildcard *.h)) $(sort $(wildcard pipeline/*.h))
+ 
+ # all source are stored in SRCS-y
+ SRCS-$(CONFIG_RTE_LIBRTE_PIPELINE) := main.c
+--- a/examples/multi_process/client_server_mp/mp_server/Makefile
++++ b/examples/multi_process/client_server_mp/mp_server/Makefile
+@@ -49,7 +49,7 @@ APP = mp_server
+ # all source are stored in SRCS-y
+ SRCS-y := main.c init.c args.c
+ 
+-INC := $(wildcard *.h)
++INC := $(sort $(wildcard *.h))
+ 
+ CFLAGS += $(WERROR_FLAGS) -O3
+ CFLAGS += -I$(SRCDIR)/../shared
+--- a/lib/librte_eal/common/Makefile
++++ b/lib/librte_eal/common/Makefile
+@@ -50,7 +50,7 @@ GENERIC_INC := rte_atomic.h rte_byteorde
+ GENERIC_INC += rte_spinlock.h rte_memcpy.h rte_cpuflags.h rte_rwlock.h
+ # defined in mk/arch/$(RTE_ARCH)/rte.vars.mk
+ ARCH_DIR ?= $(RTE_ARCH)
+-ARCH_INC := $(notdir $(wildcard $(RTE_SDK)/lib/librte_eal/common/include/arch/$(ARCH_DIR)/*.h))
++ARCH_INC := $(sort $(notdir $(wildcard $(RTE_SDK)/lib/librte_eal/common/include/arch/$(ARCH_DIR)/*.h)))
+ 
+ SYMLINK-$(CONFIG_RTE_LIBRTE_EAL)-include := $(addprefix include/,$(INC))
+ SYMLINK-$(CONFIG_RTE_LIBRTE_EAL)-include += \
