@@ -36,6 +36,8 @@ dpdk (16.11.2-1~git1) UNRELEASED; urgency=medium
   * Add patches to make the libraries and PMDs builds fully reproducible,
     by making the listing order of headers, source files and objects in
     the makefiles stable (via sorting).
+  * Install headers with arch-specific content in /usr/include/<multiarch>/dpdk
+    to make libdpdk-dev multiarch-compliant.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Jun 2017 10:05:44 -0600
 
