@@ -38,6 +38,10 @@ dpdk (16.11.2-1~git1) UNRELEASED; urgency=medium
     the makefiles stable (via sorting).
   * Install headers with arch-specific content in /usr/include/<multiarch>/dpdk
     to make libdpdk-dev multiarch-compliant.
+    To ensure backward compatibility in x86_64, which is what most of the
+    consumers use, symlink x86_64 headers in /usr/include/dpdk.
+    pkg-config returns the arch-specific headers first so that other
+    architectures are still compatible.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 08 Jun 2017 10:05:44 -0600
 
