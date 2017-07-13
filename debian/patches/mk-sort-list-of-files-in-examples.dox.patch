@@ -5,10 +5,10 @@ conditions.
 Pipe it through LC_ALL=C sort to ensure reproducible results when
 generating examples.dox.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25634/
+Origin: http://dpdk.org/dev/patchwork/patch/25862/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-06-22
+Last-Update: 2017-06-24
 ---
  mk/rte.sdkdoc.mk | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
