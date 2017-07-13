@@ -8,4 +8,4 @@ Name: dpdk
 Description: Data Plane Development Kit library
 Version: @VERSION@
 Libs: -L${libdir} @DPDK_LIBS@ -ldl -lm -lpthread -lz
-Cflags: -include ${include_arch_dir}/dpdk/rte_config.h -I${include_arch_dir}/dpdk -I${includedir}/dpdk
+Cflags: -I${includedir}/dpdk -I${include_arch_dir}/dpdk -include ${include_arch_dir}/dpdk/rte_config.h
