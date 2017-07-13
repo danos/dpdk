@@ -1,11 +1,11 @@
-dpdk (17.05.1-1~git1) UNRELEASED; urgency=medium
+dpdk (17.05.1-1) experimental; urgency=medium
 
   * New Upstream release 17.05.1.
   * Add patches to make the libraries and PMDs builds fully reproducible,
     by making the listing order of headers, source files and objects in
     the makefiles stable (via sorting).
 
- -- Luca Boccassi <luca.boccassi@gmail.com>  Mon, 03 Jul 2017 15:15:40 +0100
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Thu, 13 Jul 2017 18:43:12 +0100
 
 dpdk (17.05-1) experimental; urgency=medium
 
