@@ -4,7 +4,7 @@
 export DH_VERBOSE=1
 export DH_OPTIONS=-v
 
-VERSION := $(shell dpkg-parsechangelog | sed -nr '/^Version:/s/Version: (.*:)?(.*)-(.*)/\2/p')
+VERSION := $(shell dpkg-parsechangelog --show-field Version | sed -nr 's/(.*:)?([^-])(-.*)/\2/p')
 DPDK_ABI := $(shell echo $(VERSION) | cut -d '.'  -f1-2)
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
