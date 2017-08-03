@@ -166,6 +166,7 @@ override_dh_auto_clean:
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	test -L config/defconfig_$(DPDK_CONFIG) && rm -f config/defconfig_$(DPDK_CONFIG) || true
+	rm -f debian/dpdk-igb-uio-dkms.dkms debian/dpdk-rte-kni-dkms.dkms
 
 override_dh_auto_configure:
 	# Add support for a custom defconfig file in the debian directory.
@@ -283,6 +284,9 @@ ifeq (x86_64-linux-gnu,$(DEB_HOST_MULTIARCH))
 	ln -rs debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/*.h \
 		debian/libdpdk-dev/usr/include/dpdk
 endif
+	# have the DKMS build include the correct per-arch directory
+	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
+	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-rte-kni-dkms.dkms.in > debian/dpdk-rte-kni-dkms.dkms
 	# all static libs are in the dev package
 ifeq (y,$(BUILD_STATIC_LIB))
 	mv debian/dpdk/$(LIBDIR)/lib*.a debian/libdpdk-dev/$(LIBDIR)/
