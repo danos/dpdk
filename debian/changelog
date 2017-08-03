@@ -40,6 +40,8 @@ dpdk (17.05-1~git1) UNRELEASED; urgency=medium
     consumers use, symlink x86_64 headers in /usr/include/dpdk.
     pkg-config returns the arch-specific headers first so that other
     architectures are still compatible.
+    Also create a full copy of the headers in the dpdk-dev SDK package, as it
+    does not support multiple levels of headers.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 16 May 2017 15:38:17 +0200
 
