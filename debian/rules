@@ -283,6 +283,13 @@ endif
 	mv debian/dpdk-dev/usr/include/dpdk/rte_config.h \
 		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
 	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
+	# backward compatibility: to ease things for the majority of users,
+	# which are on x86_64, symlink the x86 headers into the global
+	# directory.
+ifeq (x86_64-linux-gnu,$(DEB_HOST_MULTIARCH))
+	ln -rs debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/*.h \
+		debian/libdpdk-dev/usr/include/dpdk
+endif
 	# all static libs are in the dev package
 ifeq (y,$(BUILD_STATIC_LIB))
 	mv debian/dpdk/$(LIBDIR)/lib*.a debian/libdpdk-dev/$(LIBDIR)/
