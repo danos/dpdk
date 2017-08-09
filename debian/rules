@@ -4,7 +4,7 @@
 export DH_VERBOSE=1
 export DH_OPTIONS=-v
 
-VERSION := $(shell dpkg-parsechangelog | sed -nr '/^Version:/s/Version: (.*:)?(.*)-(.*)/\2/p')
+VERSION := $(shell dpkg-parsechangelog --show-field Version | sed -nr 's/(.*:)?([^-])(-.*)/\2/p')
 DPDK_ABI := $(shell echo $(VERSION) | cut -d '.'  -f1-2)
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
@@ -166,6 +166,8 @@ override_dh_auto_clean:
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	test -L config/defconfig_$(DPDK_CONFIG) && rm -f config/defconfig_$(DPDK_CONFIG) || true
+	rm -f debian/dpdk-igb-uio-dkms.dkms debian/dpdk-rte-kni-dkms.dkms
+	rm -f debian/dpdk-dev.preinst
 
 override_dh_auto_configure:
 	# Add support for a custom defconfig file in the debian directory.
@@ -278,11 +280,20 @@ endif
 	# system installs them in the same directory, breaking multiarch.
 	# Move them in /usr/include/<arch>/dpdk instead.
 	mkdir -p debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk
+	# Before moving the files, remove the symlink in usr/share/dpdk and copy them over,
+	# as the SDK subdir is architecture specific and requires the arch-specific headers
+	# in the top level
+	rm -f debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
+	mkdir -p debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
+	cp -r debian/dpdk-dev/usr/include/dpdk/* debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
+	# genereate the preinst to deal with the symlink -> directory transition smoothly
+	sed "s/@@RTE_TARGET@@/$(RTE_TARGET)/g" debian/dpdk-dev.preinst.in > debian/dpdk-dev.preinst
 	mv $(addprefix debian/dpdk-dev/usr/include/dpdk/,$(notdir $(wildcard lib/librte_eal/common/include/arch/$(INCLUDE_ARCH)/*.h))) \
 		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
 	mv debian/dpdk-dev/usr/include/dpdk/rte_config.h \
 		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
 	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
+	rmdir debian/dpdk-dev/usr/include
 	# backward compatibility: to ease things for the majority of users,
 	# which are on x86_64, symlink the x86 headers into the global
 	# directory.
@@ -290,6 +301,9 @@ ifeq (x86_64-linux-gnu,$(DEB_HOST_MULTIARCH))
 	ln -rs debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/*.h \
 		debian/libdpdk-dev/usr/include/dpdk
 endif
+	# have the DKMS build include the correct per-arch directory
+	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
+	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-rte-kni-dkms.dkms.in > debian/dpdk-rte-kni-dkms.dkms
 	# all static libs are in the dev package
 ifeq (y,$(BUILD_STATIC_LIB))
 	mv debian/dpdk/$(LIBDIR)/lib*.a debian/libdpdk-dev/$(LIBDIR)/
