@@ -1,5 +1,4 @@
 fix-vhost-user-socket-permission.patch
-mk-fix-excluding-.doctrees-when-installing-docs.patch
 mk-sort-list-of-shared-objects-in-linker-script.patch
 mk-sort-list-of-files-in-examples.dox.patch
 mk-sort-headers-before-wildcard-inclusion.patch
