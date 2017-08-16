@@ -1,5 +1,4 @@
 fix-vhost-user-socket-permission.patch
-mk-use-make-silent-flag-to-print-HTML-doc-version.patch
 mk-fix-excluding-.doctrees-when-installing-docs.patch
 mk-sort-list-of-shared-objects-in-linker-script.patch
 mk-sort-list-of-files-in-examples.dox.patch
