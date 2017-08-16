@@ -205,6 +205,18 @@ Description: Data Plane Development Kit (librte-eal runtime library)
  .
  This package contains the runtime libraries for librte_eal.
 
+Package: librte-gro17.08
+Architecture: amd64 arm64 i386 ppc64el
+Multi-Arch: same
+Homepage: http://dpdk.org/doc/api/rte__gro_8h.html
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Data Plane Development Kit (librte-eal runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_gro.
+
 Package: librte-hash17.08
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
