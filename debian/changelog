@@ -1,3 +1,14 @@
+dpdk (17.05.1-3) experimental; urgency=medium
+
+  [ Luca Boccassi ]
+  * Fix reproducibility of librte-eal linuxapp.
+
+  [ Christian Ehrhardt ]
+  * d/rules: fix reference path of dpdk-devbind to match the new
+    subdirectory which is in /usr/share/dpdk/usertools
+
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Fri, 18 Aug 2017 12:21:32 +0100
+
 dpdk (17.05.1-2) experimental; urgency=medium
 
   * Install headers with arch-specific content in /usr/include/<multiarch>/dpdk
