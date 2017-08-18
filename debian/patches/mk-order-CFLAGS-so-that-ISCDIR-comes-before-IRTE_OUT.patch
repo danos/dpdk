@@ -8,10 +8,10 @@ unreproducible, as the full path is used for the expansion of
 __FILE__ and in the DWARF directory listing.
 Always pass -ISRCDIR first to CFLAGS so that it's deterministic.
 
-Origin: http://dpdk.org/dev/patchwork/patch/27512/
+Origin: http://dpdk.org/dev/patchwork/patch/27639/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-08-10
+Last-Update: 2017-08-18
 ---
  lib/librte_acl/Makefile              | 10 ++++++++--
  lib/librte_bitratestats/Makefile     |  9 ++++++++-
@@ -19,6 +19,7 @@ Last-Update: 2017-08-10
  lib/librte_distributor/Makefile      | 10 ++++++++--
  lib/librte_eal/linuxapp/eal/Makefile |  8 +++++++-
  lib/librte_efd/Makefile              | 10 ++++++++--
+ lib/librte_gro/Makefile              |  9 ++++++++-
  lib/librte_hash/Makefile             | 10 ++++++++--
  lib/librte_ip_frag/Makefile          | 10 ++++++++--
  lib/librte_jobstats/Makefile         | 10 ++++++++--
@@ -36,7 +37,7 @@ Last-Update: 2017-08-10
  lib/librte_ring/Makefile             |  9 ++++++++-
  lib/librte_timer/Makefile            |  9 ++++++++-
  lib/librte_vhost/Makefile            |  9 ++++++++-
- 23 files changed, 183 insertions(+), 32 deletions(-)
+ 24 files changed, 191 insertions(+), 33 deletions(-)
 
 diff --git a/lib/librte_acl/Makefile b/lib/librte_acl/Makefile
 index 59767920a..bce78813b 100644
@@ -159,6 +160,27 @@ index b9277bc5d..b169e3240 100644
 +CFLAGS += $(WERROR_FLAGS) -O3
  
  EXPORT_MAP := rte_efd_version.map
+ 
+diff --git a/lib/librte_gro/Makefile b/lib/librte_gro/Makefile
+index 747eeec9e..4a9f12d85 100644
+--- a/lib/librte_gro/Makefile
++++ b/lib/librte_gro/Makefile
+@@ -34,8 +34,15 @@ include $(RTE_SDK)/mk/rte.vars.mk
+ # library name
+ LIB = librte_gro.a
+ 
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR) $(CFLAGS)
+ CFLAGS += -O3
+-CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR)
++CFLAGS += $(WERROR_FLAGS)
+ 
+ EXPORT_MAP := rte_gro_version.map
  
 diff --git a/lib/librte_hash/Makefile b/lib/librte_hash/Makefile
 index 9cf13a045..677d494e7 100644
