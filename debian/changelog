@@ -1,7 +1,12 @@
 dpdk (17.05.1-1~git1) UNRELEASED; urgency=medium
 
+  [ Luca Boccassi ]
   * New Upstream release 17.05.1.
   * Fix reproducibility of librte-eal linuxapp.
+
+  [ Christian Ehrhardt ]
+  * d/rules: fix reference path of dpdk-devbind to match the new
+    subdirectory which is in /usr/share/dpdk/usertools
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Mon, 03 Jul 2017 15:15:40 +0100
 
