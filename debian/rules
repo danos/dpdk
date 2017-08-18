@@ -246,7 +246,7 @@ endif
 	cp debian/dpdk.interfaces debian/dpdk/etc/dpdk/interfaces
 	rm debian/dpdk/usr/sbin/dpdk-devbind
 	mkdir -p debian/dpdk/sbin
-	ln -s /usr/share/dpdk/tools/dpdk-devbind.py \
+	ln -s /usr/share/dpdk/usertools/dpdk-devbind.py \
 		debian/dpdk/sbin/dpdk-devbind
 	# Package: dpdk-dev (build environment)
 	# workaround to fix symbolic link creation

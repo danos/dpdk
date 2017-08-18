@@ -13,6 +13,7 @@ dpdk (17.05.1-2) experimental; urgency=medium
 
 dpdk (17.05.1-1) experimental; urgency=medium
 
+  [ Luca Boccassi ]
   * New Upstream release 17.05.1.
   * Add patches to make the libraries and PMDs builds fully reproducible,
     by making the listing order of headers, source files and objects in
