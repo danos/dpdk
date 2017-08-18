@@ -4,11 +4,10 @@
 export DH_VERBOSE=1
 export DH_OPTIONS=-v
 
-VERSION := $(shell dpkg-parsechangelog --show-field Version | sed -nr 's/(.*:)?([^-])(-.*)/\2/p')
-DPDK_ABI := $(shell echo $(VERSION) | cut -d '.'  -f1-2)
-
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
 include /usr/share/dpkg/default.mk
+
+DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '.'  -f1-2)
 
 DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
 DEB_HOST_MULTIARCH := $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
@@ -338,17 +337,17 @@ endif
 	mkdir -p debian/libdpdk-dev/$(LIBDIR)/pkgconfig
 	LIBS=$$(sed -e 's/GROUP ( \(.*\) )/\1/' -e 's/lib/-l/g' -e 's/\.so//g' \
 		$(CURDIR)/debian/libdpdk-dev/$(LIBDIR)/libdpdk.so); \
-	sed -e "s/@DPDK_LIBS@/$${LIBS}/" -e "s/@VERSION@/$(VERSION)/" \
+	sed -e "s/@DPDK_LIBS@/$${LIBS}/" -e "s/@VERSION@/$(DEB_VERSION_UPSTREAM)/" \
 		-e "s|@DEB_HOST_MULTIARCH@|$(DEB_HOST_MULTIARCH)|g" \
 		debian/libdpdk.pc.in > debian/libdpdk-dev/$(LIBDIR)/pkgconfig/libdpdk.pc
 	# Package: dpdk-igb-uio-dkms
-	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(VERSION)
+	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
 	cp lib/librte_eal/linuxapp/igb_uio/* \
-		debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(VERSION)
+		debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
 	# Package: dpdk-rte-kni-dkms
-	mkdir -p debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(VERSION)
+	mkdir -p debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
 	cp -a lib/librte_eal/linuxapp/kni/* \
-		debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(VERSION)
+		debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) \
@@ -357,7 +356,7 @@ ifneq (,$(KVERS))
 endif
 
 override_dh_dkms:
-	dh_dkms -V $(VERSION)
+	dh_dkms -V $(DEB_VERSION_UPSTREAM)
 
 override_dh_installinit:
 	dh_installinit --no-start --no-restart-on-upgrade
