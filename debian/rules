@@ -9,9 +9,6 @@ include /usr/share/dpkg/default.mk
 
 DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '.'  -f1-2)
 
-DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
-DEB_HOST_MULTIARCH := $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
-
 # see FEATURE AREAS in dpkg-buildflags(1)
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
 
