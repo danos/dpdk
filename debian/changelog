@@ -1,4 +1,4 @@
-dpdk (17.05.1-4) UNRELEASED; urgency=medium
+dpdk (17.05.1-4) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
   * Fix d/p/fix-vhost-user-socket-permission.patch: add mis-dropped
@@ -14,7 +14,7 @@ dpdk (17.05.1-4) UNRELEASED; urgency=medium
   * Bump Standards-Version to 4.1.0. Relevant changes are nodoc support and
     build reprodicibility.
 
- -- Luca Boccassi <lboccass@brocade.com>  Wed, 23 Aug 2017 14:44:09 +0100
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Wed, 23 Aug 2017 14:45:54 +0100
 
 dpdk (17.05.1-3) experimental; urgency=medium
 
