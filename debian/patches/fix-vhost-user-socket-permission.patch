@@ -33,9 +33,14 @@ Fixes LP: #1546565
  - But until that is fully working we have to carry the workaround.
  - Updated to work with Openvswitch 2.7 (and backward compatible to 2.6)
 
+*Update*
+ - in 17.05 the patch now needs to be hooked up on a different place in vhost
+   socket.c
+ - also the former rebase dropped a create socket call which is now restored
+
 Forwarded: yes
 Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
-Last-Update: 2017-05-23
+Last-Update: 2017-08-23
 
 --- a/doc/guides/testpmd_app_ug/run_app.rst
 +++ b/doc/guides/testpmd_app_ug/run_app.rst
@@ -355,12 +360,11 @@ Last-Update: 2017-05-23
  #define MAX_VIRTIO_BACKLOG 128
  
  static void vhost_user_server_new_connection(int fd, void *data, int *remove);
-@@ -644,7 +646,7 @@ rte_vhost_driver_register(const char *pa
- 	} else {
- 		vsocket->is_server = true;
+@@ -348,6 +350,7 @@ vhost_user_start_server(struct vhost_use
+ 		goto err;
  	}
--	ret = create_unix_socket(vsocket);
+ 
 +	rte_eal_set_socket_permissions(path);
- 	if (ret < 0) {
- 		free(vsocket->path);
- 		free(vsocket);
+ 	return 0;
+ 
+ err:

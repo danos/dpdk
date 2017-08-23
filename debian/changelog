@@ -1,3 +1,21 @@
+dpdk (17.05.1-4) UNRELEASED; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * Fix d/p/fix-vhost-user-socket-permission.patch: add mis-dropped
+    create_unix_socket call and reposition rte_eal_set_socket_permissions
+  * Fix d/p/fix-vhost-user-socket-permission.patch
+    - add accidenitally dropped create_unix_socket call
+    - reposition rte_eal_set_socket_permissions to match 17.05 handling of
+      vhost-user server sockets (and their late binding)
+
+  [ Luca Boccassi ]
+  * Mark build-dependencies needed for documentation builds with the <!nodoc>
+    build-profile to fully implement support for it.
+  * Bump Standards-Version to 4.1.0. Relevant changes are nodoc support and
+    build reprodicibility.
+
+ -- Luca Boccassi <lboccass@brocade.com>  Wed, 23 Aug 2017 14:44:09 +0100
+
 dpdk (17.05.1-3) experimental; urgency=medium
 
   [ Luca Boccassi ]
