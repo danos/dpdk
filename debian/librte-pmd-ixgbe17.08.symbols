@@ -2,6 +2,7 @@ librte_pmd_ixgbe.so.17.08 librte-pmd-ixgbe17.08 #MINVER#
  DPDK_16.11@DPDK_16.11 16.11
  DPDK_17.02@DPDK_17.02 17.05
  DPDK_17.05@DPDK_17.05 17.05
+ DPDK_17.08@DPDK_17.08 17.08
  DPDK_2.0@DPDK_2.0 16.04
  rte_pmd_ixgbe_macsec_config_rxsc@DPDK_17.02 17.05
  rte_pmd_ixgbe_macsec_config_txsc@DPDK_17.02 17.05

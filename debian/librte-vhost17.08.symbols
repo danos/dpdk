@@ -1,6 +1,7 @@
 librte_vhost.so.17.08 librte-vhost17.08 #MINVER#
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_17.05@DPDK_17.05 17.05
+ DPDK_17.08@DPDK_17.08 17.08
  DPDK_2.0@DPDK_2.0 16.07~rc1
  DPDK_2.1@DPDK_2.1 16.07~rc1
  rte_vhost_avail_entries@DPDK_16.07 16.07~rc1
@@ -25,3 +26,4 @@ librte_vhost.so.17.08 librte-vhost17.08 #MINVER#
  rte_vhost_get_vring_num@DPDK_17.05 17.05
  rte_vhost_log_used_vring@DPDK_17.05 17.05
  rte_vhost_log_write@DPDK_17.05 17.05
+ rte_vhost_rx_queue_count@DPDK_17.08 17.08
