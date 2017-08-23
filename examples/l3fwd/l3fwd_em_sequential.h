@@ -31,8 +31,8 @@
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __L3FWD_EM_SSE_H__
-#define __L3FWD_EM_SSE_H__
+#ifndef __L3FWD_EM_SEQUENTIAL_H__
+#define __L3FWD_EM_SEQUENTIAL_H__
 
 /**
  * @file
@@ -43,9 +43,13 @@
  * compilation time.
  */
 
+#if defined RTE_ARCH_X86
 #include "l3fwd_sse.h"
+#elif defined RTE_MACHINE_CPUFLAG_NEON
+#include "l3fwd_neon.h"
+#endif
 
-static inline __attribute__((always_inline)) uint16_t
+static __rte_always_inline uint16_t
 em_get_dst_port(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
 		uint8_t portid)
 {
@@ -101,12 +105,22 @@ static inline void
 l3fwd_em_send_packets(int nb_rx, struct rte_mbuf **pkts_burst,
 			uint8_t portid, struct lcore_conf *qconf)
 {
-	int32_t j;
+	int32_t i, j;
 	uint16_t dst_port[MAX_PKT_BURST];
 
-	for (j = 0; j < nb_rx; j++)
+	if (nb_rx > 0) {
+		rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[0],
+					       struct ether_hdr *) + 1);
+	}
+
+	for (i = 1, j = 0; j < nb_rx; i++, j++) {
+		if (i < nb_rx) {
+			rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[i],
+						       struct ether_hdr *) + 1);
+		}
 		dst_port[j] = em_get_dst_port(qconf, pkts_burst[j], portid);
+	}
 
 	send_packets_multi(qconf, pkts_burst, dst_port, nb_rx);
 }
-#endif /* __L3FWD_EM_SSE_H__ */
+#endif /* __L3FWD_EM_SEQUENTIAL_H__ */
