@@ -14,6 +14,12 @@ dpdk (17.05.1-1~git1) UNRELEASED; urgency=medium
     - reposition rte_eal_set_socket_permissions to match 17.05 handling of
       vhost-user server sockets (and their late binding)
 
+  [ Luca Boccassi ]
+  * Mark build-dependencies needed for documentation builds with the <!nodoc>
+    build-profile to fully implement support for it.
+  * Bump Standards-Version to 4.1.0. Relevant changes are nodoc support and
+    build reprodicibility.
+
  -- Luca Boccassi <luca.boccassi@gmail.com>  Mon, 03 Jul 2017 15:15:40 +0100
 
 dpdk (17.05-1~git1) UNRELEASED; urgency=medium
