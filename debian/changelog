@@ -7,6 +7,12 @@ dpdk (17.05.1-1~git1) UNRELEASED; urgency=medium
   [ Christian Ehrhardt ]
   * d/rules: fix reference path of dpdk-devbind to match the new
     subdirectory which is in /usr/share/dpdk/usertools
+  * Fix d/p/fix-vhost-user-socket-permission.patch: add mis-dropped
+    create_unix_socket call and reposition rte_eal_set_socket_permissions
+  * Fix d/p/fix-vhost-user-socket-permission.patch
+    - add accidenitally dropped create_unix_socket call
+    - reposition rte_eal_set_socket_permissions to match 17.05 handling of
+      vhost-user server sockets (and their late binding)
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Mon, 03 Jul 2017 15:15:40 +0100
 
