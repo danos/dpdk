@@ -5044,6 +5044,9 @@ ixgbe_mirror_rule_reset(struct rte_eth_dev *dev, uint8_t rule_id)
 	if (ixgbe_vmdq_mode_check(hw) < 0)
 		return -ENOTSUP;
 
+	if (rule_id >= IXGBE_MAX_MIRROR_RULES)
+		return -EINVAL;
+
 	memset(&mr_info->mr_conf[rule_id], 0,
 		sizeof(struct rte_eth_mirror_conf));
 
@@ -5197,7 +5200,8 @@ ixgbe_set_ivar_map(struct ixgbe_hw *hw, int8_t direction,
 		tmp |= (msix_vector << (8 * (queue & 0x3)));
 		IXGBE_WRITE_REG(hw, IXGBE_IVAR(idx), tmp);
 	} else if ((hw->mac.type == ixgbe_mac_82599EB) ||
-			(hw->mac.type == ixgbe_mac_X540)) {
+			(hw->mac.type == ixgbe_mac_X540) ||
+			(hw->mac.type == ixgbe_mac_X550)) {
 		if (direction == -1) {
 			/* other causes */
 			idx = ((queue & 1) * 8);
@@ -5303,6 +5307,7 @@ ixgbe_configure_msix(struct rte_eth_dev *dev)
 		break;
 	case ixgbe_mac_82599EB:
 	case ixgbe_mac_X540:
+	case ixgbe_mac_X550:
 		ixgbe_set_ivar_map(hw, -1, 1, IXGBE_MISC_VEC_ID);
 		break;
 	default:

@@ -129,7 +129,7 @@ static int  eth_igb_flow_ctrl_get(struct rte_eth_dev *dev,
 				struct rte_eth_fc_conf *fc_conf);
 static int  eth_igb_flow_ctrl_set(struct rte_eth_dev *dev,
 				struct rte_eth_fc_conf *fc_conf);
-static int eth_igb_lsc_interrupt_setup(struct rte_eth_dev *dev);
+static int eth_igb_lsc_interrupt_setup(struct rte_eth_dev *dev, uint8_t on);
 static int eth_igb_rxq_interrupt_setup(struct rte_eth_dev *dev);
 static int eth_igb_interrupt_get_status(struct rte_eth_dev *dev);
 static int eth_igb_interrupt_action(struct rte_eth_dev *dev);
@@ -1381,7 +1381,9 @@ eth_igb_start(struct rte_eth_dev *dev)
 	if (rte_intr_allow_others(intr_handle)) {
 		/* check if lsc interrupt is enabled */
 		if (dev->data->dev_conf.intr_conf.lsc != 0)
-			eth_igb_lsc_interrupt_setup(dev);
+			eth_igb_lsc_interrupt_setup(dev, TRUE);
+		else
+			eth_igb_lsc_interrupt_setup(dev, FALSE);
 	} else {
 		rte_intr_callback_unregister(intr_handle,
 					     eth_igb_interrupt_handler,
@@ -2543,18 +2545,23 @@ eth_igb_vlan_offload_set(struct rte_eth_dev *dev, int mask)
  *
  * @param dev
  *  Pointer to struct rte_eth_dev.
+ * @param on
+ *  Enable or Disable
  *
  * @return
  *  - On success, zero.
  *  - On failure, a negative value.
  */
 static int
-eth_igb_lsc_interrupt_setup(struct rte_eth_dev *dev)
+eth_igb_lsc_interrupt_setup(struct rte_eth_dev *dev, uint8_t on)
 {
 	struct e1000_interrupt *intr =
 		E1000_DEV_PRIVATE_TO_INTR(dev->data->dev_private);
 
-	intr->mask |= E1000_ICR_LSC;
+	if (on)
+		intr->mask |= E1000_ICR_LSC;
+	else
+		intr->mask &= ~E1000_ICR_LSC;
 
 	return 0;
 }
@@ -3736,10 +3743,6 @@ eth_igb_add_del_flex_filter(struct rte_eth_dev *dev,
 	}
 
 	wufc = E1000_READ_REG(hw, E1000_WUFC);
-	if (flex_filter->index < E1000_MAX_FHFT)
-		reg_off = E1000_FHFT(flex_filter->index);
-	else
-		reg_off = E1000_FHFT_EXT(flex_filter->index - E1000_MAX_FHFT);
 
 	if (add) {
 		if (eth_igb_flex_filter_lookup(&filter_info->flex_list,
@@ -3769,6 +3772,11 @@ eth_igb_add_del_flex_filter(struct rte_eth_dev *dev,
 			return -ENOSYS;
 		}
 
+		if (flex_filter->index < E1000_MAX_FHFT)
+			reg_off = E1000_FHFT(flex_filter->index);
+		else
+			reg_off = E1000_FHFT_EXT(flex_filter->index - E1000_MAX_FHFT);
+
 		E1000_WRITE_REG(hw, E1000_WUFC, wufc | E1000_WUFC_FLEX_HQ |
 				(E1000_WUFC_FLX0 << flex_filter->index));
 		queueing = filter->len |
@@ -3796,6 +3804,11 @@ eth_igb_add_del_flex_filter(struct rte_eth_dev *dev,
 			rte_free(flex_filter);
 			return -ENOENT;
 		}
+
+		if (it->index < E1000_MAX_FHFT)
+			reg_off = E1000_FHFT(it->index);
+		else
+			reg_off = E1000_FHFT_EXT(it->index - E1000_MAX_FHFT);
 
 		for (i = 0; i < E1000_FHFT_SIZE_IN_DWD; i++)
 			E1000_WRITE_REG(hw, reg_off + i * sizeof(uint32_t), 0);
