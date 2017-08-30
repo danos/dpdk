@@ -3,10 +3,10 @@ Description: mk: sort object files when building deps lists
 In order to achieve reproducible builds, always use the same
 order when listing object files to build dependencies lists.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25865/
+Origin: http://dpdk.org/dev/patchwork/patch/27511/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-06-24
+Last-Update: 2017-08-10
 ---
  mk/rte.app.mk     | 4 ++--
  mk/rte.hostapp.mk | 4 ++--

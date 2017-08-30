@@ -3,10 +3,10 @@ Description: mk: sort headers before wildcard inclusion
 In order to achieve fully reproducible builds, always use the same
 inclusion order for headers in the Makefiles.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25863/
+Origin: http://dpdk.org/dev/patchwork/patch/27509/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-06-24
+Last-Update: 2017-08-10
 ---
  examples/ip_pipeline/Makefile                              | 2 +-
  examples/multi_process/client_server_mp/mp_server/Makefile | 2 +-

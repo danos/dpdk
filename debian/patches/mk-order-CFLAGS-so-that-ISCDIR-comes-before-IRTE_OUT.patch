@@ -8,34 +8,34 @@ unreproducible, as the full path is used for the expansion of
 __FILE__ and in the DWARF directory listing.
 Always pass -ISRCDIR first to CFLAGS so that it's deterministic.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25866/
+Origin: http://dpdk.org/dev/patchwork/patch/27512/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-06-28
+Last-Update: 2017-08-10
 ---
- lib/librte_acl/Makefile          | 10 ++++++++--
- lib/librte_bitratestats/Makefile |  9 ++++++++-
- lib/librte_cmdline/Makefile      |  9 ++++++++-
- lib/librte_distributor/Makefile  | 10 ++++++++--
- lib/librte_efd/Makefile          | 10 ++++++++--
- lib/librte_hash/Makefile         | 10 ++++++++--
- lib/librte_ip_frag/Makefile      | 10 ++++++++--
- lib/librte_jobstats/Makefile     | 10 ++++++++--
- lib/librte_kni/Makefile          |  9 ++++++++-
- lib/librte_kvargs/Makefile       |  9 ++++++++-
- lib/librte_latencystats/Makefile |  9 ++++++++-
- lib/librte_lpm/Makefile          | 10 ++++++++--
- lib/librte_mbuf/Makefile         |  9 ++++++++-
- lib/librte_mempool/Makefile      |  9 ++++++++-
- lib/librte_metrics/Makefile      |  9 ++++++++-
- lib/librte_net/Makefile          |  9 ++++++++-
- lib/librte_pdump/Makefile        | 10 ++++++++--
- lib/librte_power/Makefile        |  9 ++++++++-
- lib/librte_reorder/Makefile      | 10 ++++++++--
- lib/librte_ring/Makefile         |  9 ++++++++-
- lib/librte_timer/Makefile        |  9 ++++++++-
- lib/librte_vhost/Makefile        |  9 ++++++++-
- 22 files changed, 176 insertions(+), 31 deletions(-)
+ lib/librte_acl/Makefile              | 10 ++++++++--
+ lib/librte_bitratestats/Makefile     |  9 ++++++++-
+ lib/librte_cmdline/Makefile          |  9 ++++++++-
+ lib/librte_distributor/Makefile      | 10 ++++++++--
+ lib/librte_eal/linuxapp/eal/Makefile |  8 +++++++-
+ lib/librte_hash/Makefile             | 10 ++++++++--
+ lib/librte_ip_frag/Makefile          | 10 ++++++++--
+ lib/librte_jobstats/Makefile         | 10 ++++++++--
+ lib/librte_kni/Makefile              |  9 ++++++++-
+ lib/librte_kvargs/Makefile           |  9 ++++++++-
+ lib/librte_latencystats/Makefile     |  9 ++++++++-
+ lib/librte_lpm/Makefile              | 10 ++++++++--
+ lib/librte_mbuf/Makefile             |  9 ++++++++-
+ lib/librte_mempool/Makefile          |  9 ++++++++-
+ lib/librte_metrics/Makefile          |  9 ++++++++-
+ lib/librte_net/Makefile              |  9 ++++++++-
+ lib/librte_pdump/Makefile            | 10 ++++++++--
+ lib/librte_power/Makefile            |  9 ++++++++-
+ lib/librte_reorder/Makefile          | 10 ++++++++--
+ lib/librte_ring/Makefile             |  9 ++++++++-
+ lib/librte_timer/Makefile            |  9 ++++++++-
+ lib/librte_vhost/Makefile            |  9 ++++++++-
+ 22 files changed, 173 insertions(+), 32 deletions(-)
 
 --- a/lib/librte_acl/Makefile
 +++ b/lib/librte_acl/Makefile
@@ -93,6 +93,23 @@ Last-Update: 2017-06-28
  
  EXPORT_MAP := rte_distributor_version.map
  
+--- a/lib/librte_eal/linuxapp/eal/Makefile
++++ b/lib/librte_eal/linuxapp/eal/Makefile
+@@ -41,7 +41,13 @@ LIBABIVER := 3
+ 
+ VPATH += $(RTE_SDK)/lib/librte_eal/common
+ 
+-CFLAGS += -I$(SRCDIR)/include
++# Include the source dir first, so that headers paths are always picked
++# from there. By including it last race conditions might happen during paralle
++# builds, and headers might be already installed in RTE_OUT/include when the
++# variable is recursively expanded, thus causing GCC to sometimes use the
++# SRCDIR path and sometimes the RTE_OUT/include, making the builds not
++# reproducible.
++CFLAGS := -I$(SRCDIR)/include $(CFLAGS)
+ CFLAGS += -I$(RTE_SDK)/lib/librte_eal/common
+ CFLAGS += -I$(RTE_SDK)/lib/librte_eal/common/include
+ CFLAGS += $(WERROR_FLAGS) -O3
 --- a/lib/librte_hash/Makefile
 +++ b/lib/librte_hash/Makefile
 @@ -34,8 +34,14 @@ include $(RTE_SDK)/mk/rte.vars.mk
