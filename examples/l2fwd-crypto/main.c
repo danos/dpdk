@@ -432,7 +432,8 @@ l2fwd_simple_crypto_enqueue(struct rte_mbuf *m,
 	struct ether_hdr *eth_hdr;
 	struct ipv4_hdr *ip_hdr;
 
-	unsigned ipdata_offset, pad_len, data_len;
+	uint32_t ipdata_offset, data_len;
+	uint32_t pad_len = 0;
 	char *padding;
 
 	eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
@@ -455,16 +456,32 @@ l2fwd_simple_crypto_enqueue(struct rte_mbuf *m,
 	if (cparams->do_hash && cparams->hash_verify)
 		data_len -= cparams->digest_length;
 
-	pad_len = data_len % cparams->block_size ? cparams->block_size -
-			(data_len % cparams->block_size) : 0;
+	if (cparams->do_cipher) {
+		/*
+		 * Following algorithms are block cipher algorithms,
+		 * and might need padding
+		 */
+		switch (cparams->cipher_algo) {
+		case RTE_CRYPTO_CIPHER_AES_CBC:
+		case RTE_CRYPTO_CIPHER_AES_ECB:
+		case RTE_CRYPTO_CIPHER_3DES_CBC:
+		case RTE_CRYPTO_CIPHER_3DES_ECB:
+			if (data_len % cparams->block_size)
+				pad_len = cparams->block_size -
+					(data_len % cparams->block_size);
+			break;
+		default:
+			pad_len = 0;
+		}
 
-	if (pad_len) {
-		padding = rte_pktmbuf_append(m, pad_len);
-		if (unlikely(!padding))
-			return -1;
+		if (pad_len) {
+			padding = rte_pktmbuf_append(m, pad_len);
+			if (unlikely(!padding))
+				return -1;
 
-		data_len += pad_len;
-		memset(padding, 0, pad_len);
+			data_len += pad_len;
+			memset(padding, 0, pad_len);
+		}
 	}
 
 	/* Set crypto operation data parameters */
@@ -869,7 +886,8 @@ l2fwd_crypto_usage(const char *prgname)
 		" (0 to disable, 10 default, 86400 maximum)\n"
 
 		"  --cdev_type HW / SW / ANY\n"
-		"  --chain HASH_CIPHER / CIPHER_HASH\n"
+		"  --chain HASH_CIPHER / CIPHER_HASH / CIPHER_ONLY /"
+		" HASH_ONLY\n"
 
 		"  --cipher_algo ALGO\n"
 		"  --cipher_op ENCRYPT / DECRYPT\n"
@@ -1379,7 +1397,7 @@ l2fwd_crypto_parse_args(struct l2fwd_crypto_options *options,
 
 	l2fwd_crypto_default_options(options);
 
-	while ((opt = getopt_long(argc, argvopt, "p:q:st:", lgopts,
+	while ((opt = getopt_long(argc, argvopt, "p:q:sT:", lgopts,
 			&option_index)) != EOF) {
 		switch (opt) {
 		/* long options */
