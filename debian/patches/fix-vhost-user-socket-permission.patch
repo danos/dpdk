@@ -72,7 +72,7 @@ Last-Update: 2017-08-23
  ----------------------------
 --- a/lib/librte_eal/common/eal_common_options.c
 +++ b/lib/librte_eal/common/eal_common_options.c
-@@ -95,6 +95,8 @@ eal_long_options[] = {
+@@ -98,6 +98,8 @@ eal_long_options[] = {
  	{OPT_VFIO_INTR,         1, NULL, OPT_VFIO_INTR_NUM        },
  	{OPT_VMWARE_TSC_MAP,    0, NULL, OPT_VMWARE_TSC_MAP_NUM   },
  	{OPT_XEN_DOM0,          0, NULL, OPT_XEN_DOM0_NUM         },
@@ -96,9 +96,9 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_eal/common/include/rte_eal.h
 +++ b/lib/librte_eal/common/include/rte_eal.h
-@@ -286,6 +286,11 @@ static inline int rte_gettid(void)
- #define RTE_INIT(func) \
- static void __attribute__((constructor, used)) func(void)
+@@ -293,6 +293,11 @@ static void __attribute__((constructor,
+ #define RTE_INIT_PRIO(func, prio) \
+ static void __attribute__((constructor(prio), used)) func(void)
  
 +/**
 + * Set owner/permissions on sockets if requested on EAL commandline
@@ -110,7 +110,7 @@ Last-Update: 2017-08-23
  #endif
 --- a/lib/librte_eal/linuxapp/eal/eal.c
 +++ b/lib/librte_eal/linuxapp/eal/eal.c
-@@ -53,6 +53,9 @@
+@@ -52,6 +52,9 @@
  #if defined(RTE_ARCH_X86)
  #include <sys/io.h>
  #endif
@@ -120,7 +120,7 @@ Last-Update: 2017-08-23
  
  #include <rte_common.h>
  #include <rte_debug.h>
-@@ -119,6 +122,12 @@ struct lcore_config lcore_config[RTE_MAX
+@@ -118,6 +121,12 @@ struct lcore_config lcore_config[RTE_MAX
  /* internal configuration */
  struct internal_config internal_config;
  
@@ -133,7 +133,7 @@ Last-Update: 2017-08-23
  /* used by rte_rdtsc() */
  int rte_cycles_vmware_tsc_map;
  
-@@ -356,6 +365,8 @@ eal_usage(const char *prgname)
+@@ -355,6 +364,8 @@ eal_usage(const char *prgname)
  	       "  --"OPT_CREATE_UIO_DEV"    Create /dev/uioX (usually done by hotplug)\n"
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
  	       "  --"OPT_XEN_DOM0"          Support running on Xen dom0 without hugetlbfs\n"
@@ -142,7 +142,7 @@ Last-Update: 2017-08-23
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -515,6 +526,121 @@ eal_log_level_parse(int argc, char **arg
+@@ -514,6 +525,121 @@ eal_log_level_parse(int argc, char **arg
  	optarg = old_optarg;
  }
  
@@ -264,7 +264,7 @@ Last-Update: 2017-08-23
  /* Parse the argument given in the command line of the application */
  static int
  eal_parse_args(int argc, char **argv)
-@@ -611,6 +737,26 @@ eal_parse_args(int argc, char **argv)
+@@ -610,6 +736,26 @@ eal_parse_args(int argc, char **argv)
  			internal_config.create_uio_dev = 1;
  			break;
  
@@ -291,7 +291,7 @@ Last-Update: 2017-08-23
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -995,3 +1141,47 @@ rte_eal_check_module(const char *module_
+@@ -1016,3 +1162,47 @@ rte_eal_check_module(const char *module_
  	/* Module has been found */
  	return 1;
  }

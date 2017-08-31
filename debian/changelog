@@ -1,3 +1,22 @@
+dpdk (17.08-1~git1) UNRELEASED; urgency=medium
+
+  * New Upstream release 17.08.
+  * Add librte-gro package.
+  * Drop patches merged upstream: fix-power-default-config.patch,
+    mk-use-make-silent-flag-to-print-HTML-doc-version.patch,
+    mk-fix-excluding-.doctrees-when-installing-docs.patch.
+  * Refresh fix-vhost-user-socket-permission.patch to remove fuzz.
+  * Add build-dependency on libnuma-dev, mandatory since 17.08.
+  * Update mk-order-CFLAGS-so-that-ISCDIR-comes-before-IRTE_OUT.patch to
+    include librte-gro.
+  * debian/update-helper-symbols: do not append .0 to SOVERSION.
+  * debian/rules: use dpkg's DEBIAN_VERSION_UPSTREAM and DEB_HOST_*
+    variables instead of parsing and setting them manually.
+  * Update symbols files to reflect changes in the libraries.
+  * Switch to debian.org email address.
+
+ -- Luca Boccassi <luca.boccassi@gmail.com>  Thu, 31 Aug 2017 19:07:32 +0100
+
 dpdk (17.05.1-4) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
