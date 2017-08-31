@@ -1,7 +1,7 @@
 Source: dpdk
 Priority: optional
 Maintainer: Debian DPDK Maintainers <pkg-dpdk-devel@lists.alioth.debian.org>
-Uploaders: Luca Boccassi <luca.boccassi@gmail.com>,
+Uploaders: Luca Boccassi <bluca@debian.org>,
            Christian Ehrhardt <christian.ehrhardt@canonical.com>,
            Santiago Ruano Rincón <santiagorr@riseup.net>,
 Build-Depends: debhelper (>= 9),
