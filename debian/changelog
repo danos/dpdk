@@ -13,6 +13,7 @@ dpdk (17.08-1~git1) UNRELEASED; urgency=medium
   * debian/rules: use dpkg's DEBIAN_VERSION_UPSTREAM and DEB_HOST_*
     variables instead of parsing and setting them manually.
   * Update symbols files to reflect changes in the libraries.
+  * Switch to debian.org email address.
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Wed, 16 Aug 2017 19:00:17 +0100
 
