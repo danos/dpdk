@@ -7,6 +7,7 @@ dpdk (16.11.3-1~git1) UNRELEASED; urgency=medium
     build-profile to fully implement support for it.
   * Bump Standards-Version to 4.1.0. Relevant changes are nodoc support and
     build reprodicibility.
+  * Switch to debian.org email address.
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Wed, 30 Aug 2017 15:11:09 +0100
 
