@@ -1,3 +1,10 @@
+dpdk (17.08-3) experimental; urgency=medium
+
+  * Re-enable build of librte-pmd-failsafe.
+  * Add librte-pmd-failsafe package.
+
+ -- Luca Boccassi <bluca@debian.org>  Fri, 01 Sep 2017 18:30:58 +0100
+
 dpdk (17.08-2) experimental; urgency=medium
 
   * Disable build of librte-pmd-failsafe, not yet packaged but it ends
