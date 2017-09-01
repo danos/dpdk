@@ -14,6 +14,7 @@ dpdk (17.08-1~git1) UNRELEASED; urgency=medium
     variables instead of parsing and setting them manually.
   * Update symbols files to reflect changes in the libraries.
   * Switch to debian.org email address.
+  * Add librte-pmd-failsafe package.
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Wed, 16 Aug 2017 19:00:17 +0100
 
