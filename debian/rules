@@ -183,6 +183,7 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
 		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
 		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/dpdk-pmds/",' \
+		-e 's,(CONFIG_RTE_LIBRTE_PMD_FAILSAFE=).*,\1n,' \
 		$(DPDK_STATIC_DIR)/.config
 	# xen not available on ppc64el
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
