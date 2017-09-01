@@ -1,9 +1,9 @@
-dpdk (17.08-2) UNRELEASED; urgency=medium
+dpdk (17.08-2) experimental; urgency=medium
 
   * Disable build of librte-pmd-failsafe, not yet packaged but it ends
     up mentioned in the pkg-config otherwise.
 
- -- Luca Boccassi <bluca@debian.org>  Fri, 01 Sep 2017 18:09:08 +0100
+ -- Luca Boccassi <bluca@debian.org>  Fri, 01 Sep 2017 18:17:24 +0100
 
 dpdk (17.08-1) experimental; urgency=medium
 
