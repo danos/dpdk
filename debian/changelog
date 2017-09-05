@@ -15,6 +15,9 @@ dpdk (17.08-1~git1) UNRELEASED; urgency=medium
   * Update symbols files to reflect changes in the libraries.
   * Switch to debian.org email address.
   * Add librte-pmd-failsafe package.
+  * Drop mk-order-CFLAGS-so-that-ISCDIR-comes-before-IRTE_OUT.patch and
+    add mk-install-symlinks-before-build-step.patch which has the same
+    result but is much simpler and easier to maintain.
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Wed, 16 Aug 2017 19:00:17 +0100
 
