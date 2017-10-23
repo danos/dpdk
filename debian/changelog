@@ -1,5 +1,6 @@
 dpdk (17.08-1~git1) UNRELEASED; urgency=medium
 
+  [ Luca Boccassi ]
   * New Upstream release 17.08.
   * Add librte-gro package.
   * Drop patches merged upstream: fix-power-default-config.patch,
@@ -19,7 +20,11 @@ dpdk (17.08-1~git1) UNRELEASED; urgency=medium
     add mk-install-symlinks-before-build-step.patch which has the same
     result but is much simpler and easier to maintain.
 
- -- Luca Boccassi <luca.boccassi@gmail.com>  Wed, 16 Aug 2017 19:00:17 +0100
+  [ Christian Ehrhardt ]
+  * d/rules: use new dh option names
+  * d/rules: properly enable dpdk systemd service
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 23 Oct 2017 12:11:16 +0200
 
 dpdk (17.05.1-1~git1) UNRELEASED; urgency=medium
 
