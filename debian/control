@@ -14,9 +14,9 @@ Build-Depends: debhelper (>= 9.20160709),
                libpcap-dev,
                libxen-dev [amd64 arm64 i386],
                libxenstore3.0 [amd64 arm64 i386],
-               python,
-               python-sphinx <!nodoc>,
-               python-sphinx-rtd-theme <!nodoc>,
+               python3,
+               python3-sphinx <!nodoc>,
+               python3-sphinx-rtd-theme <!nodoc>,
                texlive-fonts-recommended <!nodoc>,
                texlive-latex-extra <!nodoc>
 Standards-Version: 4.1.0
