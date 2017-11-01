@@ -9,6 +9,9 @@ dpdk (16.11.3-1~git1) UNRELEASED; urgency=medium
   * Bump Standards-Version to 4.1.0. Relevant changes are nodoc support and
     build reprodicibility.
   * Switch to debian.org email address.
+  * Build-Depend on debhelper (>= 9.20160709) rather than dh-systemd as
+    latter is deprecated. Fixes Lintian Error:
+      build-depends-on-obsolete-package
 
   [ Christian Ehrhardt ]
   * d/rules: use new dh option names
