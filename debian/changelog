@@ -19,6 +19,9 @@ dpdk (17.08-1~git1) UNRELEASED; urgency=medium
   * Drop mk-order-CFLAGS-so-that-ISCDIR-comes-before-IRTE_OUT.patch and
     add mk-install-symlinks-before-build-step.patch which has the same
     result but is much simpler and easier to maintain.
+  * Build-Depend on debhelper (>= 9.20160709) rather than dh-systemd as
+    latter is deprecated. Fixes Lintian Error:
+      build-depends-on-obsolete-package
 
   [ Christian Ehrhardt ]
   * d/rules: use new dh option names
