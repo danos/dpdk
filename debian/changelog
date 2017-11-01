@@ -22,6 +22,8 @@ dpdk (17.08-1~git1) UNRELEASED; urgency=medium
   * Build-Depend on debhelper (>= 9.20160709) rather than dh-systemd as
     latter is deprecated. Fixes Lintian Error:
       build-depends-on-obsolete-package
+  * Build-Depend on the Python 3 version of the Sphinx packages to fix
+    Lintian Warning: build-depends-on-python-sphinx-only
 
   [ Christian Ehrhardt ]
   * d/rules: use new dh option names
