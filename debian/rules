@@ -7,7 +7,7 @@ export DH_OPTIONS=-v
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
 include /usr/share/dpkg/default.mk
 
-DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '.'  -f1-2)
+DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '-' -f1 | cut -d '.'  -f1-2)
 
 # see FEATURE AREAS in dpkg-buildflags(1)
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
