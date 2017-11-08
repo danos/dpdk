@@ -43,10 +43,14 @@
 #define LIO_CN23XX_VF_VID	0x9712
 
 /* CN23xx subsystem device ids */
-#define PCI_SUBSYS_DEV_ID_CN2350_210	0x0004
-#define PCI_SUBSYS_DEV_ID_CN2360_210	0x0005
-#define PCI_SUBSYS_DEV_ID_CN2360_225	0x0006
-#define PCI_SUBSYS_DEV_ID_CN2350_225	0x0007
+#define PCI_SUBSYS_DEV_ID_CN2350_210		0x0004
+#define PCI_SUBSYS_DEV_ID_CN2360_210		0x0005
+#define PCI_SUBSYS_DEV_ID_CN2360_225		0x0006
+#define PCI_SUBSYS_DEV_ID_CN2350_225		0x0007
+#define PCI_SUBSYS_DEV_ID_CN2350_210SVPN3	0x0008
+#define PCI_SUBSYS_DEV_ID_CN2360_210SVPN3	0x0009
+#define PCI_SUBSYS_DEV_ID_CN2350_210SVPT	0x000a
+#define PCI_SUBSYS_DEV_ID_CN2360_210SVPT	0x000b
 
 /* --------------------------CONFIG VALUES------------------------ */
 
@@ -106,6 +110,8 @@ enum lio_card_type {
 
 #define LIO_FW_VERSION_LENGTH		32
 
+#define LIO_VF_TRUST_MIN_VERSION	"1.7.1"
+
 /** Tag types used by Octeon cores in its work. */
 enum octeon_tag_type {
 	OCTEON_ORDERED_TAG	= 0,
@@ -137,6 +143,7 @@ enum octeon_tag_type {
 #define LIO_MAX_RX_PKTLEN		(64 * 1024)
 
 /* NIC Command types */
+#define LIO_CMD_CHANGE_MTU		0x1
 #define LIO_CMD_CHANGE_DEVFLAGS		0x3
 #define LIO_CMD_RX_CTL			0x4
 #define LIO_CMD_CLEAR_STATS		0x6
@@ -184,6 +191,7 @@ enum octeon_tag_type {
 
 /* Interface flags communicated between host driver and core app. */
 enum lio_ifflags {
+	LIO_IFFLAG_PROMISC	= 0x01,
 	LIO_IFFLAG_ALLMULTI	= 0x02,
 	LIO_IFFLAG_UNICAST	= 0x10
 };
