@@ -42,7 +42,6 @@
 #include <rte_eal_memconfig.h>
 #include <rte_errno.h>
 #include <rte_malloc.h>
-#include <rte_memzone.h>
 #include <rte_prefetch.h>
 #include <rte_branch_prediction.h>
 #include <rte_memcpy.h>
@@ -1278,7 +1277,7 @@ efd_lookup_internal(const struct efd_online_group_entry * const group,
 
 	switch (lookup_fn) {
 
-#if defined(RTE_ARCH_X86)
+#if defined(RTE_ARCH_X86) && defined(CC_SUPPORT_AVX2)
 	case EFD_LOOKUP_AVX2:
 		return efd_lookup_internal_avx2(group->hash_idx,
 					group->lookup_table,

@@ -1,5 +1,5 @@
 ..  BSD LICENSE
-    Copyright 2012-2015 6WIND S.A.
+    Copyright 2012 6WIND S.A.
     Copyright 2015 Mellanox
 
     Redistribution and use in source and binary forms, with or without
@@ -78,28 +78,8 @@ Features
 --------
 
 - Multi arch support: x86_64 and POWER8.
-- RSS, also known as RCA, is supported. In this mode the number of
-  configured RX queues must be a power of two.
-- VLAN filtering is supported.
 - Link state information is provided.
-- Promiscuous mode is supported.
-- All multicast mode is supported.
-- Multiple MAC addresses (unicast, multicast) can be configured.
-- Scattered packets are supported for TX and RX.
-- Inner L3/L4 (IP, TCP and UDP) TX/RX checksum offloading and validation.
-- Outer L3 (IP) TX/RX checksum offloading and validation for VXLAN frames.
-- Secondary process TX is supported.
 - RX interrupts.
-
-Limitations
------------
-
-- RSS hash key cannot be modified.
-- RSS RETA cannot be configured
-- RSS always includes L3 (IPv4/IPv6) and L4 (UDP/TCP). They cannot be
-  dissociated.
-- Hardware counters are not implemented (they are software counters).
-- Secondary process RX is not supported.
 
 Configuration
 -------------
@@ -127,13 +107,6 @@ These options can be modified in the ``.config`` file.
   to abort with harmless debugging messages as a workaround.
   Relevant only when CONFIG_RTE_LIBRTE_MLX4_DEBUG is enabled.
 
-- ``CONFIG_RTE_LIBRTE_MLX4_SGE_WR_N`` (default **4**)
-
-  Number of scatter/gather elements (SGEs) per work request (WR). Lowering
-  this number improves performance but also limits the ability to receive
-  scattered packets (packets that do not fit a single mbuf). The default
-  value is a safe tradeoff.
-
 - ``CONFIG_RTE_LIBRTE_MLX4_MAX_INLINE`` (default **0**)
 
   Amount of data to be inlined during TX operations. Improves latency but
@@ -147,11 +120,6 @@ These options can be modified in the ``.config`` file.
 
   This value is always 1 for RX queues since they use a single MP.
 
-- ``CONFIG_RTE_LIBRTE_MLX4_SOFT_COUNTERS`` (default **1**)
-
-  Toggle software counters. No counters are available if this option is
-  disabled since hardware counters are not supported.
-
 Environment variables
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -163,9 +131,6 @@ Environment variables
 
 Run-time configuration
 ~~~~~~~~~~~~~~~~~~~~~~
-
-- The only constraint when RSS mode is requested is to make sure the number
-  of RX queues is a power of two. This is a hardware requirement.
 
 - librte_pmd_mlx4 brings kernel network interfaces up during initialization
   because it is affected by their state. Forcing them down prevents packets

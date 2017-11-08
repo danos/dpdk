@@ -89,12 +89,13 @@ extern "C" {
  */
 
 /**
- * RX packet is a 802.1q VLAN packet. This flag was set by PMDs when
- * the packet is recognized as a VLAN, but the behavior between PMDs
- * was not the same. This flag is kept for some time to avoid breaking
- * applications and should be replaced by PKT_RX_VLAN_STRIPPED.
+ * The RX packet is a 802.1q VLAN packet, and the tci has been
+ * saved in in mbuf->vlan_tci.
+ * If the flag PKT_RX_VLAN_STRIPPED is also present, the VLAN
+ * header has been stripped from mbuf data, else it is still
+ * present.
  */
-#define PKT_RX_VLAN_PKT      (1ULL << 0)
+#define PKT_RX_VLAN          (1ULL << 0)
 
 #define PKT_RX_RSS_HASH      (1ULL << 1)  /**< RX packet with RSS hash result. */
 #define PKT_RX_FDIR          (1ULL << 2)  /**< RX packet with FDIR match indicate. */
@@ -123,6 +124,7 @@ extern "C" {
  * A vlan has been stripped by the hardware and its tci is saved in
  * mbuf->vlan_tci. This can only happen if vlan stripping is enabled
  * in the RX configuration of the PMD.
+ * When PKT_RX_VLAN_STRIPPED is set, PKT_RX_VLAN must also be set.
  */
 #define PKT_RX_VLAN_STRIPPED (1ULL << 6)
 
@@ -165,17 +167,11 @@ extern "C" {
  * The 2 vlans have been stripped by the hardware and their tci are
  * saved in mbuf->vlan_tci (inner) and mbuf->vlan_tci_outer (outer).
  * This can only happen if vlan stripping is enabled in the RX
- * configuration of the PMD. If this flag is set, PKT_RX_VLAN_STRIPPED
- * must also be set.
+ * configuration of the PMD. If this flag is set,
+ * When PKT_RX_QINQ_STRIPPED is set, the flags (PKT_RX_VLAN |
+ * PKT_RX_VLAN_STRIPPED | PKT_RX_QINQ) must also be set.
  */
 #define PKT_RX_QINQ_STRIPPED (1ULL << 15)
-
-/**
- * Deprecated.
- * RX packet with double VLAN stripped.
- * This flag is replaced by PKT_RX_QINQ_STRIPPED.
- */
-#define PKT_RX_QINQ_PKT      PKT_RX_QINQ_STRIPPED
 
 /**
  * When packets are coalesced by a hardware or virtual driver, this flag
@@ -189,9 +185,33 @@ extern "C" {
  */
 #define PKT_RX_TIMESTAMP     (1ULL << 17)
 
+/**
+ * Indicate that security offload processing was applied on the RX packet.
+ */
+#define PKT_RX_SEC_OFFLOAD		(1ULL << 18)
+
+/**
+ * Indicate that security offload processing failed on the RX packet.
+ */
+#define PKT_RX_SEC_OFFLOAD_FAILED  	(1ULL << 19)
+
+/**
+ * The RX packet is a double VLAN, and the outer tci has been
+ * saved in in mbuf->vlan_tci_outer.
+ * If the flag PKT_RX_QINQ_STRIPPED is also present, both VLANs
+ * headers have been stripped from mbuf data, else they are still
+ * present.
+ */
+#define PKT_RX_QINQ          (1ULL << 20)
+
 /* add new RX flags here */
 
 /* add new TX flags here */
+
+/**
+ * Request security offload processing on the TX packet.
+ */
+#define PKT_TX_SEC_OFFLOAD 		(1ULL << 43)
 
 /**
  * Offload the MACsec. This flag must be set by the application to enable
@@ -316,7 +336,8 @@ extern "C" {
 		PKT_TX_QINQ_PKT |        \
 		PKT_TX_VLAN_PKT |        \
 		PKT_TX_TUNNEL_MASK |	 \
-		PKT_TX_MACSEC)
+		PKT_TX_MACSEC |		 \
+		PKT_TX_SEC_OFFLOAD)
 
 #define __RESERVED           (1ULL << 61) /**< reserved for future mbuf use */
 
@@ -411,7 +432,11 @@ struct rte_mbuf {
 	 * same mbuf cacheline0 layout for 32-bit and 64-bit. This makes
 	 * working on vector drivers easier.
 	 */
-	phys_addr_t buf_physaddr __rte_aligned(sizeof(phys_addr_t));
+	RTE_STD_C11
+	union {
+		rte_iova_t buf_iova;
+		rte_iova_t buf_physaddr; /**< deprecated */
+	} __rte_aligned(sizeof(rte_iova_t));
 
 	/* next 8 bytes are initialised on RX descriptor rearm */
 	MARKER64 rearm_data;
@@ -456,8 +481,21 @@ struct rte_mbuf {
 			uint32_t l3_type:4; /**< (Outer) L3 type. */
 			uint32_t l4_type:4; /**< (Outer) L4 type. */
 			uint32_t tun_type:4; /**< Tunnel type. */
-			uint32_t inner_l2_type:4; /**< Inner L2 type. */
-			uint32_t inner_l3_type:4; /**< Inner L3 type. */
+			RTE_STD_C11
+			union {
+				uint8_t inner_esp_next_proto;
+				/**< ESP next protocol type, valid if
+				 * RTE_PTYPE_TUNNEL_ESP tunnel type is set
+				 * on both Tx and Rx.
+				 */
+				__extension__
+				struct {
+					uint8_t inner_l2_type:4;
+					/**< Inner L2 type. */
+					uint8_t inner_l3_type:4;
+					/**< Inner L3 type. */
+				};
+			};
 			uint32_t inner_l4_type:4; /**< Inner L4 type. */
 		};
 	};
@@ -587,21 +625,28 @@ rte_mbuf_prefetch_part2(struct rte_mbuf *m)
 static inline uint16_t rte_pktmbuf_priv_size(struct rte_mempool *mp);
 
 /**
- * Return the DMA address of the beginning of the mbuf data
+ * Return the IO address of the beginning of the mbuf data
  *
  * @param mb
  *   The pointer to the mbuf.
  * @return
- *   The physical address of the beginning of the mbuf data
+ *   The IO address of the beginning of the mbuf data
  */
+static inline rte_iova_t
+rte_mbuf_data_iova(const struct rte_mbuf *mb)
+{
+	return mb->buf_iova + mb->data_off;
+}
+
+__rte_deprecated
 static inline phys_addr_t
 rte_mbuf_data_dma_addr(const struct rte_mbuf *mb)
 {
-	return mb->buf_physaddr + mb->data_off;
+	return rte_mbuf_data_iova(mb);
 }
 
 /**
- * Return the default DMA address of the beginning of the mbuf data
+ * Return the default IO address of the beginning of the mbuf data
  *
  * This function is used by drivers in their receive function, as it
  * returns the location where data should be written by the NIC, taking
@@ -610,12 +655,19 @@ rte_mbuf_data_dma_addr(const struct rte_mbuf *mb)
  * @param mb
  *   The pointer to the mbuf.
  * @return
- *   The physical address of the beginning of the mbuf data
+ *   The IO address of the beginning of the mbuf data
  */
+static inline rte_iova_t
+rte_mbuf_data_iova_default(const struct rte_mbuf *mb)
+{
+	return mb->buf_iova + RTE_PKTMBUF_HEADROOM;
+}
+
+__rte_deprecated
 static inline phys_addr_t
 rte_mbuf_data_dma_addr_default(const struct rte_mbuf *mb)
 {
-	return mb->buf_physaddr + RTE_PKTMBUF_HEADROOM;
+	return rte_mbuf_data_iova_default(mb);
 }
 
 /**
@@ -806,7 +858,7 @@ rte_mbuf_sanity_check(const struct rte_mbuf *m, int is_header);
  * For standard needs, prefer rte_pktmbuf_alloc().
  *
  * The caller can expect that the following fields of the mbuf structure
- * are initialized: buf_addr, buf_physaddr, buf_len, refcnt=1, nb_segs=1,
+ * are initialized: buf_addr, buf_iova, buf_len, refcnt=1, nb_segs=1,
  * next=NULL, pool, priv_size. The other fields must be initialized
  * by the caller.
  *
@@ -1087,6 +1139,8 @@ static inline void rte_pktmbuf_reset_headroom(struct rte_mbuf *m)
  * @param m
  *   The packet mbuf to be resetted.
  */
+#define MBUF_INVALID_PORT UINT16_MAX
+
 static inline void rte_pktmbuf_reset(struct rte_mbuf *m)
 {
 	m->next = NULL;
@@ -1095,7 +1149,7 @@ static inline void rte_pktmbuf_reset(struct rte_mbuf *m)
 	m->vlan_tci = 0;
 	m->vlan_tci_outer = 0;
 	m->nb_segs = 1;
-	m->port = 0xff;
+	m->port = MBUF_INVALID_PORT;
 
 	m->ol_flags = 0;
 	m->packet_type = 0;
@@ -1214,7 +1268,7 @@ static inline void rte_pktmbuf_attach(struct rte_mbuf *mi, struct rte_mbuf *m)
 
 	rte_mbuf_refcnt_update(md, 1);
 	mi->priv_size = m->priv_size;
-	mi->buf_physaddr = m->buf_physaddr;
+	mi->buf_iova = m->buf_iova;
 	mi->buf_addr = m->buf_addr;
 	mi->buf_len = m->buf_len;
 
@@ -1262,7 +1316,7 @@ static inline void rte_pktmbuf_detach(struct rte_mbuf *m)
 
 	m->priv_size = priv_size;
 	m->buf_addr = (char *)m + mbuf_size;
-	m->buf_physaddr = rte_mempool_virt2phy(mp, m) + mbuf_size;
+	m->buf_iova = rte_mempool_virt2iova(m) + mbuf_size;
 	m->buf_len = (uint16_t)buf_len;
 	rte_pktmbuf_reset_headroom(m);
 	m->data_len = 0;
@@ -1524,7 +1578,7 @@ static inline struct rte_mbuf *rte_pktmbuf_lastseg(struct rte_mbuf *m)
 #define rte_pktmbuf_mtod(m, t) rte_pktmbuf_mtod_offset(m, t, 0)
 
 /**
- * A macro that returns the physical address that points to an offset of the
+ * A macro that returns the IO address that points to an offset of the
  * start of the data in the mbuf
  *
  * @param m
@@ -1532,17 +1586,24 @@ static inline struct rte_mbuf *rte_pktmbuf_lastseg(struct rte_mbuf *m)
  * @param o
  *   The offset into the data to calculate address from.
  */
+#define rte_pktmbuf_iova_offset(m, o) \
+	(rte_iova_t)((m)->buf_iova + (m)->data_off + (o))
+
+/* deprecated */
 #define rte_pktmbuf_mtophys_offset(m, o) \
-	(phys_addr_t)((m)->buf_physaddr + (m)->data_off + (o))
+	rte_pktmbuf_iova_offset(m, o)
 
 /**
- * A macro that returns the physical address that points to the start of the
+ * A macro that returns the IO address that points to the start of the
  * data in the mbuf
  *
  * @param m
  *   The packet mbuf.
  */
-#define rte_pktmbuf_mtophys(m) rte_pktmbuf_mtophys_offset(m, 0)
+#define rte_pktmbuf_iova(m) rte_pktmbuf_iova_offset(m, 0)
+
+/* deprecated */
+#define rte_pktmbuf_mtophys(m) rte_pktmbuf_iova(m)
 
 /**
  * A macro that returns the length of the packet.
