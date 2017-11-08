@@ -8,6 +8,8 @@ dpdk (17.11-rc3-1~git1) UNRELEASED; urgency=medium
     librte-flow-classify17.11, librte-gso17.11, librte-member17.11,
     librte-pci17.11, librte-pmd-softnic17.11, librte-bus-vdev17.11.
   * Drop mk-* patches for reproducible builds, merged upstream.
+  * Refresh fix-vhost-user-socket-permission.patch to remove fuzz from
+    17.11-rc3.
 
  -- Luca Boccassi <lboccass@brocade.com>  Mon, 16 Oct 2017 14:47:09 +0100
 
