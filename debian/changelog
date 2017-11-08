@@ -12,6 +12,9 @@ dpdk (17.11-rc3-1~git1) UNRELEASED; urgency=medium
     17.11-rc3.
   * Switch generated dependencies to Python 3 due to switch to Python 3
     Sphinx.
+  * Build-Depend on debhelper (>= 9.20160709) | dh-systemd to keep
+    compatibility with Ubuntu 16.04, which does not yet have that
+    of debhelper.
 
  -- Luca Boccassi <lboccass@brocade.com>  Mon, 16 Oct 2017 14:47:09 +0100
 
