@@ -73,9 +73,9 @@ Last-Update: 2017-08-23
 --- a/lib/librte_eal/common/eal_common_options.c
 +++ b/lib/librte_eal/common/eal_common_options.c
 @@ -98,6 +98,8 @@ eal_long_options[] = {
+ 	{OPT_VDEV,              1, NULL, OPT_VDEV_NUM             },
  	{OPT_VFIO_INTR,         1, NULL, OPT_VFIO_INTR_NUM        },
  	{OPT_VMWARE_TSC_MAP,    0, NULL, OPT_VMWARE_TSC_MAP_NUM   },
- 	{OPT_XEN_DOM0,          0, NULL, OPT_XEN_DOM0_NUM         },
 +	{OPT_VHOST_OWNER,       1, NULL, OPT_VHOST_OWNER_NUM      },
 +	{OPT_VHOST_PERM,        1, NULL, OPT_VHOST_PERM_NUM       },
  	{0,                     0, NULL, 0                        }
@@ -84,9 +84,9 @@ Last-Update: 2017-08-23
 --- a/lib/librte_eal/common/eal_options.h
 +++ b/lib/librte_eal/common/eal_options.h
 @@ -83,6 +83,10 @@ enum {
+ 	OPT_VFIO_INTR_NUM,
+ #define OPT_VMWARE_TSC_MAP    "vmware-tsc-map"
  	OPT_VMWARE_TSC_MAP_NUM,
- #define OPT_XEN_DOM0          "xen-dom0"
- 	OPT_XEN_DOM0_NUM,
 +#define OPT_VHOST_OWNER       "vhost-owner"
 +	OPT_VHOST_OWNER_NUM,
 +#define OPT_VHOST_PERM        "vhost-perm"
@@ -96,9 +96,9 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_eal/common/include/rte_eal.h
 +++ b/lib/librte_eal/common/include/rte_eal.h
-@@ -293,6 +293,11 @@ static void __attribute__((constructor,
- #define RTE_INIT_PRIO(func, prio) \
- static void __attribute__((constructor(prio), used)) func(void)
+@@ -335,6 +335,11 @@ enum rte_iova_mode rte_eal_iova_mode(voi
+ const char *
+ rte_eal_mbuf_default_mempool_ops(void);
  
 +/**
 + * Set owner/permissions on sockets if requested on EAL commandline
@@ -120,7 +120,7 @@ Last-Update: 2017-08-23
  
  #include <rte_common.h>
  #include <rte_debug.h>
-@@ -118,6 +121,12 @@ struct lcore_config lcore_config[RTE_MAX
+@@ -117,6 +120,12 @@ struct lcore_config lcore_config[RTE_MAX
  /* internal configuration */
  struct internal_config internal_config;
  
@@ -133,16 +133,16 @@ Last-Update: 2017-08-23
  /* used by rte_rdtsc() */
  int rte_cycles_vmware_tsc_map;
  
-@@ -355,6 +364,8 @@ eal_usage(const char *prgname)
+@@ -366,6 +375,8 @@ eal_usage(const char *prgname)
+ 	       "  --"OPT_BASE_VIRTADDR"     Base virtual address\n"
  	       "  --"OPT_CREATE_UIO_DEV"    Create /dev/uioX (usually done by hotplug)\n"
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
- 	       "  --"OPT_XEN_DOM0"          Support running on Xen dom0 without hugetlbfs\n"
 +	       "  --"OPT_VHOST_OWNER"       Create vhost-user sockets with this owner:group\n"
 +	       "  --"OPT_VHOST_PERM"        Create vhost-user sockets with these permissions\n"
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -514,6 +525,121 @@ eal_log_level_parse(int argc, char **arg
+@@ -525,6 +536,121 @@ eal_log_level_parse(int argc, char **arg
  	optarg = old_optarg;
  }
  
@@ -264,8 +264,8 @@ Last-Update: 2017-08-23
  /* Parse the argument given in the command line of the application */
  static int
  eal_parse_args(int argc, char **argv)
-@@ -610,6 +736,26 @@ eal_parse_args(int argc, char **argv)
- 			internal_config.create_uio_dev = 1;
+@@ -612,6 +738,26 @@ eal_parse_args(int argc, char **argv)
+ 			internal_config.mbuf_pool_ops_name = optarg;
  			break;
  
 +		case OPT_VHOST_OWNER_NUM:
@@ -291,7 +291,7 @@ Last-Update: 2017-08-23
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -1016,3 +1162,47 @@ rte_eal_check_module(const char *module_
+@@ -1041,3 +1187,47 @@ rte_eal_check_module(const char *module_
  	/* Module has been found */
  	return 1;
  }
@@ -339,19 +339,19 @@ Last-Update: 2017-08-23
 +		vhost_set_ownership(path);
 +	}
 +}
---- a/lib/librte_eal/linuxapp/eal/rte_eal_version.map
-+++ b/lib/librte_eal/linuxapp/eal/rte_eal_version.map
-@@ -120,6 +120,7 @@ DPDK_2.2 {
- 	rte_keepalive_register_core;
- 	rte_xen_dom0_supported;
- 	rte_xen_mem_phy2mch;
+--- a/lib/librte_eal/rte_eal_version.map
++++ b/lib/librte_eal/rte_eal_version.map
+@@ -118,6 +118,7 @@ DPDK_16.04 {
+ 
+ 	rte_cpu_get_flag_name;
+ 	rte_eal_primary_proc_alive;
 +	rte_eal_set_socket_permissions;
  
- } DPDK_2.1;
+ } DPDK_2.2;
  
 --- a/lib/librte_vhost/socket.c
 +++ b/lib/librte_vhost/socket.c
-@@ -98,6 +98,8 @@ struct vhost_user {
+@@ -99,6 +99,8 @@ struct vhost_user {
  	pthread_mutex_t mutex;
  };
  
@@ -360,7 +360,7 @@ Last-Update: 2017-08-23
  #define MAX_VIRTIO_BACKLOG 128
  
  static void vhost_user_server_new_connection(int fd, void *data, int *remove);
-@@ -348,6 +350,7 @@ vhost_user_start_server(struct vhost_use
+@@ -366,6 +368,7 @@ vhost_user_start_server(struct vhost_use
  		goto err;
  	}
  
