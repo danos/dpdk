@@ -10,6 +10,8 @@ dpdk (17.11-rc3-1~git1) UNRELEASED; urgency=medium
   * Drop mk-* patches for reproducible builds, merged upstream.
   * Refresh fix-vhost-user-socket-permission.patch to remove fuzz from
     17.11-rc3.
+  * Switch generated dependencies to Python 3 due to switch to Python 3
+    Sphinx.
 
  -- Luca Boccassi <lboccass@brocade.com>  Mon, 16 Oct 2017 14:47:09 +0100
 
