@@ -121,11 +121,11 @@ build:
 	fi
 	sh debian/prep-modules $(KSRC)
 	cat debian/control.modules >> debian/control
-	dh $@ --with python2,dkms,systemd
+	dh $@ --with python3,dkms,systemd
 endif
 
 %:
-	dh $@ --with python2,dkms,systemd
+	dh $@ --with python3,dkms,systemd
 
 override_dh_gencontrol:
 	dh_gencontrol

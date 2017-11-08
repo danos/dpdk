@@ -33,7 +33,7 @@ Depends: hwdata,
          lsb-base (>= 3.2-14),
          pciutils,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends}
 Recommends: ${librte:Recommends},
 Suggests: dpdk-doc,
@@ -63,8 +63,8 @@ Section: doc
 Architecture: all
 Multi-Arch: foreign
 Homepage: http://dpdk.org/doc/guides/index.html
-Depends: libjs-jquery, libjs-underscore, ${misc:Depends}, ${python:Depends}
-Recommends: python, ${python:Recommends}
+Depends: libjs-jquery, libjs-underscore, ${misc:Depends}, ${python3:Depends}
+Recommends: python3, ${python3:Recommends}
 Description: Data Plane Development Kit (documentation)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
