@@ -1,7 +1,1 @@
 fix-vhost-user-socket-permission.patch
-mk-sort-list-of-shared-objects-in-linker-script.patch
-mk-sort-list-of-files-in-examples.dox.patch
-mk-sort-headers-before-wildcard-inclusion.patch
-mk-sort-source-files-before-passing-them-to-the-comp.patch
-mk-sort-object-files-when-building-deps-lists.patch
-mk-install-symlinks-before-build-step.patch
