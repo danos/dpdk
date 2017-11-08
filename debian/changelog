@@ -2,6 +2,7 @@ dpdk (17.11-rc3-1~git1) UNRELEASED; urgency=medium
 
   * New upstream RC 17.11-rc3.
   * Bump ABI version of packages from 17.08 to 17.11.
+  * Fix upstream version parsing in d/rules to account for -rcX.
 
  -- Luca Boccassi <lboccass@brocade.com>  Mon, 16 Oct 2017 14:47:09 +0100
 
