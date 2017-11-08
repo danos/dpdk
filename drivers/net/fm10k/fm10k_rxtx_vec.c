@@ -324,6 +324,9 @@ fm10k_rxq_rearm(struct fm10k_rx_queue *rxq)
 
 		/* Flush mbuf with pkt template.
 		 * Data to be rearmed is 6 bytes long.
+		 * Though, RX will overwrite ol_flags that are coming next
+		 * anyway. So overwrite whole 8 bytes with one load:
+		 * 6 bytes of rearm_data plus first 2 bytes of ol_flags.
 		 */
 		p0 = (uintptr_t)&mb0->rearm_data;
 		*(uint64_t *)p0 = rxq->mbuf_initializer;
@@ -331,8 +334,6 @@ fm10k_rxq_rearm(struct fm10k_rx_queue *rxq)
 		*(uint64_t *)p1 = rxq->mbuf_initializer;
 
 		/* load buf_addr(lo 64bit) and buf_physaddr(hi 64bit) */
-		RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, buf_physaddr) !=
-				offsetof(struct rte_mbuf, buf_addr) + 8);
 		vaddr0 = _mm_loadu_si128((__m128i *)&mb0->buf_addr);
 		vaddr1 = _mm_loadu_si128((__m128i *)&mb1->buf_addr);
 
@@ -450,19 +451,6 @@ fm10k_recv_raw_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts,
 		0xFF, 0xFF,  /* skip high 16 bits pkt_type */
 		0xFF, 0xFF   /* Skip pkt_type field in shuffle operation */
 		);
-	/*
-	 * Compile-time verify the shuffle mask
-	 * NOTE: some field positions already verified above, but duplicated
-	 * here for completeness in case of future modifications.
-	 */
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, pkt_len) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 4);
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, data_len) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 8);
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, vlan_tci) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 10);
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, hash) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 12);
 
 	/* Cache is empty -> need to scan the buffer rings, but first move
 	 * the next 'n' mbufs into the cache
@@ -753,7 +741,7 @@ vtx(volatile struct fm10k_tx_desc *txdp,
 		vtx1(txdp, *pkt, flags);
 }
 
-static __rte_always_inline int
+static inline int __attribute__((always_inline))
 fm10k_tx_free_bufs(struct fm10k_tx_queue *txq)
 {
 	struct rte_mbuf **txep;
@@ -774,12 +762,12 @@ fm10k_tx_free_bufs(struct fm10k_tx_queue *txq)
 	 * next_dd - (rs_thresh-1)
 	 */
 	txep = &txq->sw_ring[txq->next_dd - (n - 1)];
-	m = rte_pktmbuf_prefree_seg(txep[0]);
+	m = __rte_pktmbuf_prefree_seg(txep[0]);
 	if (likely(m != NULL)) {
 		free[0] = m;
 		nb_free = 1;
 		for (i = 1; i < n; i++) {
-			m = rte_pktmbuf_prefree_seg(txep[i]);
+			m = __rte_pktmbuf_prefree_seg(txep[i]);
 			if (likely(m != NULL)) {
 				if (likely(m->pool == free[0]->pool))
 					free[nb_free++] = m;
@@ -794,7 +782,7 @@ fm10k_tx_free_bufs(struct fm10k_tx_queue *txq)
 		rte_mempool_put_bulk(free[0]->pool, (void **)free, nb_free);
 	} else {
 		for (i = 1; i < n; i++) {
-			m = rte_pktmbuf_prefree_seg(txep[i]);
+			m = __rte_pktmbuf_prefree_seg(txep[i]);
 			if (m != NULL)
 				rte_mempool_put(m->pool, m);
 		}
@@ -809,7 +797,7 @@ fm10k_tx_free_bufs(struct fm10k_tx_queue *txq)
 	return txq->rs_thresh;
 }
 
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 tx_backlog_entry(struct rte_mbuf **txep,
 		 struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 {
@@ -820,8 +808,8 @@ tx_backlog_entry(struct rte_mbuf **txep,
 }
 
 uint16_t
-fm10k_xmit_fixed_burst_vec(void *tx_queue, struct rte_mbuf **tx_pkts,
-			   uint16_t nb_pkts)
+fm10k_xmit_pkts_vec(void *tx_queue, struct rte_mbuf **tx_pkts,
+			uint16_t nb_pkts)
 {
 	struct fm10k_tx_queue *txq = (struct fm10k_tx_queue *)tx_queue;
 	volatile struct fm10k_tx_desc *txdp;

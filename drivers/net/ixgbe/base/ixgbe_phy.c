@@ -113,7 +113,7 @@ s32 ixgbe_read_i2c_combined_generic_int(struct ixgbe_hw *hw, u8 addr, u16 reg,
 					u16 *val, bool lock)
 {
 	u32 swfw_mask = hw->phy.phy_semaphore_mask;
-	int max_retry = 3;
+	int max_retry = 10;
 	int retry = 0;
 	u8 csum_byte;
 	u8 high_bits;
@@ -121,6 +121,8 @@ s32 ixgbe_read_i2c_combined_generic_int(struct ixgbe_hw *hw, u8 addr, u16 reg,
 	u8 reg_high;
 	u8 csum;
 
+	if (hw->mac.type >= ixgbe_mac_X550)
+		max_retry = 3;
 	reg_high = ((reg >> 7) & 0xFE) | 1;	/* Indicate read combined */
 	csum = ixgbe_ones_comp_byte_add(reg_high, reg & 0xFF);
 	csum = ~csum;
@@ -291,11 +293,8 @@ static bool ixgbe_probe_phy(struct ixgbe_hw *hw, u16 phy_addr)
 {
 	u16 ext_ability = 0;
 
-	if (!ixgbe_validate_phy_addr(hw, phy_addr)) {
-		DEBUGOUT1("Unable to validate PHY address 0x%04X\n",
-			phy_addr);
+	if (!ixgbe_validate_phy_addr(hw, phy_addr))
 		return false;
-	}
 
 	if (ixgbe_get_phy_id(hw))
 		return false;
@@ -414,8 +413,6 @@ bool ixgbe_validate_phy_addr(struct ixgbe_hw *hw, u32 phy_addr)
 	if (phy_id != 0xFFFF && phy_id != 0x0)
 		valid = true;
 
-	DEBUGOUT1("PHY ID HIGH is 0x%04X\n", phy_id);
-
 	return valid;
 }
 
@@ -444,9 +441,6 @@ s32 ixgbe_get_phy_id(struct ixgbe_hw *hw)
 		hw->phy.id |= (u32)(phy_id_low & IXGBE_PHY_REVISION_MASK);
 		hw->phy.revision = (u32)(phy_id_low & ~IXGBE_PHY_REVISION_MASK);
 	}
-	DEBUGOUT2("PHY_ID_HIGH 0x%04X, PHY_ID_LOW 0x%04X\n",
-		  phy_id_high, phy_id_low);
-
 	return status;
 }
 
@@ -465,6 +459,7 @@ enum ixgbe_phy_type ixgbe_get_phy_type_from_id(u32 phy_id)
 	case TN1010_PHY_ID:
 		phy_type = ixgbe_phy_tn;
 		break;
+	case X550_PHY_ID1:
 	case X550_PHY_ID2:
 	case X550_PHY_ID3:
 	case X540_PHY_ID:
@@ -482,7 +477,7 @@ enum ixgbe_phy_type ixgbe_get_phy_type_from_id(u32 phy_id)
 		break;
 	case IXGBE_M88E1500_E_PHY_ID:
 	case IXGBE_M88E1543_E_PHY_ID:
-		phy_type = ixgbe_phy_ext_1g_t;
+		phy_type = ixgbe_phy_m88;
 		break;
 	default:
 		phy_type = ixgbe_phy_unknown;
@@ -533,30 +528,11 @@ s32 ixgbe_reset_phy_generic(struct ixgbe_hw *hw)
 	 */
 	for (i = 0; i < 30; i++) {
 		msec_delay(100);
-		if (hw->phy.type == ixgbe_phy_x550em_ext_t) {
-			status = hw->phy.ops.read_reg(hw,
-						  IXGBE_MDIO_TX_VENDOR_ALARMS_3,
-						  IXGBE_MDIO_PMA_PMD_DEV_TYPE,
-						  &ctrl);
-			if (status != IXGBE_SUCCESS)
-				return status;
-
-			if (ctrl & IXGBE_MDIO_TX_VENDOR_ALARMS_3_RST_MASK) {
-				usec_delay(2);
-				break;
-			}
-		} else {
-			status = hw->phy.ops.read_reg(hw,
-						     IXGBE_MDIO_PHY_XS_CONTROL,
-						     IXGBE_MDIO_PHY_XS_DEV_TYPE,
-						     &ctrl);
-			if (status != IXGBE_SUCCESS)
-				return status;
-
-			if (!(ctrl & IXGBE_MDIO_PHY_XS_RESET)) {
-				usec_delay(2);
-				break;
-			}
+		hw->phy.ops.read_reg(hw, IXGBE_MDIO_PHY_XS_CONTROL,
+				     IXGBE_MDIO_PHY_XS_DEV_TYPE, &ctrl);
+		if (!(ctrl & IXGBE_MDIO_PHY_XS_RESET)) {
+			usec_delay(2);
+			break;
 		}
 	}
 
@@ -578,7 +554,7 @@ out:
  *  @phy_data: Pointer to read data from PHY register
  **/
 s32 ixgbe_read_phy_reg_mdi(struct ixgbe_hw *hw, u32 reg_addr, u32 device_type,
-			   u16 *phy_data)
+		       u16 *phy_data)
 {
 	u32 i, data, command;
 
@@ -600,13 +576,12 @@ s32 ixgbe_read_phy_reg_mdi(struct ixgbe_hw *hw, u32 reg_addr, u32 device_type,
 
 		command = IXGBE_READ_REG(hw, IXGBE_MSCA);
 		if ((command & IXGBE_MSCA_MDI_COMMAND) == 0)
-			break;
+				break;
 	}
 
 
 	if ((command & IXGBE_MSCA_MDI_COMMAND) != 0) {
 		ERROR_REPORT1(IXGBE_ERROR_POLLING, "PHY address command did not complete.\n");
-		DEBUGOUT("PHY address command did not complete, returning IXGBE_ERR_PHY\n");
 		return IXGBE_ERR_PHY;
 	}
 
@@ -636,7 +611,6 @@ s32 ixgbe_read_phy_reg_mdi(struct ixgbe_hw *hw, u32 reg_addr, u32 device_type,
 
 	if ((command & IXGBE_MSCA_MDI_COMMAND) != 0) {
 		ERROR_REPORT1(IXGBE_ERROR_POLLING, "PHY read command didn't complete\n");
-		DEBUGOUT("PHY read command didn't complete, returning IXGBE_ERR_PHY\n");
 		return IXGBE_ERR_PHY;
 	}
 
@@ -794,63 +768,91 @@ s32 ixgbe_setup_phy_link_generic(struct ixgbe_hw *hw)
 
 	ixgbe_get_copper_link_capabilities_generic(hw, &speed, &autoneg);
 
-	/* Set or unset auto-negotiation 10G advertisement */
-	hw->phy.ops.read_reg(hw, IXGBE_MII_10GBASE_T_AUTONEG_CTRL_REG,
-			     IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
-			     &autoneg_reg);
+	if (speed & IXGBE_LINK_SPEED_10GB_FULL) {
+		/* Set or unset auto-negotiation 10G advertisement */
+		hw->phy.ops.read_reg(hw, IXGBE_MII_10GBASE_T_AUTONEG_CTRL_REG,
+				     IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				     &autoneg_reg);
 
-	autoneg_reg &= ~IXGBE_MII_10GBASE_T_ADVERTISE;
-	if ((hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_10GB_FULL) &&
-	    (speed & IXGBE_LINK_SPEED_10GB_FULL))
-		autoneg_reg |= IXGBE_MII_10GBASE_T_ADVERTISE;
+		autoneg_reg &= ~IXGBE_MII_10GBASE_T_ADVERTISE;
+		if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_10GB_FULL)
+			autoneg_reg |= IXGBE_MII_10GBASE_T_ADVERTISE;
 
-	hw->phy.ops.write_reg(hw, IXGBE_MII_10GBASE_T_AUTONEG_CTRL_REG,
-			      IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
-			      autoneg_reg);
-
-	hw->phy.ops.read_reg(hw, IXGBE_MII_AUTONEG_VENDOR_PROVISION_1_REG,
-			     IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
-			     &autoneg_reg);
-
-	if (hw->mac.type == ixgbe_mac_X550) {
-		/* Set or unset auto-negotiation 5G advertisement */
-		autoneg_reg &= ~IXGBE_MII_5GBASE_T_ADVERTISE;
-		if ((hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_5GB_FULL) &&
-		    (speed & IXGBE_LINK_SPEED_5GB_FULL))
-			autoneg_reg |= IXGBE_MII_5GBASE_T_ADVERTISE;
-
-		/* Set or unset auto-negotiation 2.5G advertisement */
-		autoneg_reg &= ~IXGBE_MII_2_5GBASE_T_ADVERTISE;
-		if ((hw->phy.autoneg_advertised &
-		     IXGBE_LINK_SPEED_2_5GB_FULL) &&
-		    (speed & IXGBE_LINK_SPEED_2_5GB_FULL))
-			autoneg_reg |= IXGBE_MII_2_5GBASE_T_ADVERTISE;
+		hw->phy.ops.write_reg(hw, IXGBE_MII_10GBASE_T_AUTONEG_CTRL_REG,
+				      IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				      autoneg_reg);
 	}
 
-	/* Set or unset auto-negotiation 1G advertisement */
-	autoneg_reg &= ~IXGBE_MII_1GBASE_T_ADVERTISE;
-	if ((hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_1GB_FULL) &&
-	    (speed & IXGBE_LINK_SPEED_1GB_FULL))
-		autoneg_reg |= IXGBE_MII_1GBASE_T_ADVERTISE;
+	if (hw->mac.type == ixgbe_mac_X550) {
+		if (speed & IXGBE_LINK_SPEED_5GB_FULL) {
+			/* Set or unset auto-negotiation 5G advertisement */
+			hw->phy.ops.read_reg(hw,
+				IXGBE_MII_AUTONEG_VENDOR_PROVISION_1_REG,
+				IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				&autoneg_reg);
 
-	hw->phy.ops.write_reg(hw, IXGBE_MII_AUTONEG_VENDOR_PROVISION_1_REG,
-			      IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
-			      autoneg_reg);
+			autoneg_reg &= ~IXGBE_MII_5GBASE_T_ADVERTISE;
+			if (hw->phy.autoneg_advertised &
+			     IXGBE_LINK_SPEED_5GB_FULL)
+				autoneg_reg |= IXGBE_MII_5GBASE_T_ADVERTISE;
 
-	/* Set or unset auto-negotiation 100M advertisement */
-	hw->phy.ops.read_reg(hw, IXGBE_MII_AUTONEG_ADVERTISE_REG,
-			     IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
-			     &autoneg_reg);
+			hw->phy.ops.write_reg(hw,
+				IXGBE_MII_AUTONEG_VENDOR_PROVISION_1_REG,
+				IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				autoneg_reg);
+		}
 
-	autoneg_reg &= ~(IXGBE_MII_100BASE_T_ADVERTISE |
-			 IXGBE_MII_100BASE_T_ADVERTISE_HALF);
-	if ((hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_100_FULL) &&
-	    (speed & IXGBE_LINK_SPEED_100_FULL))
-		autoneg_reg |= IXGBE_MII_100BASE_T_ADVERTISE;
+		if (speed & IXGBE_LINK_SPEED_2_5GB_FULL) {
+			/* Set or unset auto-negotiation 2.5G advertisement */
+			hw->phy.ops.read_reg(hw,
+				IXGBE_MII_AUTONEG_VENDOR_PROVISION_1_REG,
+				IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				&autoneg_reg);
 
-	hw->phy.ops.write_reg(hw, IXGBE_MII_AUTONEG_ADVERTISE_REG,
-			      IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
-			      autoneg_reg);
+			autoneg_reg &= ~IXGBE_MII_2_5GBASE_T_ADVERTISE;
+			if (hw->phy.autoneg_advertised &
+			    IXGBE_LINK_SPEED_2_5GB_FULL)
+				autoneg_reg |= IXGBE_MII_2_5GBASE_T_ADVERTISE;
+
+			hw->phy.ops.write_reg(hw,
+				IXGBE_MII_AUTONEG_VENDOR_PROVISION_1_REG,
+				IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				autoneg_reg);
+		}
+	}
+
+	if (speed & IXGBE_LINK_SPEED_1GB_FULL) {
+		/* Set or unset auto-negotiation 1G advertisement */
+		hw->phy.ops.read_reg(hw,
+				     IXGBE_MII_AUTONEG_VENDOR_PROVISION_1_REG,
+				     IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				     &autoneg_reg);
+
+		autoneg_reg &= ~IXGBE_MII_1GBASE_T_ADVERTISE;
+		if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_1GB_FULL)
+			autoneg_reg |= IXGBE_MII_1GBASE_T_ADVERTISE;
+
+		hw->phy.ops.write_reg(hw,
+				      IXGBE_MII_AUTONEG_VENDOR_PROVISION_1_REG,
+				      IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				      autoneg_reg);
+	}
+
+	if (speed & IXGBE_LINK_SPEED_100_FULL) {
+		/* Set or unset auto-negotiation 100M advertisement */
+		hw->phy.ops.read_reg(hw, IXGBE_MII_AUTONEG_ADVERTISE_REG,
+				     IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				     &autoneg_reg);
+
+		autoneg_reg &= ~(IXGBE_MII_100BASE_T_ADVERTISE |
+				 IXGBE_MII_100BASE_T_ADVERTISE_HALF);
+		if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_100_FULL)
+			autoneg_reg |= IXGBE_MII_100BASE_T_ADVERTISE;
+
+		hw->phy.ops.write_reg(hw, IXGBE_MII_AUTONEG_ADVERTISE_REG,
+				      IXGBE_MDIO_AUTO_NEG_DEV_TYPE,
+				      autoneg_reg);
+	}
 
 	/* Blocked by MNG FW so don't reset PHY */
 	if (ixgbe_check_reset_blocked(hw))
@@ -1575,9 +1577,9 @@ err_read_i2c_eeprom:
  *
  *  Determines physical layer capabilities of the current SFP.
  */
-u64 ixgbe_get_supported_phy_sfp_layer_generic(struct ixgbe_hw *hw)
+s32 ixgbe_get_supported_phy_sfp_layer_generic(struct ixgbe_hw *hw)
 {
-	u64 physical_layer = IXGBE_PHYSICAL_LAYER_UNKNOWN;
+	u32 physical_layer = IXGBE_PHYSICAL_LAYER_UNKNOWN;
 	u8 comp_codes_10g = 0;
 	u8 comp_codes_1g = 0;
 

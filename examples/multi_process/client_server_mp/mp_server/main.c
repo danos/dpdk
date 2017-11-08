@@ -38,6 +38,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <inttypes.h>
+#include <inttypes.h>
 #include <sys/queue.h>
 #include <errno.h>
 #include <netinet/ip.h>
@@ -46,6 +47,7 @@
 #include <rte_memory.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_byteorder.h>
 #include <rte_launch.h>
 #include <rte_per_lcore.h>
 #include <rte_lcore.h>
@@ -225,7 +227,7 @@ flush_rx_queue(uint16_t client)
 
 	cl = &clients[client];
 	if (rte_ring_enqueue_bulk(cl->rx_q, (void **)cl_rx_buf[client].buffer,
-			cl_rx_buf[client].count, NULL) == 0){
+			cl_rx_buf[client].count) != 0){
 		for (j = 0; j < cl_rx_buf[client].count; j++)
 			rte_pktmbuf_free(cl_rx_buf[client].buffer[j]);
 		cl->stats.rx_drop += cl_rx_buf[client].count;

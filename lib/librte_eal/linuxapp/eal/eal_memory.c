@@ -2,7 +2,6 @@
  *   BSD LICENSE
  *
  *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *   Copyright(c) 2013 6WIND.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -31,16 +30,46 @@
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+/*   BSD LICENSE
+ *
+ *   Copyright(c) 2013 6WIND.
+ *
+ *   Redistribution and use in source and binary forms, with or without
+ *   modification, are permitted provided that the following conditions
+ *   are met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in
+ *       the documentation and/or other materials provided with the
+ *       distribution.
+ *     * Neither the name of 6WIND S.A. nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #define _FILE_OFFSET_BITS 64
 #include <errno.h>
 #include <stdarg.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
+#include <stdarg.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -48,14 +77,11 @@
 #include <sys/file.h>
 #include <unistd.h>
 #include <limits.h>
+#include <errno.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <signal.h>
 #include <setjmp.h>
-#ifdef RTE_EAL_NUMA_AWARE_HUGEPAGES
-#include <numa.h>
-#include <numaif.h>
-#endif
 
 #include <rte_log.h>
 #include <rte_memory.h>
@@ -96,35 +122,36 @@ int rte_xen_dom0_supported(void)
 
 static uint64_t baseaddr_offset;
 
-static bool phys_addrs_available = true;
+static unsigned proc_pagemap_readable;
 
 #define RANDOMIZE_VA_SPACE_FILE "/proc/sys/kernel/randomize_va_space"
 
 static void
-test_phys_addrs_available(void)
+test_proc_pagemap_readable(void)
 {
-	uint64_t tmp;
-	phys_addr_t physaddr;
+	int fd = open("/proc/self/pagemap", O_RDONLY);
 
-	/* For dom0, phys addresses can always be available */
-	if (rte_xen_dom0_supported())
-		return;
-
-	if (!rte_eal_has_hugepages()) {
+	if (fd < 0) {
 		RTE_LOG(ERR, EAL,
-			"Started without hugepages support, physical addresses not available\n");
-		phys_addrs_available = false;
-		return;
-	}
-
-	physaddr = rte_mem_virt2phy(&tmp);
-	if (physaddr == RTE_BAD_PHYS_ADDR) {
-		RTE_LOG(ERR, EAL,
-			"Cannot obtain physical addresses: %s. "
-			"Only vfio will function.\n",
+			"Cannot open /proc/self/pagemap: %s. "
+			"virt2phys address translation will not work\n",
 			strerror(errno));
-		phys_addrs_available = false;
+		return;
 	}
+
+	/* Is readable */
+	close(fd);
+	proc_pagemap_readable = 1;
+}
+
+/* Lock page in physical memory and prevent from swapping. */
+int
+rte_mem_lock_page(const void *virt)
+{
+	unsigned long virtual = (unsigned long)virt;
+	int page_size = getpagesize();
+	unsigned long aligned = (virtual & ~ (page_size - 1));
+	return mlock((void*)aligned, page_size);
 }
 
 /*
@@ -163,7 +190,7 @@ rte_mem_virt2phy(const void *virtaddr)
 	}
 
 	/* Cannot parse /proc/self/pagemap, no need to log errors everywhere */
-	if (!phys_addrs_available)
+	if (!proc_pagemap_readable)
 		return RTE_BAD_PHYS_ADDR;
 
 	/* standard page size */
@@ -202,9 +229,6 @@ rte_mem_virt2phy(const void *virtaddr)
 	 * the pfn (page frame number) are bits 0-54 (see
 	 * pagemap.txt in linux Documentation)
 	 */
-	if ((page & 0x7fffffffffffffULL) == 0)
-		return RTE_BAD_PHYS_ADDR;
-
 	physaddr = ((page & 0x7fffffffffffffULL) * page_size)
 		+ ((unsigned long)virtaddr % page_size);
 
@@ -218,7 +242,7 @@ rte_mem_virt2phy(const void *virtaddr)
 static int
 find_physaddrs(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi)
 {
-	unsigned int i;
+	unsigned i;
 	phys_addr_t addr;
 
 	for (i = 0; i < hpi->num_pages[0]; i++) {
@@ -226,22 +250,6 @@ find_physaddrs(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi)
 		if (addr == RTE_BAD_PHYS_ADDR)
 			return -1;
 		hugepg_tbl[i].physaddr = addr;
-	}
-	return 0;
-}
-
-/*
- * For each hugepage in hugepg_tbl, fill the physaddr value sequentially.
- */
-static int
-set_physaddrs(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi)
-{
-	unsigned int i;
-	static phys_addr_t addr;
-
-	for (i = 0; i < hpi->num_pages[0]; i++) {
-		hugepg_tbl[i].physaddr = addr;
-		addr += hugepg_tbl[i].size;
 	}
 	return 0;
 }
@@ -305,13 +313,7 @@ get_virtual_area(size_t *size, size_t hugepage_sz)
 	}
 	do {
 		addr = mmap(addr,
-				(*size) + hugepage_sz, PROT_READ,
-#ifdef RTE_ARCH_PPC_64
-				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
-#else
-				MAP_PRIVATE,
-#endif
-				fd, 0);
+				(*size) + hugepage_sz, PROT_READ, MAP_PRIVATE, fd, 0);
 		if (addr == MAP_FAILED)
 			*size -= hugepage_sz;
 	} while (addr == MAP_FAILED && *size > 0);
@@ -357,14 +359,6 @@ static int huge_wrap_sigsetjmp(void)
 	return sigsetjmp(huge_jmpenv, 1);
 }
 
-#ifdef RTE_EAL_NUMA_AWARE_HUGEPAGES
-/* Callback for numa library. */
-void numa_error(char *where)
-{
-	RTE_LOG(ERR, EAL, "%s failed: %s\n", where, strerror(errno));
-}
-#endif
-
 /*
  * Mmap all hugepages of hugepage table: it first open a file in
  * hugetlbfs, then mmap() hugepage_sz data in it. If orig is set, the
@@ -373,77 +367,17 @@ void numa_error(char *where)
  * map continguous physical blocks in contiguous virtual blocks.
  */
 static unsigned
-map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
-		  uint64_t *essential_memory __rte_unused, int orig)
+map_all_hugepages(struct hugepage_file *hugepg_tbl,
+		struct hugepage_info *hpi, int orig)
 {
 	int fd;
 	unsigned i;
 	void *virtaddr;
 	void *vma_addr = NULL;
 	size_t vma_len = 0;
-#ifdef RTE_EAL_NUMA_AWARE_HUGEPAGES
-	int node_id = -1;
-	int essential_prev = 0;
-	int oldpolicy;
-	struct bitmask *oldmask = numa_allocate_nodemask();
-	bool have_numa = true;
-	unsigned long maxnode = 0;
-
-	/* Check if kernel supports NUMA. */
-	if (numa_available() != 0) {
-		RTE_LOG(DEBUG, EAL, "NUMA is not supported.\n");
-		have_numa = false;
-	}
-
-	if (orig && have_numa) {
-		RTE_LOG(DEBUG, EAL, "Trying to obtain current memory policy.\n");
-		if (get_mempolicy(&oldpolicy, oldmask->maskp,
-				  oldmask->size + 1, 0, 0) < 0) {
-			RTE_LOG(ERR, EAL,
-				"Failed to get current mempolicy: %s. "
-				"Assuming MPOL_DEFAULT.\n", strerror(errno));
-			oldpolicy = MPOL_DEFAULT;
-		}
-		for (i = 0; i < RTE_MAX_NUMA_NODES; i++)
-			if (internal_config.socket_mem[i])
-				maxnode = i + 1;
-	}
-#endif
 
 	for (i = 0; i < hpi->num_pages[0]; i++) {
 		uint64_t hugepage_sz = hpi->hugepage_sz;
-
-#ifdef RTE_EAL_NUMA_AWARE_HUGEPAGES
-		if (maxnode) {
-			unsigned int j;
-
-			for (j = 0; j < maxnode; j++)
-				if (essential_memory[j])
-					break;
-
-			if (j == maxnode) {
-				node_id = (node_id + 1) % maxnode;
-				while (!internal_config.socket_mem[node_id]) {
-					node_id++;
-					node_id %= maxnode;
-				}
-				essential_prev = 0;
-			} else {
-				node_id = j;
-				essential_prev = essential_memory[j];
-
-				if (essential_memory[j] < hugepage_sz)
-					essential_memory[j] = 0;
-				else
-					essential_memory[j] -= hugepage_sz;
-			}
-
-			RTE_LOG(DEBUG, EAL,
-				"Setting policy MPOL_PREFERRED for socket %d\n",
-				node_id);
-			numa_set_preferred(node_id);
-		}
-#endif
 
 		if (orig) {
 			hugepg_tbl[i].file_id = i;
@@ -499,7 +433,7 @@ map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
 		if (fd < 0) {
 			RTE_LOG(DEBUG, EAL, "%s(): open failed: %s\n", __func__,
 					strerror(errno));
-			goto out;
+			return i;
 		}
 
 		/* map the segment, and populate page tables,
@@ -510,7 +444,7 @@ map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
 			RTE_LOG(DEBUG, EAL, "%s(): mmap failed: %s\n", __func__,
 					strerror(errno));
 			close(fd);
-			goto out;
+			return i;
 		}
 
 		if (orig) {
@@ -535,12 +469,7 @@ map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
 				munmap(virtaddr, hugepage_sz);
 				close(fd);
 				unlink(hugepg_tbl[i].filepath);
-#ifdef RTE_EAL_NUMA_AWARE_HUGEPAGES
-				if (maxnode)
-					essential_memory[node_id] =
-						essential_prev;
-#endif
-				goto out;
+				return i;
 			}
 			*(int *)virtaddr = 0;
 		}
@@ -551,7 +480,7 @@ map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
 			RTE_LOG(DEBUG, EAL, "%s(): Locking file failed:%s \n",
 				__func__, strerror(errno));
 			close(fd);
-			goto out;
+			return i;
 		}
 
 		close(fd);
@@ -560,22 +489,6 @@ map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
 		vma_len -= hugepage_sz;
 	}
 
-out:
-#ifdef RTE_EAL_NUMA_AWARE_HUGEPAGES
-	if (maxnode) {
-		RTE_LOG(DEBUG, EAL,
-			"Restoring previous memory policy: %d\n", oldpolicy);
-		if (oldpolicy == MPOL_DEFAULT) {
-			numa_set_localalloc();
-		} else if (set_mempolicy(oldpolicy, oldmask->maskp,
-					 oldmask->size + 1) < 0) {
-			RTE_LOG(ERR, EAL, "Failed to restore mempolicy: %s\n",
-				strerror(errno));
-			numa_set_localalloc();
-		}
-	}
-	numa_free_cpumask(oldmask);
-#endif
 	return i;
 }
 
@@ -610,8 +523,8 @@ find_numasocket(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi)
 
 	f = fopen("/proc/self/numa_maps", "r");
 	if (f == NULL) {
-		RTE_LOG(NOTICE, EAL, "NUMA support not available"
-			" consider that all memory is in socket_id 0\n");
+		RTE_LOG(NOTICE, EAL, "cannot open /proc/self/numa_maps,"
+				" consider that all memory is in socket_id 0\n");
 		return 0;
 	}
 
@@ -660,11 +573,6 @@ find_numasocket(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi)
 			if (hugepg_tbl[i].orig_va == va) {
 				hugepg_tbl[i].socket_id = socket_id;
 				hp_count++;
-#ifdef RTE_EAL_NUMA_AWARE_HUGEPAGES
-				RTE_LOG(DEBUG, EAL,
-					"Hugepage %s is on socket %d\n",
-					hugepg_tbl[i].filepath, socket_id);
-#endif
 			}
 		}
 	}
@@ -684,12 +592,12 @@ static int
 cmp_physaddr(const void *a, const void *b)
 {
 #ifndef RTE_ARCH_PPC_64
-	const struct hugepage_file *p1 = a;
-	const struct hugepage_file *p2 = b;
+	const struct hugepage_file *p1 = (const struct hugepage_file *)a;
+	const struct hugepage_file *p2 = (const struct hugepage_file *)b;
 #else
 	/* PowerPC needs memory sorted in reverse order from x86 */
-	const struct hugepage_file *p1 = b;
-	const struct hugepage_file *p2 = a;
+	const struct hugepage_file *p1 = (const struct hugepage_file *)b;
+	const struct hugepage_file *p2 = (const struct hugepage_file *)a;
 #endif
 	if (p1->physaddr < p2->physaddr)
 		return -1;
@@ -1043,7 +951,7 @@ rte_eal_hugepage_init(void)
 	int nr_hugefiles, nr_hugepages = 0;
 	void *addr;
 
-	test_phys_addrs_available();
+	test_proc_pagemap_readable();
 
 	memset(used_hp, 0, sizeof(used_hp));
 
@@ -1059,7 +967,7 @@ rte_eal_hugepage_init(void)
 					strerror(errno));
 			return -1;
 		}
-		mcfg->memseg[0].phys_addr = RTE_BAD_PHYS_ADDR;
+		mcfg->memseg[0].phys_addr = (phys_addr_t)(uintptr_t)addr;
 		mcfg->memseg[0].addr = addr;
 		mcfg->memseg[0].hugepage_sz = RTE_PGSIZE_4K;
 		mcfg->memseg[0].len = internal_config.memory;
@@ -1103,11 +1011,6 @@ rte_eal_hugepage_init(void)
 
 	huge_register_sigbus();
 
-	/* make a copy of socket_mem, needed for balanced allocation. */
-	for (i = 0; i < RTE_MAX_NUMA_NODES; i++)
-		memory[i] = internal_config.socket_mem[i];
-
-
 	/* map all hugepages and sort them */
 	for (i = 0; i < (int)internal_config.num_hugepage_sizes; i ++){
 		unsigned pages_old, pages_new;
@@ -1125,8 +1028,7 @@ rte_eal_hugepage_init(void)
 
 		/* map all hugepages available */
 		pages_old = hpi->num_pages[0];
-		pages_new = map_all_hugepages(&tmp_hp[hp_offset], hpi,
-					      memory, 1);
+		pages_new = map_all_hugepages(&tmp_hp[hp_offset], hpi, 1);
 		if (pages_new < pages_old) {
 			RTE_LOG(DEBUG, EAL,
 				"%d not %d hugepages of size %u MB allocated\n",
@@ -1141,22 +1043,11 @@ rte_eal_hugepage_init(void)
 				continue;
 		}
 
-		if (phys_addrs_available) {
-			/* find physical addresses for each hugepage */
-			if (find_physaddrs(&tmp_hp[hp_offset], hpi) < 0) {
-				RTE_LOG(DEBUG, EAL, "Failed to find phys addr "
-					"for %u MB pages\n",
-					(unsigned int)(hpi->hugepage_sz / 0x100000));
-				goto fail;
-			}
-		} else {
-			/* set physical addresses for each hugepage */
-			if (set_physaddrs(&tmp_hp[hp_offset], hpi) < 0) {
-				RTE_LOG(DEBUG, EAL, "Failed to set phys addr "
-					"for %u MB pages\n",
-					(unsigned int)(hpi->hugepage_sz / 0x100000));
-				goto fail;
-			}
+		/* find physical addresses and sockets for each hugepage */
+		if (find_physaddrs(&tmp_hp[hp_offset], hpi) < 0){
+			RTE_LOG(DEBUG, EAL, "Failed to find phys addr for %u MB pages\n",
+					(unsigned)(hpi->hugepage_sz / 0x100000));
+			goto fail;
 		}
 
 		if (find_numasocket(&tmp_hp[hp_offset], hpi) < 0){
@@ -1169,7 +1060,7 @@ rte_eal_hugepage_init(void)
 		      sizeof(struct hugepage_file), cmp_physaddr);
 
 		/* remap all hugepages */
-		if (map_all_hugepages(&tmp_hp[hp_offset], hpi, NULL, 0) !=
+		if (map_all_hugepages(&tmp_hp[hp_offset], hpi, 0) !=
 		    hpi->num_pages[0]) {
 			RTE_LOG(ERR, EAL, "Failed to remap %u MB pages\n",
 					(unsigned)(hpi->hugepage_sz / 0x100000));
@@ -1398,7 +1289,7 @@ rte_eal_hugepage_attach(void)
 				"into secondary processes\n");
 	}
 
-	test_phys_addrs_available();
+	test_proc_pagemap_readable();
 
 	if (internal_config.xen_dom0_support) {
 #ifdef RTE_LIBRTE_XEN_DOM0
@@ -1439,13 +1330,7 @@ rte_eal_hugepage_attach(void)
 		 * use mmap to get identical addresses as the primary process.
 		 */
 		base_addr = mmap(mcfg->memseg[s].addr, mcfg->memseg[s].len,
-				 PROT_READ,
-#ifdef RTE_ARCH_PPC_64
-				 MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
-#else
-				 MAP_PRIVATE,
-#endif
-				 fd_zero, 0);
+				 PROT_READ, MAP_PRIVATE, fd_zero, 0);
 		if (base_addr == MAP_FAILED ||
 		    base_addr != mcfg->memseg[s].addr) {
 			max_seg = s;
@@ -1540,10 +1425,4 @@ error:
 	if (fd_hugepage >= 0)
 		close(fd_hugepage);
 	return -1;
-}
-
-bool
-rte_eal_using_phys_addrs(void)
-{
-	return phys_addrs_available;
 }

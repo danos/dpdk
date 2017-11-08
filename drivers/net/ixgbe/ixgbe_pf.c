@@ -61,9 +61,7 @@
 static inline uint16_t
 dev_num_vf(struct rte_eth_dev *eth_dev)
 {
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
-
-	return pci_dev->max_vfs;
+	return eth_dev->pci_dev->max_vfs;
 }
 
 static inline
@@ -178,7 +176,6 @@ ixgbe_add_tx_flow_control_drop_filter(struct rte_eth_dev *eth_dev)
 		IXGBE_DEV_PRIVATE_TO_FILTER_INFO(eth_dev->data->dev_private);
 	uint16_t vf_num;
 	int i;
-	struct ixgbe_ethertype_filter ethertype_filter;
 
 	if (!hw->mac.ops.set_ethertype_anti_spoofing) {
 		RTE_LOG(INFO, PMD, "ether type anti-spoofing is not"
@@ -186,23 +183,16 @@ ixgbe_add_tx_flow_control_drop_filter(struct rte_eth_dev *eth_dev)
 		return;
 	}
 
-	i = ixgbe_ethertype_filter_lookup(filter_info,
-					  IXGBE_ETHERTYPE_FLOW_CTRL);
-	if (i >= 0) {
-		RTE_LOG(ERR, PMD, "A ether type filter"
-			" entity for flow control already exists!\n");
-		return;
-	}
-
-	ethertype_filter.ethertype = IXGBE_ETHERTYPE_FLOW_CTRL;
-	ethertype_filter.etqf = IXGBE_ETQF_FILTER_EN |
-				IXGBE_ETQF_TX_ANTISPOOF |
+	/* occupy an entity of ether type filter */
+	for (i = 0; i < IXGBE_MAX_ETQF_FILTERS; i++) {
+		if (!(filter_info->ethertype_mask & (1 << i))) {
+			filter_info->ethertype_mask |= 1 << i;
+			filter_info->ethertype_filters[i] =
 				IXGBE_ETHERTYPE_FLOW_CTRL;
-	ethertype_filter.etqs = 0;
-	ethertype_filter.conf = TRUE;
-	i = ixgbe_ethertype_filter_insert(filter_info,
-					  &ethertype_filter);
-	if (i < 0) {
+			break;
+		}
+	}
+	if (i == IXGBE_MAX_ETQF_FILTERS) {
 		RTE_LOG(ERR, PMD, "Cannot find an unused ether type filter"
 			" entity for flow control.\n");
 		return;
@@ -511,7 +501,7 @@ ixgbe_vf_set_mac_addr(struct rte_eth_dev *dev, uint32_t vf, uint32_t *msgbuf)
 }
 
 static int
-ixgbe_vf_set_multicast(struct rte_eth_dev *dev, uint32_t vf, uint32_t *msgbuf)
+ixgbe_vf_set_multicast(struct rte_eth_dev *dev, __rte_unused uint32_t vf, uint32_t *msgbuf)
 {
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	struct ixgbe_vf_info *vfinfo =
@@ -683,7 +673,7 @@ ixgbe_rcv_msg_from_vf(struct rte_eth_dev *dev, uint16_t vf)
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	struct ixgbe_vf_info *vfinfo =
 		*IXGBE_DEV_PRIVATE_TO_P_VFDATA(dev->data->dev_private);
-	struct rte_pmd_ixgbe_mb_event_param ret_param;
+	struct rte_pmd_ixgbe_mb_event_param cb_param;
 
 	retval = ixgbe_read_mbx(hw, msgbuf, mbx_size, vf);
 	if (retval) {
@@ -702,10 +692,10 @@ ixgbe_rcv_msg_from_vf(struct rte_eth_dev *dev, uint16_t vf)
 	 * initialise structure to send to user application
 	 * will return response from user in retval field
 	 */
-	ret_param.retval = RTE_PMD_IXGBE_MB_EVENT_PROCEED;
-	ret_param.vfid = vf;
-	ret_param.msg_type = msgbuf[0] & 0xFFFF;
-	ret_param.msg = (void *)msgbuf;
+	cb_param.retval = RTE_PMD_IXGBE_MB_EVENT_PROCEED;
+	cb_param.vfid = vf;
+	cb_param.msg_type = msgbuf[0] & 0xFFFF;
+	cb_param.msg = (void *)msgbuf;
 
 	/* perform VF reset */
 	if (msgbuf[0] == IXGBE_VF_RESET) {
@@ -714,22 +704,20 @@ ixgbe_rcv_msg_from_vf(struct rte_eth_dev *dev, uint16_t vf)
 		vfinfo[vf].clear_to_send = true;
 
 		/* notify application about VF reset */
-		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_VF_MBOX,
-					      NULL, &ret_param);
+		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_VF_MBOX, &cb_param);
 		return ret;
 	}
 
 	/**
 	 * ask user application if we allowed to perform those functions
-	 * if we get ret_param.retval == RTE_PMD_IXGBE_MB_EVENT_PROCEED
+	 * if we get cb_param.retval == RTE_PMD_IXGBE_MB_EVENT_PROCEED
 	 * then business as usual,
 	 * if 0, do nothing and send ACK to VF
-	 * if ret_param.retval > 1, do nothing and send NAK to VF
+	 * if cb_param.retval > 1, do nothing and send NAK to VF
 	 */
-	_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_VF_MBOX,
-				      NULL, &ret_param);
+	_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_VF_MBOX, &cb_param);
 
-	retval = ret_param.retval;
+	retval = cb_param.retval;
 
 	/* check & process VF to PF mailbox message */
 	switch ((msgbuf[0] & 0xFFFF)) {

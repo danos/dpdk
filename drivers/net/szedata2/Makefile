@@ -48,11 +48,17 @@ LIBABIVER := 1
 # all source are stored in SRCS-y
 #
 SRCS-$(CONFIG_RTE_LIBRTE_PMD_SZEDATA2) += rte_eth_szedata2.c
-SRCS-$(CONFIG_RTE_LIBRTE_PMD_SZEDATA2) += szedata2_iobuf.c
 
 #
 # Export include files
 #
 SYMLINK-y-include +=
+
+# this lib depends upon:
+DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_SZEDATA2) += lib/librte_eal
+DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_SZEDATA2) += lib/librte_mbuf
+DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_SZEDATA2) += lib/librte_mempool
+DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_SZEDATA2) += lib/librte_ether
+DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_SZEDATA2) += lib/librte_kvargs
 
 include $(RTE_SDK)/mk/rte.lib.mk

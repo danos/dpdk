@@ -443,8 +443,6 @@ priv_mac_addrs_enable(struct priv *priv)
 	unsigned int i;
 	int ret;
 
-	if (priv->isolated)
-		return 0;
 	if (!priv_allow_flow_type(priv, HASH_RXQ_FLOW_TYPE_MAC))
 		return 0;
 	for (i = 0; (i != priv->hash_rxqs_n); ++i) {
@@ -472,30 +470,26 @@ priv_mac_addrs_enable(struct priv *priv)
  * @param vmdq
  *   VMDq pool index to associate address with (ignored).
  */
-int
+void
 mlx5_mac_addr_add(struct rte_eth_dev *dev, struct ether_addr *mac_addr,
 		  uint32_t index, uint32_t vmdq)
 {
 	struct priv *priv = dev->data->dev_private;
-	int re;
 
 	if (mlx5_is_secondary())
-		return -ENOTSUP;
+		return;
 
 	(void)vmdq;
 	priv_lock(priv);
 	DEBUG("%p: adding MAC address at index %" PRIu32,
 	      (void *)dev, index);
-	if (index >= RTE_DIM(priv->mac)) {
-		re = EINVAL;
+	if (index >= RTE_DIM(priv->mac))
 		goto end;
-	}
-	re = priv_mac_addr_add(priv, index,
-			       (const uint8_t (*)[ETHER_ADDR_LEN])
-			       mac_addr->addr_bytes);
+	priv_mac_addr_add(priv, index,
+			  (const uint8_t (*)[ETHER_ADDR_LEN])
+			  mac_addr->addr_bytes);
 end:
 	priv_unlock(priv);
-	return -re;
 }
 
 /**

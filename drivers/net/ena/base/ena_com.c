@@ -2242,6 +2242,7 @@ int ena_com_set_hash_ctrl(struct ena_com_dev *ena_dev)
 {
 	struct ena_com_admin_queue *admin_queue = &ena_dev->admin_queue;
 	struct ena_rss *rss = &ena_dev->rss;
+	struct ena_admin_feature_rss_hash_control *hash_ctrl = rss->hash_ctrl;
 	struct ena_admin_set_feat_cmd cmd;
 	struct ena_admin_set_feat_resp resp;
 	int ret;
@@ -2268,8 +2269,7 @@ int ena_com_set_hash_ctrl(struct ena_com_dev *ena_dev)
 		ena_trc_err("memory address set failed\n");
 		return ret;
 	}
-	cmd.control_buffer.length =
-		sizeof(struct ena_admin_feature_rss_hash_control);
+	cmd.control_buffer.length = sizeof(*hash_ctrl);
 
 	ret = ena_com_execute_admin_command(admin_queue,
 					    (struct ena_admin_aq_entry *)&cmd,

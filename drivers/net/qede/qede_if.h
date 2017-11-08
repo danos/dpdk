@@ -30,46 +30,21 @@ struct qed_dev_info {
 
 	/* MFW version */
 	uint32_t mfw_rev;
-#define QED_MFW_VERSION_0_MASK		0x000000FF
-#define QED_MFW_VERSION_0_OFFSET	0
-#define QED_MFW_VERSION_1_MASK		0x0000FF00
-#define QED_MFW_VERSION_1_OFFSET	8
-#define QED_MFW_VERSION_2_MASK		0x00FF0000
-#define QED_MFW_VERSION_2_OFFSET	16
-#define QED_MFW_VERSION_3_MASK		0xFF000000
-#define QED_MFW_VERSION_3_OFFSET	24
 
 	uint32_t flash_size;
 	uint8_t mf_mode;
 	bool tx_switching;
-	u16 mtu;
-
-	/* Out param for qede */
-	bool vxlan_enable;
-	bool gre_enable;
-	bool geneve_enable;
+	/* To be added... */
 };
 
-struct qed_dev_eth_info {
-	struct qed_dev_info common;
-
-	uint8_t num_queues;
-	uint8_t num_tc;
-
-	struct ether_addr port_mac;
-	uint16_t num_vlan_filters;
-	uint32_t num_mac_filters;
-
-	/* Legacy VF - this affects the datapath */
-	bool is_legacy;
+enum qed_sb_type {
+	QED_SB_TYPE_L2_QUEUE,
+	QED_SB_TYPE_STORAGE,
+	QED_SB_TYPE_CNQ,
 };
 
-#define INIT_STRUCT_FIELD(field, value) .field = value
-
-struct qed_eth_ops {
-	const struct qed_common_ops *common;
-	int (*fill_dev_info)(struct ecore_dev *edev,
-			     struct qed_dev_eth_info *info);
+enum qed_protocol {
+	QED_PROTOCOL_ETH,
 };
 
 struct qed_link_params {
@@ -111,25 +86,38 @@ struct qed_slowpath_params {
 	uint8_t name[NAME_SIZE];
 };
 
+#define ILT_PAGE_SIZE_TCFC 0x8000	/* 32KB */
+
 struct qed_common_cb_ops {
 	void (*link_update)(void *dev, struct qed_link_output *link);
+};
+
+struct qed_selftest_ops {
+/**
+ * @brief registers - Perform register tests
+ *
+ * @param edev
+ *
+ * @return 0 on success, error otherwise.
+ */
+	int (*registers)(struct ecore_dev *edev);
 };
 
 struct qed_common_ops {
 	int (*probe)(struct ecore_dev *edev,
 		     struct rte_pci_device *pci_dev,
+		     enum qed_protocol protocol,
 		     uint32_t dp_module, uint8_t dp_level, bool is_vf);
-	void (*set_name)(struct ecore_dev *edev, char name[]);
-	enum _ecore_status_t
-		(*chain_alloc)(struct ecore_dev *edev,
-			       enum ecore_chain_use_mode
-			       intended_use,
-			       enum ecore_chain_mode mode,
-			       enum ecore_chain_cnt_type cnt_type,
-			       uint32_t num_elems,
-			       osal_size_t elem_size,
-			       struct ecore_chain *p_chain,
-			       struct ecore_chain_ext_pbl *ext_pbl);
+	void (*set_id)(struct ecore_dev *edev,
+		char name[], const char ver_str[]);
+	enum _ecore_status_t (*chain_alloc)(struct ecore_dev *edev,
+					    enum ecore_chain_use_mode
+					    intended_use,
+					    enum ecore_chain_mode mode,
+					    enum ecore_chain_cnt_type cnt_type,
+					    uint32_t num_elems,
+					    osal_size_t elem_size,
+					    struct ecore_chain *p_chain);
 
 	void (*chain_free)(struct ecore_dev *edev,
 			   struct ecore_chain *p_chain);
@@ -157,22 +145,11 @@ struct qed_common_ops {
 			    struct ecore_sb_info *sb_info,
 			    void *sb_virt_addr,
 			    dma_addr_t sb_phy_addr,
-			    uint16_t sb_id);
-
-	int (*get_sb_info)(struct ecore_dev *edev,
-			   struct ecore_sb_info *sb, u16 qid,
-			   struct ecore_sb_info_dbg *sb_dbg);
+			    uint16_t sb_id, enum qed_sb_type type);
 
 	bool (*can_link_change)(struct ecore_dev *edev);
-
 	void (*update_msglvl)(struct ecore_dev *edev,
 			      uint32_t dp_module, uint8_t dp_level);
-
-	int (*send_drv_state)(struct ecore_dev *edev, bool active);
 };
-
-/* Externs */
-
-const struct qed_eth_ops *qed_get_eth_ops(void);
 
 #endif /* _QEDE_IF_H */

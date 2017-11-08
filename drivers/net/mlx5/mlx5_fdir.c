@@ -55,8 +55,6 @@
 #include <rte_malloc.h>
 #include <rte_ethdev.h>
 #include <rte_common.h>
-#include <rte_flow.h>
-#include <rte_flow_driver.h>
 #ifdef PEDANTIC
 #pragma GCC diagnostic error "-Wpedantic"
 #endif
@@ -144,7 +142,6 @@ fdir_filter_to_flow_desc(const struct rte_eth_fdir_filter *fdir_filter,
 	case RTE_ETH_FLOW_NONFRAG_IPV4_TCP:
 		desc->src_port = fdir_filter->input.flow.udp4_flow.src_port;
 		desc->dst_port = fdir_filter->input.flow.udp4_flow.dst_port;
-		/* fallthrough */
 	case RTE_ETH_FLOW_NONFRAG_IPV4_OTHER:
 		desc->src_ip[0] = fdir_filter->input.flow.ip4_flow.src_ip;
 		desc->dst_ip[0] = fdir_filter->input.flow.ip4_flow.dst_ip;
@@ -734,11 +731,9 @@ priv_fdir_disable(struct priv *priv)
 
 	/* Destroy flow director context in each RX queue. */
 	for (i = 0; (i != priv->rxqs_n); i++) {
-		struct rxq_ctrl *rxq_ctrl;
+		struct rxq_ctrl *rxq_ctrl =
+			container_of((*priv->rxqs)[i], struct rxq_ctrl, rxq);
 
-		if (!(*priv->rxqs)[i])
-			continue;
-		rxq_ctrl = container_of((*priv->rxqs)[i], struct rxq_ctrl, rxq);
 		if (!rxq_ctrl->fdir_queue)
 			continue;
 		priv_fdir_queue_destroy(priv, rxq_ctrl->fdir_queue);
@@ -1047,15 +1042,6 @@ priv_fdir_ctrl_func(struct priv *priv, enum rte_filter_op filter_op, void *arg)
 	return ret;
 }
 
-static const struct rte_flow_ops mlx5_flow_ops = {
-	.validate = mlx5_flow_validate,
-	.create = mlx5_flow_create,
-	.destroy = mlx5_flow_destroy,
-	.flush = mlx5_flow_flush,
-	.query = NULL,
-	.isolate = mlx5_flow_isolate,
-};
-
 /**
  * Manage filter operations.
  *
@@ -1081,11 +1067,6 @@ mlx5_dev_filter_ctrl(struct rte_eth_dev *dev,
 	struct priv *priv = dev->data->dev_private;
 
 	switch (filter_type) {
-	case RTE_ETH_FILTER_GENERIC:
-		if (filter_op != RTE_ETH_FILTER_GET)
-			return -EINVAL;
-		*(const void **)arg = &mlx5_flow_ops;
-		return 0;
 	case RTE_ETH_FILTER_FDIR:
 		priv_lock(priv);
 		ret = priv_fdir_ctrl_func(priv, filter_op, arg);

@@ -36,11 +36,16 @@ LIB = librte_pmd_mlx4.a
 
 # Sources.
 SRCS-$(CONFIG_RTE_LIBRTE_MLX4_PMD) += mlx4.c
-SRCS-$(CONFIG_RTE_LIBRTE_MLX4_PMD) += mlx4_flow.c
+
+# Dependencies.
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX4_PMD) += lib/librte_ether
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX4_PMD) += lib/librte_mbuf
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX4_PMD) += lib/librte_eal
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX4_PMD) += lib/librte_mempool
 
 # Basic CFLAGS.
 CFLAGS += -O3
-CFLAGS += -std=c11 -Wall -Wextra
+CFLAGS += -std=gnu99 -Wall -Wextra
 CFLAGS += -g
 CFLAGS += -I.
 CFLAGS += -D_BSD_SOURCE
@@ -84,10 +89,6 @@ ifdef CONFIG_RTE_LIBRTE_MLX4_SOFT_COUNTERS
 CFLAGS += -DMLX4_PMD_SOFT_COUNTERS=$(CONFIG_RTE_LIBRTE_MLX4_SOFT_COUNTERS)
 endif
 
-ifeq ($(CONFIG_RTE_LIBRTE_MLX4_DEBUG_BROKEN_VERBS),y)
-CFLAGS += -DMLX4_PMD_DEBUG_BROKEN_VERBS
-endif
-
 include $(RTE_SDK)/mk/rte.lib.mk
 
 # Generate and clean-up mlx4_autoconf.h.
@@ -101,7 +102,7 @@ endif
 
 mlx4_autoconf.h.new: FORCE
 
-mlx4_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
+mlx4_autoconf.h.new: $(RTE_SDK)/scripts/auto-config-h.sh
 	$Q $(RM) -f -- '$@'
 	$Q sh -- '$<' '$@' \
 		RSS_SUPPORT \
@@ -128,7 +129,7 @@ mlx4_autoconf.h: mlx4_autoconf.h.new
 		cmp '$<' '$@' $(AUTOCONF_OUTPUT) || \
 		mv '$<' '$@'
 
-$(SRCS-$(CONFIG_RTE_LIBRTE_MLX4_PMD):.c=.o): mlx4_autoconf.h
+mlx4.o: mlx4_autoconf.h
 
 clean_mlx4: FORCE
 	$Q rm -f -- mlx4_autoconf.h mlx4_autoconf.h.new

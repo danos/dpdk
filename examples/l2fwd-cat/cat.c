@@ -686,7 +686,7 @@ parse_args(int argc, char **argv)
 
 exit:
 	/* reset getopt lib */
-	optind = 1;
+	optind = 0;
 
 	/* Restore opterr value */
 	opterr = oldopterr;

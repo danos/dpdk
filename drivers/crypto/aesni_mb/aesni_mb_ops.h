@@ -44,30 +44,29 @@ enum aesni_mb_vector_mode {
 	RTE_AESNI_MB_NOT_SUPPORTED = 0,
 	RTE_AESNI_MB_SSE,
 	RTE_AESNI_MB_AVX,
-	RTE_AESNI_MB_AVX2,
-	RTE_AESNI_MB_AVX512
+	RTE_AESNI_MB_AVX2
 };
 
-typedef void (*md5_one_block_t)(const void *data, void *digest);
+typedef void (*md5_one_block_t)(void *data, void *digest);
 
-typedef void (*sha1_one_block_t)(const void *data, void *digest);
-typedef void (*sha224_one_block_t)(const void *data, void *digest);
-typedef void (*sha256_one_block_t)(const void *data, void *digest);
-typedef void (*sha384_one_block_t)(const void *data, void *digest);
-typedef void (*sha512_one_block_t)(const void *data, void *digest);
+typedef void (*sha1_one_block_t)(void *data, void *digest);
+typedef void (*sha224_one_block_t)(void *data, void *digest);
+typedef void (*sha256_one_block_t)(void *data, void *digest);
+typedef void (*sha384_one_block_t)(void *data, void *digest);
+typedef void (*sha512_one_block_t)(void *data, void *digest);
 
 typedef void (*aes_keyexp_128_t)
-		(const void *key, void *enc_exp_keys, void *dec_exp_keys);
+		(void *key, void *enc_exp_keys, void *dec_exp_keys);
 typedef void (*aes_keyexp_192_t)
-		(const void *key, void *enc_exp_keys, void *dec_exp_keys);
+		(void *key, void *enc_exp_keys, void *dec_exp_keys);
 typedef void (*aes_keyexp_256_t)
-		(const void *key, void *enc_exp_keys, void *dec_exp_keys);
+		(void *key, void *enc_exp_keys, void *dec_exp_keys);
 
 typedef void (*aes_xcbc_expand_key_t)
-		(const void *key, void *exp_k1, void *k2, void *k3);
+		(void *key, void *exp_k1, void *k2, void *k3);
 
 /** Multi-buffer library function pointer table */
-struct aesni_mb_op_fns {
+struct aesni_mb_ops {
 	struct {
 		init_mb_mgr_t init_mgr;
 		/**< Initialise scheduler  */
@@ -116,7 +115,7 @@ struct aesni_mb_op_fns {
 };
 
 
-static const struct aesni_mb_op_fns job_ops[] = {
+static const struct aesni_mb_ops job_ops[] = {
 		[RTE_AESNI_MB_NOT_SUPPORTED] = {
 			.job = {
 				NULL
@@ -202,31 +201,6 @@ static const struct aesni_mb_op_fns job_ops[] = {
 					aes_keyexp_192_avx2,
 					aes_keyexp_256_avx2,
 					aes_xcbc_expand_key_avx2
-				}
-			}
-		},
-		[RTE_AESNI_MB_AVX512] = {
-			.job = {
-				init_mb_mgr_avx512,
-				get_next_job_avx512,
-				submit_job_avx512,
-				get_completed_job_avx512,
-				flush_job_avx512
-			},
-			.aux = {
-				.one_block = {
-					md5_one_block_avx512,
-					sha1_one_block_avx512,
-					sha224_one_block_avx512,
-					sha256_one_block_avx512,
-					sha384_one_block_avx512,
-					sha512_one_block_avx512
-				},
-				.keyexp = {
-					aes_keyexp_128_avx512,
-					aes_keyexp_192_avx512,
-					aes_keyexp_256_avx512,
-					aes_xcbc_expand_key_avx512
 				}
 			}
 		}

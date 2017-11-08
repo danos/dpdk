@@ -48,7 +48,7 @@ LDLIBS += -lgcc_s
 
 EXPORT_MAP := rte_eal_version.map
 
-LIBABIVER := 5
+LIBABIVER := 3
 
 # specific to bsdapp exec-env
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) := eal.c
@@ -78,7 +78,6 @@ SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += eal_common_cpuflags.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += eal_common_string_fns.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += eal_common_hexdump.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += eal_common_devargs.c
-SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += eal_common_bus.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += eal_common_dev.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += eal_common_options.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += eal_common_thread.c
@@ -87,7 +86,6 @@ SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += rte_malloc.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += malloc_elem.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += malloc_heap.c
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += rte_keepalive.c
-SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += rte_service.c
 
 # from arch dir
 SRCS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += rte_cpuflags.c
@@ -111,5 +109,8 @@ INC := rte_interrupts.h
 
 SYMLINK-$(CONFIG_RTE_EXEC_ENV_BSDAPP)-include/exec-env := \
 	$(addprefix include/exec-env/,$(INC))
+
+DEPDIRS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += lib/librte_eal/common
+DEPDIRS-$(CONFIG_RTE_EXEC_ENV_BSDAPP) += lib/librte_eal/common/arch/$(ARCH_DIR)
 
 include $(RTE_SDK)/mk/rte.lib.mk

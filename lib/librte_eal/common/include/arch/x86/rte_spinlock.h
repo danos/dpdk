@@ -43,7 +43,6 @@ extern "C" {
 #include "rte_cpuflags.h"
 #include "rte_branch_prediction.h"
 #include "rte_common.h"
-#include "rte_pause.h"
 
 #define RTE_RTM_MAX_RETRIES (10)
 #define RTE_XABORT_LOCK_BUSY (0xff)

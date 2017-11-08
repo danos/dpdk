@@ -32,7 +32,7 @@ ifeq ($(RTE_SDK),)
 $(error "Please define RTE_SDK environment variable")
 endif
 
-# Default target, can be overridden by command line or environment
+# Default target, can be overriden by command line or environment
 RTE_TARGET ?= x86_64-native-linuxapp-gcc
 
 include $(RTE_SDK)/mk/rte.vars.mk
@@ -40,9 +40,11 @@ include $(RTE_SDK)/mk/rte.vars.mk
 DIRS-$(CONFIG_RTE_LIBRTE_PMD_BOND) += bond
 DIRS-y += cmdline
 DIRS-$(CONFIG_RTE_LIBRTE_DISTRIBUTOR) += distributor
+ifneq ($(ICP_ROOT),)
+DIRS-y += dpdk_qat
+endif
 DIRS-y += ethtool
 DIRS-y += exception_path
-DIRS-$(CONFIG_RTE_LIBRTE_EFD) += server_node_efd
 DIRS-y += helloworld
 DIRS-$(CONFIG_RTE_LIBRTE_PIPELINE) += ip_pipeline
 ifeq ($(CONFIG_RTE_LIBRTE_LPM),y)
@@ -75,9 +77,6 @@ DIRS-$(CONFIG_RTE_LIBRTE_LPM) += load_balancer
 DIRS-y += multi_process
 DIRS-y += netmap_compat/bridge
 DIRS-$(CONFIG_RTE_LIBRTE_REORDER) += packet_ordering
-ifeq ($(CONFIG_RTE_ARCH_X86_64),y)
-DIRS-y += performance-thread
-endif
 DIRS-$(CONFIG_RTE_LIBRTE_IEEE1588) += ptpclient
 DIRS-$(CONFIG_RTE_LIBRTE_METER) += qos_meter
 DIRS-$(CONFIG_RTE_LIBRTE_SCHED) += qos_sched
@@ -88,7 +87,7 @@ ifeq ($(CONFIG_RTE_LIBRTE_HASH),y)
 DIRS-$(CONFIG_RTE_LIBRTE_VHOST) += tep_termination
 endif
 DIRS-$(CONFIG_RTE_LIBRTE_TIMER) += timer
-DIRS-$(CONFIG_RTE_LIBRTE_VHOST) += vhost vhost_scsi
+DIRS-$(CONFIG_RTE_LIBRTE_VHOST) += vhost
 DIRS-$(CONFIG_RTE_LIBRTE_XEN_DOM0) += vhost_xen
 DIRS-y += vmdq
 DIRS-y += vmdq_dcb
@@ -99,7 +98,5 @@ else
 $(info vm_power_manager requires libvirt >= 0.9.3)
 endif
 endif
-
-DIRS-y += eventdev_pipeline_sw_pmd
 
 include $(RTE_SDK)/mk/rte.extsubdir.mk

@@ -40,7 +40,6 @@
 
 #include <rte_cycles.h>
 #include <rte_ethdev.h>
-#include <rte_ethdev_vdev.h>
 #include <rte_kvargs.h>
 #include <rte_malloc.h>
 #include <rte_mbuf.h>
@@ -120,6 +119,7 @@ static struct ether_addr eth_addr = {
 	.addr_bytes = { 0, 0, 0, 0x1, 0x2, 0x3 }
 };
 
+static const char *drivername = "Pcap PMD";
 static struct rte_eth_link pmd_link = {
 		.link_speed = ETH_SPEED_NUM_10G,
 		.link_duplex = ETH_LINK_FULL_DUPLEX,
@@ -552,12 +552,14 @@ eth_dev_info(struct rte_eth_dev *dev,
 {
 	struct pmd_internals *internals = dev->data->dev_private;
 
+	dev_info->driver_name = drivername;
 	dev_info->if_index = internals->if_index;
 	dev_info->max_mac_addrs = 1;
 	dev_info->max_rx_pktlen = (uint32_t) -1;
 	dev_info->max_rx_queues = dev->data->nb_rx_queues;
 	dev_info->max_tx_queues = dev->data->nb_tx_queues;
 	dev_info->min_rx_bufsize = 0;
+	dev_info->pci_dev = NULL;
 }
 
 static void
@@ -788,20 +790,15 @@ open_tx_iface(const char *key, const char *value, void *extra_args)
 	return 0;
 }
 
-static struct rte_vdev_driver pmd_pcap_drv;
-
 static int
-pmd_init_internals(struct rte_vdev_device *vdev,
-		const unsigned int nb_rx_queues,
+pmd_init_internals(const char *name, const unsigned int nb_rx_queues,
 		const unsigned int nb_tx_queues,
 		struct pmd_internals **internals,
 		struct rte_eth_dev **eth_dev)
 {
 	struct rte_eth_dev_data *data = NULL;
-	unsigned int numa_node = vdev->device.numa_node;
-	const char *name;
+	unsigned int numa_node = rte_socket_id();
 
-	name = rte_vdev_device_name(vdev);
 	RTE_LOG(INFO, PMD, "Creating pcap-backed ethdev on numa socket %u\n",
 		numa_node);
 
@@ -810,14 +807,17 @@ pmd_init_internals(struct rte_vdev_device *vdev,
 	 */
 	data = rte_zmalloc_socket(name, sizeof(*data), 0, numa_node);
 	if (data == NULL)
-		return -1;
+		goto error;
+
+	*internals = rte_zmalloc_socket(name, sizeof(**internals), 0,
+			numa_node);
+	if (*internals == NULL)
+		goto error;
 
 	/* reserve an ethdev entry */
-	*eth_dev = rte_eth_vdev_allocate(vdev, sizeof(**internals));
-	if (*eth_dev == NULL) {
-		rte_free(data);
-		return -1;
-	}
+	*eth_dev = rte_eth_dev_allocate(name);
+	if (*eth_dev == NULL)
+		goto error;
 
 	/* now put it all together
 	 * - store queue data in internals,
@@ -825,8 +825,9 @@ pmd_init_internals(struct rte_vdev_device *vdev,
 	 * - point eth_dev_data to internals
 	 * - and point eth_dev structure to new eth_dev_data structure
 	 */
-	*internals = (*eth_dev)->data->dev_private;
-	rte_memcpy(data, (*eth_dev)->data, sizeof(*data));
+	data->dev_private = *internals;
+	data->port_id = (*eth_dev)->data->port_id;
+	snprintf(data->name, sizeof(data->name), "%s", (*eth_dev)->data->name);
 	data->nb_rx_queues = (uint16_t)nb_rx_queues;
 	data->nb_tx_queues = (uint16_t)nb_tx_queues;
 	data->dev_link = pmd_link;
@@ -838,17 +839,26 @@ pmd_init_internals(struct rte_vdev_device *vdev,
 	 */
 	(*eth_dev)->data = data;
 	(*eth_dev)->dev_ops = &ops;
+	(*eth_dev)->driver = NULL;
 	data->dev_flags = RTE_ETH_DEV_DETACHABLE;
+	data->kdrv = RTE_KDRV_NONE;
+	data->drv_name = drivername;
+	data->numa_node = numa_node;
 
 	return 0;
+
+error:
+	rte_free(data);
+	rte_free(*internals);
+
+	return -1;
 }
 
 static int
-eth_from_pcaps_common(struct rte_vdev_device *vdev,
-		struct pmd_devargs *rx_queues, const unsigned int nb_rx_queues,
-		struct pmd_devargs *tx_queues, const unsigned int nb_tx_queues,
-		struct rte_kvargs *kvlist, struct pmd_internals **internals,
-		struct rte_eth_dev **eth_dev)
+eth_from_pcaps_common(const char *name, struct pmd_devargs *rx_queues,
+		const unsigned int nb_rx_queues, struct pmd_devargs *tx_queues,
+		const unsigned int nb_tx_queues, struct rte_kvargs *kvlist,
+		struct pmd_internals **internals, struct rte_eth_dev **eth_dev)
 {
 	struct rte_kvargs_pair *pair = NULL;
 	unsigned int k_idx;
@@ -860,7 +870,7 @@ eth_from_pcaps_common(struct rte_vdev_device *vdev,
 	if (tx_queues == NULL && nb_tx_queues > 0)
 		return -1;
 
-	if (pmd_init_internals(vdev, nb_rx_queues, nb_tx_queues, internals,
+	if (pmd_init_internals(name, nb_rx_queues, nb_tx_queues, internals,
 			eth_dev) < 0)
 		return -1;
 
@@ -898,17 +908,16 @@ eth_from_pcaps_common(struct rte_vdev_device *vdev,
 }
 
 static int
-eth_from_pcaps(struct rte_vdev_device *vdev,
-		struct pmd_devargs *rx_queues, const unsigned int nb_rx_queues,
-		struct pmd_devargs *tx_queues, const unsigned int nb_tx_queues,
-		struct rte_kvargs *kvlist, int single_iface,
-		unsigned int using_dumpers)
+eth_from_pcaps(const char *name, struct pmd_devargs *rx_queues,
+		const unsigned int nb_rx_queues, struct pmd_devargs *tx_queues,
+		const unsigned int nb_tx_queues, struct rte_kvargs *kvlist,
+		int single_iface, unsigned int using_dumpers)
 {
 	struct pmd_internals *internals = NULL;
 	struct rte_eth_dev *eth_dev = NULL;
 	int ret;
 
-	ret = eth_from_pcaps_common(vdev, rx_queues, nb_rx_queues,
+	ret = eth_from_pcaps_common(name, rx_queues, nb_rx_queues,
 		tx_queues, nb_tx_queues, kvlist, &internals, &eth_dev);
 
 	if (ret < 0)
@@ -928,9 +937,8 @@ eth_from_pcaps(struct rte_vdev_device *vdev,
 }
 
 static int
-pmd_pcap_probe(struct rte_vdev_device *dev)
+pmd_pcap_probe(const char *name, const char *params)
 {
-	const char *name;
 	unsigned int is_rx_pcap = 0, is_tx_pcap = 0;
 	struct rte_kvargs *kvlist;
 	struct pmd_devargs pcaps = {0};
@@ -938,14 +946,13 @@ pmd_pcap_probe(struct rte_vdev_device *dev)
 	int single_iface = 0;
 	int ret;
 
-	name = rte_vdev_device_name(dev);
 	RTE_LOG(INFO, PMD, "Initializing pmd_pcap for %s\n", name);
 
 	gettimeofday(&start_time, NULL);
 	start_cycles = rte_get_timer_cycles();
 	hz = rte_get_timer_hz();
 
-	kvlist = rte_kvargs_parse(rte_vdev_device_args(dev), valid_arguments);
+	kvlist = rte_kvargs_parse(params, valid_arguments);
 	if (kvlist == NULL)
 		return -1;
 
@@ -1019,7 +1026,7 @@ pmd_pcap_probe(struct rte_vdev_device *dev)
 		goto free_kvlist;
 
 create_eth:
-	ret = eth_from_pcaps(dev, &pcaps, pcaps.num_of_queue, &dumpers,
+	ret = eth_from_pcaps(name, &pcaps, pcaps.num_of_queue, &dumpers,
 		dumpers.num_of_queue, kvlist, single_iface, is_tx_pcap);
 
 free_kvlist:
@@ -1029,18 +1036,18 @@ free_kvlist:
 }
 
 static int
-pmd_pcap_remove(struct rte_vdev_device *dev)
+pmd_pcap_remove(const char *name)
 {
 	struct rte_eth_dev *eth_dev = NULL;
 
 	RTE_LOG(INFO, PMD, "Closing pcap ethdev on numa socket %u\n",
 			rte_socket_id());
 
-	if (!dev)
+	if (name == NULL)
 		return -1;
 
 	/* reserve an ethdev entry */
-	eth_dev = rte_eth_dev_allocated(rte_vdev_device_name(dev));
+	eth_dev = rte_eth_dev_allocated(name);
 	if (eth_dev == NULL)
 		return -1;
 

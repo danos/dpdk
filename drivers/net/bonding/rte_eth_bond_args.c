@@ -32,7 +32,6 @@
  */
 
 #include <rte_devargs.h>
-#include <rte_pci.h>
 #include <rte_kvargs.h>
 
 #include <cmdline_parse.h>
@@ -48,31 +47,22 @@ const char *pmd_bond_init_valid_arguments[] = {
 	PMD_BOND_XMIT_POLICY_KVARG,
 	PMD_BOND_SOCKET_ID_KVARG,
 	PMD_BOND_MAC_ADDR_KVARG,
-	PMD_BOND_AGG_MODE_KVARG,
-	"driver",
+
 	NULL
 };
 
 static inline int
 find_port_id_by_pci_addr(const struct rte_pci_addr *pci_addr)
 {
-	struct rte_pci_device *pci_dev;
 	struct rte_pci_addr *eth_pci_addr;
 	unsigned i;
 
 	for (i = 0; i < rte_eth_dev_count(); i++) {
 
-		/* Currently populated by rte_eth_copy_pci_info().
-		 *
-		 * TODO: Once the PCI bus has arrived we should have a better
-		 * way to test for being a PCI device or not.
-		 */
-		if (rte_eth_devices[i].data->kdrv == RTE_KDRV_UNKNOWN ||
-		    rte_eth_devices[i].data->kdrv == RTE_KDRV_NONE)
+		if (rte_eth_devices[i].pci_dev == NULL)
 			continue;
 
-		pci_dev = RTE_ETH_DEV_TO_PCI(&rte_eth_devices[i]);
-		eth_pci_addr = &pci_dev->addr;
+		eth_pci_addr = &(rte_eth_devices[i].pci_dev->addr);
 
 		if (pci_addr->bus == eth_pci_addr->bus &&
 			pci_addr->devid == eth_pci_addr->devid &&
@@ -92,7 +82,7 @@ find_port_id_by_dev_name(const char *name)
 		if (rte_eth_devices[i].data == NULL)
 			continue;
 
-		if (strcmp(rte_eth_devices[i].device->name, name) == 0)
+		if (strcmp(rte_eth_devices[i].data->name, name) == 0)
 			return i;
 	}
 	return -1;
@@ -136,7 +126,7 @@ parse_port_id(const char *port_str)
 }
 
 int
-bond_ethdev_parse_slave_port_kvarg(const char *key,
+bond_ethdev_parse_slave_port_kvarg(const char *key __rte_unused,
 		const char *value, void *extra_args)
 {
 	struct bond_ethdev_slave_ports *slave_ports;
@@ -192,38 +182,6 @@ bond_ethdev_parse_slave_mode_kvarg(const char *key __rte_unused,
 }
 
 int
-bond_ethdev_parse_slave_agg_mode_kvarg(const char *key __rte_unused,
-		const char *value, void *extra_args)
-{
-	uint8_t *agg_mode;
-
-	if (value == NULL || extra_args == NULL)
-		return -1;
-
-	agg_mode = extra_args;
-
-	errno = 0;
-	if (strncmp(value, "stable", 6) == 0)
-		*agg_mode = AGG_STABLE;
-
-	if (strncmp(value, "bandwidth", 9) == 0)
-		*agg_mode = AGG_BANDWIDTH;
-
-	if (strncmp(value, "count", 5) == 0)
-		*agg_mode = AGG_COUNT;
-
-	switch (*agg_mode) {
-	case AGG_STABLE:
-	case AGG_BANDWIDTH:
-	case AGG_COUNT:
-		return 0;
-	default:
-		RTE_BOND_LOG(ERR, "Invalid agg mode value stable/bandwidth/count");
-		return -1;
-	}
-}
-
-int
 bond_ethdev_parse_socket_id_kvarg(const char *key __rte_unused,
 		const char *value, void *extra_args)
 {
@@ -238,8 +196,8 @@ bond_ethdev_parse_socket_id_kvarg(const char *key __rte_unused,
 	if (*endptr != 0 || errno != 0)
 		return -1;
 
-	/* validate socket id value */
-	if (socket_id >= 0) {
+	/* validate mode value */
+	if (socket_id >= 0 && socket_id < number_of_sockets()) {
 		*(uint8_t *)extra_args = (uint8_t)socket_id;
 		return 0;
 	}

@@ -47,7 +47,6 @@ CFLAGS += $(WERROR_FLAGS)
 SRCS-y := testpmd.c
 SRCS-y += parameters.c
 SRCS-$(CONFIG_RTE_LIBRTE_CMDLINE) += cmdline.c
-SRCS-$(CONFIG_RTE_LIBRTE_CMDLINE) += cmdline_flow.c
 SRCS-y += config.c
 SRCS-y += iofwd.c
 SRCS-y += macfwd.c
@@ -60,30 +59,13 @@ SRCS-y += icmpecho.c
 SRCS-$(CONFIG_RTE_LIBRTE_IEEE1588) += ieee1588fwd.c
 
 ifeq ($(CONFIG_RTE_BUILD_SHARED_LIB),y)
-
-ifeq ($(CONFIG_RTE_LIBRTE_PMD_BOND),y)
-LDLIBS += -lrte_pmd_bond
-endif
-
-ifeq ($(CONFIG_RTE_LIBRTE_IXGBE_PMD),y)
-LDLIBS += -lrte_pmd_ixgbe
-endif
-
-ifeq ($(CONFIG_RTE_LIBRTE_I40E_PMD),y)
-LDLIBS += -lrte_pmd_i40e
-endif
-
-ifeq ($(CONFIG_RTE_LIBRTE_BNXT_PMD),y)
-LDLIBS += -lrte_pmd_bnxt
-endif
-
-ifeq ($(CONFIG_RTE_LIBRTE_PMD_XENVIRT),y)
-LDLIBS += -lrte_pmd_xenvirt
-endif
-
+_LDLIBS-$(CONFIG_RTE_LIBRTE_IXGBE_PMD) += -lrte_pmd_ixgbe
 endif
 
 CFLAGS_cmdline.o := -D_GNU_SOURCE
+
+# this application needs libraries first
+DEPDIRS-y += lib drivers
 
 include $(RTE_SDK)/mk/rte.app.mk
 

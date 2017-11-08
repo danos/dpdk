@@ -51,6 +51,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -345,8 +346,8 @@ reassemble(struct rte_mbuf *m, uint8_t portid, uint32_t queue,
 	struct rte_ip_frag_death_row *dr;
 	struct rx_queue *rxq;
 	void *d_addr_bytes;
-	uint32_t next_hop;
-	uint8_t dst_port;
+	uint32_t next_hop_ipv4;
+	uint8_t next_hop_ipv6, dst_port;
 
 	rxq = &qconf->rx_queue_list[queue];
 
@@ -389,9 +390,9 @@ reassemble(struct rte_mbuf *m, uint8_t portid, uint32_t queue,
 		ip_dst = rte_be_to_cpu_32(ip_hdr->dst_addr);
 
 		/* Find destination port */
-		if (rte_lpm_lookup(rxq->lpm, ip_dst, &next_hop) == 0 &&
-				(enabled_port_mask & 1 << next_hop) != 0) {
-			dst_port = next_hop;
+		if (rte_lpm_lookup(rxq->lpm, ip_dst, &next_hop_ipv4) == 0 &&
+				(enabled_port_mask & 1 << next_hop_ipv4) != 0) {
+			dst_port = next_hop_ipv4;
 		}
 
 		eth_hdr->ether_type = rte_be_to_cpu_16(ETHER_TYPE_IPv4);
@@ -426,10 +427,9 @@ reassemble(struct rte_mbuf *m, uint8_t portid, uint32_t queue,
 		}
 
 		/* Find destination port */
-		if (rte_lpm6_lookup(rxq->lpm6, ip_hdr->dst_addr,
-						&next_hop) == 0 &&
-				(enabled_port_mask & 1 << next_hop) != 0) {
-			dst_port = next_hop;
+		if (rte_lpm6_lookup(rxq->lpm6, ip_hdr->dst_addr, &next_hop_ipv6) == 0 &&
+				(enabled_port_mask & 1 << next_hop_ipv6) != 0) {
+			dst_port = next_hop_ipv6;
 		}
 
 		eth_hdr->ether_type = rte_be_to_cpu_16(ETHER_TYPE_IPv6);
@@ -718,7 +718,7 @@ parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 1; /* reset getopt lib */
+	optind = 0; /* reset getopt lib */
 	return ret;
 }
 
@@ -903,7 +903,7 @@ setup_queue_tbl(struct rx_queue *rxq, uint32_t lcore, uint32_t queue)
 	nb_mbuf = RTE_MAX(max_flow_num, 2UL * MAX_PKT_BURST) * MAX_FRAG_NUM;
 	nb_mbuf *= (port_conf.rxmode.max_rx_pkt_len + BUF_SIZE - 1) / BUF_SIZE;
 	nb_mbuf *= 2; /* ipv4 and ipv6 */
-	nb_mbuf += nb_rxd + nb_txd;
+	nb_mbuf += RTE_TEST_RX_DESC_DEFAULT + RTE_TEST_TX_DESC_DEFAULT;
 
 	nb_mbuf = RTE_MAX(nb_mbuf, (uint32_t)NB_MBUF);
 
@@ -1062,11 +1062,6 @@ main(int argc, char **argv)
 
 		qconf = &lcore_queue_conf[rx_lcore_id];
 
-		/* limit the frame size to the maximum supported by NIC */
-		rte_eth_dev_info_get(portid, &dev_info);
-		port_conf.rxmode.max_rx_pkt_len = RTE_MIN(
-		    dev_info.max_rx_pktlen, port_conf.rxmode.max_rx_pkt_len);
-
 		/* get the lcore_id for this port */
 		while (rte_lcore_is_enabled(rx_lcore_id) == 0 ||
 			   qconf->n_rx_queue == (unsigned)rx_queue_per_lcore) {
@@ -1087,14 +1082,6 @@ main(int argc, char **argv)
 		rxq->portid = portid;
 		rxq->lpm = socket_lpm[socket];
 		rxq->lpm6 = socket_lpm6[socket];
-
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-						       &nb_txd);
-		if (ret < 0)
-			rte_exit(EXIT_FAILURE,
-				 "Cannot adjust number of descriptors: err=%d, port=%d\n",
-				 ret, portid);
-
 		if (setup_queue_tbl(rxq, rx_lcore_id, queueid) < 0)
 			rte_exit(EXIT_FAILURE, "Failed to set up queue table\n");
 		qconf->n_rx_queue++;
@@ -1141,6 +1128,7 @@ main(int argc, char **argv)
 			printf("txq=%u,%d,%d ", lcore_id, queueid, socket);
 			fflush(stdout);
 
+			rte_eth_dev_info_get(portid, &dev_info);
 			txconf = &dev_info.default_txconf;
 			txconf->txq_flags = 0;
 

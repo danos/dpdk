@@ -62,10 +62,6 @@
 #ifndef LTHREAD_H_
 #define LTHREAD_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <rte_per_lcore.h>
 
 #include "lthread_api.h"
@@ -99,9 +95,5 @@ _lthread_init(struct lthread *lt,
 	      lthread_func_t fun, void *arg, lthread_exit_func exit_handler);
 
 void _lthread_set_stack(struct lthread *lt, void *stack, size_t stack_size);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif				/* LTHREAD_H_ */

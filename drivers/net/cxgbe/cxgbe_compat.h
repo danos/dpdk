@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2014-2017 Chelsio Communications.
+ *   Copyright(c) 2014-2015 Chelsio Communications.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,6 @@
 #include <rte_cycles.h>
 #include <rte_spinlock.h>
 #include <rte_log.h>
-#include <rte_io.h>
 
 #define dev_printf(level, fmt, args...) \
 	RTE_LOG(level, PMD, "rte_cxgbe_pmd: " fmt, ## args)
@@ -226,15 +225,6 @@ static inline int cxgbe_fls(int x)
 	return x ? sizeof(x) * 8 - __builtin_clz(x) : 0;
 }
 
-/**
- * cxgbe_ffs - find first bit set
- * @x: the word to search
- */
-static inline int cxgbe_ffs(int x)
-{
-	return x ? __builtin_ffs(x) : 0;
-}
-
 static inline unsigned long ilog2(unsigned long n)
 {
 	unsigned int e = 0;
@@ -264,18 +254,13 @@ static inline unsigned long ilog2(unsigned long n)
 
 static inline void writel(unsigned int val, volatile void __iomem *addr)
 {
-	rte_write32(val, addr);
+	*(volatile unsigned int *)addr = val;
 }
 
 static inline void writeq(u64 val, volatile void __iomem *addr)
 {
 	writel(val, addr);
 	writel(val >> 32, (void *)((uintptr_t)addr + 4));
-}
-
-static inline void writel_relaxed(unsigned int val, volatile void __iomem *addr)
-{
-	rte_write32_relaxed(val, addr);
 }
 
 #endif /* _CXGBE_COMPAT_H_ */

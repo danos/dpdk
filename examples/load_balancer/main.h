@@ -56,11 +56,7 @@
 #endif
 
 #ifndef APP_MAX_IO_LCORES
-#if (APP_MAX_LCORES > 16)
 #define APP_MAX_IO_LCORES 16
-#else
-#define APP_MAX_IO_LCORES APP_MAX_LCORES
-#endif
 #endif
 #if (APP_MAX_IO_LCORES > APP_MAX_LCORES)
 #error "APP_MAX_IO_LCORES is too big"
@@ -78,11 +74,7 @@
 #endif
 
 #ifndef APP_MAX_WORKER_LCORES
-#if (APP_MAX_LCORES > 16)
 #define APP_MAX_WORKER_LCORES 16
-#else
-#define APP_MAX_WORKER_LCORES APP_MAX_LCORES
-#endif
 #endif
 #if (APP_MAX_WORKER_LCORES > APP_MAX_LCORES)
 #error "APP_MAX_WORKER_LCORES is too big"

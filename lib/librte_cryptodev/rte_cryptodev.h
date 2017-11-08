@@ -1,6 +1,6 @@
 /*-
  *
- *   Copyright(c) 2015-2017 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2015-2016 Intel Corporation. All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -49,7 +49,35 @@ extern "C" {
 #include "rte_crypto.h"
 #include "rte_dev.h"
 #include <rte_common.h>
-#include <rte_vdev.h>
+
+#define CRYPTODEV_NAME_NULL_PMD		crypto_null
+/**< Null crypto PMD device name */
+#define CRYPTODEV_NAME_AESNI_MB_PMD	crypto_aesni_mb
+/**< AES-NI Multi buffer PMD device name */
+#define CRYPTODEV_NAME_AESNI_GCM_PMD	crypto_aesni_gcm
+/**< AES-NI GCM PMD device name */
+#define CRYPTODEV_NAME_OPENSSL_PMD	crypto_openssl
+/**< Open SSL Crypto PMD device name */
+#define CRYPTODEV_NAME_QAT_SYM_PMD	crypto_qat
+/**< Intel QAT Symmetric Crypto PMD device name */
+#define CRYPTODEV_NAME_SNOW3G_PMD	crypto_snow3g
+/**< SNOW 3G PMD device name */
+#define CRYPTODEV_NAME_KASUMI_PMD	crypto_kasumi
+/**< KASUMI PMD device name */
+#define CRYPTODEV_NAME_ZUC_PMD		crypto_zuc
+/**< KASUMI PMD device name */
+
+/** Crypto device type */
+enum rte_cryptodev_type {
+	RTE_CRYPTODEV_NULL_PMD = 1,	/**< Null crypto PMD */
+	RTE_CRYPTODEV_AESNI_GCM_PMD,	/**< AES-NI GCM PMD */
+	RTE_CRYPTODEV_AESNI_MB_PMD,	/**< AES-NI multi buffer PMD */
+	RTE_CRYPTODEV_QAT_SYM_PMD,	/**< QAT PMD Symmetric Crypto */
+	RTE_CRYPTODEV_SNOW3G_PMD,	/**< SNOW 3G PMD */
+	RTE_CRYPTODEV_KASUMI_PMD,	/**< KASUMI PMD */
+	RTE_CRYPTODEV_ZUC_PMD,		/**< ZUC PMD */
+	RTE_CRYPTODEV_OPENSSL_PMD,    /**<  OpenSSL PMD */
+};
 
 extern const char **rte_cyptodev_names;
 
@@ -81,58 +109,12 @@ extern const char **rte_cyptodev_names;
 #define CDEV_PMD_TRACE(...) (void)0
 #endif
 
-
-
-/**
- * A macro that points to an offset from the start
- * of the crypto operation structure (rte_crypto_op)
- *
- * The returned pointer is cast to type t.
- *
- * @param c
- *   The crypto operation.
- * @param o
- *   The offset from the start of the crypto operation.
- * @param t
- *   The type to cast the result into.
- */
-#define rte_crypto_op_ctod_offset(c, t, o)	\
-	((t)((char *)(c) + (o)))
-
-/**
- * A macro that returns the physical address that points
- * to an offset from the start of the crypto operation
- * (rte_crypto_op)
- *
- * @param c
- *   The crypto operation.
- * @param o
- *   The offset from the start of the crypto operation
- *   to calculate address from.
- */
-#define rte_crypto_op_ctophys_offset(c, o)	\
-	(phys_addr_t)((c)->phys_addr + (o))
-
-/**
- * Crypto parameters range description
- */
-struct rte_crypto_param_range {
-	uint16_t min;	/**< minimum size */
-	uint16_t max;	/**< maximum size */
-	uint16_t increment;
-	/**< if a range of sizes are supported,
-	 * this parameter is used to indicate
-	 * increments in byte size that are supported
-	 * between the minimum and maximum
-	 */
-};
-
 /**
  * Symmetric Crypto Capability
  */
 struct rte_cryptodev_symmetric_capability {
 	enum rte_crypto_sym_xform_type xform_type;
-	/**< Transform type : Authentication / Cipher / AEAD */
+	/**< Transform type : Authentication / Cipher */
 	RTE_STD_C11
 	union {
 		struct {
@@ -140,14 +122,36 @@ struct rte_cryptodev_symmetric_capability {
 			/**< authentication algorithm */
 			uint16_t block_size;
 			/**< algorithm block size */
-			struct rte_crypto_param_range key_size;
+			struct {
+				uint16_t min;	/**< minimum key size */
+				uint16_t max;	/**< maximum key size */
+				uint16_t increment;
+				/**< if a range of sizes are supported,
+				 * this parameter is used to indicate
+				 * increments in byte size that are supported
+				 * between the minimum and maximum */
+			} key_size;
 			/**< auth key size range */
-			struct rte_crypto_param_range digest_size;
+			struct {
+				uint16_t min;	/**< minimum digest size */
+				uint16_t max;	/**< maximum digest size */
+				uint16_t increment;
+				/**< if a range of sizes are supported,
+				 * this parameter is used to indicate
+				 * increments in byte size that are supported
+				 * between the minimum and maximum */
+			} digest_size;
 			/**< digest size range */
-			struct rte_crypto_param_range aad_size;
+			struct {
+				uint16_t min;	/**< minimum aad size */
+				uint16_t max;	/**< maximum aad size */
+				uint16_t increment;
+				/**< if a range of sizes are supported,
+				 * this parameter is used to indicate
+				 * increments in byte size that are supported
+				 * between the minimum and maximum */
+			} aad_size;
 			/**< Additional authentication data size range */
-			struct rte_crypto_param_range iv_size;
-			/**< Initialisation vector data size range */
 		} auth;
 		/**< Symmetric Authentication transform capabilities */
 		struct {
@@ -155,26 +159,28 @@ struct rte_cryptodev_symmetric_capability {
 			/**< cipher algorithm */
 			uint16_t block_size;
 			/**< algorithm block size */
-			struct rte_crypto_param_range key_size;
+			struct {
+				uint16_t min;	/**< minimum key size */
+				uint16_t max;	/**< maximum key size */
+				uint16_t increment;
+				/**< if a range of sizes are supported,
+				 * this parameter is used to indicate
+				 * increments in byte size that are supported
+				 * between the minimum and maximum */
+			} key_size;
 			/**< cipher key size range */
-			struct rte_crypto_param_range iv_size;
+			struct {
+				uint16_t min;	/**< minimum iv size */
+				uint16_t max;	/**< maximum iv size */
+				uint16_t increment;
+				/**< if a range of sizes are supported,
+				 * this parameter is used to indicate
+				 * increments in byte size that are supported
+				 * between the minimum and maximum */
+			} iv_size;
 			/**< Initialisation vector data size range */
 		} cipher;
 		/**< Symmetric Cipher transform capabilities */
-		struct {
-			enum rte_crypto_aead_algorithm algo;
-			/**< AEAD algorithm */
-			uint16_t block_size;
-			/**< algorithm block size */
-			struct rte_crypto_param_range key_size;
-			/**< AEAD key size range */
-			struct rte_crypto_param_range digest_size;
-			/**< digest size range */
-			struct rte_crypto_param_range aad_size;
-			/**< Additional authentication data size range */
-			struct rte_crypto_param_range iv_size;
-			/**< Initialisation vector data size range */
-		} aead;
 	};
 };
 
@@ -189,130 +195,6 @@ struct rte_cryptodev_capabilities {
 		/**< Symmetric operation capability parameters */
 	};
 };
-
-/** Structure used to describe crypto algorithms */
-struct rte_cryptodev_sym_capability_idx {
-	enum rte_crypto_sym_xform_type type;
-	union {
-		enum rte_crypto_cipher_algorithm cipher;
-		enum rte_crypto_auth_algorithm auth;
-		enum rte_crypto_aead_algorithm aead;
-	} algo;
-};
-
-/**
- *  Provide capabilities available for defined device and algorithm
- *
- * @param	dev_id		The identifier of the device.
- * @param	idx		Description of crypto algorithms.
- *
- * @return
- *   - Return description of the symmetric crypto capability if exist.
- *   - Return NULL if the capability not exist.
- */
-const struct rte_cryptodev_symmetric_capability *
-rte_cryptodev_sym_capability_get(uint8_t dev_id,
-		const struct rte_cryptodev_sym_capability_idx *idx);
-
-/**
- * Check if key size and initial vector are supported
- * in crypto cipher capability
- *
- * @param	capability	Description of the symmetric crypto capability.
- * @param	key_size	Cipher key size.
- * @param	iv_size		Cipher initial vector size.
- *
- * @return
- *   - Return 0 if the parameters are in range of the capability.
- *   - Return -1 if the parameters are out of range of the capability.
- */
-int
-rte_cryptodev_sym_capability_check_cipher(
-		const struct rte_cryptodev_symmetric_capability *capability,
-		uint16_t key_size, uint16_t iv_size);
-
-/**
- * Check if key size and initial vector are supported
- * in crypto auth capability
- *
- * @param	capability	Description of the symmetric crypto capability.
- * @param	key_size	Auth key size.
- * @param	digest_size	Auth digest size.
- * @param	iv_size		Auth initial vector size.
- *
- * @return
- *   - Return 0 if the parameters are in range of the capability.
- *   - Return -1 if the parameters are out of range of the capability.
- */
-int
-rte_cryptodev_sym_capability_check_auth(
-		const struct rte_cryptodev_symmetric_capability *capability,
-		uint16_t key_size, uint16_t digest_size, uint16_t iv_size);
-
-/**
- * Check if key, digest, AAD and initial vector sizes are supported
- * in crypto AEAD capability
- *
- * @param	capability	Description of the symmetric crypto capability.
- * @param	key_size	AEAD key size.
- * @param	digest_size	AEAD digest size.
- * @param	aad_size	AEAD AAD size.
- * @param	iv_size		AEAD IV size.
- *
- * @return
- *   - Return 0 if the parameters are in range of the capability.
- *   - Return -1 if the parameters are out of range of the capability.
- */
-int
-rte_cryptodev_sym_capability_check_aead(
-		const struct rte_cryptodev_symmetric_capability *capability,
-		uint16_t key_size, uint16_t digest_size, uint16_t aad_size,
-		uint16_t iv_size);
-
-/**
- * Provide the cipher algorithm enum, given an algorithm string
- *
- * @param	algo_enum	A pointer to the cipher algorithm
- *				enum to be filled
- * @param	algo_string	Authentication algo string
- *
- * @return
- * - Return -1 if string is not valid
- * - Return 0 is the string is valid
- */
-int
-rte_cryptodev_get_cipher_algo_enum(enum rte_crypto_cipher_algorithm *algo_enum,
-		const char *algo_string);
-
-/**
- * Provide the authentication algorithm enum, given an algorithm string
- *
- * @param	algo_enum	A pointer to the authentication algorithm
- *				enum to be filled
- * @param	algo_string	Authentication algo string
- *
- * @return
- * - Return -1 if string is not valid
- * - Return 0 is the string is valid
- */
-int
-rte_cryptodev_get_auth_algo_enum(enum rte_crypto_auth_algorithm *algo_enum,
-		const char *algo_string);
-
-/**
- * Provide the AEAD algorithm enum, given an algorithm string
- *
- * @param	algo_enum	A pointer to the AEAD algorithm
- *				enum to be filled
- * @param	algo_string	AEAD algorithm string
- *
- * @return
- * - Return -1 if string is not valid
- * - Return 0 is the string is valid
- */
-int
-rte_cryptodev_get_aead_algo_enum(enum rte_crypto_aead_algorithm *algo_enum,
-		const char *algo_string);
 
 /** Macro used at end of crypto PMD list */
 #define RTE_CRYPTODEV_END_OF_CAPABILITIES_LIST() \
@@ -343,14 +225,6 @@ rte_cryptodev_get_aead_algo_enum(enum rte_crypto_aead_algorithm *algo_enum,
 /**< Utilises CPU AES-NI instructions */
 #define	RTE_CRYPTODEV_FF_HW_ACCELERATED		(1ULL << 7)
 /**< Operations are off-loaded to an external hardware accelerator */
-#define	RTE_CRYPTODEV_FF_CPU_AVX512		(1ULL << 8)
-/**< Utilises CPU SIMD AVX512 instructions */
-#define	RTE_CRYPTODEV_FF_MBUF_SCATTER_GATHER	(1ULL << 9)
-/**< Scatter-gather mbufs are supported */
-#define	RTE_CRYPTODEV_FF_CPU_NEON		(1ULL << 10)
-/**< Utilises CPU NEON instructions */
-#define	RTE_CRYPTODEV_FF_CPU_ARM_CE		(1ULL << 11)
-/**< Utilises ARM CPU Cryptographic Extensions */
 
 
 /**
@@ -368,7 +242,7 @@ rte_cryptodev_get_feature_name(uint64_t flag);
 /**  Crypto device information */
 struct rte_cryptodev_info {
 	const char *driver_name;		/**< Driver name. */
-	uint8_t driver_id;			/**< Driver identifier */
+	enum rte_cryptodev_type dev_type;	/**< Device type */
 	struct rte_pci_device *pci_dev;		/**< PCI information. */
 
 	uint64_t feature_flags;			/**< Feature flags */
@@ -382,10 +256,6 @@ struct rte_cryptodev_info {
 	struct {
 		unsigned max_nb_sessions;
 		/**< Maximum number of sessions supported by device. */
-		unsigned int max_nb_sessions_per_qp;
-		/**< Maximum number of sessions per queue pair.
-		 * Default 0 for infinite sessions
-		 */
 	} sym;
 };
 
@@ -430,12 +300,36 @@ struct rte_cryptodev_stats {
 	/**< Total error count on operations dequeued */
 };
 
-#define RTE_CRYPTODEV_NAME_MAX_LEN	(64)
-/**< Max length of name of crypto PMD */
+#define RTE_CRYPTODEV_VDEV_DEFAULT_MAX_NB_QUEUE_PAIRS	8
+#define RTE_CRYPTODEV_VDEV_DEFAULT_MAX_NB_SESSIONS	2048
 
 /**
- * @deprecated
+ * @internal
+ * Initialisation parameters for virtual crypto devices
+ */
+struct rte_crypto_vdev_init_params {
+	unsigned max_nb_queue_pairs;
+	unsigned max_nb_sessions;
+	uint8_t socket_id;
+};
+
+/**
+ * Parse virtual device initialisation parameters input arguments
+ * @internal
  *
+ * @params	params		Initialisation parameters with defaults set.
+ * @params	input_args	Command line arguments
+ *
+ * @return
+ * 0 on successful parse
+ * <0 on failure to parse
+ */
+int
+rte_cryptodev_parse_vdev_init_params(
+		struct rte_crypto_vdev_init_params *params,
+		const char *input_args);
+
+/**
  * Create a virtual crypto device
  *
  * @param	name	Cryptodev PMD name of device to be created.
@@ -446,7 +340,6 @@ struct rte_cryptodev_stats {
  *   which will be between 0 and rte_cryptodev_count().
  * - In the case of a failure, returns -1.
  */
-__rte_deprecated
 extern int
 rte_cryptodev_create_vdev(const char *name, const char *args);
 
@@ -472,31 +365,8 @@ rte_cryptodev_get_dev_id(const char *name);
 extern uint8_t
 rte_cryptodev_count(void);
 
-/**
- * Get number of crypto device defined type.
- *
- * @param	driver_id	driver identifier.
- *
- * @return
- *   Returns number of crypto device.
- */
 extern uint8_t
-rte_cryptodev_device_count_by_driver(uint8_t driver_id);
-
-/**
- * Get number and identifiers of attached crypto devices that
- * use the same crypto driver.
- *
- * @param	driver_name	driver name.
- * @param	devices		output devices identifiers.
- * @param	nb_devices	maximal number of devices.
- *
- * @return
- *   Returns number of attached crypto device.
- */
-uint8_t
-rte_cryptodev_devices_get(const char *driver_name, uint8_t *devices,
-		uint8_t nb_devices);
+rte_cryptodev_count_devtype(enum rte_cryptodev_type type);
 /*
  * Return the NUMA socket to which a device is connected
  *
@@ -515,6 +385,11 @@ struct rte_cryptodev_config {
 	int socket_id;			/**< Socket to allocate resources on */
 	uint16_t nb_queue_pairs;
 	/**< Number of queue pairs to configure on device */
+
+	struct {
+		uint32_t nb_objs;	/**< Number of objects in mempool */
+		uint32_t cache_size;	/**< l-core object cache size */
+	} session_mp;		/**< Session mempool configuration */
 };
 
 /**
@@ -591,8 +466,6 @@ rte_cryptodev_close(uint8_t dev_id);
  *				*SOCKET_ID_ANY* if there is no NUMA constraint
  *				for the DMA memory allocated for the receive
  *				queue pair.
- * @param	session_pool	Pointer to device session mempool, used
- *				for session-less operations.
  *
  * @return
  *   - 0: Success, queue pair correctly set up.
@@ -600,8 +473,7 @@ rte_cryptodev_close(uint8_t dev_id);
  */
 extern int
 rte_cryptodev_queue_pair_setup(uint8_t dev_id, uint16_t queue_pair_id,
-		const struct rte_cryptodev_qp_conf *qp_conf, int socket_id,
-		struct rte_mempool *session_pool);
+		const struct rte_cryptodev_qp_conf *qp_conf, int socket_id);
 
 /**
  * Start a specified queue pair of a device. It is used
@@ -741,17 +613,19 @@ struct rte_cryptodev {
 	enqueue_pkt_burst_t enqueue_burst;
 	/**< Pointer to PMD transmit function. */
 
+	const struct rte_cryptodev_driver *driver;
+	/**< Driver for this device */
 	struct rte_cryptodev_data *data;
 	/**< Pointer to device data */
 	struct rte_cryptodev_ops *dev_ops;
 	/**< Functions exported by PMD */
 	uint64_t feature_flags;
 	/**< Supported features */
-	struct rte_device *device;
-	/**< Backing device */
+	struct rte_pci_device *pci_dev;
+	/**< PCI info. supplied by probing */
 
-	uint8_t driver_id;
-	/**< Crypto driver identifier*/
+	enum rte_cryptodev_type dev_type;
+	/**< Crypto device type */
 
 	struct rte_cryptodev_cb_list link_intr_cbs;
 	/**< User application callback for interrupts if present */
@@ -760,6 +634,10 @@ struct rte_cryptodev {
 	uint8_t attached : 1;
 	/**< Flag indicating the device is attached */
 } __rte_cache_aligned;
+
+
+#define RTE_CRYPTODEV_NAME_MAX_LEN	(64)
+/**< Max length of name of crypto PMD */
 
 /**
  *
@@ -884,165 +762,61 @@ rte_cryptodev_enqueue_burst(uint8_t dev_id, uint16_t qp_id,
 
 /** Cryptodev symmetric crypto session */
 struct rte_cryptodev_sym_session {
-	__extension__ void *sess_private_data[0];
+	RTE_STD_C11
+	struct {
+		uint8_t dev_id;
+		/**< Device Id */
+		enum rte_cryptodev_type dev_type;
+		/** Crypto Device type session created on */
+		struct rte_mempool *mp;
+		/**< Mempool session allocated from */
+	} __rte_aligned(8);
+	/**< Public symmetric session details */
+
+	__extension__ char _private[0];
 	/**< Private session material */
 };
 
 
 /**
- * Create symmetric crypto session header (generic with no private data)
+ * Initialise a session for symmetric cryptographic operations.
  *
- * @param   mempool    Symmetric session mempool to allocate session
- *                     objects from
- * @return
- *  - On success return pointer to sym-session
- *  - On failure returns NULL
- */
-struct rte_cryptodev_sym_session *
-rte_cryptodev_sym_session_create(struct rte_mempool *mempool);
-
-/**
- * Frees symmetric crypto session header, after checking that all
- * the device private data has been freed, returning it
- * to its original mempool.
+ * This function is used by the client to initialize immutable
+ * parameters of symmetric cryptographic operation.
+ * To perform the operation the rte_cryptodev_enqueue_burst function is
+ * used.  Each mbuf should contain a reference to the session
+ * pointer returned from this function contained within it's crypto_op if a
+ * session-based operation is being provisioned. Memory to contain the session
+ * information is allocated from within mempool managed by the cryptodev.
  *
- * @param   sess     Session header to be freed.
- *
- * @return
- *  - 0 if successful.
- *  - -EINVAL if session is NULL.
- *  - -EBUSY if not all device private data has been freed.
- */
-int
-rte_cryptodev_sym_session_free(struct rte_cryptodev_sym_session *sess);
-
-/**
- * Fill out private data for the device id, based on its device type.
- *
- * @param   dev_id   ID of device that we want the session to be used on
- * @param   sess     Session where the private data will be attached to
- * @param   xforms   Symmetric crypto transform operations to apply on flow
- *                   processed with this session
- * @param   mempool  Mempool where the private data is allocated.
- *
- * @return
- *  - On success, zero.
- *  - -EINVAL if input parameters are invalid.
- *  - -ENOTSUP if crypto device does not support the crypto transform.
- *  - -ENOMEM if the private session could not be allocated.
- */
-int
-rte_cryptodev_sym_session_init(uint8_t dev_id,
-			struct rte_cryptodev_sym_session *sess,
-			struct rte_crypto_sym_xform *xforms,
-			struct rte_mempool *mempool);
-
-/**
- * Frees private data for the device id, based on its device type,
- * returning it to its mempool.
- *
- * @param   dev_id   ID of device that uses the session.
- * @param   sess     Session containing the reference to the private data
- *
- * @return
- *  - 0 if successful.
- *  - -EINVAL if device is invalid or session is NULL.
- */
-int
-rte_cryptodev_sym_session_clear(uint8_t dev_id,
-			struct rte_cryptodev_sym_session *sess);
-
-/**
- * Get the size of the header session, for all registered drivers.
- *
- * @return
- *   Size of the header session.
- */
-unsigned int
-rte_cryptodev_get_header_session_size(void);
-
-/**
- * Get the size of the private session data for a device.
+ * The rte_cryptodev_session_free must be called to free allocated
+ * memory when the session is no longer required.
  *
  * @param	dev_id		The device identifier.
+ * @param	xform		Crypto transform chain.
+
  *
  * @return
- *   - Size of the private data, if successful
- *   - 0 if device is invalid or does not have private session
+ *  Pointer to the created session or NULL
  */
-unsigned int
-rte_cryptodev_get_private_session_size(uint8_t dev_id);
+extern struct rte_cryptodev_sym_session *
+rte_cryptodev_sym_session_create(uint8_t dev_id,
+		struct rte_crypto_sym_xform *xform);
 
 /**
- * Attach queue pair with sym session.
+ * Free the memory associated with a previously allocated session.
  *
- * @param	dev_id		Device to which the session will be attached.
- * @param	qp_id		Queue pair to which the session will be attached.
+ * @param	dev_id		The device identifier.
  * @param	session		Session pointer previously allocated by
  *				*rte_cryptodev_sym_session_create*.
  *
  * @return
- *  - On success, zero.
- *  - On failure, a negative value.
+ *   NULL on successful freeing of session.
+ *   Session pointer on failure to free session.
  */
-int
-rte_cryptodev_queue_pair_attach_sym_session(uint8_t dev_id, uint16_t qp_id,
+extern struct rte_cryptodev_sym_session *
+rte_cryptodev_sym_session_free(uint8_t dev_id,
 		struct rte_cryptodev_sym_session *session);
-
-/**
- * Detach queue pair with sym session.
- *
- * @param	dev_id		Device to which the session is attached.
- * @param	qp_id		Queue pair to which the session is attached.
- * @param	session		Session pointer previously allocated by
- *				*rte_cryptodev_sym_session_create*.
- *
- * @return
- *  - On success, zero.
- *  - On failure, a negative value.
- */
-int
-rte_cryptodev_queue_pair_detach_sym_session(uint8_t dev_id, uint16_t qp_id,
-		struct rte_cryptodev_sym_session *session);
-
-/**
- * Provide driver identifier.
- *
- * @param name
- *   The pointer to a driver name.
- * @return
- *  The driver type identifier or -1 if no driver found
- */
-int rte_cryptodev_driver_id_get(const char *name);
-
-/**
- * Provide driver name.
- *
- * @param driver_id
- *   The driver identifier.
- * @return
- *  The driver name or null if no driver found
- */
-const char *rte_cryptodev_driver_name_get(uint8_t driver_id);
-
-/**
- * @internal
- * Allocate Cryptodev driver.
- *
- * @param driver
- *   Pointer to rte_driver.
- * @return
- *  The driver type identifier
- */
-uint8_t rte_cryptodev_allocate_driver(const struct rte_driver *driver);
-
-
-#define RTE_PMD_REGISTER_CRYPTO_DRIVER(drv, driver_id)\
-RTE_INIT(init_ ##driver_id);\
-static void init_ ##driver_id(void)\
-{\
-	driver_id = rte_cryptodev_allocate_driver(&(drv).driver);\
-}
 
 
 #ifdef __cplusplus

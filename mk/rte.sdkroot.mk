@@ -88,19 +88,13 @@ export ROOTDIRS-y ROOTDIRS- ROOTDIRS-n
 .PHONY: default
 default: all
 
-.PHONY: config defconfig showconfigs showversion showversionum
-config defconfig showconfigs showversion showversionum:
+.PHONY: config showconfigs showversion showversionum
+config showconfigs showversion showversionum:
 	$(Q)$(MAKE) -f $(RTE_SDK)/mk/rte.sdkconfig.mk $@
 
-.PHONY: cscope gtags tags etags
-cscope gtags tags etags:
-	$(Q)$(RTE_SDK)/devtools/build-tags.sh $@ $T
-
-.PHONY: test test-basic test-fast test-ring test-mempool test-perf coverage
-test test-basic test-fast test-ring test-mempool test-perf coverage:
+.PHONY: test fast_test ring_test mempool_test perf_test coverage
+test fast_test ring_test mempool_test perf_test coverage:
 	$(Q)$(MAKE) -f $(RTE_SDK)/mk/rte.sdktest.mk $@
-
-test: test-build
 
 .PHONY: install
 install:
@@ -114,6 +108,10 @@ doc: doc-all
 help: doc-help
 doc-%:
 	$(Q)$(MAKE) -f $(RTE_SDK)/mk/rte.sdkdoc.mk $*
+
+.PHONY: depdirs depgraph
+depdirs depgraph:
+	$(Q)$(MAKE) -f $(RTE_SDK)/mk/rte.sdkdepdirs.mk $@
 
 .PHONY: gcov gcovclean
 gcov gcovclean:

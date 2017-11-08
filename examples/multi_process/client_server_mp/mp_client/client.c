@@ -50,9 +50,11 @@
 #include <rte_branch_prediction.h>
 #include <rte_log.h>
 #include <rte_per_lcore.h>
+#include <rte_launch.h>
 #include <rte_lcore.h>
 #include <rte_ring.h>
 #include <rte_launch.h>
+#include <rte_lcore.h>
 #include <rte_debug.h>
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
@@ -274,11 +276,14 @@ main(int argc, char *argv[])
 	printf("[Press Ctrl-C to quit ...]\n");
 
 	for (;;) {
-		uint16_t i, rx_pkts;
+		uint16_t i, rx_pkts = PKT_READ_SIZE;
 		uint8_t port;
 
-		rx_pkts = rte_ring_dequeue_burst(rx_ring, pkts,
-				PKT_READ_SIZE, NULL);
+		/* try dequeuing max possible packets first, if that fails, get the
+		 * most we can. Loop body should only execute once, maximum */
+		while (rx_pkts > 0 &&
+				unlikely(rte_ring_dequeue_bulk(rx_ring, pkts, rx_pkts) != 0))
+			rx_pkts = (uint16_t)RTE_MIN(rte_ring_count(rx_ring), PKT_READ_SIZE);
 
 		if (unlikely(rx_pkts == 0)){
 			if (need_flush)

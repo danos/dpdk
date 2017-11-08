@@ -36,6 +36,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <errno.h>
 #include <sys/queue.h>
 
 #include <rte_log.h>
@@ -1033,7 +1034,7 @@ add_depth_big_v1604(struct rte_lpm *lpm, uint32_t ip_masked, uint8_t depth,
 		 */
 
 		struct rte_lpm_tbl_entry new_tbl24_entry = {
-			.group_idx = tbl8_group_index,
+			.group_idx = (uint8_t)tbl8_group_index,
 			.valid = VALID,
 			.valid_group = 1,
 			.depth = 0,
@@ -1079,7 +1080,7 @@ add_depth_big_v1604(struct rte_lpm *lpm, uint32_t ip_masked, uint8_t depth,
 		 */
 
 		struct rte_lpm_tbl_entry new_tbl24_entry = {
-				.group_idx = tbl8_group_index,
+				.group_idx = (uint8_t)tbl8_group_index,
 				.valid = VALID,
 				.valid_group = 1,
 				.depth = 0,

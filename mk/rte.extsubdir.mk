@@ -30,11 +30,9 @@
 
 MAKEFLAGS += --no-print-directory
 
-ALL_DEPDIRS := $(patsubst DEPDIRS-%,%,$(filter DEPDIRS-%,$(.VARIABLES)))
-
 # output directory
-O ?= $(CURDIR)
-BASE_OUTPUT ?= $(abspath $(O))
+O ?= .
+BASE_OUTPUT ?= $(O)
 CUR_SUBDIR ?= .
 
 .PHONY: all
@@ -52,16 +50,4 @@ $(DIRS-y):
 		BASE_OUTPUT=$(BASE_OUTPUT) \
 		CUR_SUBDIR=$(CUR_SUBDIR)/$(@) \
 		S=$(CURDIR)/$(@) \
-		DEPDIRS="$(DEPDIRS-$@)" \
 		$(filter-out $(DIRS-y),$(MAKECMDGOALS))
-
-define depdirs_rule
-$(DEPDIRS-$(1)):
-
-$(1): | $(DEPDIRS-$(1))
-
-$(if $(D),$(info $(1) depends on $(DEPDIRS-$(1))))
-endef
-
-$(foreach dir,$(ALL_DEPDIRS),\
-	$(eval $(call depdirs_rule,$(dir))))

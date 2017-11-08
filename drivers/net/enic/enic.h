@@ -60,7 +60,6 @@
 #define ENIC_RQ_MAX		16
 #define ENIC_CQ_MAX		(ENIC_WQ_MAX + (ENIC_RQ_MAX / 2))
 #define ENIC_INTR_MAX		(ENIC_CQ_MAX + 2)
-#define ENIC_MAX_MAC_ADDR	64
 
 #define VLAN_ETH_HLEN           18
 
@@ -80,8 +79,6 @@
 #define PCI_DEVICE_ID_CISCO_VIC_ENET         0x0043  /* ethernet vnic */
 #define PCI_DEVICE_ID_CISCO_VIC_ENET_VF      0x0071  /* enet SRIOV VF */
 
-/* Special Filter id for non-specific packet flagging. Don't change value */
-#define ENIC_MAGIC_FILTER_ID 0xffff
 
 #define ENICPMD_FDIR_MAX           64
 
@@ -113,12 +110,6 @@ struct enic_memzone_entry {
 	LIST_ENTRY(enic_memzone_entry) entries;
 };
 
-struct rte_flow {
-	LIST_ENTRY(rte_flow) next;
-	u16 enic_filter_id;
-	struct filter_v2 enic_filter;
-};
-
 /* Per-instance private data structure */
 struct enic {
 	struct enic *next;
@@ -143,9 +134,7 @@ struct enic {
 	int link_status;
 	u8 hw_ip_checksum;
 	u16 max_mtu;
-	u8 adv_filters;
-	u32 flow_filter_mode;
-	u8 filter_tags;
+	u16 adv_filters;
 
 	unsigned int flags;
 	unsigned int priv_flags;
@@ -180,8 +169,6 @@ struct enic {
 	rte_spinlock_t memzone_list_lock;
 	rte_spinlock_t mtu_lock;
 
-	LIST_HEAD(enic_flows, rte_flow) flows;
-	rte_spinlock_t flows_lock;
 };
 
 /* Get the CQ index from a Start of Packet(SOP) RQ index */
@@ -291,8 +278,8 @@ extern void enic_dev_stats_get(struct enic *enic,
 	struct rte_eth_stats *r_stats);
 extern void enic_dev_stats_clear(struct enic *enic);
 extern void enic_add_packet_filter(struct enic *enic);
-int enic_set_mac_address(struct enic *enic, uint8_t *mac_addr);
-void enic_del_mac_address(struct enic *enic, int mac_index);
+extern void enic_set_mac_address(struct enic *enic, uint8_t *mac_addr);
+extern void enic_del_mac_address(struct enic *enic);
 extern unsigned int enic_cleanup_wq(struct enic *enic, struct vnic_wq *wq);
 extern void enic_send_pkt(struct enic *enic, struct vnic_wq *wq,
 			  struct rte_mbuf *tx_pkt, unsigned short len,
@@ -305,9 +292,9 @@ extern int enic_clsf_init(struct enic *enic);
 extern void enic_clsf_destroy(struct enic *enic);
 uint16_t enic_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 			uint16_t nb_pkts);
-uint16_t enic_dummy_recv_pkts(void *rx_queue,
-			      struct rte_mbuf **rx_pkts,
-			      uint16_t nb_pkts);
+uint16_t enic_dummy_recv_pkts(__rte_unused void *rx_queue,
+			      __rte_unused struct rte_mbuf **rx_pkts,
+			      __rte_unused uint16_t nb_pkts);
 uint16_t enic_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 			       uint16_t nb_pkts);
 int enic_set_mtu(struct enic *enic, uint16_t new_mtu);
@@ -315,8 +302,7 @@ int enic_link_update(struct enic *enic);
 void enic_fdir_info(struct enic *enic);
 void enic_fdir_info_get(struct enic *enic, struct rte_eth_fdir_info *stats);
 void copy_fltr_v1(struct filter_v2 *fltr, struct rte_eth_fdir_input *input,
-		  struct rte_eth_fdir_masks *masks);
+		  __rte_unused struct rte_eth_fdir_masks *masks);
 void copy_fltr_v2(struct filter_v2 *fltr, struct rte_eth_fdir_input *input,
 		  struct rte_eth_fdir_masks *masks);
-extern const struct rte_flow_ops enic_flow_ops;
 #endif /* _ENIC_H_ */

@@ -1,7 +1,7 @@
 /*
  *   BSD LICENSE
  *
- *   Copyright (C) Cavium, Inc. 2016.
+ *   Copyright (C) Cavium networks Ltd. 2016.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Cavium, Inc nor the names of its
+ *     * Neither the name of Cavium networks nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -72,21 +72,10 @@ struct nicvf_txq {
 	uint16_t tx_free_thresh;
 } __rte_cache_aligned;
 
-union mbuf_initializer {
-	struct {
-		uint16_t data_off;
-		uint16_t refcnt;
-		uint16_t nb_segs;
-		uint16_t port;
-	} fields;
-	uint64_t value;
-};
-
 struct nicvf_rxq {
 	uint64_t mbuf_phys_off;
 	uintptr_t cq_status;
 	uintptr_t cq_door;
-	union mbuf_initializer mbuf_initializer;
 	nicvf_phys_addr_t phys;
 	union cq_entry_t *desc;
 	struct nicvf_rbdr *shared_rbdr;

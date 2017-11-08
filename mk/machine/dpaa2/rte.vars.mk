@@ -1,7 +1,6 @@
 #   BSD LICENSE
 #
-#   Copyright (c) 2016 Freescale Semiconductor, Inc. All rights reserved.
-#   Copyright 2016 NXP.
+#   Copyright(c) 2016 Freescale Semiconductor, Inc. All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions
@@ -54,8 +53,8 @@
 # CPU_CFLAGS =
 # CPU_LDFLAGS =
 # CPU_ASFLAGS =
-MACHINE_CFLAGS += -march=armv8-a+crc
+MACHINE_CFLAGS += -march=armv8-a
 
 ifdef CONFIG_RTE_ARCH_ARM_TUNE
-MACHINE_CFLAGS += -mtune=$(CONFIG_RTE_ARCH_ARM_TUNE:"%"=%)
+MACHINE_CFLAGS += -mcpu=$(CONFIG_RTE_ARCH_ARM_TUNE:"%"=%)
 endif

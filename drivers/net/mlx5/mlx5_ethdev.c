@@ -119,7 +119,6 @@ struct ethtool_link_settings {
 #define ETHTOOL_LINK_MODE_100000baseCR4_Full_BIT 38
 #define ETHTOOL_LINK_MODE_100000baseLR4_ER4_Full_BIT 39
 #endif
-#define ETHTOOL_LINK_MODE_MASK_MAX_KERNEL_NU32 (SCHAR_MAX)
 
 /**
  * Return private structure associated with an Ethernet device.
@@ -235,23 +234,6 @@ try_dev_id:
 }
 
 /**
- * Check if the counter is located on ib counters file.
- *
- * @param[in] cntr
- *   Counter name.
- *
- * @return
- *   1 if counter is located on ib counters file , 0 otherwise.
- */
-int
-priv_is_ib_cntr(const char *cntr)
-{
-	if (!strcmp(cntr, "out_of_buffer"))
-		return 1;
-	return 0;
-}
-
-/**
  * Read from sysfs entry.
  *
  * @param[in] priv
@@ -278,15 +260,10 @@ priv_sysfs_read(const struct priv *priv, const char *entry,
 	if (priv_get_ifname(priv, &ifname))
 		return -1;
 
-	if (priv_is_ib_cntr(entry)) {
-		MKSTR(path, "%s/ports/1/hw_counters/%s",
-		      priv->ctx->device->ibdev_path, entry);
-		file = fopen(path, "rb");
-	} else {
-		MKSTR(path, "%s/device/net/%s/%s",
-		      priv->ctx->device->ibdev_path, ifname, entry);
-		file = fopen(path, "rb");
-	}
+	MKSTR(path, "%s/device/net/%s/%s", priv->ctx->device->ibdev_path,
+	      ifname, entry);
+
+	file = fopen(path, "rb");
 	if (file == NULL)
 		return -1;
 	ret = fread(buf, 1, size, file);
@@ -492,30 +469,6 @@ priv_get_mtu(struct priv *priv, uint16_t *mtu)
 }
 
 /**
- * Read device counter from sysfs.
- *
- * @param priv
- *   Pointer to private structure.
- * @param name
- *   Counter name.
- * @param[out] cntr
- *   Counter output buffer.
- *
- * @return
- *   0 on success, -1 on failure and errno is set.
- */
-int
-priv_get_cntr_sysfs(struct priv *priv, const char *name, uint64_t *cntr)
-{
-	unsigned long ulong_ctr;
-
-	if (priv_get_sysfs_ulong(priv, name, &ulong_ctr) == -1)
-		return -1;
-	*cntr = ulong_ctr;
-	return 0;
-}
-
-/**
  * Set device MTU.
  *
  * @param priv
@@ -662,8 +615,6 @@ mlx5_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *info)
 	unsigned int max;
 	char ifname[IF_NAMESIZE];
 
-	info->pci_dev = RTE_ETH_DEV_TO_PCI(dev);
-
 	priv_lock(priv);
 	/* FIXME: we should ask the device for these values. */
 	info->min_rx_bufsize = 32;
@@ -694,16 +645,14 @@ mlx5_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *info)
 			(DEV_TX_OFFLOAD_IPV4_CKSUM |
 			 DEV_TX_OFFLOAD_UDP_CKSUM |
 			 DEV_TX_OFFLOAD_TCP_CKSUM);
-	if (priv->tso)
-		info->tx_offload_capa |= DEV_TX_OFFLOAD_TCP_TSO;
-	if (priv->tunnel_en)
-		info->tx_offload_capa |= (DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM |
-					  DEV_TX_OFFLOAD_VXLAN_TNL_TSO |
-					  DEV_TX_OFFLOAD_GRE_TNL_TSO);
 	if (priv_get_ifname(priv, &ifname) == 0)
 		info->if_index = if_nametoindex(ifname);
-	info->reta_size = priv->reta_idx_n ?
-		priv->reta_idx_n : priv->ind_table_max_size;
+	/* FIXME: RETA update/query API expects the callee to know the size of
+	 * the indirection table, for this PMD the size varies depending on
+	 * the number of RX queues, it becomes impossible to find the correct
+	 * size if it is not fixed.
+	 * The API should be updated to solve this problem. */
+	info->reta_size = priv->ind_table_max_size;
 	info->hash_key_size = ((*priv->rss_conf) ?
 			       (*priv->rss_conf)[0]->rss_key_len :
 			       0);
@@ -716,30 +665,21 @@ mlx5_dev_supported_ptypes_get(struct rte_eth_dev *dev)
 {
 	static const uint32_t ptypes[] = {
 		/* refers to rxq_cq_to_pkt_type() */
-		RTE_PTYPE_L2_ETHER,
 		RTE_PTYPE_L3_IPV4_EXT_UNKNOWN,
 		RTE_PTYPE_L3_IPV6_EXT_UNKNOWN,
-		RTE_PTYPE_L4_NONFRAG,
-		RTE_PTYPE_L4_FRAG,
-		RTE_PTYPE_L4_TCP,
-		RTE_PTYPE_L4_UDP,
 		RTE_PTYPE_INNER_L3_IPV4_EXT_UNKNOWN,
 		RTE_PTYPE_INNER_L3_IPV6_EXT_UNKNOWN,
-		RTE_PTYPE_INNER_L4_NONFRAG,
-		RTE_PTYPE_INNER_L4_FRAG,
-		RTE_PTYPE_INNER_L4_TCP,
-		RTE_PTYPE_INNER_L4_UDP,
 		RTE_PTYPE_UNKNOWN
+
 	};
 
-	if (dev->rx_pkt_burst == mlx5_rx_burst ||
-	    dev->rx_pkt_burst == mlx5_rx_burst_vec)
+	if (dev->rx_pkt_burst == mlx5_rx_burst)
 		return ptypes;
 	return NULL;
 }
 
 /**
- * DPDK callback to retrieve physical link information.
+ * Retrieve physical link information (unlocked version using legacy ioctl).
  *
  * @param dev
  *   Pointer to Ethernet device structure.
@@ -756,8 +696,6 @@ mlx5_link_update_unlocked_gset(struct rte_eth_dev *dev, int wait_to_complete)
 	struct ifreq ifr;
 	struct rte_eth_link dev_link;
 	int link_speed = 0;
-
-	/* priv_lock() is not taken to allow concurrent calls. */
 
 	(void)wait_to_complete;
 	if (priv_ifreq(priv, SIOCGIFFLAGS, &ifr)) {
@@ -816,12 +754,9 @@ static int
 mlx5_link_update_unlocked_gs(struct rte_eth_dev *dev, int wait_to_complete)
 {
 	struct priv *priv = mlx5_get_priv(dev);
-	__extension__ struct {
-		struct ethtool_link_settings edata;
-		uint32_t link_mode_data[3 *
-					ETHTOOL_LINK_MODE_MASK_MAX_KERNEL_NU32];
-	} ecmd;
-
+	struct ethtool_link_settings edata = {
+		.cmd = ETHTOOL_GLINKSETTINGS,
+	};
 	struct ifreq ifr;
 	struct rte_eth_link dev_link;
 	uint64_t sc;
@@ -834,23 +769,15 @@ mlx5_link_update_unlocked_gs(struct rte_eth_dev *dev, int wait_to_complete)
 	memset(&dev_link, 0, sizeof(dev_link));
 	dev_link.link_status = ((ifr.ifr_flags & IFF_UP) &&
 				(ifr.ifr_flags & IFF_RUNNING));
-	memset(&ecmd, 0, sizeof(ecmd));
-	ecmd.edata.cmd = ETHTOOL_GLINKSETTINGS;
-	ifr.ifr_data = (void *)&ecmd;
+	ifr.ifr_data = (void *)&edata;
 	if (priv_ifreq(priv, SIOCETHTOOL, &ifr)) {
 		DEBUG("ioctl(SIOCETHTOOL, ETHTOOL_GLINKSETTINGS) failed: %s",
 		      strerror(errno));
 		return -1;
 	}
-	ecmd.edata.link_mode_masks_nwords = -ecmd.edata.link_mode_masks_nwords;
-	if (priv_ifreq(priv, SIOCETHTOOL, &ifr)) {
-		DEBUG("ioctl(SIOCETHTOOL, ETHTOOL_GLINKSETTINGS) failed: %s",
-		      strerror(errno));
-		return -1;
-	}
-	dev_link.link_speed = ecmd.edata.speed;
-	sc = ecmd.edata.link_mode_masks[0] |
-		((uint64_t)ecmd.edata.link_mode_masks[1] << 32);
+	dev_link.link_speed = edata.speed;
+	sc = edata.link_mode_masks[0] |
+		((uint64_t)edata.link_mode_masks[1] << 32);
 	priv->link_speed_capa = 0;
 	if (sc & ETHTOOL_LINK_MODE_Autoneg_BIT)
 		priv->link_speed_capa |= ETH_LINK_SPEED_AUTONEG;
@@ -886,7 +813,7 @@ mlx5_link_update_unlocked_gs(struct rte_eth_dev *dev, int wait_to_complete)
 		  ETHTOOL_LINK_MODE_100000baseCR4_Full_BIT |
 		  ETHTOOL_LINK_MODE_100000baseLR4_ER4_Full_BIT))
 		priv->link_speed_capa |= ETH_LINK_SPEED_100G;
-	dev_link.link_duplex = ((ecmd.edata.duplex == DUPLEX_HALF) ?
+	dev_link.link_duplex = ((edata.duplex == DUPLEX_HALF) ?
 				ETH_LINK_HALF_DUPLEX : ETH_LINK_FULL_DUPLEX);
 	dev_link.link_autoneg = !(dev->data->dev_conf.link_speeds &
 				  ETH_LINK_SPEED_FIXED);
@@ -900,7 +827,7 @@ mlx5_link_update_unlocked_gs(struct rte_eth_dev *dev, int wait_to_complete)
 }
 
 /**
- * DPDK callback to retrieve physical link information.
+ * DPDK callback to retrieve physical link information (unlocked version).
  *
  * @param dev
  *   Pointer to Ethernet device structure.
@@ -908,7 +835,7 @@ mlx5_link_update_unlocked_gs(struct rte_eth_dev *dev, int wait_to_complete)
  *   Wait for request completion (ignored).
  */
 int
-mlx5_link_update(struct rte_eth_dev *dev, int wait_to_complete)
+mlx5_link_update_unlocked(struct rte_eth_dev *dev, int wait_to_complete)
 {
 	struct utsname utsname;
 	int ver[3];
@@ -922,7 +849,33 @@ mlx5_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 }
 
 /**
+ * DPDK callback to retrieve physical link information.
+ *
+ * @param dev
+ *   Pointer to Ethernet device structure.
+ * @param wait_to_complete
+ *   Wait for request completion (ignored).
+ */
+int
+mlx5_link_update(struct rte_eth_dev *dev, int wait_to_complete)
+{
+	struct priv *priv = mlx5_get_priv(dev);
+	int ret;
+
+	priv_lock(priv);
+	ret = mlx5_link_update_unlocked(dev, wait_to_complete);
+	priv_unlock(priv);
+	return ret;
+}
+
+/**
  * DPDK callback to change the MTU.
+ *
+ * Setting the MTU affects hardware MRU (packets larger than the MTU cannot be
+ * received). Use this as a hint to enable/disable scattered packets support
+ * and improve performance when not needed.
+ * Since failure is not an option, reconfiguring queues on the fly is not
+ * recommended.
  *
  * @param dev
  *   Pointer to Ethernet device structure.
@@ -936,33 +889,125 @@ int
 mlx5_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 {
 	struct priv *priv = dev->data->dev_private;
-	uint16_t kern_mtu;
 	int ret = 0;
+	unsigned int i;
+	uint16_t (*rx_func)(void *, struct rte_mbuf **, uint16_t) =
+		mlx5_rx_burst;
+	unsigned int max_frame_len;
+	int rehash;
+	int restart = priv->started;
 
 	if (mlx5_is_secondary())
 		return -E_RTE_SECONDARY;
 
 	priv_lock(priv);
-	ret = priv_get_mtu(priv, &kern_mtu);
-	if (ret)
-		goto out;
 	/* Set kernel interface MTU first. */
-	ret = priv_set_mtu(priv, mtu);
-	if (ret)
+	if (priv_set_mtu(priv, mtu)) {
+		ret = errno;
+		WARN("cannot set port %u MTU to %u: %s", priv->port, mtu,
+		     strerror(ret));
 		goto out;
-	ret = priv_get_mtu(priv, &kern_mtu);
-	if (ret)
-		goto out;
-	if (kern_mtu == mtu) {
-		priv->mtu = mtu;
+	} else
 		DEBUG("adapter port %u MTU set to %u", priv->port, mtu);
+	/* Temporarily replace RX handler with a fake one, assuming it has not
+	 * been copied elsewhere. */
+	dev->rx_pkt_burst = removed_rx_burst;
+	/* Make sure everyone has left mlx5_rx_burst() and uses
+	 * removed_rx_burst() instead. */
+	rte_wmb();
+	usleep(1000);
+	/* MTU does not include header and CRC. */
+	max_frame_len = ETHER_HDR_LEN + mtu + ETHER_CRC_LEN;
+	/* Check if at least one queue is going to need a SGE update. */
+	for (i = 0; i != priv->rxqs_n; ++i) {
+		struct rxq *rxq = (*priv->rxqs)[i];
+		unsigned int mb_len;
+		unsigned int size = RTE_PKTMBUF_HEADROOM + max_frame_len;
+		unsigned int sges_n;
+
+		if (rxq == NULL)
+			continue;
+		mb_len = rte_pktmbuf_data_room_size(rxq->mp);
+		assert(mb_len >= RTE_PKTMBUF_HEADROOM);
+		/*
+		 * Determine the number of SGEs needed for a full packet
+		 * and round it to the next power of two.
+		 */
+		sges_n = log2above((size / mb_len) + !!(size % mb_len));
+		if (sges_n != rxq->sges_n)
+			break;
 	}
-	priv_unlock(priv);
-	return 0;
+	/*
+	 * If all queues have the right number of SGEs, a simple rehash
+	 * of their buffers is enough, otherwise SGE information can only
+	 * be updated in a queue by recreating it. All resources that depend
+	 * on queues (flows, indirection tables) must be recreated as well in
+	 * that case.
+	 */
+	rehash = (i == priv->rxqs_n);
+	if (!rehash) {
+		/* Clean up everything as with mlx5_dev_stop(). */
+		priv_special_flow_disable_all(priv);
+		priv_mac_addrs_disable(priv);
+		priv_destroy_hash_rxqs(priv);
+		priv_fdir_disable(priv);
+		priv_dev_interrupt_handler_uninstall(priv, dev);
+	}
+recover:
+	/* Reconfigure each RX queue. */
+	for (i = 0; (i != priv->rxqs_n); ++i) {
+		struct rxq *rxq = (*priv->rxqs)[i];
+		struct rxq_ctrl *rxq_ctrl =
+			container_of(rxq, struct rxq_ctrl, rxq);
+		int sp;
+		unsigned int mb_len;
+		unsigned int tmp;
+
+		if (rxq == NULL)
+			continue;
+		mb_len = rte_pktmbuf_data_room_size(rxq->mp);
+		assert(mb_len >= RTE_PKTMBUF_HEADROOM);
+		/* Toggle scattered support (sp) if necessary. */
+		sp = (max_frame_len > (mb_len - RTE_PKTMBUF_HEADROOM));
+		/* Provide new values to rxq_setup(). */
+		dev->data->dev_conf.rxmode.jumbo_frame = sp;
+		dev->data->dev_conf.rxmode.max_rx_pkt_len = max_frame_len;
+		if (rehash)
+			ret = rxq_rehash(dev, rxq_ctrl);
+		else
+			ret = rxq_ctrl_setup(dev, rxq_ctrl, 1 << rxq->elts_n,
+					     rxq_ctrl->socket, NULL, rxq->mp);
+		if (!ret)
+			continue;
+		/* Attempt to roll back in case of error. */
+		tmp = (mb_len << rxq->sges_n) - RTE_PKTMBUF_HEADROOM;
+		if (max_frame_len != tmp) {
+			max_frame_len = tmp;
+			goto recover;
+		}
+		/* Double fault, disable RX. */
+		break;
+	}
+	/*
+	 * Use a safe RX burst function in case of error, otherwise mimic
+	 * mlx5_dev_start().
+	 */
+	if (ret) {
+		ERROR("unable to reconfigure RX queues, RX disabled");
+		rx_func = removed_rx_burst;
+	} else if (restart &&
+		 !rehash &&
+		 !priv_create_hash_rxqs(priv) &&
+		 !priv_rehash_flows(priv)) {
+		if (dev->data->dev_conf.fdir_conf.mode == RTE_FDIR_MODE_NONE)
+			priv_fdir_enable(priv);
+		priv_dev_interrupt_handler_install(priv, dev);
+	}
+	priv->mtu = mtu;
+	/* Burst functions can now be called again. */
+	rte_wmb();
+	dev->rx_pkt_burst = rx_func;
 out:
-	ret = errno;
-	WARN("cannot set port %u MTU to %u: %s", priv->port, mtu,
-	     strerror(ret));
 	priv_unlock(priv);
 	assert(ret >= 0);
 	return -ret;
@@ -1110,7 +1155,7 @@ mlx5_ibv_device_to_pci_addr(const struct ibv_device *device,
 		/* Extract information. */
 		if (sscanf(line,
 			   "PCI_SLOT_NAME="
-			   "%" SCNx32 ":%" SCNx8 ":%" SCNx8 ".%" SCNx8 "\n",
+			   "%" SCNx16 ":%" SCNx8 ":%" SCNx8 ".%" SCNx8 "\n",
 			   &pci_addr->domain,
 			   &pci_addr->bus,
 			   &pci_addr->devid,
@@ -1187,8 +1232,7 @@ mlx5_dev_link_status_handler(void *arg)
 	ret = priv_dev_link_status_handler(priv, dev);
 	priv_unlock(priv);
 	if (ret)
-		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL,
-					      NULL);
+		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 }
 
 /**
@@ -1200,18 +1244,18 @@ mlx5_dev_link_status_handler(void *arg)
  *   Callback argument.
  */
 void
-mlx5_dev_interrupt_handler(void *cb_arg)
+mlx5_dev_interrupt_handler(struct rte_intr_handle *intr_handle, void *cb_arg)
 {
 	struct rte_eth_dev *dev = cb_arg;
 	struct priv *priv = dev->data->dev_private;
 	int ret;
 
+	(void)intr_handle;
 	priv_lock(priv);
 	ret = priv_dev_link_status_handler(priv, dev);
 	priv_unlock(priv);
 	if (ret)
-		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL,
-					      NULL);
+		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 }
 
 /**
@@ -1509,22 +1553,14 @@ void
 priv_select_tx_function(struct priv *priv)
 {
 	priv->dev->tx_pkt_burst = mlx5_tx_burst;
+	/* Display warning for unsupported configurations. */
+	if (priv->sriov && priv->mps)
+		WARN("multi-packet send WQE cannot be used on a SR-IOV setup");
 	/* Select appropriate TX function. */
-	if (priv->mps == MLX5_MPW_ENHANCED) {
-		if (priv_check_vec_tx_support(priv) > 0) {
-			if (priv_check_raw_vec_tx_support(priv) > 0)
-				priv->dev->tx_pkt_burst = mlx5_tx_burst_raw_vec;
-			else
-				priv->dev->tx_pkt_burst = mlx5_tx_burst_vec;
-			DEBUG("selected Enhanced MPW TX vectorized function");
-		} else {
-			priv->dev->tx_pkt_burst = mlx5_tx_burst_empw;
-			DEBUG("selected Enhanced MPW TX function");
-		}
-	} else if (priv->mps && priv->txq_inline) {
+	if ((priv->sriov == 0) && priv->mps && priv->txq_inline) {
 		priv->dev->tx_pkt_burst = mlx5_tx_burst_mpw_inline;
 		DEBUG("selected MPW inline TX function");
-	} else if (priv->mps) {
+	} else if ((priv->sriov == 0) && priv->mps) {
 		priv->dev->tx_pkt_burst = mlx5_tx_burst_mpw;
 		DEBUG("selected MPW TX function");
 	}
@@ -1539,11 +1575,5 @@ priv_select_tx_function(struct priv *priv)
 void
 priv_select_rx_function(struct priv *priv)
 {
-	if (priv_check_vec_rx_support(priv) > 0) {
-		priv_prep_vec_rx_function(priv);
-		priv->dev->rx_pkt_burst = mlx5_rx_burst_vec;
-		DEBUG("selected RX vectorized function");
-	} else {
-		priv->dev->rx_pkt_burst = mlx5_rx_burst;
-	}
+	priv->dev->rx_pkt_burst = mlx5_rx_burst;
 }

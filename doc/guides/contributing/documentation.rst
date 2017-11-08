@@ -282,21 +282,33 @@ The additional guidelines below reiterate or expand upon those guidelines.
 Line Length
 ~~~~~~~~~~~
 
-* Lines in sentences should be less than 80 characters and wrapped at
-  words. Multiple sentences which are not separated by a blank line are joined
-  automatically into paragraphs.
+* The recommended style for the DPDK documentation is to put sentences on separate lines.
+  This allows for easier reviewing of patches.
+  Multiple sentences which are not separated by a blank line are joined automatically into paragraphs, for example::
 
-* Lines in literal blocks **must** be less than 80 characters since
-  they are not wrapped by the document formatters and can exceed the page width
-  in PDF documents.
+     Here is an example sentence.
+     Long sentences over the limit shown below can be wrapped onto
+     a new line.
+     These three sentences will be joined into the same paragraph.
 
-  Long literal command lines can be shown wrapped with backslashes. For
-  example::
+     This is a new paragraph, since it is separated from the
+     previous paragraph by a blank line.
 
-     testpmd -l 2-3 -n 4 \
-             --vdev=virtio_user0,path=/dev/vhost-net,queues=2,queue_size=1024 \
-             -- -i --txqflags=0x0 --disable-hw-vlan --enable-lro \
-             --enable-rx-cksum --txq=2 --rxq=2 --rxd=1024  --txd=1024
+  This would be rendered as follows:
+
+     *Here is an example sentence.
+     Long sentences over the limit shown below can be wrapped onto
+     a new line.
+     These three sentences will be joined into the same paragraph.*
+
+     *This is a new paragraph, since it is separated from the
+     previous paragraph by a blank line.*
+
+
+* Long sentences should be wrapped at 120 characters +/- 10 characters. They should be wrapped at words.
+
+* Lines in literal blocks must by less than 80 characters since they aren't wrapped by the document formatters
+  and can exceed the page width in PDF documents.
 
 
 Whitespace
@@ -320,7 +332,7 @@ Whitespace
 Section Headers
 ~~~~~~~~~~~~~~~
 
-* Section headers should use the following underline formats::
+* Section headers should use the use the following underline formats::
 
    Level 1 Heading
    ===============
@@ -368,10 +380,11 @@ Lists
 
      #. Item one.
 
+     #. Item two is a long line that is wrapped and then indented
+        to match the start of the e first line.
+
      #. Item two is a long line that is wrapped and then indented to match
         the start of the previous line.
-
-     #. Item three.
 
 * Definition lists can be written with or without a bullet::
 
@@ -445,7 +458,7 @@ Code and Literal block sections
   For long literal lines that exceed that limit try to wrap the text at sensible locations.
   For example a long command line could be documented like this and still work if copied directly from the docs::
 
-     build/app/testpmd -l 0-2 -n3 --vdev=net_pcap0,iface=eth0     \
+     build/app/testpmd -c7 -n3 --vdev=net_pcap0,iface=eth0     \
                                --vdev=net_pcap1,iface=eth1     \
                                -- -i --nb-cores=2 --nb-ports=2 \
                                   --total-num-mbufs=2048
@@ -464,7 +477,7 @@ Images
 
 * `Inkscape <http://inkscape.org>`_ is the recommended graphics editor for creating the images.
   Use some of the older images in ``doc/guides/prog_guide/img/`` as a template, for example ``mbuf1.svg``
-  or ``ring-enqueue1.svg``.
+  or ``ring-enqueue.svg``.
 
 * The SVG images should include a copyright notice, as an XML comment.
 

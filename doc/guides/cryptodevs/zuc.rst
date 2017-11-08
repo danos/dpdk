@@ -79,9 +79,6 @@ In order to enable this virtual crypto PMD, user must:
 * Export the environmental variable LIBSSO_ZUC_PATH with the path where
   the library was extracted (zuc folder).
 
-* Export the environmental variable LD_LIBRARY_PATH with the path
-  where the built libsso library is (LIBSSO_ZUC_PATH/build).
-
 * Build the LIBSSO_ZUC library (explained in Installation section).
 
 * Build DPDK as follows:
@@ -94,9 +91,9 @@ In order to enable this virtual crypto PMD, user must:
 
 To use the PMD in an application, user must:
 
-* Call rte_vdev_init("crypto_zuc") within the application.
+* Call rte_eal_vdev_init("crypto_zuc") within the application.
 
-* Use --vdev="crypto_zuc" in the EAL options, which will call rte_vdev_init() internally.
+* Use --vdev="crypto_zuc" in the EAL options, which will call rte_eal_vdev_init() internally.
 
 The following parameters (all optional) can be provided in the previous two calls:
 
@@ -111,5 +108,4 @@ Example:
 
 .. code-block:: console
 
-    ./l2fwd-crypto -l 1 -n 4 --vdev="crypto_zuc,socket_id=0,max_nb_sessions=128" \
-    -- -p 1 --cdev SW --chain CIPHER_ONLY --cipher_algo "zuc-eea3"
+    ./l2fwd-crypto -c 40 -n 4 --vdev="crypto_zuc,socket_id=1,max_nb_sessions=128"

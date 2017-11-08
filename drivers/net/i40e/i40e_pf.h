@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2017 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2015 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,7 @@
 #define _I40E_PF_H_
 
 /* VERSION info to exchange between VF and PF host. In case VF works with
- *  ND kernel driver, it reads VIRTCHNL_VERSION_MAJOR/MINOR. In
+ *  ND kernel driver, it reads I40E_VIRTCHNL_VERSION_MAJOR/MINOR. In
  *  case works with DPDK host, it reads version below. Then VF realize who it
  *  is talking to and use proper language to communicate.
  * */
@@ -49,44 +49,45 @@
 #define I40E_DPDK_OFFSET  0x100
 
 /* DPDK pf driver specific command to VF */
-enum virtchnl_ops_dpdk {
+enum i40e_virtchnl_ops_dpdk {
 	/*
 	 * Keep some gap between Linux PF commands and
 	 * DPDK PF extended commands.
 	 */
-	I40E_VIRTCHNL_OP_CFG_VLAN_PVID = VIRTCHNL_OP_VERSION +
-					 I40E_DPDK_OFFSET,
-	VIRTCHNL_OP_CONFIG_VSI_QUEUES_EXT,
+	I40E_VIRTCHNL_OP_CFG_VLAN_OFFLOAD = I40E_VIRTCHNL_OP_VERSION +
+						I40E_DPDK_OFFSET,
+	I40E_VIRTCHNL_OP_CFG_VLAN_PVID,
+	I40E_VIRTCHNL_OP_CONFIG_VSI_QUEUES_EXT,
 };
 
 /* A structure to support extended info of a receive queue. */
-struct virtchnl_rxq_ext_info {
+struct i40e_virtchnl_rxq_ext_info {
 	uint8_t crcstrip;
 };
 
 /*
  * A structure to support extended info of queue pairs, an additional field
- * is added, comparing to original 'struct virtchnl_queue_pair_info'.
+ * is added, comparing to original 'struct i40e_virtchnl_queue_pair_info'.
  */
-struct virtchnl_queue_pair_ext_info {
+struct i40e_virtchnl_queue_pair_ext_info {
 	/* vsi_id and queue_id should be identical for both rx and tx queues.*/
-	struct virtchnl_txq_info txq;
-	struct virtchnl_rxq_info rxq;
-	struct virtchnl_rxq_ext_info rxq_ext;
+	struct i40e_virtchnl_txq_info txq;
+	struct i40e_virtchnl_rxq_info rxq;
+	struct i40e_virtchnl_rxq_ext_info rxq_ext;
 };
 
 /*
  * A structure to support extended info of VSI queue pairs,
- * 'struct virtchnl_queue_pair_ext_info' is used, see its original
- * of 'struct virtchnl_queue_pair_info'.
+ * 'struct i40e_virtchnl_queue_pair_ext_info' is used, see its original
+ * of 'struct i40e_virtchnl_queue_pair_info'.
  */
-struct virtchnl_vsi_queue_config_ext_info {
+struct i40e_virtchnl_vsi_queue_config_ext_info {
 	uint16_t vsi_id;
 	uint16_t num_queue_pairs;
-	struct virtchnl_queue_pair_ext_info qpair[0];
+	struct i40e_virtchnl_queue_pair_ext_info qpair[0];
 };
 
-struct virtchnl_vlan_offload_info {
+struct i40e_virtchnl_vlan_offload_info {
 	uint16_t vsi_id;
 	uint8_t enable_vlan_strip;
 	uint8_t reserved;
@@ -105,7 +106,7 @@ struct virtchnl_vlan_offload_info {
  * enable op, needs to specify the pvid. PF returns status
  * code in retval.
  */
-struct virtchnl_pvid_info {
+struct i40e_virtchnl_pvid_info {
 	uint16_t vsi_id;
 	struct i40e_vsi_vlan_pvid_info info;
 };
@@ -113,11 +114,9 @@ struct virtchnl_pvid_info {
 int i40e_pf_host_vf_reset(struct i40e_pf_vf *vf, bool do_hw_reset);
 void i40e_pf_host_handle_vf_msg(struct rte_eth_dev *dev,
 				uint16_t abs_vf_id, uint32_t opcode,
-				uint32_t retval,
+				__rte_unused uint32_t retval,
 				uint8_t *msg, uint16_t msglen);
 int i40e_pf_host_init(struct rte_eth_dev *dev);
 int i40e_pf_host_uninit(struct rte_eth_dev *dev);
-void i40e_notify_vf_link_status(struct rte_eth_dev *dev,
-				struct i40e_pf_vf *vf);
 
 #endif /* _I40E_PF_H_ */

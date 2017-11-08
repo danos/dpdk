@@ -49,6 +49,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -136,7 +137,7 @@ struct lcore_queue_conf {
 } __rte_cache_aligned;
 static struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
 
-static struct rte_eth_conf port_conf = {
+static const struct rte_eth_conf port_conf = {
 	.rxmode = {
 		.max_rx_pkt_len = JUMBO_FRAME_MAX_SIZE,
 		.split_hdr_size = 0,
@@ -574,7 +575,7 @@ parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 1; /* reset getopt lib */
+	optind = 0; /* reset getopt lib */
 	return ret;
 }
 
@@ -724,11 +725,6 @@ main(int argc, char **argv)
 
 		qconf = &lcore_queue_conf[rx_lcore_id];
 
-		/* limit the frame size to the maximum supported by NIC */
-		rte_eth_dev_info_get(portid, &dev_info);
-		port_conf.rxmode.max_rx_pkt_len = RTE_MIN(
-		    dev_info.max_rx_pktlen, port_conf.rxmode.max_rx_pkt_len);
-
 		/* get the lcore_id for this port */
 		while (rte_lcore_is_enabled(rx_lcore_id) == 0 ||
 		       qconf->n_rx_queue == (unsigned)rx_queue_per_lcore) {
@@ -756,13 +752,6 @@ main(int argc, char **argv)
 			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d, port=%d\n",
 				  ret, portid);
 
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-						       &nb_txd);
-		if (ret < 0)
-			rte_exit(EXIT_FAILURE,
-				 "Cannot adjust number of descriptors: err=%d, port=%d\n",
-				 ret, portid);
-
 		rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);
 		print_ethaddr(" Address:", &ports_eth_addr[portid]);
 		printf(", ");
@@ -788,6 +777,7 @@ main(int argc, char **argv)
 			printf("txq=%u,%hu ", lcore_id, queueid);
 			fflush(stdout);
 
+			rte_eth_dev_info_get(portid, &dev_info);
 			txconf = &dev_info.default_txconf;
 			txconf->txq_flags = 0;
 			ret = rte_eth_tx_queue_setup(portid, queueid, nb_txd,

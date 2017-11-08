@@ -172,6 +172,16 @@ void ecore_int_free(struct ecore_hwfn *p_hwfn);
 void ecore_int_setup(struct ecore_hwfn *p_hwfn, struct ecore_ptt *p_ptt);
 
 /**
+ * @brief - Returns an Rx queue index appropriate for usage with given SB.
+ *
+ * @param p_hwfn
+ * @param sb_id - absolute index of SB
+ *
+ * @return index of Rx queue
+ */
+u16 ecore_int_queue_id_from_sb_id(struct ecore_hwfn *p_hwfn, u16 sb_id);
+
+/**
  * @brief - Enable Interrupt & Attention for hw function
  *
  * @param p_hwfn
@@ -207,8 +217,5 @@ enum _ecore_status_t ecore_int_set_timer_res(struct ecore_hwfn *p_hwfn,
 #else
 #define ECORE_MAPPING_MEMORY_SIZE(dev) NUM_OF_SBS(dev)
 #endif
-
-enum _ecore_status_t ecore_pglueb_rbc_attn_handler(struct ecore_hwfn *p_hwfn,
-						   struct ecore_ptt *p_ptt);
 
 #endif /* __ECORE_INT_H__ */

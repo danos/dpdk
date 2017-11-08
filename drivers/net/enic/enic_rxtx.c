@@ -37,9 +37,6 @@
 #include "enic_compat.h"
 #include "rq_enet_desc.h"
 #include "enic.h"
-#include <rte_ether.h>
-#include <rte_ip.h>
-#include <rte_tcp.h>
 
 #define RTE_PMD_USE_PREFETCH
 
@@ -132,60 +129,6 @@ enic_cq_rx_desc_n_bytes(struct cq_desc *cqd)
 		CQ_ENET_RQ_DESC_BYTES_WRITTEN_MASK;
 }
 
-/* Find the offset to L5. This is needed by enic TSO implementation.
- * Return 0 if not a TCP packet or can't figure out the length.
- */
-static inline uint8_t tso_header_len(struct rte_mbuf *mbuf)
-{
-	struct ether_hdr *eh;
-	struct vlan_hdr *vh;
-	struct ipv4_hdr *ip4;
-	struct ipv6_hdr *ip6;
-	struct tcp_hdr *th;
-	uint8_t hdr_len;
-	uint16_t ether_type;
-
-	/* offset past Ethernet header */
-	eh = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-	ether_type = eh->ether_type;
-	hdr_len = sizeof(struct ether_hdr);
-	if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_VLAN)) {
-		vh = rte_pktmbuf_mtod_offset(mbuf, struct vlan_hdr *, hdr_len);
-		ether_type = vh->eth_proto;
-		hdr_len += sizeof(struct vlan_hdr);
-	}
-
-	/* offset past IP header */
-	switch (rte_be_to_cpu_16(ether_type)) {
-	case ETHER_TYPE_IPv4:
-		ip4 = rte_pktmbuf_mtod_offset(mbuf, struct ipv4_hdr *, hdr_len);
-		if (ip4->next_proto_id != IPPROTO_TCP)
-			return 0;
-		hdr_len += (ip4->version_ihl & 0xf) * 4;
-		break;
-	case ETHER_TYPE_IPv6:
-		ip6 = rte_pktmbuf_mtod_offset(mbuf, struct ipv6_hdr *, hdr_len);
-		if (ip6->proto != IPPROTO_TCP)
-			return 0;
-		hdr_len += sizeof(struct ipv6_hdr);
-		break;
-	default:
-		return 0;
-	}
-
-	if ((hdr_len + sizeof(struct tcp_hdr)) > mbuf->pkt_len)
-		return 0;
-
-	/* offset past TCP header */
-	th = rte_pktmbuf_mtod_offset(mbuf, struct tcp_hdr *, hdr_len);
-	hdr_len += (th->data_off >> 4) * 4;
-
-	if (hdr_len > mbuf->pkt_len)
-		return 0;
-
-	return hdr_len;
-}
-
 static inline uint8_t
 enic_cq_rx_check_err(struct cq_desc *cqd)
 {
@@ -253,44 +196,23 @@ enic_cq_rx_to_pkt_flags(struct cq_desc *cqd, struct rte_mbuf *mbuf)
 	}
 	mbuf->vlan_tci = vlan_tci;
 
-	if ((cqd->type_color & CQ_DESC_TYPE_MASK) == CQ_DESC_TYPE_CLASSIFIER) {
-		struct cq_enet_rq_clsf_desc *clsf_cqd;
-		uint16_t filter_id;
-		clsf_cqd = (struct cq_enet_rq_clsf_desc *)cqd;
-		filter_id = clsf_cqd->filter_id;
-		if (filter_id) {
-			pkt_flags |= PKT_RX_FDIR;
-			if (filter_id != ENIC_MAGIC_FILTER_ID) {
-				mbuf->hash.fdir.hi = clsf_cqd->filter_id;
-				pkt_flags |= PKT_RX_FDIR_ID;
-			}
-		}
-	} else if (enic_cq_rx_desc_rss_type(cqrd)) {
-		/* RSS flag */
+	/* RSS flag */
+	if (enic_cq_rx_desc_rss_type(cqrd)) {
 		pkt_flags |= PKT_RX_RSS_HASH;
 		mbuf->hash.rss = enic_cq_rx_desc_rss_hash(cqrd);
 	}
 
 	/* checksum flags */
-	if (mbuf->packet_type & RTE_PTYPE_L3_IPV4) {
-		if (enic_cq_rx_desc_csum_not_calc(cqrd))
-			pkt_flags |= (PKT_RX_IP_CKSUM_UNKNOWN &
-				     PKT_RX_L4_CKSUM_UNKNOWN);
-		else {
-			uint32_t l4_flags;
-			l4_flags = mbuf->packet_type & RTE_PTYPE_L4_MASK;
+	if (!enic_cq_rx_desc_csum_not_calc(cqrd) &&
+		(mbuf->packet_type & RTE_PTYPE_L3_IPV4)) {
+		uint32_t l4_flags = mbuf->packet_type & RTE_PTYPE_L4_MASK;
 
-			if (enic_cq_rx_desc_ipv4_csum_ok(cqrd))
-				pkt_flags |= PKT_RX_IP_CKSUM_GOOD;
-			else
-				pkt_flags |= PKT_RX_IP_CKSUM_BAD;
-
-			if (l4_flags & (RTE_PTYPE_L4_UDP | RTE_PTYPE_L4_TCP)) {
-				if (enic_cq_rx_desc_tcp_udp_csum_ok(cqrd))
-					pkt_flags |= PKT_RX_L4_CKSUM_GOOD;
-				else
-					pkt_flags |= PKT_RX_L4_CKSUM_BAD;
-			}
+		if (unlikely(!enic_cq_rx_desc_ipv4_csum_ok(cqrd)))
+			pkt_flags |= PKT_RX_IP_CKSUM_BAD;
+		if (l4_flags == RTE_PTYPE_L4_UDP ||
+		    l4_flags == RTE_PTYPE_L4_TCP) {
+			if (unlikely(!enic_cq_rx_desc_tcp_udp_csum_ok(cqrd)))
+				pkt_flags |= PKT_RX_L4_CKSUM_BAD;
 		}
 	}
 
@@ -398,6 +320,7 @@ enic_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 
 		if (rq->is_sop) {
 			first_seg = rxmb;
+			first_seg->nb_segs = 1;
 			first_seg->pkt_len = seg_length;
 		} else {
 			first_seg->pkt_len = (uint16_t)(first_seg->pkt_len
@@ -406,6 +329,7 @@ enic_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 			last_seg->next = rxmb;
 		}
 
+		rxmb->next = NULL;
 		rxmb->port = enic->port_id;
 		rxmb->data_len = seg_length;
 
@@ -456,11 +380,10 @@ enic_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 
 		rte_mb();
 		if (data_rq->in_use)
-			iowrite32_relaxed(data_rq->posted_index,
-					  &data_rq->ctrl->posted_index);
+			iowrite32(data_rq->posted_index,
+				  &data_rq->ctrl->posted_index);
 		rte_compiler_barrier();
-		iowrite32_relaxed(sop_rq->posted_index,
-				  &sop_rq->ctrl->posted_index);
+		iowrite32(sop_rq->posted_index, &sop_rq->ctrl->posted_index);
 	}
 
 
@@ -483,7 +406,7 @@ static inline void enic_free_wq_bufs(struct vnic_wq *wq, u16 completed_index)
 	pool = ((struct rte_mbuf *)buf->mb)->pool;
 	for (i = 0; i < nb_to_free; i++) {
 		buf = &wq->bufs[tail_idx];
-		m = rte_pktmbuf_prefree_seg((struct rte_mbuf *)(buf->mb));
+		m = __rte_pktmbuf_prefree_seg((struct rte_mbuf *)(buf->mb));
 		buf->mb = NULL;
 
 		if (unlikely(m == NULL)) {
@@ -503,8 +426,7 @@ static inline void enic_free_wq_bufs(struct vnic_wq *wq, u16 completed_index)
 		tail_idx = enic_ring_incr(desc_count, tail_idx);
 	}
 
-	if (nb_free > 0)
-		rte_mempool_put_bulk(pool, (void **)free, nb_free);
+	rte_mempool_put_bulk(pool, (void **)free, nb_free);
 
 	wq->tail_idx = tail_idx;
 	wq->ring.desc_avail += nb_to_free;
@@ -544,8 +466,6 @@ uint16_t enic_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 	uint8_t vlan_tag_insert;
 	uint8_t eop;
 	uint64_t bus_addr;
-	uint8_t offload_mode;
-	uint16_t header_len;
 
 	enic_cleanup_wq(enic, wq);
 	wq_desc_avail = vnic_wq_desc_avail(wq);
@@ -584,17 +504,13 @@ uint16_t enic_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 		desc_p = descs + head_idx;
 
 		eop = (data_len == pkt_len);
-		offload_mode = WQ_ENET_OFFLOAD_MODE_CSUM;
-		header_len = 0;
 
-		if (tx_pkt->tso_segsz) {
-			header_len = tso_header_len(tx_pkt);
-			if (header_len) {
-				offload_mode = WQ_ENET_OFFLOAD_MODE_TSO;
-				mss = tx_pkt->tso_segsz;
+		if (ol_flags & ol_flags_mask) {
+			if (ol_flags & PKT_TX_VLAN_PKT) {
+				vlan_tag_insert = 1;
+				vlan_id = tx_pkt->vlan_tci;
 			}
-		}
-		if ((ol_flags & ol_flags_mask) && (header_len == 0)) {
+
 			if (ol_flags & PKT_TX_IP_CKSUM)
 				mss |= ENIC_CALC_IP_CKSUM;
 
@@ -607,14 +523,8 @@ uint16_t enic_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 			}
 		}
 
-		if (ol_flags & PKT_TX_VLAN_PKT) {
-			vlan_tag_insert = 1;
-			vlan_id = tx_pkt->vlan_tci;
-		}
-
-		wq_enet_desc_enc(&desc_tmp, bus_addr, data_len, mss, header_len,
-				 offload_mode, eop, eop, 0, vlan_tag_insert,
-				 vlan_id, 0);
+		wq_enet_desc_enc(&desc_tmp, bus_addr, data_len, mss, 0, 0, eop,
+				 eop, 0, vlan_tag_insert, vlan_id, 0);
 
 		*desc_p = desc_tmp;
 		buf = &wq->bufs[head_idx];
@@ -634,9 +544,8 @@ uint16_t enic_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 					   + tx_pkt->data_off);
 				wq_enet_desc_enc((struct wq_enet_desc *)
 						 &desc_tmp, bus_addr, data_len,
-						 mss, 0, offload_mode, eop, eop,
-						 0, vlan_tag_insert, vlan_id,
-						 0);
+						 mss, 0, 0, eop, eop, 0,
+						 vlan_tag_insert, vlan_id, 0);
 
 				*desc_p = desc_tmp;
 				buf = &wq->bufs[head_idx];
@@ -648,7 +557,7 @@ uint16_t enic_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 	}
  post:
 	rte_wmb();
-	iowrite32_relaxed(head_idx, &wq->ctrl->posted_index);
+	iowrite32(head_idx, &wq->ctrl->posted_index);
  done:
 	wq->ring.desc_avail = wq_desc_avail;
 	wq->head_idx = head_idx;

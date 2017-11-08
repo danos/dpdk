@@ -51,7 +51,6 @@
 #ifdef RTE_FORCE_INTRINSICS
 #include <rte_common.h>
 #endif
-#include <rte_pause.h>
 
 /**
  * The rte_spinlock_t type.

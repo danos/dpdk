@@ -52,11 +52,6 @@ CONFIG_RTE_LIBRTE_KNI=n
 CONFIG_RTE_IXGBE_INC_VECTOR=n
 
 #
-# Solarflare PMD is not supported on 32-bit
-#
-CONFIG_RTE_LIBRTE_SFC_EFX_PMD=n
-
-#
 # AES-NI multi-buffer PMD is not supported on 32-bit
 #
 CONFIG_RTE_LIBRTE_PMD_AESNI_MB=n
@@ -75,8 +70,3 @@ CONFIG_RTE_LIBRTE_PMD_KASUMI=n
 # ZUC PMD is not supported on 32-bit
 #
 CONFIG_RTE_LIBRTE_PMD_ZUC=n
-
-#
-# AVP PMD is not supported on 32-bit
-#
-CONFIG_RTE_LIBRTE_AVP_PMD=n

@@ -1,7 +1,7 @@
 /*
  *   BSD LICENSE
  *
- *   Copyright (C) Cavium, Inc. 2016.
+ *   Copyright (C) Cavium networks Ltd. 2016.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Cavium, Inc nor the names of its
+ *     * Neither the name of Cavium networks nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -83,33 +83,6 @@ fill_sq_desc_gather(union sq_entry_t *entry, struct rte_mbuf *pkt)
 	entry->buff[1] = rte_mbuf_data_dma_addr(pkt);
 }
 #endif
-
-static inline void
-nicvf_mbuff_init_update(struct rte_mbuf *pkt, const uint64_t mbuf_init,
-				uint16_t apad)
-{
-	union mbuf_initializer init = {.value = mbuf_init};
-#if RTE_BYTE_ORDER == RTE_BIG_ENDIAN
-	init.fields.data_off += apad;
-#else
-	init.value += apad;
-#endif
-	*(uint64_t *)(&pkt->rearm_data) = init.value;
-}
-
-static inline void
-nicvf_mbuff_init_mseg_update(struct rte_mbuf *pkt, const uint64_t mbuf_init,
-						uint16_t apad, uint16_t nb_segs)
-{
-	union mbuf_initializer init = {.value = mbuf_init};
-#if RTE_BYTE_ORDER == RTE_BIG_ENDIAN
-	init.fields.data_off += apad;
-#else
-	init.value += apad;
-#endif
-	init.fields.nb_segs = nb_segs;
-	*(uint64_t *)(&pkt->rearm_data) = init.value;
-}
 
 uint32_t nicvf_dev_rx_queue_count(struct rte_eth_dev *dev, uint16_t queue_idx);
 uint32_t nicvf_dev_rbdr_refill(struct rte_eth_dev *dev, uint16_t queue_idx);

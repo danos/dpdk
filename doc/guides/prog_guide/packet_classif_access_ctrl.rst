@@ -329,9 +329,8 @@ When creating a set of rules, for each rule, additional information must be supp
     Each set could be assigned its own category and by combining them into a single database,
     one lookup returns a result for each of the four sets.
 
-*   **userdata**: A user-defined value.
+*   **userdata**: A user-defined field that could be any value except zero.
     For each category, a successful match returns the userdata field of the highest priority matched rule.
-    When no rules match, returned value is zero.
 
 .. note::
 

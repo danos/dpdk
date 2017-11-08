@@ -44,7 +44,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
-#include <signal.h>
 
 #include <rte_common.h>
 #include <rte_log.h>
@@ -53,6 +52,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -141,15 +141,6 @@ static int64_t check_period = 5; /* default check cycle is 5ms */
 
 /* Keepalive structure */
 struct rte_keepalive *rte_global_keepalive_info;
-
-/* Termination signalling */
-static int terminate_signal_received;
-
-/* Termination signal handler */
-static void handle_sigterm(__rte_unused int value)
-{
-	terminate_signal_received = 1;
-}
 
 /* Print out statistics on packets dropped */
 static void
@@ -260,7 +251,7 @@ l2fwd_main_loop(void)
 	uint64_t tsc_initial = rte_rdtsc();
 	uint64_t tsc_lifetime = (rand()&0x07) * rte_get_tsc_hz();
 
-	while (!terminate_signal_received) {
+	while (1) {
 		/* Keepalive heartbeat */
 		rte_keepalive_mark_alive(rte_global_keepalive_info);
 
@@ -473,7 +464,7 @@ l2fwd_parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 1; /* reset getopt lib */
+	optind = 0; /* reset getopt lib */
 	return ret;
 }
 
@@ -535,8 +526,6 @@ check_all_ports_link_status(uint8_t port_num, uint32_t port_mask)
 static void
 dead_core(__rte_unused void *ptr_data, const int id_core)
 {
-	if (terminate_signal_received)
-		return;
 	printf("Dead core %i - restarting..\n", id_core);
 	if (rte_eal_get_lcore_state(id_core) == FINISHED) {
 		rte_eal_wait_lcore(id_core);
@@ -565,16 +554,6 @@ main(int argc, char **argv)
 	uint8_t portid, last_port;
 	unsigned lcore_id, rx_lcore_id;
 	unsigned nb_ports_in_mask = 0;
-	struct sigaction signal_handler;
-	struct rte_keepalive_shm *ka_shm;
-
-	memset(&signal_handler, 0, sizeof(signal_handler));
-	terminate_signal_received = 0;
-	signal_handler.sa_handler = &handle_sigterm;
-	if (sigaction(SIGINT, &signal_handler, NULL) == -1 ||
-			sigaction(SIGTERM, &signal_handler, NULL) == -1)
-		rte_exit(EXIT_FAILURE, "SIGNAL\n");
-
 
 	/* init EAL */
 	ret = rte_eal_init(argc, argv);
@@ -676,13 +655,6 @@ main(int argc, char **argv)
 				"Cannot configure device: err=%d, port=%u\n",
 				ret, (unsigned) portid);
 
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-						       &nb_txd);
-		if (ret < 0)
-			rte_exit(EXIT_FAILURE,
-				"Cannot adjust number of descriptors: err=%d, port=%u\n",
-				ret, (unsigned) portid);
-
 		rte_eth_macaddr_get(portid, &l2fwd_ports_eth_addr[portid]);
 
 		/* init one RX queue */
@@ -758,8 +730,9 @@ main(int argc, char **argv)
 	rte_timer_subsystem_init();
 	rte_timer_init(&stats_timer);
 
-	ka_shm = NULL;
 	if (check_period > 0) {
+		struct rte_keepalive_shm *ka_shm;
+
 		ka_shm = rte_keepalive_shm_create();
 		if (ka_shm == NULL)
 			rte_exit(EXIT_FAILURE,
@@ -809,7 +782,7 @@ main(int argc, char **argv)
 				lcore_id);
 		}
 	}
-	while (!terminate_signal_received) {
+	for (;;) {
 		rte_timer_manage();
 		rte_delay_ms(5);
 		}
@@ -819,7 +792,5 @@ main(int argc, char **argv)
 			return -1;
 	}
 
-	if (ka_shm != NULL)
-		rte_keepalive_shm_cleanup(ka_shm);
 	return 0;
 }

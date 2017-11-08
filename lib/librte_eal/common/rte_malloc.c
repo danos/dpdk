@@ -253,8 +253,6 @@ rte_malloc_virt2phy(const void *addr)
 {
 	const struct malloc_elem *elem = malloc_elem_from_data(addr);
 	if (elem == NULL)
-		return RTE_BAD_PHYS_ADDR;
-	if (elem->ms->phys_addr == RTE_BAD_PHYS_ADDR)
-		return RTE_BAD_PHYS_ADDR;
+		return 0;
 	return elem->ms->phys_addr + ((uintptr_t)addr - (uintptr_t)elem->ms->addr);
 }

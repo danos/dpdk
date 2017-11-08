@@ -1,5 +1,5 @@
 ..  BSD LICENSE
-    Copyright(c) 2010-2017 Intel Corporation. All rights reserved.
+    Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -38,35 +38,28 @@ Programmer's Guide
     intro
     overview
     env_abstraction_layer
-    service_cores
     ring_lib
     mempool_lib
     mbuf_lib
     poll_mode_drv
-    rte_flow
-    traffic_management
     cryptodev_lib
     link_bonding_poll_mode_drv_lib
     timer_lib
     hash_lib
-    efd_lib
     lpm_lib
     lpm6_lib
     packet_distrib_lib
     reorder_lib
     ip_fragment_reassembly_lib
-    generic_receive_offload_lib
     pdump_lib
     multi_proc_support
     kernel_nic_interface
     thread_safety_dpdk_functions
-    eventdev
     qos_framework
     power_man
     packet_classif_access_ctrl
     packet_framework
     vhost_lib
-    metrics_lib
     port_hotplug_framework
     source_org
     dev_kit_build_system
@@ -132,6 +125,10 @@ Programmer's Guide
 
 :numref:`figure_pkt_flow_kni` :ref:`figure_pkt_flow_kni`
 
+:numref:`figure_vhost_net_arch2` :ref:`figure_vhost_net_arch2`
+
+:numref:`figure_kni_traffic_flow` :ref:`figure_kni_traffic_flow`
+
 
 :numref:`figure_pkt_proc_pipeline_qos` :ref:`figure_pkt_proc_pipeline_qos`
 
@@ -168,28 +165,6 @@ Programmer's Guide
 :numref:`figure_figure38` :ref:`figure_figure38`
 
 :numref:`figure_figure39` :ref:`figure_figure39`
-
-:numref:`figure_efd1` :ref:`figure_efd1`
-
-:numref:`figure_efd2` :ref:`figure_efd2`
-
-:numref:`figure_efd3` :ref:`figure_efd3`
-
-:numref:`figure_efd4` :ref:`figure_efd4`
-
-:numref:`figure_efd5` :ref:`figure_efd5`
-
-:numref:`figure_efd6` :ref:`figure_efd6`
-
-:numref:`figure_efd7` :ref:`figure_efd7`
-
-:numref:`figure_efd8` :ref:`figure_efd8`
-
-:numref:`figure_efd9` :ref:`figure_efd9`
-
-:numref:`figure_efd10` :ref:`figure_efd10`
-
-:numref:`figure_efd11` :ref:`figure_efd11`
 
 
 **Tables**

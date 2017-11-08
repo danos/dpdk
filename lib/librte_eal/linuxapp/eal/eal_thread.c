@@ -49,6 +49,7 @@
 #include <rte_memzone.h>
 #include <rte_per_lcore.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_lcore.h>
 
 #include "eal_private.h"
@@ -183,14 +184,7 @@ eal_thread_loop(__attribute__((unused)) void *arg)
 		ret = lcore_config[lcore_id].f(fct_arg);
 		lcore_config[lcore_id].ret = ret;
 		rte_wmb();
-
-		/* when a service core returns, it should go directly to WAIT
-		 * state, because the application will not lcore_wait() for it.
-		 */
-		if (lcore_config[lcore_id].core_role == ROLE_SERVICE)
-			lcore_config[lcore_id].state = WAIT;
-		else
-			lcore_config[lcore_id].state = FINISHED;
+		lcore_config[lcore_id].state = FINISHED;
 	}
 
 	/* never reached */

@@ -56,12 +56,17 @@ SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += enic_main.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += enic_rxtx.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += enic_clsf.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += enic_res.c
-SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += enic_flow.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += base/vnic_cq.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += base/vnic_wq.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += base/vnic_dev.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += base/vnic_intr.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += base/vnic_rq.c
 SRCS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += base/vnic_rss.c
+
+# this lib depends upon:
+DEPDIRS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += lib/librte_eal lib/librte_ether
+DEPDIRS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += lib/librte_mempool lib/librte_mbuf
+DEPDIRS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += lib/librte_net
+DEPDIRS-$(CONFIG_RTE_LIBRTE_ENIC_PMD) += lib/librte_hash
 
 include $(RTE_SDK)/mk/rte.lib.mk

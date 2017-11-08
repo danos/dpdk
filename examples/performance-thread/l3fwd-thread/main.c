@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2015 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -72,7 +73,6 @@
 #include <rte_tcp.h>
 #include <rte_udp.h>
 #include <rte_string_fns.h>
-#include <rte_pause.h>
 
 #include <cmdline_parse.h>
 #include <cmdline_parse_etheraddr.h>
@@ -94,70 +94,16 @@
 #define sched_getcpu() rte_lcore_id()
 #endif
 
-static int
-check_ptype(int portid)
-{
-	int i, ret;
-	int ipv4 = 0, ipv6 = 0;
-
-	ret = rte_eth_dev_get_supported_ptypes(portid, RTE_PTYPE_L3_MASK, NULL,
-			0);
-	if (ret <= 0)
-		return 0;
-
-	uint32_t ptypes[ret];
-
-	ret = rte_eth_dev_get_supported_ptypes(portid, RTE_PTYPE_L3_MASK,
-			ptypes, ret);
-	for (i = 0; i < ret; ++i) {
-		if (ptypes[i] & RTE_PTYPE_L3_IPV4)
-			ipv4 = 1;
-		if (ptypes[i] & RTE_PTYPE_L3_IPV6)
-			ipv6 = 1;
-	}
-
-	if (ipv4 && ipv6)
-		return 1;
-
-	return 0;
-}
-
-static inline void
-parse_ptype(struct rte_mbuf *m)
-{
-	struct ether_hdr *eth_hdr;
-	uint32_t packet_type = RTE_PTYPE_UNKNOWN;
-	uint16_t ether_type;
-
-	eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
-	ether_type = eth_hdr->ether_type;
-	if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_IPv4))
-		packet_type |= RTE_PTYPE_L3_IPV4_EXT_UNKNOWN;
-	else if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_IPv6))
-		packet_type |= RTE_PTYPE_L3_IPV6_EXT_UNKNOWN;
-
-	m->packet_type = packet_type;
-}
-
-static uint16_t
-cb_parse_ptype(__rte_unused uint8_t port, __rte_unused uint16_t queue,
-		struct rte_mbuf *pkts[], uint16_t nb_pkts,
-		__rte_unused uint16_t max_pkts, __rte_unused void *user_param)
-{
-	unsigned int i;
-
-	for (i = 0; i < nb_pkts; i++)
-		parse_ptype(pkts[i]);
-
-	return nb_pkts;
-}
-
 /*
  *  When set to zero, simple forwaring path is eanbled.
  *  When set to one, optimized forwarding path is enabled.
  *  Note that LPM optimisation path uses SSE4.1 instructions.
  */
+#if ((APP_LOOKUP_METHOD == APP_LOOKUP_LPM) && !defined(__SSE4_1__))
+#define ENABLE_MULTI_BUFFER_OPTIMIZE	0
+#else
 #define ENABLE_MULTI_BUFFER_OPTIMIZE	1
+#endif
 
 #if (APP_LOOKUP_METHOD == APP_LOOKUP_EXACT_MATCH)
 #include <rte_hash.h>
@@ -184,10 +130,10 @@ cb_parse_ptype(__rte_unused uint8_t port, __rte_unused uint16_t queue,
  */
 
 #define NB_MBUF RTE_MAX(\
-		(nb_ports*nb_rx_queue*nb_rxd +      \
-		nb_ports*nb_lcores*MAX_PKT_BURST +  \
-		nb_ports*n_tx_queue*nb_txd +        \
-		nb_lcores*MEMPOOL_CACHE_SIZE),      \
+		(nb_ports*nb_rx_queue*RTE_TEST_RX_DESC_DEFAULT +       \
+		nb_ports*nb_lcores*MAX_PKT_BURST +                     \
+		nb_ports*n_tx_queue*RTE_TEST_TX_DESC_DEFAULT +         \
+		nb_lcores*MEMPOOL_CACHE_SIZE),                         \
 		(unsigned)8192)
 
 #define MAX_PKT_BURST     32
@@ -221,16 +167,15 @@ static uint16_t nb_txd = RTE_TEST_TX_DESC_DEFAULT;
 static uint64_t dest_eth_addr[RTE_MAX_ETHPORTS];
 static struct ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
 
-static xmm_t val_eth[RTE_MAX_ETHPORTS];
+static __m128i val_eth[RTE_MAX_ETHPORTS];
 
 /* replace first 12B of the ethernet header. */
 #define	MASK_ETH 0x3f
 
 /* mask of enabled ports */
 static uint32_t enabled_port_mask;
-static int promiscuous_on; /**< Set in promiscuous mode off by default. */
+static int promiscuous_on; /**< $et in promiscuous mode off by default. */
 static int numa_on = 1;    /**< NUMA is enabled by default. */
-static int parse_ptype_on;
 
 #if (APP_LOOKUP_METHOD == APP_LOOKUP_EXACT_MATCH)
 static int ipv6;           /**< ipv6 is false by default. */
@@ -358,8 +303,13 @@ static struct rte_mempool *pktmbuf_pool[NB_SOCKETS];
 
 #if (APP_LOOKUP_METHOD == APP_LOOKUP_EXACT_MATCH)
 
+#ifdef RTE_MACHINE_CPUFLAG_SSE4_2
 #include <rte_hash_crc.h>
 #define DEFAULT_HASH_FUNC       rte_hash_crc
+#else
+#include <rte_jhash.h>
+#define DEFAULT_HASH_FUNC       rte_jhash
+#endif
 
 struct ipv4_5tuple {
 	uint32_t ip_dst;
@@ -476,10 +426,17 @@ ipv4_hash_crc(const void *data, __rte_unused uint32_t data_len,
 	t = k->proto;
 	p = (const uint32_t *)&k->port_src;
 
+#ifdef RTE_MACHINE_CPUFLAG_SSE4_2
 	init_val = rte_hash_crc_4byte(t, init_val);
 	init_val = rte_hash_crc_4byte(k->ip_src, init_val);
 	init_val = rte_hash_crc_4byte(k->ip_dst, init_val);
 	init_val = rte_hash_crc_4byte(*p, init_val);
+#else /* RTE_MACHINE_CPUFLAG_SSE4_2 */
+	init_val = rte_jhash_1word(t, init_val);
+	init_val = rte_jhash_1word(k->ip_src, init_val);
+	init_val = rte_jhash_1word(k->ip_dst, init_val);
+	init_val = rte_jhash_1word(*p, init_val);
+#endif /* RTE_MACHINE_CPUFLAG_SSE4_2 */
 	return init_val;
 }
 
@@ -490,13 +447,16 @@ ipv6_hash_crc(const void *data, __rte_unused uint32_t data_len,
 	const union ipv6_5tuple_host *k;
 	uint32_t t;
 	const uint32_t *p;
+#ifdef RTE_MACHINE_CPUFLAG_SSE4_2
 	const uint32_t *ip_src0, *ip_src1, *ip_src2, *ip_src3;
 	const uint32_t *ip_dst0, *ip_dst1, *ip_dst2, *ip_dst3;
+#endif /* RTE_MACHINE_CPUFLAG_SSE4_2 */
 
 	k = data;
 	t = k->proto;
 	p = (const uint32_t *)&k->port_src;
 
+#ifdef RTE_MACHINE_CPUFLAG_SSE4_2
 	ip_src0 = (const uint32_t *) k->ip_src;
 	ip_src1 = (const uint32_t *)(k->ip_src + 4);
 	ip_src2 = (const uint32_t *)(k->ip_src + 8);
@@ -515,6 +475,12 @@ ipv6_hash_crc(const void *data, __rte_unused uint32_t data_len,
 	init_val = rte_hash_crc_4byte(*ip_dst2, init_val);
 	init_val = rte_hash_crc_4byte(*ip_dst3, init_val);
 	init_val = rte_hash_crc_4byte(*p, init_val);
+#else /* RTE_MACHINE_CPUFLAG_SSE4_2 */
+	init_val = rte_jhash_1word(t, init_val);
+	init_val = rte_jhash(k->ip_src, sizeof(uint8_t) * IPV6_ADDR_LEN, init_val);
+	init_val = rte_jhash(k->ip_dst, sizeof(uint8_t) * IPV6_ADDR_LEN, init_val);
+	init_val = rte_jhash_1word(*p, init_val);
+#endif /* RTE_MACHINE_CPUFLAG_SSE4_2 */
 	return init_val;
 }
 
@@ -695,7 +661,7 @@ send_single_packet(struct rte_mbuf *m, uint8_t port)
 
 #if ((APP_LOOKUP_METHOD == APP_LOOKUP_LPM) && \
 	(ENABLE_MULTI_BUFFER_OPTIMIZE == 1))
-static __rte_always_inline void
+static inline __attribute__((always_inline)) void
 send_packetsx4(uint8_t port,
 	struct rte_mbuf *m[], uint32_t num)
 {
@@ -736,15 +702,12 @@ send_packetsx4(uint8_t port,
 	case 0:
 		qconf->tx_mbufs[port].m_table[len + j] = m[j];
 		j++;
-		/* fall-through */
 	case 3:
 		qconf->tx_mbufs[port].m_table[len + j] = m[j];
 		j++;
-		/* fall-through */
 	case 2:
 		qconf->tx_mbufs[port].m_table[len + j] = m[j];
 		j++;
-		/* fall-through */
 	case 1:
 		qconf->tx_mbufs[port].m_table[len + j] = m[j];
 		j++;
@@ -766,15 +729,12 @@ send_packetsx4(uint8_t port,
 		case 0:
 			qconf->tx_mbufs[port].m_table[j] = m[n + j];
 			j++;
-			/* fall-through */
 		case 3:
 			qconf->tx_mbufs[port].m_table[j] = m[n + j];
 			j++;
-			/* fall-through */
 		case 2:
 			qconf->tx_mbufs[port].m_table[j] = m[n + j];
 			j++;
-			/* fall-through */
 		case 1:
 			qconf->tx_mbufs[port].m_table[j] = m[n + j];
 			j++;
@@ -894,7 +854,7 @@ static inline uint8_t
 get_ipv6_dst_port(void *ipv6_hdr,  uint8_t portid,
 		lookup6_struct_t *ipv6_l3fwd_lookup_struct)
 {
-	uint32_t next_hop;
+	uint8_t next_hop;
 
 	return (uint8_t) ((rte_lpm6_lookup(ipv6_l3fwd_lookup_struct,
 			((struct ipv6_hdr *)ipv6_hdr)->dst_addr, &next_hop) == 0) ?
@@ -1262,7 +1222,7 @@ simple_ipv6_fwd_8pkts(struct rte_mbuf *m[8], uint8_t portid)
 }
 #endif /* APP_LOOKUP_METHOD */
 
-static __rte_always_inline void
+static inline __attribute__((always_inline)) void
 l3fwd_simple_forward(struct rte_mbuf *m, uint8_t portid)
 {
 	struct ether_hdr *eth_hdr;
@@ -1350,7 +1310,7 @@ l3fwd_simple_forward(struct rte_mbuf *m, uint8_t portid)
  * If we encounter invalid IPV4 packet, then set destination port for it
  * to BAD_PORT value.
  */
-static __rte_always_inline void
+static inline __attribute__((always_inline)) void
 rfc1812_process(struct ipv4_hdr *ipv4_hdr, uint16_t *dp, uint32_t ptype)
 {
 	uint8_t ihl;
@@ -1378,17 +1338,18 @@ rfc1812_process(struct ipv4_hdr *ipv4_hdr, uint16_t *dp, uint32_t ptype)
 #if ((APP_LOOKUP_METHOD == APP_LOOKUP_LPM) && \
 	(ENABLE_MULTI_BUFFER_OPTIMIZE == 1))
 
-static __rte_always_inline uint16_t
+static inline __attribute__((always_inline)) uint16_t
 get_dst_port(struct rte_mbuf *pkt, uint32_t dst_ipv4, uint8_t portid)
 {
-	uint32_t next_hop;
+	uint32_t next_hop_ipv4;
+	uint8_t next_hop_ipv6;
 	struct ipv6_hdr *ipv6_hdr;
 	struct ether_hdr *eth_hdr;
 
 	if (RTE_ETH_IS_IPV4_HDR(pkt->packet_type)) {
 		return (uint16_t) ((rte_lpm_lookup(
 				RTE_PER_LCORE(lcore_conf)->ipv4_lookup_struct, dst_ipv4,
-				&next_hop) == 0) ? next_hop : portid);
+				&next_hop_ipv4) == 0) ? next_hop_ipv4 : portid);
 
 	} else if (RTE_ETH_IS_IPV6_HDR(pkt->packet_type)) {
 
@@ -1397,8 +1358,8 @@ get_dst_port(struct rte_mbuf *pkt, uint32_t dst_ipv4, uint8_t portid)
 
 		return (uint16_t) ((rte_lpm6_lookup(
 				RTE_PER_LCORE(lcore_conf)->ipv6_lookup_struct,
-				ipv6_hdr->dst_addr, &next_hop) == 0) ?
-				next_hop : portid);
+				ipv6_hdr->dst_addr, &next_hop_ipv6) == 0) ? next_hop_ipv6 :
+						portid);
 
 	}
 
@@ -1579,7 +1540,7 @@ processx4_step3(struct rte_mbuf *pkt[FWDSTEP], uint16_t dst_port[FWDSTEP])
  * Suppose we have array of destionation ports:
  * dst_port[] = {a, b, c, d,, e, ... }
  * dp1 should contain: <a, b, c, d>, dp2: <b, c, d, e>.
- * We doing 4 comparisons at once and the result is 4 bit mask.
+ * We doing 4 comparisions at once and the result is 4 bit mask.
  * This mask is used as an index into prebuild array of pnum values.
  */
 static inline uint16_t *
@@ -1841,12 +1802,10 @@ process_burst(struct rte_mbuf *pkts_burst[MAX_PKT_BURST], int nb_rx,
 		process_packet(pkts_burst[j], dst_port + j, portid);
 		GROUP_PORT_STEP(dlp, dst_port, lp, pnum, j);
 		j++;
-		/* fall-through */
 	case 2:
 		process_packet(pkts_burst[j], dst_port + j, portid);
 		GROUP_PORT_STEP(dlp, dst_port, lp, pnum, j);
 		j++;
-		/* fall-through */
 	case 1:
 		process_packet(pkts_burst[j], dst_port + j, portid);
 		GROUP_PORT_STEP(dlp, dst_port, lp, pnum, j);
@@ -2064,7 +2023,7 @@ lthread_tx_per_ring(void *dummy)
 		 */
 		SET_CPU_BUSY(tx_conf, CPU_POLL);
 		nb_rx = rte_ring_sc_dequeue_burst(ring, (void **)pkts_burst,
-				MAX_PKT_BURST, NULL);
+				MAX_PKT_BURST);
 		SET_CPU_IDLE(tx_conf, CPU_POLL);
 
 		if (nb_rx > 0) {
@@ -2200,7 +2159,7 @@ lthread_rx(void *dummy)
 				ret = rte_ring_sp_enqueue_burst(
 						rx_conf->ring[worker_id],
 						(void **) pkts_burst,
-						nb_rx, NULL);
+						nb_rx);
 
 				new_len = old_len + ret;
 
@@ -2368,7 +2327,7 @@ pthread_tx(void *dummy)
 		 */
 		SET_CPU_BUSY(tx_conf, CPU_POLL);
 		nb_rx = rte_ring_sc_dequeue_burst(tx_conf->ring,
-				(void **)pkts_burst, MAX_PKT_BURST, NULL);
+				(void **)pkts_burst, MAX_PKT_BURST);
 		SET_CPU_IDLE(tx_conf, CPU_POLL);
 
 		if (unlikely(nb_rx == 0)) {
@@ -2440,7 +2399,7 @@ pthread_rx(void *dummy)
 			SET_CPU_BUSY(rx_conf, CPU_PROCESS);
 			worker_id = (worker_id + 1) % rx_conf->n_ring;
 			n = rte_ring_sp_enqueue_burst(rx_conf->ring[worker_id],
-					(void **)pkts_burst, nb_rx, NULL);
+					(void **)pkts_burst, nb_rx);
 
 			if (unlikely(n != nb_rx)) {
 				uint32_t k;
@@ -2655,7 +2614,6 @@ print_usage(const char *prgname)
 		"  [--rx (port,queue,lcore,thread)[,(port,queue,lcore,thread]]"
 		"  [--tx (lcore,thread)[,(lcore,thread]]"
 		"  [--enable-jumbo [--max-pkt-len PKTLEN]]\n"
-		"  [--parse-ptype]\n\n"
 		"  -p PORTMASK: hexadecimal bitmask of ports to configure\n"
 		"  -P : enable promiscuous mode\n"
 		"  --rx (port,queue,lcore,thread): rx queues configuration\n"
@@ -2667,8 +2625,7 @@ print_usage(const char *prgname)
 		"  --enable-jumbo: enable jumbo frame"
 		" which max packet len is PKTLEN in decimal (64-9600)\n"
 		"  --hash-entry-num: specify the hash entry number in hexadecimal to be setup\n"
-		"  --no-lthreads: turn off lthread model\n"
-		"  --parse-ptype: set to use software to analyze packet type\n\n",
+		"  --no-lthreads: turn off lthread model\n",
 		prgname);
 }
 
@@ -2887,7 +2844,6 @@ parse_eth_dest(const char *optarg)
 #define CMD_LINE_OPT_ENABLE_JUMBO "enable-jumbo"
 #define CMD_LINE_OPT_HASH_ENTRY_NUM "hash-entry-num"
 #define CMD_LINE_OPT_NO_LTHREADS "no-lthreads"
-#define CMD_LINE_OPT_PARSE_PTYPE "parse-ptype"
 
 /* Parse the argument given in the command line of the application */
 static int
@@ -2907,7 +2863,6 @@ parse_args(int argc, char **argv)
 		{CMD_LINE_OPT_ENABLE_JUMBO, 0, 0, 0},
 		{CMD_LINE_OPT_HASH_ENTRY_NUM, 1, 0, 0},
 		{CMD_LINE_OPT_NO_LTHREADS, 0, 0, 0},
-		{CMD_LINE_OPT_PARSE_PTYPE, 0, 0, 0},
 		{NULL, 0, 0, 0}
 	};
 
@@ -2984,12 +2939,6 @@ parse_args(int argc, char **argv)
 				lthreads_on = 0;
 			}
 
-			if (!strncmp(lgopts[option_index].name, CMD_LINE_OPT_PARSE_PTYPE,
-					sizeof(CMD_LINE_OPT_PARSE_PTYPE))) {
-				printf("software packet type parsing enabled\n");
-				parse_ptype_on = 1;
-			}
-
 			if (!strncmp(lgopts[option_index].name, CMD_LINE_OPT_ENABLE_JUMBO,
 				sizeof(CMD_LINE_OPT_ENABLE_JUMBO))) {
 				struct option lenopts = {"max-pkt-len", required_argument, 0,
@@ -3038,7 +2987,7 @@ parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 1; /* reset getopt lib */
+	optind = 0; /* reset getopt lib */
 	return ret;
 }
 
@@ -3570,13 +3519,6 @@ main(int argc, char **argv)
 			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d, port=%d\n",
 				ret, portid);
 
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-						       &nb_txd);
-		if (ret < 0)
-			rte_exit(EXIT_FAILURE,
-				 "rte_eth_dev_adjust_nb_rx_tx_desc: err=%d, port=%d\n",
-				 ret, portid);
-
 		rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);
 		print_ethaddr(" Address:", &ports_eth_addr[portid]);
 		printf(", ");
@@ -3683,31 +3625,6 @@ main(int argc, char **argv)
 		 */
 		if (promiscuous_on)
 			rte_eth_promiscuous_enable(portid);
-	}
-
-	for (i = 0; i < n_rx_thread; i++) {
-		lcore_id = rx_thread[i].conf.lcore_id;
-		if (rte_lcore_is_enabled(lcore_id) == 0)
-			continue;
-
-		/* check if hw packet type is supported */
-		for (queue = 0; queue < rx_thread[i].n_rx_queue; ++queue) {
-			portid = rx_thread[i].rx_queue_list[queue].port_id;
-			queueid = rx_thread[i].rx_queue_list[queue].queue_id;
-
-			if (parse_ptype_on) {
-				if (!rte_eth_add_rx_callback(portid, queueid,
-						cb_parse_ptype, NULL))
-					rte_exit(EXIT_FAILURE,
-						"Failed to add rx callback: "
-						"port=%d\n", portid);
-			} else if (!check_ptype(portid))
-				rte_exit(EXIT_FAILURE,
-					"Port %d cannot parse packet type.\n\n"
-					"Please add --parse-ptype to use sw "
-					"packet type analyzer.\n\n",
-					portid);
-		}
 	}
 
 	check_all_ports_link_status((uint8_t)nb_ports, enabled_port_mask);

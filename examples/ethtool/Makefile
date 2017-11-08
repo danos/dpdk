@@ -46,7 +46,4 @@ else
 DIRS-y += lib ethtool-app
 endif
 
-DEPDIRS-ethtool-app := lib
-DEPDIRS-lib := librte_eal librte_ether
-
 include $(RTE_SDK)/mk/rte.extsubdir.mk

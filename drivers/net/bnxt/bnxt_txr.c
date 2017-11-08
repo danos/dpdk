@@ -213,8 +213,7 @@ static uint16_t bnxt_start_xmit(struct rte_mbuf *tx_pkt,
 			/* TSO */
 			txbd1->lflags = TX_BD_LONG_LFLAGS_LSO;
 			txbd1->hdr_size = tx_pkt->l2_len + tx_pkt->l3_len +
-					tx_pkt->l4_len + tx_pkt->outer_l2_len +
-					tx_pkt->outer_l3_len;
+					tx_pkt->l4_len;
 			txbd1->mss = tx_pkt->tso_segsz;
 
 		} else if (tx_pkt->ol_flags & (PKT_TX_TCP_CKSUM |
@@ -299,7 +298,7 @@ static int bnxt_handle_tx_cp(struct bnxt_tx_queue *txq)
 			if (CMP_TYPE(txcmp) == TX_CMPL_TYPE_TX_L2)
 				nb_tx_pkts++;
 			else
-				RTE_LOG_DP(DEBUG, PMD,
+				RTE_LOG(DEBUG, PMD,
 						"Unhandled CMP type %02x\n",
 						CMP_TYPE(txcmp));
 			raw_cons = NEXT_RAW_CMP(raw_cons);

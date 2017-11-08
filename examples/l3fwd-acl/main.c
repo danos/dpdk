@@ -49,6 +49,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -90,10 +91,10 @@
  */
 
 #define NB_MBUF	RTE_MAX(\
-	(nb_ports * nb_rx_queue * nb_rxd +	\
-	nb_ports * nb_lcores * MAX_PKT_BURST +	\
-	nb_ports * n_tx_queue * nb_txd +	\
-	nb_lcores * MEMPOOL_CACHE_SIZE),	\
+	(nb_ports * nb_rx_queue*RTE_TEST_RX_DESC_DEFAULT +	\
+	nb_ports * nb_lcores * MAX_PKT_BURST +			\
+	nb_ports * n_tx_queue * RTE_TEST_TX_DESC_DEFAULT +	\
+	nb_lcores * MEMPOOL_CACHE_SIZE),			\
 	(unsigned)8192)
 
 #define MAX_PKT_BURST 32
@@ -1775,7 +1776,7 @@ parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 1; /* reset getopt lib */
+	optind = 0; /* reset getopt lib */
 	return ret;
 }
 
@@ -1948,13 +1949,6 @@ main(int argc, char **argv)
 		if (ret < 0)
 			rte_exit(EXIT_FAILURE,
 				"Cannot configure device: err=%d, port=%d\n",
-				ret, portid);
-
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-						       &nb_txd);
-		if (ret < 0)
-			rte_exit(EXIT_FAILURE,
-				"rte_eth_dev_adjust_nb_rx_tx_desc: err=%d, port=%d\n",
 				ret, portid);
 
 		rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);

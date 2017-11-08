@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2017 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -72,6 +72,7 @@ static const char *MZ_RTE_ETH_DEV_DATA = "rte_eth_dev_data";
 struct rte_eth_dev rte_eth_devices[RTE_MAX_ETHPORTS];
 static struct rte_eth_dev_data *rte_eth_dev_data;
 static uint8_t eth_dev_last_created_port;
+static uint8_t nb_ports;
 
 /* spinlock for eth device callbacks */
 static rte_spinlock_t rte_eth_dev_cb_lock = RTE_SPINLOCK_INITIALIZER;
@@ -128,7 +129,6 @@ struct rte_eth_dev_callback {
 	TAILQ_ENTRY(rte_eth_dev_callback) next; /**< Callbacks list */
 	rte_eth_dev_cb_fn cb_fn;                /**< Callback address */
 	void *cb_arg;                           /**< Parameter for callback */
-	void *ret_param;                        /**< Return parameter */
 	enum rte_eth_event_type event;          /**< Interrupt event type */
 	uint32_t active;                        /**< Callback is executing */
 };
@@ -138,18 +138,10 @@ enum {
 	STAT_QMAP_RX
 };
 
-uint8_t
-rte_eth_find_next(uint8_t port_id)
-{
-	while (port_id < RTE_MAX_ETHPORTS &&
-	       rte_eth_devices[port_id].state != RTE_ETH_DEV_ATTACHED)
-		port_id++;
-
-	if (port_id >= RTE_MAX_ETHPORTS)
-		return RTE_MAX_ETHPORTS;
-
-	return port_id;
-}
+enum {
+	DEV_DETACHED = 0,
+	DEV_ATTACHED
+};
 
 static void
 rte_eth_dev_data_alloc(void)
@@ -178,11 +170,9 @@ rte_eth_dev_allocated(const char *name)
 	unsigned i;
 
 	for (i = 0; i < RTE_MAX_ETHPORTS; i++) {
-		if (rte_eth_devices[i].state == RTE_ETH_DEV_ATTACHED &&
-				rte_eth_devices[i].device) {
-			if (!strcmp(rte_eth_devices[i].device->name, name))
-				return &rte_eth_devices[i];
-		}
+		if ((rte_eth_devices[i].attached == DEV_ATTACHED) &&
+		    strcmp(rte_eth_devices[i].data->name, name) == 0)
+			return &rte_eth_devices[i];
 	}
 	return NULL;
 }
@@ -193,7 +183,7 @@ rte_eth_dev_find_free_port(void)
 	unsigned i;
 
 	for (i = 0; i < RTE_MAX_ETHPORTS; i++) {
-		if (rte_eth_devices[i].state == RTE_ETH_DEV_UNUSED)
+		if (rte_eth_devices[i].attached == DEV_DETACHED)
 			return i;
 	}
 	return RTE_MAX_ETHPORTS;
@@ -205,10 +195,10 @@ eth_dev_get(uint8_t port_id)
 	struct rte_eth_dev *eth_dev = &rte_eth_devices[port_id];
 
 	eth_dev->data = &rte_eth_dev_data[port_id];
-	eth_dev->state = RTE_ETH_DEV_ATTACHED;
-	TAILQ_INIT(&(eth_dev->link_intr_cbs));
+	eth_dev->attached = DEV_ATTACHED;
 
 	eth_dev_last_created_port = port_id;
+	nb_ports++;
 
 	return eth_dev;
 }
@@ -234,11 +224,9 @@ rte_eth_dev_allocate(const char *name)
 		return NULL;
 	}
 
-	memset(&rte_eth_dev_data[port_id], 0, sizeof(struct rte_eth_dev_data));
 	eth_dev = eth_dev_get(port_id);
 	snprintf(eth_dev->data->name, sizeof(eth_dev->data->name), "%s", name);
 	eth_dev->data->port_id = port_id;
-	eth_dev->data->mtu = ETHER_MTU;
 
 	return eth_dev;
 }
@@ -248,8 +236,8 @@ rte_eth_dev_allocate(const char *name)
  * makes sure that the same device would have the same port id both
  * in the primary and secondary process.
  */
-struct rte_eth_dev *
-rte_eth_dev_attach_secondary(const char *name)
+static struct rte_eth_dev *
+eth_dev_attach_secondary(const char *name)
 {
 	uint8_t i;
 	struct rte_eth_dev *eth_dev;
@@ -280,7 +268,113 @@ rte_eth_dev_release_port(struct rte_eth_dev *eth_dev)
 	if (eth_dev == NULL)
 		return -EINVAL;
 
-	eth_dev->state = RTE_ETH_DEV_UNUSED;
+	eth_dev->attached = DEV_DETACHED;
+	nb_ports--;
+	return 0;
+}
+
+int
+rte_eth_dev_pci_probe(struct rte_pci_driver *pci_drv,
+		      struct rte_pci_device *pci_dev)
+{
+	struct eth_driver    *eth_drv;
+	struct rte_eth_dev *eth_dev;
+	char ethdev_name[RTE_ETH_NAME_MAX_LEN];
+
+	int diag;
+
+	eth_drv = (struct eth_driver *)pci_drv;
+
+	rte_eal_pci_device_name(&pci_dev->addr, ethdev_name,
+			sizeof(ethdev_name));
+
+	if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
+		eth_dev = rte_eth_dev_allocate(ethdev_name);
+		if (eth_dev == NULL)
+			return -ENOMEM;
+
+		eth_dev->data->dev_private = rte_zmalloc("ethdev private structure",
+				  eth_drv->dev_private_size,
+				  RTE_CACHE_LINE_SIZE);
+		if (eth_dev->data->dev_private == NULL)
+			rte_panic("Cannot allocate memzone for private port data\n");
+	} else {
+		eth_dev = eth_dev_attach_secondary(ethdev_name);
+		if (eth_dev == NULL) {
+			/*
+			 * if we failed to attach a device, it means the
+			 * device is skipped in primary process, due to
+			 * some errors. If so, we return a positive value,
+			 * to let EAL skip it for the secondary process
+			 * as well.
+			 */
+			return 1;
+		}
+	}
+	eth_dev->pci_dev = pci_dev;
+	eth_dev->driver = eth_drv;
+	eth_dev->data->rx_mbuf_alloc_failed = 0;
+
+	/* init user callbacks */
+	TAILQ_INIT(&(eth_dev->link_intr_cbs));
+
+	/*
+	 * Set the default MTU.
+	 */
+	eth_dev->data->mtu = ETHER_MTU;
+
+	/* Invoke PMD device initialization function */
+	diag = (*eth_drv->eth_dev_init)(eth_dev);
+	if (diag == 0)
+		return 0;
+
+	RTE_PMD_DEBUG_TRACE("driver %s: eth_dev_init(vendor_id=0x%x device_id=0x%x) failed\n",
+			pci_drv->driver.name,
+			(unsigned) pci_dev->id.vendor_id,
+			(unsigned) pci_dev->id.device_id);
+	if (rte_eal_process_type() == RTE_PROC_PRIMARY)
+		rte_free(eth_dev->data->dev_private);
+	rte_eth_dev_release_port(eth_dev);
+	return diag;
+}
+
+int
+rte_eth_dev_pci_remove(struct rte_pci_device *pci_dev)
+{
+	const struct eth_driver *eth_drv;
+	struct rte_eth_dev *eth_dev;
+	char ethdev_name[RTE_ETH_NAME_MAX_LEN];
+	int ret;
+
+	if (pci_dev == NULL)
+		return -EINVAL;
+
+	rte_eal_pci_device_name(&pci_dev->addr, ethdev_name,
+			sizeof(ethdev_name));
+
+	eth_dev = rte_eth_dev_allocated(ethdev_name);
+	if (eth_dev == NULL)
+		return -ENODEV;
+
+	eth_drv = (const struct eth_driver *)pci_dev->driver;
+
+	/* Invoke PMD device uninit function */
+	if (*eth_drv->eth_dev_uninit) {
+		ret = (*eth_drv->eth_dev_uninit)(eth_dev);
+		if (ret)
+			return ret;
+	}
+
+	/* free ether device */
+	rte_eth_dev_release_port(eth_dev);
+
+	if (rte_eal_process_type() == RTE_PROC_PRIMARY)
+		rte_free(eth_dev->data->dev_private);
+
+	eth_dev->pci_dev = NULL;
+	eth_dev->driver = NULL;
+	eth_dev->data = NULL;
+
 	return 0;
 }
 
@@ -288,8 +382,7 @@ int
 rte_eth_dev_is_valid_port(uint8_t port_id)
 {
 	if (port_id >= RTE_MAX_ETHPORTS ||
-	    (rte_eth_devices[port_id].state != RTE_ETH_DEV_ATTACHED &&
-	     rte_eth_devices[port_id].state != RTE_ETH_DEV_DEFERRED))
+	    rte_eth_devices[port_id].attached != DEV_ATTACHED)
 		return 0;
 	else
 		return 1;
@@ -305,21 +398,13 @@ rte_eth_dev_socket_id(uint8_t port_id)
 uint8_t
 rte_eth_dev_count(void)
 {
-	uint8_t p;
-	uint8_t count;
-
-	count = 0;
-
-	RTE_ETH_FOREACH_DEV(p)
-		count++;
-
-	return count;
+	return nb_ports;
 }
 
 int
 rte_eth_dev_get_name_by_port(uint8_t port_id, char *name)
 {
-	const char *tmp;
+	char *tmp;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -EINVAL);
 
@@ -330,7 +415,7 @@ rte_eth_dev_get_name_by_port(uint8_t port_id, char *name)
 
 	/* shouldn't check 'rte_eth_devices[i].data',
 	 * because it might be overwritten by VDEV PMD */
-	tmp = rte_eth_devices[port_id].device->name;
+	tmp = rte_eth_dev_data[port_id].name;
 	strcpy(name, tmp);
 	return 0;
 }
@@ -338,7 +423,6 @@ rte_eth_dev_get_name_by_port(uint8_t port_id, char *name)
 int
 rte_eth_dev_get_port_by_name(const char *name, uint8_t *port_id)
 {
-	int ret;
 	int i;
 
 	if (name == NULL) {
@@ -346,14 +430,18 @@ rte_eth_dev_get_port_by_name(const char *name, uint8_t *port_id)
 		return -EINVAL;
 	}
 
-	RTE_ETH_FOREACH_DEV(i) {
-		if (!rte_eth_devices[i].device)
-			continue;
+	if (!nb_ports)
+		return -ENODEV;
 
-		ret = strncmp(name, rte_eth_devices[i].device->name,
-				strlen(name));
-		if (ret == 0) {
+	*port_id = RTE_MAX_ETHPORTS;
+
+	for (i = 0; i < RTE_MAX_ETHPORTS; i++) {
+
+		if (!strncmp(name,
+			rte_eth_dev_data[i].name, strlen(name))) {
+
 			*port_id = i;
+
 			return 0;
 		}
 	}
@@ -367,6 +455,16 @@ rte_eth_dev_is_detachable(uint8_t port_id)
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -EINVAL);
 
+	switch (rte_eth_devices[port_id].data->kdrv) {
+	case RTE_KDRV_IGB_UIO:
+	case RTE_KDRV_UIO_GENERIC:
+	case RTE_KDRV_NIC_UIO:
+	case RTE_KDRV_NONE:
+		break;
+	case RTE_KDRV_VFIO:
+	default:
+		return -ENOTSUP;
+	}
 	dev_flags = rte_eth_devices[port_id].data->dev_flags;
 	if ((dev_flags & RTE_ETH_DEV_DETACHABLE) &&
 		(!(dev_flags & RTE_ETH_DEV_BONDED_SLAVE)))
@@ -436,14 +534,12 @@ rte_eth_dev_detach(uint8_t port_id, char *name)
 	if (rte_eth_dev_is_detachable(port_id))
 		goto err;
 
-	snprintf(name, RTE_DEV_NAME_MAX_LEN, "%s",
-		 rte_eth_devices[port_id].device->name);
-
-	ret = rte_eal_dev_detach(rte_eth_devices[port_id].device);
+	snprintf(name, sizeof(rte_eth_devices[port_id].data->name),
+		 "%s", rte_eth_devices[port_id].data->name);
+	ret = rte_eal_dev_detach(name);
 	if (ret < 0)
 		goto err;
 
-	rte_eth_devices[port_id].state = RTE_ETH_DEV_UNUSED;
 	return 0;
 
 err:
@@ -492,9 +588,6 @@ rte_eth_dev_rx_queue_config(struct rte_eth_dev *dev, uint16_t nb_queues)
 
 		for (i = nb_queues; i < old_nb_queues; i++)
 			(*dev->dev_ops->rx_queue_release)(rxq[i]);
-
-		rte_free(dev->data->rx_queues);
-		dev->data->rx_queues = NULL;
 	}
 	dev->data->nb_rx_queues = nb_queues;
 	return 0;
@@ -646,9 +739,6 @@ rte_eth_dev_tx_queue_config(struct rte_eth_dev *dev, uint16_t nb_queues)
 
 		for (i = nb_queues; i < old_nb_queues; i++)
 			(*dev->dev_ops->tx_queue_release)(txq[i]);
-
-		rte_free(dev->data->tx_queues);
-		dev->data->tx_queues = NULL;
 	}
 	dev->data->nb_tx_queues = nb_queues;
 	return 0;
@@ -749,18 +839,15 @@ rte_eth_dev_configure(uint8_t port_id, uint16_t nb_rx_q, uint16_t nb_tx_q,
 		return -EINVAL;
 	}
 
-	/* Check that the device supports requested interrupts */
+	/*
+	 * If link state interrupt is enabled, check that the
+	 * device supports it.
+	 */
 	if ((dev_conf->intr_conf.lsc == 1) &&
 		(!(dev->data->dev_flags & RTE_ETH_DEV_INTR_LSC))) {
 			RTE_PMD_DEBUG_TRACE("driver %s does not support lsc\n",
-					dev->device->driver->name);
+					dev->data->drv_name);
 			return -EINVAL;
-	}
-	if ((dev_conf->intr_conf.rmv == 1) &&
-	    (!(dev->data->dev_flags & RTE_ETH_DEV_INTR_RMV))) {
-		RTE_PMD_DEBUG_TRACE("driver %s does not support rmv\n",
-				    dev->device->driver->name);
-		return -EINVAL;
 	}
 
 	/*
@@ -822,61 +909,39 @@ rte_eth_dev_configure(uint8_t port_id, uint16_t nb_rx_q, uint16_t nb_tx_q,
 	return 0;
 }
 
-void
-_rte_eth_dev_reset(struct rte_eth_dev *dev)
-{
-	if (dev->data->dev_started) {
-		RTE_PMD_DEBUG_TRACE(
-			"port %d must be stopped to allow reset\n",
-			dev->data->port_id);
-		return;
-	}
-
-	rte_eth_dev_rx_queue_config(dev, 0);
-	rte_eth_dev_tx_queue_config(dev, 0);
-
-	memset(&dev->data->dev_conf, 0, sizeof(dev->data->dev_conf));
-}
-
 static void
 rte_eth_dev_config_restore(uint8_t port_id)
 {
 	struct rte_eth_dev *dev;
 	struct rte_eth_dev_info dev_info;
-	struct ether_addr *addr;
+	struct ether_addr addr;
 	uint16_t i;
 	uint32_t pool = 0;
-	uint64_t pool_mask;
 
 	dev = &rte_eth_devices[port_id];
 
 	rte_eth_dev_info_get(port_id, &dev_info);
 
-	/* replay MAC address configuration including default MAC */
-	addr = &dev->data->mac_addrs[0];
-	if (*dev->dev_ops->mac_addr_set != NULL)
-		(*dev->dev_ops->mac_addr_set)(dev, addr);
-	else if (*dev->dev_ops->mac_addr_add != NULL)
-		(*dev->dev_ops->mac_addr_add)(dev, addr, 0, pool);
+	if (RTE_ETH_DEV_SRIOV(dev).active)
+		pool = RTE_ETH_DEV_SRIOV(dev).def_vmdq_idx;
 
-	if (*dev->dev_ops->mac_addr_add != NULL) {
-		for (i = 1; i < dev_info.max_mac_addrs; i++) {
-			addr = &dev->data->mac_addrs[i];
+	/* replay MAC address configuration */
+	for (i = 0; i < dev_info.max_mac_addrs; i++) {
+		addr = dev->data->mac_addrs[i];
 
-			/* skip zero address */
-			if (is_zero_ether_addr(addr))
-				continue;
+		/* skip zero address */
+		if (is_zero_ether_addr(&addr))
+			continue;
 
-			pool = 0;
-			pool_mask = dev->data->mac_pool_sel[i];
-
-			do {
-				if (pool_mask & 1ULL)
-					(*dev->dev_ops->mac_addr_add)(dev,
-						addr, i, pool);
-				pool_mask >>= 1;
-				pool++;
-			} while (pool_mask);
+		/* add address to the hardware */
+		if  (*dev->dev_ops->mac_addr_add &&
+			(dev->data->mac_pool_sel[i] & (1ULL << pool)))
+			(*dev->dev_ops->mac_addr_add)(dev, &addr, i, pool);
+		else {
+			RTE_PMD_DEBUG_TRACE("port %d: MAC address array not supported\n",
+					port_id);
+			/* exit the loop but not return an error */
+			break;
 		}
 	}
 
@@ -1004,7 +1069,6 @@ rte_eth_rx_queue_setup(uint8_t port_id, uint16_t rx_queue_id,
 	uint32_t mbp_buf_size;
 	struct rte_eth_dev *dev;
 	struct rte_eth_dev_info dev_info;
-	void **rxq;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -EINVAL);
 
@@ -1063,14 +1127,6 @@ rte_eth_rx_queue_setup(uint8_t port_id, uint16_t rx_queue_id,
 		return -EINVAL;
 	}
 
-	rxq = dev->data->rx_queues;
-	if (rxq[rx_queue_id]) {
-		RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->rx_queue_release,
-					-ENOTSUP);
-		(*dev->dev_ops->rx_queue_release)(rxq[rx_queue_id]);
-		rxq[rx_queue_id] = NULL;
-	}
-
 	if (rx_conf == NULL)
 		rx_conf = &dev_info.default_rxconf;
 
@@ -1092,7 +1148,6 @@ rte_eth_tx_queue_setup(uint8_t port_id, uint16_t tx_queue_id,
 {
 	struct rte_eth_dev *dev;
 	struct rte_eth_dev_info dev_info;
-	void **txq;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -EINVAL);
 
@@ -1123,14 +1178,6 @@ rte_eth_tx_queue_setup(uint8_t port_id, uint16_t tx_queue_id,
 				dev_info.tx_desc_lim.nb_min,
 				dev_info.tx_desc_lim.nb_align);
 		return -EINVAL;
-	}
-
-	txq = dev->data->tx_queues;
-	if (txq[tx_queue_id]) {
-		RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->tx_queue_release,
-					-ENOTSUP);
-		(*dev->dev_ops->tx_queue_release)(txq[tx_queue_id]);
-		txq[tx_queue_id] = NULL;
 	}
 
 	if (tx_conf == NULL)
@@ -1187,20 +1234,6 @@ rte_eth_tx_buffer_init(struct rte_eth_dev_tx_buffer *buffer, uint16_t size)
 	}
 
 	return ret;
-}
-
-int
-rte_eth_tx_done_cleanup(uint8_t port_id, uint16_t queue_id, uint32_t free_cnt)
-{
-	struct rte_eth_dev *dev = &rte_eth_devices[port_id];
-
-	/* Validate Input Data. Bail if not valid or not supported. */
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->tx_done_cleanup, -ENOTSUP);
-
-	/* Call driver to free pending mbufs. */
-	return (*dev->dev_ops->tx_done_cleanup)(dev->data->tx_queues[queue_id],
-			free_cnt);
 }
 
 void
@@ -1362,19 +1395,12 @@ get_xstats_count(uint8_t port_id)
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -EINVAL);
 	dev = &rte_eth_devices[port_id];
-	if (dev->dev_ops->xstats_get_names_by_id != NULL) {
-		count = (*dev->dev_ops->xstats_get_names_by_id)(dev, NULL,
-				NULL, 0);
-		if (count < 0)
-			return count;
-	}
 	if (dev->dev_ops->xstats_get_names != NULL) {
 		count = (*dev->dev_ops->xstats_get_names)(dev, NULL, 0);
 		if (count < 0)
 			return count;
 	} else
 		count = 0;
-
 	count += RTE_NB_STATS;
 	count += RTE_MIN(dev->data->nb_rx_queues, RTE_ETHDEV_QUEUE_STAT_CNTRS) *
 		 RTE_NB_RXQ_STATS;
@@ -1384,170 +1410,9 @@ get_xstats_count(uint8_t port_id)
 }
 
 int
-rte_eth_xstats_get_id_by_name(uint8_t port_id, const char *xstat_name,
-		uint64_t *id)
-{
-	int cnt_xstats, idx_xstat;
-
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-
-	if (!id) {
-		RTE_PMD_DEBUG_TRACE("Error: id pointer is NULL\n");
-		return -ENOMEM;
-	}
-
-	if (!xstat_name) {
-		RTE_PMD_DEBUG_TRACE("Error: xstat_name pointer is NULL\n");
-		return -ENOMEM;
-	}
-
-	/* Get count */
-	cnt_xstats = rte_eth_xstats_get_names_by_id(port_id, NULL, 0, NULL);
-	if (cnt_xstats  < 0) {
-		RTE_PMD_DEBUG_TRACE("Error: Cannot get count of xstats\n");
-		return -ENODEV;
-	}
-
-	/* Get id-name lookup table */
-	struct rte_eth_xstat_name xstats_names[cnt_xstats];
-
-	if (cnt_xstats != rte_eth_xstats_get_names_by_id(
-			port_id, xstats_names, cnt_xstats, NULL)) {
-		RTE_PMD_DEBUG_TRACE("Error: Cannot get xstats lookup\n");
-		return -1;
-	}
-
-	for (idx_xstat = 0; idx_xstat < cnt_xstats; idx_xstat++) {
-		if (!strcmp(xstats_names[idx_xstat].name, xstat_name)) {
-			*id = idx_xstat;
-			return 0;
-		};
-	}
-
-	return -EINVAL;
-}
-
-int
-rte_eth_xstats_get_names_by_id(uint8_t port_id,
-	struct rte_eth_xstat_name *xstats_names, unsigned int size,
-	uint64_t *ids)
-{
-	/* Get all xstats */
-	if (!ids) {
-		struct rte_eth_dev *dev;
-		int cnt_used_entries;
-		int cnt_expected_entries;
-		int cnt_driver_entries;
-		uint32_t idx, id_queue;
-		uint16_t num_q;
-
-		cnt_expected_entries = get_xstats_count(port_id);
-		if (xstats_names == NULL || cnt_expected_entries < 0 ||
-				(int)size < cnt_expected_entries)
-			return cnt_expected_entries;
-
-		/* port_id checked in get_xstats_count() */
-		dev = &rte_eth_devices[port_id];
-		cnt_used_entries = 0;
-
-		for (idx = 0; idx < RTE_NB_STATS; idx++) {
-			snprintf(xstats_names[cnt_used_entries].name,
-				sizeof(xstats_names[0].name),
-				"%s", rte_stats_strings[idx].name);
-			cnt_used_entries++;
-		}
-		num_q = RTE_MIN(dev->data->nb_rx_queues,
-				RTE_ETHDEV_QUEUE_STAT_CNTRS);
-		for (id_queue = 0; id_queue < num_q; id_queue++) {
-			for (idx = 0; idx < RTE_NB_RXQ_STATS; idx++) {
-				snprintf(xstats_names[cnt_used_entries].name,
-					sizeof(xstats_names[0].name),
-					"rx_q%u%s",
-					id_queue,
-					rte_rxq_stats_strings[idx].name);
-				cnt_used_entries++;
-			}
-
-		}
-		num_q = RTE_MIN(dev->data->nb_tx_queues,
-				RTE_ETHDEV_QUEUE_STAT_CNTRS);
-		for (id_queue = 0; id_queue < num_q; id_queue++) {
-			for (idx = 0; idx < RTE_NB_TXQ_STATS; idx++) {
-				snprintf(xstats_names[cnt_used_entries].name,
-					sizeof(xstats_names[0].name),
-					"tx_q%u%s",
-					id_queue,
-					rte_txq_stats_strings[idx].name);
-				cnt_used_entries++;
-			}
-		}
-
-		if (dev->dev_ops->xstats_get_names_by_id != NULL) {
-			/* If there are any driver-specific xstats, append them
-			 * to end of list.
-			 */
-			cnt_driver_entries =
-				(*dev->dev_ops->xstats_get_names_by_id)(
-				dev,
-				xstats_names + cnt_used_entries,
-				NULL,
-				size - cnt_used_entries);
-			if (cnt_driver_entries < 0)
-				return cnt_driver_entries;
-			cnt_used_entries += cnt_driver_entries;
-
-		} else if (dev->dev_ops->xstats_get_names != NULL) {
-			/* If there are any driver-specific xstats, append them
-			 * to end of list.
-			 */
-			cnt_driver_entries = (*dev->dev_ops->xstats_get_names)(
-				dev,
-				xstats_names + cnt_used_entries,
-				size - cnt_used_entries);
-			if (cnt_driver_entries < 0)
-				return cnt_driver_entries;
-			cnt_used_entries += cnt_driver_entries;
-		}
-
-		return cnt_used_entries;
-	}
-	/* Get only xstats given by IDS */
-	else {
-		uint16_t len, i;
-		struct rte_eth_xstat_name *xstats_names_copy;
-
-		len = rte_eth_xstats_get_names_by_id(port_id, NULL, 0, NULL);
-
-		xstats_names_copy =
-				malloc(sizeof(struct rte_eth_xstat_name) * len);
-		if (!xstats_names_copy) {
-			RTE_PMD_DEBUG_TRACE(
-			     "ERROR: can't allocate memory for values_copy\n");
-			free(xstats_names_copy);
-			return -1;
-		}
-
-		rte_eth_xstats_get_names_by_id(port_id, xstats_names_copy,
-				len, NULL);
-
-		for (i = 0; i < size; i++) {
-			if (ids[i] >= len) {
-				RTE_PMD_DEBUG_TRACE(
-					"ERROR: id value isn't valid\n");
-				return -1;
-			}
-			strcpy(xstats_names[i].name,
-					xstats_names_copy[ids[i]].name);
-		}
-		free(xstats_names_copy);
-		return size;
-	}
-}
-
-int
 rte_eth_xstats_get_names(uint8_t port_id,
 	struct rte_eth_xstat_name *xstats_names,
-	unsigned int size)
+	unsigned size)
 {
 	struct rte_eth_dev *dev;
 	int cnt_used_entries;
@@ -1611,139 +1476,13 @@ rte_eth_xstats_get_names(uint8_t port_id,
 
 /* retrieve ethdev extended statistics */
 int
-rte_eth_xstats_get_by_id(uint8_t port_id, const uint64_t *ids, uint64_t *values,
-	unsigned int n)
-{
-	/* If need all xstats */
-	if (!ids) {
-		struct rte_eth_stats eth_stats;
-		struct rte_eth_dev *dev;
-		unsigned int count = 0, i, q;
-		signed int xcount = 0;
-		uint64_t val, *stats_ptr;
-		uint16_t nb_rxqs, nb_txqs;
-
-		RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-		dev = &rte_eth_devices[port_id];
-
-		nb_rxqs = RTE_MIN(dev->data->nb_rx_queues,
-				RTE_ETHDEV_QUEUE_STAT_CNTRS);
-		nb_txqs = RTE_MIN(dev->data->nb_tx_queues,
-				RTE_ETHDEV_QUEUE_STAT_CNTRS);
-
-		/* Return generic statistics */
-		count = RTE_NB_STATS + (nb_rxqs * RTE_NB_RXQ_STATS) +
-			(nb_txqs * RTE_NB_TXQ_STATS);
-
-
-		/* implemented by the driver */
-		if (dev->dev_ops->xstats_get_by_id != NULL) {
-			/* Retrieve the xstats from the driver at the end of the
-			 * xstats struct. Retrieve all xstats.
-			 */
-			xcount = (*dev->dev_ops->xstats_get_by_id)(dev,
-					NULL,
-					values ? values + count : NULL,
-					(n > count) ? n - count : 0);
-
-			if (xcount < 0)
-				return xcount;
-		/* implemented by the driver */
-		} else if (dev->dev_ops->xstats_get != NULL) {
-			/* Retrieve the xstats from the driver at the end of the
-			 * xstats struct. Retrieve all xstats.
-			 * Compatibility for PMD without xstats_get_by_ids
-			 */
-			unsigned int size = (n > count) ? n - count : 1;
-			struct rte_eth_xstat xstats[size];
-
-			xcount = (*dev->dev_ops->xstats_get)(dev,
-					values ? xstats : NULL,	size);
-
-			if (xcount < 0)
-				return xcount;
-
-			if (values != NULL)
-				for (i = 0 ; i < (unsigned int)xcount; i++)
-					values[i + count] = xstats[i].value;
-		}
-
-		if (n < count + xcount || values == NULL)
-			return count + xcount;
-
-		/* now fill the xstats structure */
-		count = 0;
-		rte_eth_stats_get(port_id, &eth_stats);
-
-		/* global stats */
-		for (i = 0; i < RTE_NB_STATS; i++) {
-			stats_ptr = RTE_PTR_ADD(&eth_stats,
-						rte_stats_strings[i].offset);
-			val = *stats_ptr;
-			values[count++] = val;
-		}
-
-		/* per-rxq stats */
-		for (q = 0; q < nb_rxqs; q++) {
-			for (i = 0; i < RTE_NB_RXQ_STATS; i++) {
-				stats_ptr = RTE_PTR_ADD(&eth_stats,
-					    rte_rxq_stats_strings[i].offset +
-					    q * sizeof(uint64_t));
-				val = *stats_ptr;
-				values[count++] = val;
-			}
-		}
-
-		/* per-txq stats */
-		for (q = 0; q < nb_txqs; q++) {
-			for (i = 0; i < RTE_NB_TXQ_STATS; i++) {
-				stats_ptr = RTE_PTR_ADD(&eth_stats,
-					    rte_txq_stats_strings[i].offset +
-					    q * sizeof(uint64_t));
-				val = *stats_ptr;
-				values[count++] = val;
-			}
-		}
-
-		return count + xcount;
-	}
-	/* Need only xstats given by IDS array */
-	else {
-		uint16_t i, size;
-		uint64_t *values_copy;
-
-		size = rte_eth_xstats_get_by_id(port_id, NULL, NULL, 0);
-
-		values_copy = malloc(sizeof(*values_copy) * size);
-		if (!values_copy) {
-			RTE_PMD_DEBUG_TRACE(
-			    "ERROR: can't allocate memory for values_copy\n");
-			return -1;
-		}
-
-		rte_eth_xstats_get_by_id(port_id, NULL, values_copy, size);
-
-		for (i = 0; i < n; i++) {
-			if (ids[i] >= size) {
-				RTE_PMD_DEBUG_TRACE(
-					"ERROR: id value isn't valid\n");
-				return -1;
-			}
-			values[i] = values_copy[ids[i]];
-		}
-		free(values_copy);
-		return n;
-	}
-}
-
-int
 rte_eth_xstats_get(uint8_t port_id, struct rte_eth_xstat *xstats,
-	unsigned int n)
+	unsigned n)
 {
 	struct rte_eth_stats eth_stats;
 	struct rte_eth_dev *dev;
-	unsigned int count = 0, i, q;
-	signed int xcount = 0;
+	unsigned count = 0, i, q;
+	signed xcount = 0;
 	uint64_t val, *stats_ptr;
 	uint16_t nb_rxqs, nb_txqs;
 
@@ -1869,18 +1608,6 @@ rte_eth_dev_set_rx_queue_stats_mapping(uint8_t port_id, uint16_t rx_queue_id,
 			STAT_QMAP_RX);
 }
 
-int
-rte_eth_dev_fw_version_get(uint8_t port_id, char *fw_version, size_t fw_size)
-{
-	struct rte_eth_dev *dev;
-
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-	dev = &rte_eth_devices[port_id];
-
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->fw_version_get, -ENOTSUP);
-	return (*dev->dev_ops->fw_version_get)(dev, fw_version, fw_size);
-}
-
 void
 rte_eth_dev_info_get(uint8_t port_id, struct rte_eth_dev_info *dev_info)
 {
@@ -1900,7 +1627,8 @@ rte_eth_dev_info_get(uint8_t port_id, struct rte_eth_dev_info *dev_info)
 
 	RTE_FUNC_PTR_OR_RET(*dev->dev_ops->dev_infos_get);
 	(*dev->dev_ops->dev_infos_get)(dev, dev_info);
-	dev_info->driver_name = dev->device->driver->name;
+	dev_info->pci_dev = dev->pci_dev;
+	dev_info->driver_name = dev->data->drv_name;
 	dev_info->nb_rx_queues = dev->data->nb_rx_queues;
 	dev_info->nb_tx_queues = dev->data->nb_tx_queues;
 }
@@ -1975,7 +1703,6 @@ int
 rte_eth_dev_vlan_filter(uint8_t port_id, uint16_t vlan_id, int on)
 {
 	struct rte_eth_dev *dev;
-	int ret;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
 	dev = &rte_eth_devices[port_id];
@@ -1991,23 +1718,7 @@ rte_eth_dev_vlan_filter(uint8_t port_id, uint16_t vlan_id, int on)
 	}
 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->vlan_filter_set, -ENOTSUP);
 
-	ret = (*dev->dev_ops->vlan_filter_set)(dev, vlan_id, on);
-	if (ret == 0) {
-		struct rte_vlan_filter_conf *vfc;
-		int vidx;
-		int vbit;
-
-		vfc = &dev->data->vlan_filter_conf;
-		vidx = vlan_id / 64;
-		vbit = vlan_id % 64;
-
-		if (on)
-			vfc->ids[vidx] |= UINT64_C(1) << vbit;
-		else
-			vfc->ids[vidx] &= ~(UINT64_C(1) << vbit);
-	}
-
-	return ret;
+	return (*dev->dev_ops->vlan_filter_set)(dev, vlan_id, on);
 }
 
 int
@@ -2174,7 +1885,13 @@ rte_eth_check_reta_mask(struct rte_eth_rss_reta_entry64 *reta_conf,
 	if (!reta_conf)
 		return -EINVAL;
 
-	num = (reta_size + RTE_RETA_GROUP_SIZE - 1) / RTE_RETA_GROUP_SIZE;
+	if (reta_size != RTE_ALIGN(reta_size, RTE_RETA_GROUP_SIZE)) {
+		RTE_PMD_DEBUG_TRACE("Invalid reta size, should be %u aligned\n",
+							RTE_RETA_GROUP_SIZE);
+		return -EINVAL;
+	}
+
+	num = reta_size / RTE_RETA_GROUP_SIZE;
 	for (i = 0; i < num; i++) {
 		if (reta_conf[i].mask)
 			return 0;
@@ -2368,7 +2085,6 @@ get_mac_addr_index(uint8_t port_id, const struct ether_addr *addr)
 	struct rte_eth_dev *dev = &rte_eth_devices[port_id];
 	unsigned i;
 
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
 	rte_eth_dev_info_get(port_id, &dev_info);
 
 	for (i = 0; i < dev_info.max_mac_addrs; i++)
@@ -2387,7 +2103,6 @@ rte_eth_dev_mac_addr_add(uint8_t port_id, struct ether_addr *addr,
 	struct rte_eth_dev *dev;
 	int index;
 	uint64_t pool_mask;
-	int ret;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
 	dev = &rte_eth_devices[port_id];
@@ -2420,17 +2135,15 @@ rte_eth_dev_mac_addr_add(uint8_t port_id, struct ether_addr *addr,
 	}
 
 	/* Update NIC */
-	ret = (*dev->dev_ops->mac_addr_add)(dev, addr, index, pool);
+	(*dev->dev_ops->mac_addr_add)(dev, addr, index, pool);
 
-	if (ret == 0) {
-		/* Update address in NIC data structure */
-		ether_addr_copy(addr, &dev->data->mac_addrs[index]);
+	/* Update address in NIC data structure */
+	ether_addr_copy(addr, &dev->data->mac_addrs[index]);
 
-		/* Update pool bitmap in NIC data structure */
-		dev->data->mac_pool_sel[index] |= (1ULL << pool);
-	}
+	/* Update pool bitmap in NIC data structure */
+	dev->data->mac_pool_sel[index] |= (1ULL << pool);
 
-	return ret;
+	return 0;
 }
 
 int
@@ -2483,6 +2196,32 @@ rte_eth_dev_default_mac_addr_set(uint8_t port_id, struct ether_addr *addr)
 	return 0;
 }
 
+int
+rte_eth_dev_set_vf_rxmode(uint8_t port_id,  uint16_t vf,
+				uint16_t rx_mode, uint8_t on)
+{
+	uint16_t num_vfs;
+	struct rte_eth_dev *dev;
+	struct rte_eth_dev_info dev_info;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+	rte_eth_dev_info_get(port_id, &dev_info);
+
+	num_vfs = dev_info.max_vfs;
+	if (vf > num_vfs) {
+		RTE_PMD_DEBUG_TRACE("set VF RX mode:invalid VF id %d\n", vf);
+		return -EINVAL;
+	}
+
+	if (rx_mode == 0) {
+		RTE_PMD_DEBUG_TRACE("set VF RX mode:mode mask ca not be zero\n");
+		return -EINVAL;
+	}
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->set_vf_rx_mode, -ENOTSUP);
+	return (*dev->dev_ops->set_vf_rx_mode)(dev, vf, rx_mode, on);
+}
 
 /*
  * Returns index into MAC address array of addr. Use 00:00:00:00:00:00 to find
@@ -2572,6 +2311,76 @@ rte_eth_dev_uc_all_hash_table_set(uint8_t port_id, uint8_t on)
 	return (*dev->dev_ops->uc_all_hash_table_set)(dev, on);
 }
 
+int
+rte_eth_dev_set_vf_rx(uint8_t port_id, uint16_t vf, uint8_t on)
+{
+	uint16_t num_vfs;
+	struct rte_eth_dev *dev;
+	struct rte_eth_dev_info dev_info;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+	rte_eth_dev_info_get(port_id, &dev_info);
+
+	num_vfs = dev_info.max_vfs;
+	if (vf > num_vfs) {
+		RTE_PMD_DEBUG_TRACE("port %d: invalid vf id\n", port_id);
+		return -EINVAL;
+	}
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->set_vf_rx, -ENOTSUP);
+	return (*dev->dev_ops->set_vf_rx)(dev, vf, on);
+}
+
+int
+rte_eth_dev_set_vf_tx(uint8_t port_id, uint16_t vf, uint8_t on)
+{
+	uint16_t num_vfs;
+	struct rte_eth_dev *dev;
+	struct rte_eth_dev_info dev_info;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+	rte_eth_dev_info_get(port_id, &dev_info);
+
+	num_vfs = dev_info.max_vfs;
+	if (vf > num_vfs) {
+		RTE_PMD_DEBUG_TRACE("set pool tx:invalid pool id=%d\n", vf);
+		return -EINVAL;
+	}
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->set_vf_tx, -ENOTSUP);
+	return (*dev->dev_ops->set_vf_tx)(dev, vf, on);
+}
+
+int
+rte_eth_dev_set_vf_vlan_filter(uint8_t port_id, uint16_t vlan_id,
+			       uint64_t vf_mask, uint8_t vlan_on)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+
+	if (vlan_id > ETHER_MAX_VLAN_ID) {
+		RTE_PMD_DEBUG_TRACE("VF VLAN filter:invalid VLAN id=%d\n",
+			vlan_id);
+		return -EINVAL;
+	}
+
+	if (vf_mask == 0) {
+		RTE_PMD_DEBUG_TRACE("VF VLAN filter:pool_mask can not be 0\n");
+		return -EINVAL;
+	}
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->set_vf_vlan_filter, -ENOTSUP);
+	return (*dev->dev_ops->set_vf_vlan_filter)(dev, vlan_id,
+						   vf_mask, vlan_on);
+}
+
 int rte_eth_set_queue_rate_limit(uint8_t port_id, uint16_t queue_idx,
 					uint16_t tx_rate)
 {
@@ -2602,12 +2411,45 @@ int rte_eth_set_queue_rate_limit(uint8_t port_id, uint16_t queue_idx,
 	return (*dev->dev_ops->set_queue_rate_limit)(dev, queue_idx, tx_rate);
 }
 
+int rte_eth_set_vf_rate_limit(uint8_t port_id, uint16_t vf, uint16_t tx_rate,
+				uint64_t q_msk)
+{
+	struct rte_eth_dev *dev;
+	struct rte_eth_dev_info dev_info;
+	struct rte_eth_link link;
+
+	if (q_msk == 0)
+		return 0;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+	rte_eth_dev_info_get(port_id, &dev_info);
+	link = dev->data->dev_link;
+
+	if (vf > dev_info.max_vfs) {
+		RTE_PMD_DEBUG_TRACE("set VF rate limit:port %d: "
+				"invalid vf id=%d\n", port_id, vf);
+		return -EINVAL;
+	}
+
+	if (tx_rate > link.link_speed) {
+		RTE_PMD_DEBUG_TRACE("set VF rate limit:invalid tx_rate=%d, "
+				"bigger than link speed= %d\n",
+				tx_rate, link.link_speed);
+		return -EINVAL;
+	}
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->set_vf_rate_limit, -ENOTSUP);
+	return (*dev->dev_ops->set_vf_rate_limit)(dev, vf, tx_rate, q_msk);
+}
+
 int
 rte_eth_mirror_rule_set(uint8_t port_id,
 			struct rte_eth_mirror_conf *mirror_conf,
 			uint8_t rule_id, uint8_t on)
 {
-	struct rte_eth_dev *dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[port_id];
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
 	if (mirror_conf->rule_type == 0) {
@@ -2643,7 +2485,7 @@ rte_eth_mirror_rule_set(uint8_t port_id,
 int
 rte_eth_mirror_rule_reset(uint8_t port_id, uint8_t rule_id)
 {
-	struct rte_eth_dev *dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[port_id];
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
 
@@ -2736,13 +2578,12 @@ rte_eth_dev_callback_unregister(uint8_t port_id,
 	return ret;
 }
 
-int
+void
 _rte_eth_dev_callback_process(struct rte_eth_dev *dev,
-	enum rte_eth_event_type event, void *cb_arg, void *ret_param)
+	enum rte_eth_event_type event, void *cb_arg)
 {
 	struct rte_eth_dev_callback *cb_lst;
 	struct rte_eth_dev_callback dev_cb;
-	int rc = 0;
 
 	rte_spinlock_lock(&rte_eth_dev_cb_lock);
 	TAILQ_FOREACH(cb_lst, &(dev->link_intr_cbs), next) {
@@ -2751,18 +2592,15 @@ _rte_eth_dev_callback_process(struct rte_eth_dev *dev,
 		dev_cb = *cb_lst;
 		cb_lst->active = 1;
 		if (cb_arg != NULL)
-			dev_cb.cb_arg = cb_arg;
-		if (ret_param != NULL)
-			dev_cb.ret_param = ret_param;
+			dev_cb.cb_arg = (void *) cb_arg;
 
 		rte_spinlock_unlock(&rte_eth_dev_cb_lock);
-		rc = dev_cb.cb_fn(dev->data->port_id, dev_cb.event,
-				dev_cb.cb_arg, dev_cb.ret_param);
+		dev_cb.cb_fn(dev->data->port_id, dev_cb.event,
+						dev_cb.cb_arg);
 		rte_spinlock_lock(&rte_eth_dev_cb_lock);
 		cb_lst->active = 0;
 	}
 	rte_spinlock_unlock(&rte_eth_dev_cb_lock);
-	return rc;
 }
 
 int
@@ -2777,13 +2615,7 @@ rte_eth_dev_rx_intr_ctl(uint8_t port_id, int epfd, int op, void *data)
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
 
 	dev = &rte_eth_devices[port_id];
-
-	if (!dev->intr_handle) {
-		RTE_PMD_DEBUG_TRACE("RX Intr handle unset\n");
-		return -ENOTSUP;
-	}
-
-	intr_handle = dev->intr_handle;
+	intr_handle = &dev->pci_dev->intr_handle;
 	if (!intr_handle->intr_vec) {
 		RTE_PMD_DEBUG_TRACE("RX Intr vector unset\n");
 		return -EPERM;
@@ -2811,7 +2643,7 @@ rte_eth_dma_zone_reserve(const struct rte_eth_dev *dev, const char *ring_name,
 	const struct rte_memzone *mz;
 
 	snprintf(z_name, sizeof(z_name), "%s_%s_%d_%d",
-		 dev->device->driver->name, ring_name,
+		 dev->driver->pci_drv.driver.name, ring_name,
 		 dev->data->port_id, queue_id);
 
 	mz = rte_memzone_lookup(z_name);
@@ -2843,12 +2675,7 @@ rte_eth_dev_rx_intr_ctl_q(uint8_t port_id, uint16_t queue_id,
 		return -EINVAL;
 	}
 
-	if (!dev->intr_handle) {
-		RTE_PMD_DEBUG_TRACE("RX Intr handle unset\n");
-		return -ENOTSUP;
-	}
-
-	intr_handle = dev->intr_handle;
+	intr_handle = &dev->pci_dev->intr_handle;
 	if (!intr_handle->intr_vec) {
 		RTE_PMD_DEBUG_TRACE("RX Intr vector unset\n");
 		return -EPERM;
@@ -2894,6 +2721,128 @@ rte_eth_dev_rx_intr_disable(uint8_t port_id,
 	return (*dev->dev_ops->rx_queue_intr_disable)(dev, queue_id);
 }
 
+#ifdef RTE_NIC_BYPASS
+int rte_eth_dev_bypass_init(uint8_t port_id)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_init, -ENOTSUP);
+	(*dev->dev_ops->bypass_init)(dev);
+	return 0;
+}
+
+int
+rte_eth_dev_bypass_state_show(uint8_t port_id, uint32_t *state)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_state_show, -ENOTSUP);
+	(*dev->dev_ops->bypass_state_show)(dev, state);
+	return 0;
+}
+
+int
+rte_eth_dev_bypass_state_set(uint8_t port_id, uint32_t *new_state)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_state_set, -ENOTSUP);
+	(*dev->dev_ops->bypass_state_set)(dev, new_state);
+	return 0;
+}
+
+int
+rte_eth_dev_bypass_event_show(uint8_t port_id, uint32_t event, uint32_t *state)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_state_show, -ENOTSUP);
+	(*dev->dev_ops->bypass_event_show)(dev, event, state);
+	return 0;
+}
+
+int
+rte_eth_dev_bypass_event_store(uint8_t port_id, uint32_t event, uint32_t state)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_event_set, -ENOTSUP);
+	(*dev->dev_ops->bypass_event_set)(dev, event, state);
+	return 0;
+}
+
+int
+rte_eth_dev_wd_timeout_store(uint8_t port_id, uint32_t timeout)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_wd_timeout_set, -ENOTSUP);
+	(*dev->dev_ops->bypass_wd_timeout_set)(dev, timeout);
+	return 0;
+}
+
+int
+rte_eth_dev_bypass_ver_show(uint8_t port_id, uint32_t *ver)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_ver_show, -ENOTSUP);
+	(*dev->dev_ops->bypass_ver_show)(dev, ver);
+	return 0;
+}
+
+int
+rte_eth_dev_bypass_wd_timeout_show(uint8_t port_id, uint32_t *wd_timeout)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_wd_timeout_show, -ENOTSUP);
+	(*dev->dev_ops->bypass_wd_timeout_show)(dev, wd_timeout);
+	return 0;
+}
+
+int
+rte_eth_dev_bypass_wd_reset(uint8_t port_id)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+
+	dev = &rte_eth_devices[port_id];
+
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->bypass_wd_reset, -ENOTSUP);
+	(*dev->dev_ops->bypass_wd_reset)(dev);
+	return 0;
+}
+#endif
 
 int
 rte_eth_dev_filter_supported(uint8_t port_id, enum rte_filter_type filter_type)
@@ -3319,6 +3268,26 @@ rte_eth_dev_get_dcb_info(uint8_t port_id,
 	return (*dev->dev_ops->get_dcb_info)(dev, dcb_info);
 }
 
+void
+rte_eth_copy_pci_info(struct rte_eth_dev *eth_dev, struct rte_pci_device *pci_dev)
+{
+	if ((eth_dev == NULL) || (pci_dev == NULL)) {
+		RTE_PMD_DEBUG_TRACE("NULL pointer eth_dev=%p pci_dev=%p\n",
+				eth_dev, pci_dev);
+		return;
+	}
+
+	eth_dev->data->dev_flags = 0;
+	if (pci_dev->driver->drv_flags & RTE_PCI_DRV_INTR_LSC)
+		eth_dev->data->dev_flags |= RTE_ETH_DEV_INTR_LSC;
+	if (pci_dev->driver->drv_flags & RTE_PCI_DRV_DETACHABLE)
+		eth_dev->data->dev_flags |= RTE_ETH_DEV_DETACHABLE;
+
+	eth_dev->data->kdrv = pci_dev->kdrv;
+	eth_dev->data->numa_node = pci_dev->device.numa_node;
+	eth_dev->data->drv_name = pci_dev->driver->driver.name;
+}
+
 int
 rte_eth_dev_l2_tunnel_eth_type_conf(uint8_t port_id,
 				    struct rte_eth_l2_tunnel_conf *l2_tunnel)
@@ -3371,41 +3340,4 @@ rte_eth_dev_l2_tunnel_offload_set(uint8_t port_id,
 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->l2_tunnel_offload_set,
 				-ENOTSUP);
 	return (*dev->dev_ops->l2_tunnel_offload_set)(dev, l2_tunnel, mask, en);
-}
-
-static void
-rte_eth_dev_adjust_nb_desc(uint16_t *nb_desc,
-			   const struct rte_eth_desc_lim *desc_lim)
-{
-	if (desc_lim->nb_align != 0)
-		*nb_desc = RTE_ALIGN_CEIL(*nb_desc, desc_lim->nb_align);
-
-	if (desc_lim->nb_max != 0)
-		*nb_desc = RTE_MIN(*nb_desc, desc_lim->nb_max);
-
-	*nb_desc = RTE_MAX(*nb_desc, desc_lim->nb_min);
-}
-
-int
-rte_eth_dev_adjust_nb_rx_tx_desc(uint8_t port_id,
-				 uint16_t *nb_rx_desc,
-				 uint16_t *nb_tx_desc)
-{
-	struct rte_eth_dev *dev;
-	struct rte_eth_dev_info dev_info;
-
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-
-	dev = &rte_eth_devices[port_id];
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->dev_infos_get, -ENOTSUP);
-
-	rte_eth_dev_info_get(port_id, &dev_info);
-
-	if (nb_rx_desc != NULL)
-		rte_eth_dev_adjust_nb_desc(nb_rx_desc, &dev_info.rx_desc_lim);
-
-	if (nb_tx_desc != NULL)
-		rte_eth_dev_adjust_nb_desc(nb_tx_desc, &dev_info.tx_desc_lim);
-
-	return 0;
 }

@@ -56,6 +56,7 @@
 #include <rte_lcore.h>
 #include <rte_atomic.h>
 #include <rte_branch_prediction.h>
+#include <rte_memory.h>
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
 #include <rte_interrupts.h>
@@ -66,7 +67,6 @@
 #include <rte_ip.h>
 #include <rte_udp.h>
 #include <rte_net.h>
-#include <rte_flow.h>
 
 #include "testpmd.h"
 
@@ -100,7 +100,9 @@ pkt_burst_receive(struct fwd_stream *fs)
 	uint64_t start_tsc;
 	uint64_t end_tsc;
 	uint64_t core_cycles;
+#endif
 
+#ifdef RTE_TEST_PMD_RECORD_CORE_CYCLES
 	start_tsc = rte_rdtsc();
 #endif
 
@@ -145,8 +147,7 @@ pkt_burst_receive(struct fwd_stream *fs)
 		if (ol_flags & PKT_RX_RSS_HASH) {
 			printf(" - RSS hash=0x%x", (unsigned) mb->hash.rss);
 			printf(" - RSS queue=0x%x",(unsigned) fs->rx_queue);
-		}
-		if (ol_flags & PKT_RX_FDIR) {
+		} else if (ol_flags & PKT_RX_FDIR) {
 			printf(" - FDIR matched ");
 			if (ol_flags & PKT_RX_FDIR_ID)
 				printf("ID=0x%x",

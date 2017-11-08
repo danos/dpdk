@@ -280,21 +280,7 @@ vring_desc_init(struct vring_desc *dp, uint16_t n)
 /**
  * Tell the backend not to interrupt us.
  */
-static inline void
-virtqueue_disable_intr(struct virtqueue *vq)
-{
-	vq->vq_ring.avail->flags |= VRING_AVAIL_F_NO_INTERRUPT;
-}
-
-/**
- * Tell the backend to interrupt us.
- */
-static inline void
-virtqueue_enable_intr(struct virtqueue *vq)
-{
-	vq->vq_ring.avail->flags &= (~VRING_AVAIL_F_NO_INTERRUPT);
-}
-
+void virtqueue_disable_intr(struct virtqueue *vq);
 /**
  *  Dump virtqueue internal structures, for debug purpose only.
  */

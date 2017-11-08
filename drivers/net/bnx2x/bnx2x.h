@@ -18,7 +18,6 @@
 
 #include <rte_byteorder.h>
 #include <rte_spinlock.h>
-#include <rte_io.h>
 
 #if RTE_BYTE_ORDER == RTE_LITTLE_ENDIAN
 #ifndef __LITTLE_ENDIAN
@@ -1421,7 +1420,8 @@ bnx2x_reg_write8(struct bnx2x_softc *sc, size_t offset, uint8_t val)
 {
 	PMD_DEBUG_PERIODIC_LOG(DEBUG, "offset=0x%08lx val=0x%02x",
 			       (unsigned long)offset, val);
-	rte_write8(val, ((uint8_t *)sc->bar[BAR0].base_addr + offset));
+	*((volatile uint8_t*)
+	  ((uintptr_t)sc->bar[BAR0].base_addr + offset)) = val;
 }
 
 static inline void
@@ -1434,8 +1434,8 @@ bnx2x_reg_write16(struct bnx2x_softc *sc, size_t offset, uint16_t val)
 #endif
 	PMD_DEBUG_PERIODIC_LOG(DEBUG, "offset=0x%08lx val=0x%04x",
 			       (unsigned long)offset, val);
-	rte_write16(val, ((uint8_t *)sc->bar[BAR0].base_addr + offset));
-
+	*((volatile uint16_t*)
+	  ((uintptr_t)sc->bar[BAR0].base_addr + offset)) = val;
 }
 
 static inline void
@@ -1449,7 +1449,8 @@ bnx2x_reg_write32(struct bnx2x_softc *sc, size_t offset, uint32_t val)
 
 	PMD_DEBUG_PERIODIC_LOG(DEBUG, "offset=0x%08lx val=0x%08x",
 			       (unsigned long)offset, val);
-	rte_write32(val, ((uint8_t *)sc->bar[BAR0].base_addr + offset));
+	*((volatile uint32_t*)
+	  ((uintptr_t)sc->bar[BAR0].base_addr + offset)) = val;
 }
 
 static inline uint8_t
@@ -1457,7 +1458,8 @@ bnx2x_reg_read8(struct bnx2x_softc *sc, size_t offset)
 {
 	uint8_t val;
 
-	val = rte_read8((uint8_t *)sc->bar[BAR0].base_addr + offset);
+	val = (uint8_t)(*((volatile uint8_t*)
+			  ((uintptr_t)sc->bar[BAR0].base_addr + offset)));
 	PMD_DEBUG_PERIODIC_LOG(DEBUG, "offset=0x%08lx val=0x%02x",
 			       (unsigned long)offset, val);
 
@@ -1475,7 +1477,8 @@ bnx2x_reg_read16(struct bnx2x_softc *sc, size_t offset)
 			    (unsigned long)offset);
 #endif
 
-	val = rte_read16(((uint8_t *)sc->bar[BAR0].base_addr + offset));
+	val = (uint16_t)(*((volatile uint16_t*)
+			   ((uintptr_t)sc->bar[BAR0].base_addr + offset)));
 	PMD_DEBUG_PERIODIC_LOG(DEBUG, "offset=0x%08lx val=0x%08x",
 			       (unsigned long)offset, val);
 
@@ -1493,7 +1496,8 @@ bnx2x_reg_read32(struct bnx2x_softc *sc, size_t offset)
 			    (unsigned long)offset);
 #endif
 
-	val = rte_read32(((uint8_t *)sc->bar[BAR0].base_addr + offset));
+	val = (uint32_t)(*((volatile uint32_t*)
+			   ((uintptr_t)sc->bar[BAR0].base_addr + offset)));
 	PMD_DEBUG_PERIODIC_LOG(DEBUG, "offset=0x%08lx val=0x%08x",
 			       (unsigned long)offset, val);
 
@@ -1557,9 +1561,11 @@ bnx2x_reg_read32(struct bnx2x_softc *sc, size_t offset)
 #define DPM_TRIGGER_TYPE 0x40
 
 /* Doorbell macro */
-#define BNX2X_DB_WRITE(db_bar, val) rte_write32_relaxed((val), (db_bar))
+#define BNX2X_DB_WRITE(db_bar, val) \
+	*((volatile uint32_t *)(db_bar)) = (val)
 
-#define BNX2X_DB_READ(db_bar) rte_read32_relaxed(db_bar)
+#define BNX2X_DB_READ(db_bar) \
+	*((volatile uint32_t *)(db_bar))
 
 #define DOORBELL_ADDR(sc, offset) \
 	(volatile uint32_t *)(((char *)(sc)->bar[BAR1].base_addr + (offset)))
@@ -1977,7 +1983,7 @@ bnx2x_set_rx_mode(struct bnx2x_softc *sc)
 static inline int pci_read(struct bnx2x_softc *sc, size_t addr,
 			   void *val, uint8_t size)
 {
-	if (rte_pci_read_config(sc->pci_dev, val, size, addr) <= 0) {
+	if (rte_eal_pci_read_config(sc->pci_dev, val, size, addr) <= 0) {
 		PMD_DRV_LOG(ERR, "Can't read from PCI config space");
 		return ENXIO;
 	}
@@ -1989,7 +1995,7 @@ static inline int pci_write_word(struct bnx2x_softc *sc, size_t addr, off_t val)
 {
 	uint16_t val16 = val;
 
-	if (rte_pci_write_config(sc->pci_dev, &val16,
+	if (rte_eal_pci_write_config(sc->pci_dev, &val16,
 				     sizeof(val16), addr) <= 0) {
 		PMD_DRV_LOG(ERR, "Can't write to PCI config space");
 		return ENXIO;
@@ -2001,7 +2007,7 @@ static inline int pci_write_word(struct bnx2x_softc *sc, size_t addr, off_t val)
 static inline int pci_write_long(struct bnx2x_softc *sc, size_t addr, off_t val)
 {
 	uint32_t val32 = val;
-	if (rte_pci_write_config(sc->pci_dev, &val32,
+	if (rte_eal_pci_write_config(sc->pci_dev, &val32,
 				     sizeof(val32), addr) <= 0) {
 		PMD_DRV_LOG(ERR, "Can't write to PCI config space");
 		return ENXIO;

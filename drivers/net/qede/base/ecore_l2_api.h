@@ -28,26 +28,15 @@ enum ecore_rss_caps {
 #endif
 
 struct ecore_queue_start_common_params {
-	/* Should always be relative to entity sending this. */
+	/* Rx/Tx queue id */
+	u8 queue_id;
 	u8 vport_id;
-	u16 queue_id;
 
-	/* Relative, but relevant only for PFs */
+	/* stats_id is relative or absolute depends on function */
 	u8 stats_id;
-
-	/* These are always absolute */
 	u16 sb;
-	u8 sb_idx;
-};
-
-struct ecore_rxq_start_ret_params {
-	void OSAL_IOMEM *p_prod;
-	void *p_handle;
-};
-
-struct ecore_txq_start_ret_params {
-	void OSAL_IOMEM *p_doorbell;
-	void *p_handle;
+	u16 sb_idx;
+	u16 vf_qid;
 };
 
 struct ecore_rss_params {
@@ -59,9 +48,7 @@ struct ecore_rss_params {
 	u8 update_rss_key;
 	u8 rss_caps;
 	u8 rss_table_size_log; /* The table size is 2 ^ rss_table_size_log */
-
-	/* Indirection table consist of rx queue handles */
-	void *rss_ind_table[ECORE_RSS_IND_TABLE_SIZE];
+	u16 rss_ind_table[ECORE_RSS_IND_TABLE_SIZE];
 	u32 rss_key[ECORE_RSS_KEY_SIZE];
 };
 
@@ -102,7 +89,6 @@ enum ecore_filter_ucast_type {
 	ECORE_FILTER_INNER_MAC_VNI_PAIR,
 	ECORE_FILTER_MAC_VNI_PAIR,
 	ECORE_FILTER_VNI,
-	ECORE_FILTER_UNUSED, /* @DPDK */
 };
 
 struct ecore_filter_ucast {
@@ -141,14 +127,6 @@ struct ecore_filter_accept_flags {
 #define ECORE_ACCEPT_BCAST		0x20
 };
 
-struct ecore_arfs_config_params {
-	bool tcp;
-	bool udp;
-	bool ipv4;
-	bool ipv6;
-	bool arfs_enable;	/* Enable or disable arfs mode */
-};
-
 /* Add / remove / move / remove-all unicast MAC-VLAN filters.
  * FW will assert in the following cases, so driver should take care...:
  * 1. Adding a filter to a full table.
@@ -181,37 +159,42 @@ ecore_filter_accept_cmd(
 	struct ecore_spq_comp_cb	 *p_comp_data);
 
 /**
- * @brief ecore_eth_rx_queue_start - RX Queue Start Ramrod
+ * @brief ecore_sp_eth_rx_queue_start - RX Queue Start Ramrod
  *
  * This ramrod initializes an RX Queue for a VPort. An Assert is generated if
  * the VPort ID is not currently initialized.
  *
  * @param p_hwfn
  * @param opaque_fid
- * @p_params			Inputs; Relative for PF [SB being an exception]
+ * @p_params			[stats_id is relative, packed in p_params]
  * @param bd_max_bytes		Maximum bytes that can be placed on a BD
  * @param bd_chain_phys_addr	Physical address of BDs for receive.
  * @param cqe_pbl_addr		Physical address of the CQE PBL Table.
  * @param cqe_pbl_size		Size of the CQE PBL Table
- * @param p_ret_params		Pointed struct to be filled with outputs.
+ * @param pp_prod		Pointer to place producer's
+ *                              address for the Rx Q (May be
+ *				NULL).
  *
  * @return enum _ecore_status_t
  */
 enum _ecore_status_t
-ecore_eth_rx_queue_start(struct ecore_hwfn *p_hwfn,
-			 u16 opaque_fid,
-			 struct ecore_queue_start_common_params *p_params,
-			 u16 bd_max_bytes,
-			 dma_addr_t bd_chain_phys_addr,
-			 dma_addr_t cqe_pbl_addr,
-			 u16 cqe_pbl_size,
-			 struct ecore_rxq_start_ret_params *p_ret_params);
+ecore_sp_eth_rx_queue_start(struct ecore_hwfn *p_hwfn,
+			    u16 opaque_fid,
+			    struct ecore_queue_start_common_params *p_params,
+			    u16 bd_max_bytes,
+			    dma_addr_t bd_chain_phys_addr,
+			    dma_addr_t cqe_pbl_addr,
+			    u16 cqe_pbl_size,
+			    void OSAL_IOMEM * *pp_prod);
 
 /**
- * @brief ecore_eth_rx_queue_stop - This ramrod closes an Rx queue
+ * @brief ecore_sp_eth_rx_queue_stop -
+ *
+ * This ramrod closes an RX queue. It sends RX queue stop ramrod
+ * + CFC delete ramrod
  *
  * @param p_hwfn
- * @param p_rxq			Handler of queue to close
+ * @param rx_queue_id		RX Queue ID
  * @param eq_completion_only	If True completion will be on
  *				EQe, if False completion will be
  *				on EQe if p_hwfn opaque
@@ -222,13 +205,13 @@ ecore_eth_rx_queue_start(struct ecore_hwfn *p_hwfn,
  * @return enum _ecore_status_t
  */
 enum _ecore_status_t
-ecore_eth_rx_queue_stop(struct ecore_hwfn *p_hwfn,
-			void *p_rxq,
-			bool eq_completion_only,
-			bool cqe_completion);
+ecore_sp_eth_rx_queue_stop(struct ecore_hwfn *p_hwfn,
+			   u16 rx_queue_id,
+			   bool eq_completion_only,
+			   bool cqe_completion);
 
 /**
- * @brief - TX Queue Start Ramrod
+ * @brief ecore_sp_eth_tx_queue_start - TX Queue Start Ramrod
  *
  * This ramrod initializes a TX Queue for a VPort. An Assert is generated if
  * the VPort is not currently initialized.
@@ -239,29 +222,34 @@ ecore_eth_rx_queue_stop(struct ecore_hwfn *p_hwfn,
  * @param tc			traffic class to use with this L2 txq
  * @param pbl_addr		address of the pbl array
  * @param pbl_size		number of entries in pbl
- * @param p_ret_params		Pointer to fill the return parameters in.
+ * @param pp_doorbell		Pointer to place doorbell pointer (May be NULL).
+ *				This address should be used with the
+ *				DIRECT_REG_WR macro.
  *
  * @return enum _ecore_status_t
  */
 enum _ecore_status_t
-ecore_eth_tx_queue_start(struct ecore_hwfn *p_hwfn,
-			 u16 opaque_fid,
-			 struct ecore_queue_start_common_params *p_params,
-			 u8 tc,
-			 dma_addr_t pbl_addr,
-			 u16 pbl_size,
-			 struct ecore_txq_start_ret_params *p_ret_params);
+ecore_sp_eth_tx_queue_start(struct ecore_hwfn *p_hwfn,
+			    u16 opaque_fid,
+			    struct ecore_queue_start_common_params *p_params,
+			    u8 tc,
+			    dma_addr_t pbl_addr,
+			    u16 pbl_size,
+			    void OSAL_IOMEM * *pp_doorbell);
 
 /**
- * @brief ecore_eth_tx_queue_stop - closes a Tx queue
+ * @brief ecore_sp_eth_tx_queue_stop -
+ *
+ * This ramrod closes a TX queue. It sends TX queue stop ramrod
+ * + CFC delete ramrod
  *
  * @param p_hwfn
- * @param p_txq - handle to Tx queue needed to be closed
+ * @param tx_queue_id		TX Queue ID
  *
  * @return enum _ecore_status_t
  */
-enum _ecore_status_t ecore_eth_tx_queue_stop(struct ecore_hwfn *p_hwfn,
-					     void *p_txq);
+enum _ecore_status_t ecore_sp_eth_tx_queue_stop(struct ecore_hwfn *p_hwfn,
+						u16 tx_queue_id);
 
 enum ecore_tpa_mode	{
 	ECORE_TPA_MODE_NONE,
@@ -285,15 +273,6 @@ struct ecore_sp_vport_start_params {
 	bool zero_placement_offset;
 	bool check_mac;
 	bool check_ethtype;
-
-	/* Strict behavior on transmission errors */
-	bool b_err_illegal_vlan_mode;
-	bool b_err_illegal_inband_mode;
-	bool b_err_vlan_insert_with_inband;
-	bool b_err_small_pkt;
-	bool b_err_big_pkt;
-	bool b_err_anti_spoof;
-	bool b_err_ctrl_frame;
 };
 
 /**
@@ -393,19 +372,19 @@ ecore_sp_eth_filter_ucast(struct ecore_hwfn *p_hwfn,
  * @note Final phase API.
  *
  * @param p_hwfn
- * @param pp_rxq_handlers	An array of queue handlers to be updated.
- * @param num_rxqs              number of queues to update.
+ * @param rx_queue_id		RX Queue ID
+ * @param num_rxqs              Allow to update multiple rx
+ *				queues, from rx_queue_id to
+ *				(rx_queue_id + num_rxqs)
  * @param complete_cqe_flg	Post completion to the CQE Ring if set
  * @param complete_event_flg	Post completion to the Event Ring if set
- * @param comp_mode
- * @param p_comp_data
  *
  * @return enum _ecore_status_t
  */
 
 enum _ecore_status_t
 ecore_sp_eth_rx_queues_update(struct ecore_hwfn *p_hwfn,
-			      void **pp_rxq_handlers,
+			      u16 rx_queue_id,
 			      u8 num_rxqs,
 			      u8 complete_cqe_flg,
 			      u8 complete_event_flg,
@@ -422,18 +401,4 @@ void ecore_get_vport_stats(struct ecore_dev *p_dev,
 
 void ecore_reset_vport_stats(struct ecore_dev *p_dev);
 
-/**
- *@brief ecore_arfs_mode_configure -
- *
- *Enable or disable rfs mode. It must accept atleast one of tcp or udp true
- *and atleast one of ipv4 or ipv6 true to enable rfs mode.
- *
- *@param p_hwfn
- *@param p_ptt
- *@param p_cfg_params		arfs mode configuration parameters.
- *
- */
-void ecore_arfs_mode_configure(struct ecore_hwfn *p_hwfn,
-			       struct ecore_ptt *p_ptt,
-			       struct ecore_arfs_config_params *p_cfg_params);
 #endif

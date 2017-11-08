@@ -74,7 +74,8 @@ struct rte_table_array {
 static void *
 rte_table_array_create(void *params, int socket_id, uint32_t entry_size)
 {
-	struct rte_table_array_params *p = params;
+	struct rte_table_array_params *p =
+		(struct rte_table_array_params *) params;
 	struct rte_table_array *t;
 	uint32_t total_cl_size, total_size;
 
@@ -110,7 +111,7 @@ rte_table_array_create(void *params, int socket_id, uint32_t entry_size)
 static int
 rte_table_array_free(void *table)
 {
-	struct rte_table_array *t = table;
+	struct rte_table_array *t = (struct rte_table_array *) table;
 
 	/* Check input parameters */
 	if (t == NULL) {
@@ -132,8 +133,8 @@ rte_table_array_entry_add(
 	int *key_found,
 	void **entry_ptr)
 {
-	struct rte_table_array *t = table;
-	struct rte_table_array_key *k = key;
+	struct rte_table_array *t = (struct rte_table_array *) table;
+	struct rte_table_array_key *k = (struct rte_table_array_key *) key;
 	uint8_t *table_entry;
 
 	/* Check input parameters */
@@ -213,7 +214,7 @@ rte_table_array_lookup(
 static int
 rte_table_array_stats_read(void *table, struct rte_table_stats *stats, int clear)
 {
-	struct rte_table_array *array = table;
+	struct rte_table_array *array = (struct rte_table_array *) table;
 
 	if (stats != NULL)
 		memcpy(stats, &array->stats, sizeof(array->stats));

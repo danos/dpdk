@@ -17,22 +17,14 @@
 		##__VA_ARGS__)
 
 #define DP_NOTICE(p_dev, is_assert, fmt, ...) \
-do { \
-	if (is_assert) \
-		rte_log(RTE_LOG_ERR, RTE_LOGTYPE_PMD,\
-			"[QEDE PMD: (%s)]%s:" fmt, \
-			(p_dev)->name ? (p_dev)->name : "", \
-			 __func__, \
-			##__VA_ARGS__); \
-	else \
-		rte_log(RTE_LOG_NOTICE, RTE_LOGTYPE_PMD,\
-			"[QEDE PMD: (%s)]%s:" fmt, \
-			(p_dev)->name ? (p_dev)->name : "", \
-			 __func__, \
-			##__VA_ARGS__); \
-} while (0)
+	rte_log(RTE_LOG_NOTICE, RTE_LOGTYPE_PMD,\
+		"[QEDE PMD: (%s)]%s:" fmt, \
+		(p_dev)->name ? (p_dev)->name : "", \
+		 __func__, \
+		##__VA_ARGS__)
 
 #ifdef RTE_LIBRTE_QEDE_DEBUG_INFO
+
 #define DP_INFO(p_dev, fmt, ...) \
 	rte_log(RTE_LOG_INFO, RTE_LOGTYPE_PMD, \
 		"[%s:%d(%s)]" fmt, \
@@ -41,6 +33,7 @@ do { \
 		##__VA_ARGS__)
 #else
 #define DP_INFO(p_dev, fmt, ...) do { } while (0)
+
 #endif
 
 #ifdef RTE_LIBRTE_QEDE_DEBUG_DRIVER
@@ -83,5 +76,15 @@ do { \
 #else
 #define PMD_RX_LOG(level, q, fmt, args...) do { } while (0)
 #endif
+
+#ifdef RTE_LIBRTE_QEDE_DEBUG_DRIVER
+#define PMD_DRV_LOG_RAW(level, fmt, args...) \
+	RTE_LOG(level, PMD, "%s(): " fmt, __func__, ## args)
+#else
+#define PMD_DRV_LOG_RAW(level, fmt, args...) do { } while (0)
+#endif
+
+#define PMD_DRV_LOG(level, fmt, args...) \
+	PMD_DRV_LOG_RAW(level, fmt "\n", ## args)
 
 #endif /* _QEDE_LOGS_H_ */

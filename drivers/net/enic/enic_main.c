@@ -193,28 +193,35 @@ void enic_dev_stats_get(struct enic *enic, struct rte_eth_stats *r_stats)
 	r_stats->rx_nombuf = rte_atomic64_read(&soft_stats->rx_nombuf);
 }
 
-void enic_del_mac_address(struct enic *enic, int mac_index)
+void enic_del_mac_address(struct enic *enic)
 {
-	struct rte_eth_dev *eth_dev = enic->rte_dev;
-	uint8_t *mac_addr = eth_dev->data->mac_addrs[mac_index].addr_bytes;
-
-	if (vnic_dev_del_addr(enic->vdev, mac_addr))
+	if (vnic_dev_del_addr(enic->vdev, enic->mac_addr))
 		dev_err(enic, "del mac addr failed\n");
 }
 
-int enic_set_mac_address(struct enic *enic, uint8_t *mac_addr)
+void enic_set_mac_address(struct enic *enic, uint8_t *mac_addr)
 {
 	int err;
 
 	if (!is_eth_addr_valid(mac_addr)) {
 		dev_err(enic, "invalid mac address\n");
-		return -EINVAL;
+		return;
 	}
 
+	err = vnic_dev_del_addr(enic->vdev, enic->mac_addr);
+	if (err) {
+		dev_err(enic, "del mac addr failed\n");
+		return;
+	}
+
+	ether_addr_copy((struct ether_addr *)mac_addr,
+		(struct ether_addr *)enic->mac_addr);
+
 	err = vnic_dev_add_addr(enic->vdev, mac_addr);
-	if (err)
+	if (err) {
 		dev_err(enic, "add mac addr failed\n");
-	return err;
+		return;
+	}
 }
 
 static void
@@ -422,7 +429,8 @@ int enic_link_update(struct enic *enic)
 }
 
 static void
-enic_intr_handler(void *arg)
+enic_intr_handler(__rte_unused struct rte_intr_handle *handle,
+	void *arg)
 {
 	struct rte_eth_dev *dev = (struct rte_eth_dev *)arg;
 	struct enic *enic = pmd_priv(dev);
@@ -430,7 +438,7 @@ enic_intr_handler(void *arg)
 	vnic_intr_return_all_credits(&enic->intr);
 
 	enic_link_update(enic);
-	_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL, NULL);
+	_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 	enic_log_q_error(enic);
 }
 
@@ -1225,7 +1233,7 @@ int enic_set_mtu(struct enic *enic, uint16_t new_mtu)
 		}
 	}
 
-	/* replace Rx function with a no-op to avoid getting stale pkts */
+	/* replace Rx funciton with a no-op to avoid getting stale pkts */
 	eth_dev->rx_pkt_burst = enic_dummy_recv_pkts;
 	rte_mb();
 
@@ -1303,19 +1311,15 @@ static int enic_dev_init(struct enic *enic)
 	/* Get the supported filters */
 	enic_fdir_info(enic);
 
-	eth_dev->data->mac_addrs = rte_zmalloc("enic_mac_addr", ETH_ALEN
-						* ENIC_MAX_MAC_ADDR, 0);
+	eth_dev->data->mac_addrs = rte_zmalloc("enic_mac_addr", ETH_ALEN, 0);
 	if (!eth_dev->data->mac_addrs) {
 		dev_err(enic, "mac addr storage alloc failed, aborting.\n");
 		return -1;
 	}
 	ether_addr_copy((struct ether_addr *) enic->mac_addr,
-			eth_dev->data->mac_addrs);
+		&eth_dev->data->mac_addrs[0]);
 
 	vnic_dev_set_reset_flag(enic->vdev, 0);
-
-	LIST_INIT(&enic->flows);
-	rte_spinlock_init(&enic->flows_lock);
 
 	/* set up link status checking */
 	vnic_dev_notify_set(enic->vdev, -1); /* No Intr for notify */

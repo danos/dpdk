@@ -98,14 +98,12 @@ Running a Sample Application
 
 .. warning::
 
-    Before running the application make sure:
+    The UIO drivers and hugepages must be setup prior to running an application.
 
-    - Hugepages setup is done.
-    - Any kernel driver being used is loaded.
-    - In case needed, ports being used by the application should be
-      bound to the corresponding kernel driver.
+.. warning::
 
-    refer to :ref:`linux_gsg_linux_drivers` for more details.
+    Any ports to be used by the application must be already bound to an appropriate kernel
+    module, as described in :ref:`linux_gsg_binding_kernel`, prior to running the application.
 
 The application is linked with the DPDK target environment's Environmental Abstraction Layer (EAL) library,
 which provides some options that are generic to every DPDK application.
@@ -114,16 +112,15 @@ The following is the list of options that can be given to the EAL:
 
 .. code-block:: console
 
-    ./rte-app [-c COREMASK | -l CORELIST] [-n NUM] [-b <domain:bus:devid.func>] \
-              [--socket-mem=MB,...] [-d LIB.so|DIR] [-m MB] [-r NUM] [-v] [--file-prefix] \
+    ./rte-app -c COREMASK [-n NUM] [-b <domain:bus:devid.func>] \
+              [--socket-mem=MB,...] [-m MB] [-r NUM] [-v] [--file-prefix] \
 	      [--proc-type <primary|secondary|auto>] [-- xen-dom0]
 
 The EAL options are as follows:
 
-* ``-c COREMASK`` or ``-l CORELIST``:
+* ``-c COREMASK``:
   An hexadecimal bit mask of the cores to run on. Note that core numbering can
-  change between platforms and should be determined beforehand. The corelist is
-  a set of core numbers instead of a bitmap core mask.
+  change between platforms and should be determined beforehand.
 
 * ``-n NUM``:
   Number of memory channels per processor socket.
@@ -138,11 +135,6 @@ The EAL options are as follows:
 
 * ``--socket-mem``:
   Memory to allocate from hugepages on specific sockets.
-
-* ``-d``:
-  Add a driver or driver directory to be loaded.
-  The application should use this option to load the pmd drivers
-  that are built as shared libraries.
 
 * ``-m MB``:
   Memory to allocate from hugepages, regardless of processor socket. It is
@@ -175,13 +167,13 @@ The EAL options are as follows:
 * ``--vfio-intr``:
   Specify interrupt type to be used by VFIO (has no effect if VFIO is not used).
 
-The ``-c`` or ``-l`` and option is mandatory; the others are optional.
+The ``-c`` and option is mandatory; the others are optional.
 
 Copy the DPDK application binary to your target, then run the application as follows
 (assuming the platform has four memory channels per processor socket,
 and that cores 0-3 are present and are to be used for running the application)::
 
-    ./helloworld -l 0-3 -n 4
+    ./helloworld -c f -n 4
 
 .. note::
 
@@ -193,10 +185,10 @@ and that cores 0-3 are present and are to be used for running the application)::
 Logical Core Use by Applications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The coremask (-c 0x0f) or corelist (-l 0-3) parameter is always mandatory for DPDK applications.
-Each bit of the mask corresponds to the equivalent logical core number as reported by Linux. The preferred corelist option is a cleaner method to define cores to be used.
+The coremask parameter is always mandatory for DPDK applications.
+Each bit of the mask corresponds to the equivalent logical core number as reported by Linux.
 Since these logical core numbers, and their mapping to specific cores on specific NUMA sockets, can vary from platform to platform,
-it is recommended that the core layout for each platform be considered when choosing the coremask/corelist to use in each case.
+it is recommended that the core layout for each platform be considered when choosing the coremask to use in each case.
 
 On initialization of the EAL layer by an DPDK application, the logical cores to be used and their socket location are displayed.
 This information can also be determined for all cores on the system by examining the ``/proc/cpuinfo`` file, for example, by running cat ``/proc/cpuinfo``.
@@ -213,7 +205,7 @@ This can be useful when using other processors to understand the mapping of the 
 
 .. warning::
 
-    The logical core layout can change between different board layouts and should be checked before selecting an application coremask/corelist.
+    The logical core layout can change between different board layouts and should be checked before selecting an application coremask.
 
 Hugepage Memory Use by Applications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

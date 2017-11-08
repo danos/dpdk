@@ -51,12 +51,6 @@ The lookup method is the Four-byte Key (FBK) hash-based method.
 The lookup table is composed of pairs of destination IPv4 address (the FBK)
 and a port mask associated with that IPv4 address.
 
-.. note::
-
-    The max port mask supported in the given hash table is 0xf, so only first
-    four ports can be supported.
-    If using non-consecutive ports, use the destination IPv4 address accordingly.
-
 For convenience and simplicity, this sample application does not take IANA-assigned multicast addresses into account,
 but instead equates the last four bytes of the multicast group (that is, the last four bytes of the destination IP address)
 with the mask of ports to multicast packets to.
@@ -119,11 +113,11 @@ Typically, to run the IPv4 Multicast sample application, issue the following com
 
 .. code-block:: console
 
-    ./build/ipv4_multicast -l 0-3 -n 3 -- -p 0x3 -q 1
+    ./build/ipv4_multicast -c 0x00f -n 3 -- -p 0x3 -q 1
 
 In this command:
 
-*   The -l option enables cores 0, 1, 2 and 3
+*   The -c option enables cores 0, 1, 2 and 3
 
 *   The -n option specifies 3 memory channels
 
@@ -151,12 +145,12 @@ Memory pools for indirect buffers are initialized differently from the memory po
 
 .. code-block:: c
 
-    packet_pool = rte_pktmbuf_pool_create("packet_pool", NB_PKT_MBUF, 32,
-			0, PKT_MBUF_DATA_SIZE, rte_socket_id());
-    header_pool = rte_pktmbuf_pool_create("header_pool", NB_HDR_MBUF, 32,
-			0, HDR_MBUF_DATA_SIZE, rte_socket_id());
-    clone_pool = rte_pktmbuf_pool_create("clone_pool", NB_CLONE_MBUF, 32,
-			0, 0, rte_socket_id());
+    packet_pool = rte_mempool_create("packet_pool", NB_PKT_MBUF, PKT_MBUF_SIZE, 32, sizeof(struct rte_pktmbuf_pool_private),
+                                     rte_pktmbuf_pool_init, NULL, rte_pktmbuf_init, NULL, rte_socket_id(), 0);
+
+    header_pool = rte_mempool_create("header_pool", NB_HDR_MBUF, HDR_MBUF_SIZE, 32, 0, NULL, NULL, rte_pktmbuf_init, NULL, rte_socket_id(), 0);
+    clone_pool = rte_mempool_create("clone_pool", NB_CLONE_MBUF,
+    CLONE_MBUF_SIZE, 32, 0, NULL, NULL, rte_pktmbuf_init, NULL, rte_socket_id(), 0);
 
 The reason for this is because indirect buffers are not supposed to hold any packet data and
 therefore can be initialized with lower amount of reserved memory for each buffer.

@@ -45,7 +45,6 @@
 
 #include <rte_mbuf.h>
 #include <rte_ethdev.h>
-#include <rte_ethdev_pci.h>
 #include <rte_malloc.h>
 #include <rte_memcpy.h>
 #include <rte_kvargs.h>
@@ -53,7 +52,6 @@
 #include <rte_atomic.h>
 
 #include "rte_eth_szedata2.h"
-#include "szedata2_iobuf.h"
 
 #define RTE_ETH_SZEDATA2_MAX_RX_QUEUES 32
 #define RTE_ETH_SZEDATA2_MAX_TX_QUEUES 32
@@ -65,6 +63,7 @@
 #define RTE_SZE2_PACKET_HEADER_SIZE_ALIGNED 8
 
 #define RTE_SZEDATA2_DRIVER_NAME net_szedata2
+#define RTE_SZEDATA2_PCI_DRIVER_NAME "rte_szedata2_pmd"
 
 #define SZEDATA2_DEV_PATH_FMT "/dev/szedataII%u"
 
@@ -92,7 +91,6 @@ struct pmd_internals {
 	uint16_t max_rx_queues;
 	uint16_t max_tx_queues;
 	char sze_dev[PATH_MAX];
-	struct rte_mem_resource *pci_rsc;
 };
 
 static struct ether_addr eth_addr = {
@@ -1032,7 +1030,6 @@ eth_dev_info(struct rte_eth_dev *dev,
 		struct rte_eth_dev_info *dev_info)
 {
 	struct pmd_internals *internals = dev->data->dev_private;
-	dev_info->pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	dev_info->if_index = 0;
 	dev_info->max_mac_addrs = 1;
 	dev_info->max_rx_pktlen = (uint32_t)-1;
@@ -1140,33 +1137,6 @@ eth_dev_close(struct rte_eth_dev *dev)
 	dev->data->nb_tx_queues = 0;
 }
 
-/**
- * Function takes value from first IBUF status register.
- * Values in IBUF and OBUF should be same.
- *
- * @param internals
- *     Pointer to device private structure.
- * @return
- *     Link speed constant.
- */
-static inline enum szedata2_link_speed
-get_link_speed(const struct pmd_internals *internals)
-{
-	const volatile struct szedata2_ibuf *ibuf =
-		ibuf_ptr_by_index(internals->pci_rsc, 0);
-	uint32_t speed = (szedata2_read32(&ibuf->ibuf_st) & 0x70) >> 4;
-	switch (speed) {
-	case 0x03:
-		return SZEDATA2_LINK_SPEED_10G;
-	case 0x04:
-		return SZEDATA2_LINK_SPEED_40G;
-	case 0x05:
-		return SZEDATA2_LINK_SPEED_100G;
-	default:
-		return SZEDATA2_LINK_SPEED_DEFAULT;
-	}
-}
-
 static int
 eth_link_update(struct rte_eth_dev *dev,
 		int wait_to_complete __rte_unused)
@@ -1174,13 +1144,11 @@ eth_link_update(struct rte_eth_dev *dev,
 	struct rte_eth_link link;
 	struct rte_eth_link *link_ptr = &link;
 	struct rte_eth_link *dev_link = &dev->data->dev_link;
-	struct pmd_internals *internals = (struct pmd_internals *)
-		dev->data->dev_private;
-	const volatile struct szedata2_ibuf *ibuf;
-	uint32_t i;
-	bool link_is_up = false;
+	volatile struct szedata2_cgmii_ibuf *ibuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_IBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_ibuf *);
 
-	switch (get_link_speed(internals)) {
+	switch (cgmii_link_speed(ibuf)) {
 	case SZEDATA2_LINK_SPEED_10G:
 		link.link_speed = ETH_SPEED_NUM_10G;
 		break;
@@ -1198,19 +1166,8 @@ eth_link_update(struct rte_eth_dev *dev,
 	/* szedata2 uses only full duplex */
 	link.link_duplex = ETH_LINK_FULL_DUPLEX;
 
-	for (i = 0; i < szedata2_ibuf_count; i++) {
-		ibuf = ibuf_ptr_by_index(internals->pci_rsc, i);
-		/*
-		 * Link is considered up if at least one ibuf is enabled
-		 * and up.
-		 */
-		if (ibuf_is_enabled(ibuf) && ibuf_is_link_up(ibuf)) {
-			link_is_up = true;
-			break;
-		}
-	}
-
-	link.link_status = (link_is_up) ? ETH_LINK_UP : ETH_LINK_DOWN;
+	link.link_status = (cgmii_ibuf_is_enabled(ibuf) &&
+			cgmii_ibuf_is_link_up(ibuf)) ? ETH_LINK_UP : ETH_LINK_DOWN;
 
 	link.link_autoneg = ETH_LINK_SPEED_FIXED;
 
@@ -1223,28 +1180,30 @@ eth_link_update(struct rte_eth_dev *dev,
 static int
 eth_dev_set_link_up(struct rte_eth_dev *dev)
 {
-	struct pmd_internals *internals = (struct pmd_internals *)
-		dev->data->dev_private;
-	uint32_t i;
+	volatile struct szedata2_cgmii_ibuf *ibuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_IBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_ibuf *);
+	volatile struct szedata2_cgmii_obuf *obuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_OBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_obuf *);
 
-	for (i = 0; i < szedata2_ibuf_count; i++)
-		ibuf_enable(ibuf_ptr_by_index(internals->pci_rsc, i));
-	for (i = 0; i < szedata2_obuf_count; i++)
-		obuf_enable(obuf_ptr_by_index(internals->pci_rsc, i));
+	cgmii_ibuf_enable(ibuf);
+	cgmii_obuf_enable(obuf);
 	return 0;
 }
 
 static int
 eth_dev_set_link_down(struct rte_eth_dev *dev)
 {
-	struct pmd_internals *internals = (struct pmd_internals *)
-		dev->data->dev_private;
-	uint32_t i;
+	volatile struct szedata2_cgmii_ibuf *ibuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_IBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_ibuf *);
+	volatile struct szedata2_cgmii_obuf *obuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_OBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_obuf *);
 
-	for (i = 0; i < szedata2_ibuf_count; i++)
-		ibuf_disable(ibuf_ptr_by_index(internals->pci_rsc, i));
-	for (i = 0; i < szedata2_obuf_count; i++)
-		obuf_disable(obuf_ptr_by_index(internals->pci_rsc, i));
+	cgmii_ibuf_disable(ibuf);
+	cgmii_obuf_disable(obuf);
 	return 0;
 }
 
@@ -1322,53 +1281,37 @@ eth_mac_addr_set(struct rte_eth_dev *dev __rte_unused,
 static void
 eth_promiscuous_enable(struct rte_eth_dev *dev)
 {
-	struct pmd_internals *internals = (struct pmd_internals *)
-		dev->data->dev_private;
-	uint32_t i;
-
-	for (i = 0; i < szedata2_ibuf_count; i++) {
-		ibuf_mac_mode_write(ibuf_ptr_by_index(internals->pci_rsc, i),
-				SZEDATA2_MAC_CHMODE_PROMISC);
-	}
+	volatile struct szedata2_cgmii_ibuf *ibuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_IBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_ibuf *);
+	cgmii_ibuf_mac_mode_write(ibuf, SZEDATA2_MAC_CHMODE_PROMISC);
 }
 
 static void
 eth_promiscuous_disable(struct rte_eth_dev *dev)
 {
-	struct pmd_internals *internals = (struct pmd_internals *)
-		dev->data->dev_private;
-	uint32_t i;
-
-	for (i = 0; i < szedata2_ibuf_count; i++) {
-		ibuf_mac_mode_write(ibuf_ptr_by_index(internals->pci_rsc, i),
-				SZEDATA2_MAC_CHMODE_ONLY_VALID);
-	}
+	volatile struct szedata2_cgmii_ibuf *ibuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_IBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_ibuf *);
+	cgmii_ibuf_mac_mode_write(ibuf, SZEDATA2_MAC_CHMODE_ONLY_VALID);
 }
 
 static void
 eth_allmulticast_enable(struct rte_eth_dev *dev)
 {
-	struct pmd_internals *internals = (struct pmd_internals *)
-		dev->data->dev_private;
-	uint32_t i;
-
-	for (i = 0; i < szedata2_ibuf_count; i++) {
-		ibuf_mac_mode_write(ibuf_ptr_by_index(internals->pci_rsc, i),
-				SZEDATA2_MAC_CHMODE_ALL_MULTICAST);
-	}
+	volatile struct szedata2_cgmii_ibuf *ibuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_IBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_ibuf *);
+	cgmii_ibuf_mac_mode_write(ibuf, SZEDATA2_MAC_CHMODE_ALL_MULTICAST);
 }
 
 static void
 eth_allmulticast_disable(struct rte_eth_dev *dev)
 {
-	struct pmd_internals *internals = (struct pmd_internals *)
-		dev->data->dev_private;
-	uint32_t i;
-
-	for (i = 0; i < szedata2_ibuf_count; i++) {
-		ibuf_mac_mode_write(ibuf_ptr_by_index(internals->pci_rsc, i),
-				SZEDATA2_MAC_CHMODE_ONLY_VALID);
-	}
+	volatile struct szedata2_cgmii_ibuf *ibuf = SZEDATA2_PCI_RESOURCE_PTR(
+			dev, SZEDATA2_CGMII_IBUF_BASE_OFF,
+			volatile struct szedata2_cgmii_ibuf *);
+	cgmii_ibuf_mac_mode_write(ibuf, SZEDATA2_MAC_CHMODE_ONLY_VALID);
 }
 
 static const struct eth_dev_ops ops = {
@@ -1406,7 +1349,7 @@ static const struct eth_dev_ops ops = {
  *          -1 on error
  */
 static int
-get_szedata2_index(const struct rte_pci_addr *pcislot_addr, uint32_t *index)
+get_szedata2_index(struct rte_eth_dev *dev, uint32_t *index)
 {
 	DIR *dir;
 	struct dirent *entry;
@@ -1414,6 +1357,7 @@ get_szedata2_index(const struct rte_pci_addr *pcislot_addr, uint32_t *index)
 	uint32_t tmp_index;
 	FILE *fd;
 	char pcislot_path[PATH_MAX];
+	struct rte_pci_addr pcislot_addr = dev->pci_dev->addr;
 	uint32_t domain;
 	uint32_t bus;
 	uint32_t devid;
@@ -1448,10 +1392,10 @@ get_szedata2_index(const struct rte_pci_addr *pcislot_addr, uint32_t *index)
 		if (ret != 4)
 			continue;
 
-		if (pcislot_addr->domain == domain &&
-				pcislot_addr->bus == bus &&
-				pcislot_addr->devid == devid &&
-				pcislot_addr->function == function) {
+		if (pcislot_addr.domain == domain &&
+				pcislot_addr.bus == bus &&
+				pcislot_addr.devid == devid &&
+				pcislot_addr.function == function) {
 			*index = tmp_index;
 			closedir(dir);
 			return 0;
@@ -1471,10 +1415,9 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev)
 	struct szedata *szedata_temp;
 	int ret;
 	uint32_t szedata2_index;
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
-	struct rte_pci_addr *pci_addr = &pci_dev->addr;
+	struct rte_pci_addr *pci_addr = &dev->pci_dev->addr;
 	struct rte_mem_resource *pci_rsc =
-		&pci_dev->mem_resource[PCI_RESOURCE_NUMBER];
+		&dev->pci_dev->mem_resource[PCI_RESOURCE_NUMBER];
 	char rsc_filename[PATH_MAX];
 	void *pci_resource_ptr = NULL;
 	int fd;
@@ -1484,7 +1427,7 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev)
 			pci_addr->function);
 
 	/* Get index of szedata2 device file and create path to device file */
-	ret = get_szedata2_index(pci_addr, &szedata2_index);
+	ret = get_szedata2_index(dev, &szedata2_index);
 	if (ret != 0) {
 		RTE_LOG(ERR, PMD, "Failed to get szedata2 device index!\n");
 		return -ENODEV;
@@ -1528,10 +1471,10 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev)
 	/* Set function callbacks for Ethernet API */
 	dev->dev_ops = &ops;
 
-	rte_eth_copy_pci_info(dev, pci_dev);
+	rte_eth_copy_pci_info(dev, dev->pci_dev);
 
 	/* mmap pci resource0 file to rte_mem_resource structure */
-	if (pci_dev->mem_resource[PCI_RESOURCE_NUMBER].phys_addr ==
+	if (dev->pci_dev->mem_resource[PCI_RESOURCE_NUMBER].phys_addr ==
 			0) {
 		RTE_LOG(ERR, PMD, "Missing resource%u file\n",
 				PCI_RESOURCE_NUMBER);
@@ -1548,7 +1491,7 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev)
 	}
 
 	pci_resource_ptr = mmap(0,
-			pci_dev->mem_resource[PCI_RESOURCE_NUMBER].len,
+			dev->pci_dev->mem_resource[PCI_RESOURCE_NUMBER].len,
 			PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	close(fd);
 	if (pci_resource_ptr == NULL) {
@@ -1556,8 +1499,8 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev)
 				rsc_filename, fd);
 		return -EINVAL;
 	}
-	pci_dev->mem_resource[PCI_RESOURCE_NUMBER].addr = pci_resource_ptr;
-	internals->pci_rsc = pci_rsc;
+	dev->pci_dev->mem_resource[PCI_RESOURCE_NUMBER].addr =
+		pci_resource_ptr;
 
 	RTE_LOG(DEBUG, PMD, "resource%u phys_addr = 0x%llx len = %llu "
 			"virt addr = %llx\n", PCI_RESOURCE_NUMBER,
@@ -1573,8 +1516,8 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev)
 			RTE_CACHE_LINE_SIZE);
 	if (data->mac_addrs == NULL) {
 		RTE_LOG(ERR, PMD, "Could not alloc space for MAC address!\n");
-		munmap(pci_dev->mem_resource[PCI_RESOURCE_NUMBER].addr,
-		       pci_dev->mem_resource[PCI_RESOURCE_NUMBER].len);
+		munmap(dev->pci_dev->mem_resource[PCI_RESOURCE_NUMBER].addr,
+			dev->pci_dev->mem_resource[PCI_RESOURCE_NUMBER].len);
 		return -EINVAL;
 	}
 
@@ -1594,13 +1537,12 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev)
 static int
 rte_szedata2_eth_dev_uninit(struct rte_eth_dev *dev)
 {
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
-	struct rte_pci_addr *pci_addr = &pci_dev->addr;
+	struct rte_pci_addr *pci_addr = &dev->pci_dev->addr;
 
 	rte_free(dev->data->mac_addrs);
 	dev->data->mac_addrs = NULL;
-	munmap(pci_dev->mem_resource[PCI_RESOURCE_NUMBER].addr,
-	       pci_dev->mem_resource[PCI_RESOURCE_NUMBER].len);
+	munmap(dev->pci_dev->mem_resource[PCI_RESOURCE_NUMBER].addr,
+		dev->pci_dev->mem_resource[PCI_RESOURCE_NUMBER].len);
 
 	RTE_LOG(INFO, PMD, "szedata2 device ("
 			PCI_PRI_FMT ") successfully uninitialized\n",
@@ -1628,26 +1570,16 @@ static const struct rte_pci_id rte_szedata2_pci_id_table[] = {
 	}
 };
 
-static int szedata2_eth_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
-	struct rte_pci_device *pci_dev)
-{
-	return rte_eth_dev_pci_generic_probe(pci_dev,
-		sizeof(struct pmd_internals), rte_szedata2_eth_dev_init);
-}
-
-static int szedata2_eth_pci_remove(struct rte_pci_device *pci_dev)
-{
-	return rte_eth_dev_pci_generic_remove(pci_dev,
-		rte_szedata2_eth_dev_uninit);
-}
-
-static struct rte_pci_driver szedata2_eth_driver = {
-	.id_table = rte_szedata2_pci_id_table,
-	.probe = szedata2_eth_pci_probe,
-	.remove = szedata2_eth_pci_remove,
+static struct eth_driver szedata2_eth_driver = {
+	.pci_drv = {
+		.id_table = rte_szedata2_pci_id_table,
+		.probe = rte_eth_dev_pci_probe,
+		.remove = rte_eth_dev_pci_remove,
+	},
+	.eth_dev_init     = rte_szedata2_eth_dev_init,
+	.eth_dev_uninit   = rte_szedata2_eth_dev_uninit,
+	.dev_private_size = sizeof(struct pmd_internals),
 };
 
-RTE_PMD_REGISTER_PCI(RTE_SZEDATA2_DRIVER_NAME, szedata2_eth_driver);
+RTE_PMD_REGISTER_PCI(RTE_SZEDATA2_DRIVER_NAME, szedata2_eth_driver.pci_drv);
 RTE_PMD_REGISTER_PCI_TABLE(RTE_SZEDATA2_DRIVER_NAME, rte_szedata2_pci_id_table);
-RTE_PMD_REGISTER_KMOD_DEP(RTE_SZEDATA2_DRIVER_NAME,
-	"* combo6core & combov3 & szedata2 & szedata2_cv3");

@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2017 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -49,10 +49,9 @@
 #include <rte_log.h>
 #include <rte_string_fns.h>
 #include <rte_malloc.h>
-#include <rte_vhost.h>
+#include <rte_virtio_net.h>
 #include <rte_ip.h>
 #include <rte_tcp.h>
-#include <rte_pause.h>
 
 #include "main.h"
 
@@ -66,6 +65,7 @@
 #define MBUF_CACHE_SIZE	128
 #define MBUF_DATA_SIZE	RTE_MBUF_DEFAULT_BUF_SIZE
 
+#define MAX_PKT_BURST 32		/* Max burst size for RX/TX */
 #define BURST_TX_DRAIN_US 100	/* TX drain every ~100us */
 
 #define BURST_RX_WAIT_US 15	/* Defines how long we wait between retries on RX */
@@ -128,8 +128,6 @@ static uint32_t enable_tso;
 
 static int client_mode;
 static int dequeue_zero_copy;
-
-static int builtin_net_driver;
 
 /* Specify timeout (in useconds) between retries on RX. */
 static uint32_t burst_rx_delay_time = BURST_RX_WAIT_US;
@@ -330,6 +328,16 @@ port_init(uint8_t port)
 
 	if (port >= rte_eth_dev_count()) return -1;
 
+	if (enable_tx_csum == 0)
+		rte_vhost_feature_disable(1ULL << VIRTIO_NET_F_CSUM);
+
+	if (enable_tso == 0) {
+		rte_vhost_feature_disable(1ULL << VIRTIO_NET_F_HOST_TSO4);
+		rte_vhost_feature_disable(1ULL << VIRTIO_NET_F_HOST_TSO6);
+		rte_vhost_feature_disable(1ULL << VIRTIO_NET_F_GUEST_TSO4);
+		rte_vhost_feature_disable(1ULL << VIRTIO_NET_F_GUEST_TSO6);
+	}
+
 	rx_rings = (uint16_t)dev_info.max_rx_queues;
 	/* Configure ethernet device. */
 	retval = rte_eth_dev_configure(port, rx_rings, tx_rings, &port_conf);
@@ -337,19 +345,6 @@ port_init(uint8_t port)
 		RTE_LOG(ERR, VHOST_PORT, "Failed to configure port %u: %s.\n",
 			port, strerror(-retval));
 		return retval;
-	}
-
-	retval = rte_eth_dev_adjust_nb_rx_tx_desc(port, &rx_ring_size,
-		&tx_ring_size);
-	if (retval != 0) {
-		RTE_LOG(ERR, VHOST_PORT, "Failed to adjust number of descriptors "
-			"for port %u: %s.\n", port, strerror(-retval));
-		return retval;
-	}
-	if (rx_ring_size > RTE_TEST_RX_DESC_DEFAULT) {
-		RTE_LOG(ERR, VHOST_PORT, "Mbuf pool has an insufficient size "
-			"for Rx queues on port %u.\n", port);
-		return -1;
 	}
 
 	/* Setup the queues. */
@@ -410,7 +405,7 @@ static int
 us_vhost_parse_socket_path(const char *q_arg)
 {
 	/* parse number string */
-	if (strnlen(q_arg, PATH_MAX) == PATH_MAX)
+	if (strnlen(q_arg, PATH_MAX) > PATH_MAX)
 		return -1;
 
 	socket_files = realloc(socket_files, PATH_MAX * (nb_sockets + 1));
@@ -514,7 +509,6 @@ us_vhost_parse_args(int argc, char **argv)
 		{"tso", required_argument, NULL, 0},
 		{"client", no_argument, &client_mode, 1},
 		{"dequeue-zero-copy", no_argument, &dequeue_zero_copy, 1},
-		{"builtin-net-driver", no_argument, &builtin_net_driver, 1},
 		{NULL, 0, 0, 0},
 	};
 
@@ -537,6 +531,7 @@ us_vhost_parse_args(int argc, char **argv)
 			vmdq_conf_default.rx_adv_conf.vmdq_rx_conf.rx_mode =
 				ETH_VMDQ_ACCEPT_BROADCAST |
 				ETH_VMDQ_ACCEPT_MULTICAST;
+			rte_vhost_feature_enable(1ULL << VIRTIO_NET_F_CTRL_RX);
 
 			break;
 
@@ -705,7 +700,7 @@ static unsigned check_ports_num(unsigned nb_ports)
 	return valid_num_ports;
 }
 
-static __rte_always_inline struct vhost_dev *
+static inline struct vhost_dev *__attribute__((always_inline))
 find_vhost_dev(struct ether_addr *mac)
 {
 	struct vhost_dev *vdev;
@@ -805,18 +800,13 @@ unlink_vmdq(struct vhost_dev *vdev)
 	}
 }
 
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 virtio_xmit(struct vhost_dev *dst_vdev, struct vhost_dev *src_vdev,
 	    struct rte_mbuf *m)
 {
 	uint16_t ret;
 
-	if (builtin_net_driver) {
-		ret = vs_enqueue_pkts(dst_vdev, VIRTIO_RXQ, &m, 1);
-	} else {
-		ret = rte_vhost_enqueue_burst(dst_vdev->vid, VIRTIO_RXQ, &m, 1);
-	}
-
+	ret = rte_vhost_enqueue_burst(dst_vdev->vid, VIRTIO_RXQ, &m, 1);
 	if (enable_stats) {
 		rte_atomic64_inc(&dst_vdev->stats.rx_total_atomic);
 		rte_atomic64_add(&dst_vdev->stats.rx_atomic, ret);
@@ -829,7 +819,7 @@ virtio_xmit(struct vhost_dev *dst_vdev, struct vhost_dev *src_vdev,
  * Check if the packet destination MAC address is for a local device. If so then put
  * the packet on that devices RX queue. If not then return.
  */
-static __rte_always_inline int
+static inline int __attribute__((always_inline))
 virtio_tx_local(struct vhost_dev *vdev, struct rte_mbuf *m)
 {
 	struct ether_hdr *pkt_hdr;
@@ -842,17 +832,17 @@ virtio_tx_local(struct vhost_dev *vdev, struct rte_mbuf *m)
 		return -1;
 
 	if (vdev->vid == dst_vdev->vid) {
-		RTE_LOG_DP(DEBUG, VHOST_DATA,
+		RTE_LOG(DEBUG, VHOST_DATA,
 			"(%d) TX: src and dst MAC is same. Dropping packet.\n",
 			vdev->vid);
 		return 0;
 	}
 
-	RTE_LOG_DP(DEBUG, VHOST_DATA,
+	RTE_LOG(DEBUG, VHOST_DATA,
 		"(%d) TX: MAC address is local\n", dst_vdev->vid);
 
 	if (unlikely(dst_vdev->remove)) {
-		RTE_LOG_DP(DEBUG, VHOST_DATA,
+		RTE_LOG(DEBUG, VHOST_DATA,
 			"(%d) device is marked for removal\n", dst_vdev->vid);
 		return 0;
 	}
@@ -865,7 +855,7 @@ virtio_tx_local(struct vhost_dev *vdev, struct rte_mbuf *m)
  * Check if the destination MAC of a packet is one local VM,
  * and get its vlan tag, and offset if it is.
  */
-static __rte_always_inline int
+static inline int __attribute__((always_inline))
 find_local_dest(struct vhost_dev *vdev, struct rte_mbuf *m,
 	uint32_t *offset, uint16_t *vlan_tag)
 {
@@ -877,7 +867,7 @@ find_local_dest(struct vhost_dev *vdev, struct rte_mbuf *m,
 		return 0;
 
 	if (vdev->vid == dst_vdev->vid) {
-		RTE_LOG_DP(DEBUG, VHOST_DATA,
+		RTE_LOG(DEBUG, VHOST_DATA,
 			"(%d) TX: src and dst MAC is same. Dropping packet.\n",
 			vdev->vid);
 		return -1;
@@ -891,7 +881,7 @@ find_local_dest(struct vhost_dev *vdev, struct rte_mbuf *m,
 	*offset  = VLAN_HLEN;
 	*vlan_tag = vlan_tags[vdev->vid];
 
-	RTE_LOG_DP(DEBUG, VHOST_DATA,
+	RTE_LOG(DEBUG, VHOST_DATA,
 		"(%d) TX: pkt to local VM device id: (%d), vlan tag: %u.\n",
 		vdev->vid, dst_vdev->vid, *vlan_tag);
 
@@ -933,7 +923,7 @@ free_pkts(struct rte_mbuf **pkts, uint16_t n)
 		rte_pktmbuf_free(pkts[n]);
 }
 
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 do_drain_mbuf_table(struct mbuf_table *tx_q)
 {
 	uint16_t count;
@@ -950,7 +940,7 @@ do_drain_mbuf_table(struct mbuf_table *tx_q)
  * This function routes the TX packet to the correct interface. This
  * may be a local device or the physical port.
  */
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 virtio_tx_route(struct vhost_dev *vdev, struct rte_mbuf *m, uint16_t vlan_tag)
 {
 	struct mbuf_table *tx_q;
@@ -983,7 +973,7 @@ virtio_tx_route(struct vhost_dev *vdev, struct rte_mbuf *m, uint16_t vlan_tag)
 		}
 	}
 
-	RTE_LOG_DP(DEBUG, VHOST_DATA,
+	RTE_LOG(DEBUG, VHOST_DATA,
 		"(%d) TX: MAC address is external\n", vdev->vid);
 
 queue2nic:
@@ -1038,7 +1028,7 @@ queue2nic:
 }
 
 
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 drain_mbuf_table(struct mbuf_table *tx_q)
 {
 	static uint64_t prev_tsc;
@@ -1051,14 +1041,14 @@ drain_mbuf_table(struct mbuf_table *tx_q)
 	if (unlikely(cur_tsc - prev_tsc > MBUF_TABLE_DRAIN_TSC)) {
 		prev_tsc = cur_tsc;
 
-		RTE_LOG_DP(DEBUG, VHOST_DATA,
+		RTE_LOG(DEBUG, VHOST_DATA,
 			"TX queue drained after timeout with burst size %u\n",
 			tx_q->len);
 		do_drain_mbuf_table(tx_q);
 	}
 }
 
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 drain_eth_rx(struct vhost_dev *vdev)
 {
 	uint16_t rx_count, enqueue_count;
@@ -1087,13 +1077,8 @@ drain_eth_rx(struct vhost_dev *vdev)
 		}
 	}
 
-	if (builtin_net_driver) {
-		enqueue_count = vs_enqueue_pkts(vdev, VIRTIO_RXQ,
+	enqueue_count = rte_vhost_enqueue_burst(vdev->vid, VIRTIO_RXQ,
 						pkts, rx_count);
-	} else {
-		enqueue_count = rte_vhost_enqueue_burst(vdev->vid, VIRTIO_RXQ,
-						pkts, rx_count);
-	}
 	if (enable_stats) {
 		rte_atomic64_add(&vdev->stats.rx_total_atomic, rx_count);
 		rte_atomic64_add(&vdev->stats.rx_atomic, enqueue_count);
@@ -1102,20 +1087,15 @@ drain_eth_rx(struct vhost_dev *vdev)
 	free_pkts(pkts, rx_count);
 }
 
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 drain_virtio_tx(struct vhost_dev *vdev)
 {
 	struct rte_mbuf *pkts[MAX_PKT_BURST];
 	uint16_t count;
 	uint16_t i;
 
-	if (builtin_net_driver) {
-		count = vs_dequeue_pkts(vdev, VIRTIO_TXQ, mbuf_pool,
+	count = rte_vhost_dequeue_burst(vdev->vid, VIRTIO_TXQ, mbuf_pool,
 					pkts, MAX_PKT_BURST);
-	} else {
-		count = rte_vhost_dequeue_burst(vdev->vid, VIRTIO_TXQ,
-					mbuf_pool, pkts, MAX_PKT_BURST);
-	}
 
 	/* setup VMDq for the first packet */
 	if (unlikely(vdev->ready == DEVICE_MAC_LEARNING) && count) {
@@ -1218,9 +1198,6 @@ destroy_device(int vid)
 		rte_pause();
 	}
 
-	if (builtin_net_driver)
-		vs_vhost_net_remove(vdev);
-
 	TAILQ_REMOVE(&lcore_info[vdev->coreid].vdev_list, vdev,
 		     lcore_vdev_entry);
 	TAILQ_REMOVE(&vhost_dev_list, vdev, global_vdev_entry);
@@ -1269,9 +1246,6 @@ new_device(int vid)
 	}
 	vdev->vid = vid;
 
-	if (builtin_net_driver)
-		vs_vhost_net_setup(vdev);
-
 	TAILQ_INSERT_TAIL(&vhost_dev_list, vdev, global_vdev_entry);
 	vdev->vmdq_rx_q = vid * queues_per_pool + vmdq_queue_base;
 
@@ -1307,7 +1281,7 @@ new_device(int vid)
  * These callback allow devices to be added to the data core when configuration
  * has been fully complete.
  */
-static const struct vhost_device_ops virtio_net_device_ops =
+static const struct virtio_net_device_ops virtio_net_device_ops =
 {
 	.new_device =  new_device,
 	.destroy_device = destroy_device,
@@ -1535,6 +1509,9 @@ main(int argc, char *argv[])
 	RTE_LCORE_FOREACH_SLAVE(lcore_id)
 		rte_eal_remote_launch(switch_worker, NULL, lcore_id);
 
+	if (mergeable == 0)
+		rte_vhost_feature_disable(1ULL << VIRTIO_NET_F_MRG_RXBUF);
+
 	if (client_mode)
 		flags |= RTE_VHOST_USER_CLIENT;
 
@@ -1543,59 +1520,18 @@ main(int argc, char *argv[])
 
 	/* Register vhost user driver to handle vhost messages. */
 	for (i = 0; i < nb_sockets; i++) {
-		char *file = socket_files + i * PATH_MAX;
-		ret = rte_vhost_driver_register(file, flags);
+		ret = rte_vhost_driver_register
+				(socket_files + i * PATH_MAX, flags);
 		if (ret != 0) {
 			unregister_drivers(i);
 			rte_exit(EXIT_FAILURE,
 				"vhost driver register failure.\n");
 		}
-
-		if (builtin_net_driver)
-			rte_vhost_driver_set_features(file, VIRTIO_NET_FEATURES);
-
-		if (mergeable == 0) {
-			rte_vhost_driver_disable_features(file,
-				1ULL << VIRTIO_NET_F_MRG_RXBUF);
-		}
-
-		if (enable_tx_csum == 0) {
-			rte_vhost_driver_disable_features(file,
-				1ULL << VIRTIO_NET_F_CSUM);
-		}
-
-		if (enable_tso == 0) {
-			rte_vhost_driver_disable_features(file,
-				1ULL << VIRTIO_NET_F_HOST_TSO4);
-			rte_vhost_driver_disable_features(file,
-				1ULL << VIRTIO_NET_F_HOST_TSO6);
-			rte_vhost_driver_disable_features(file,
-				1ULL << VIRTIO_NET_F_GUEST_TSO4);
-			rte_vhost_driver_disable_features(file,
-				1ULL << VIRTIO_NET_F_GUEST_TSO6);
-		}
-
-		if (promiscuous) {
-			rte_vhost_driver_enable_features(file,
-				1ULL << VIRTIO_NET_F_CTRL_RX);
-		}
-
-		ret = rte_vhost_driver_callback_register(file,
-			&virtio_net_device_ops);
-		if (ret != 0) {
-			rte_exit(EXIT_FAILURE,
-				"failed to register vhost driver callbacks.\n");
-		}
-
-		if (rte_vhost_driver_start(file) < 0) {
-			rte_exit(EXIT_FAILURE,
-				"failed to start vhost driver.\n");
-		}
 	}
 
-	RTE_LCORE_FOREACH_SLAVE(lcore_id)
-		rte_eal_wait_lcore(lcore_id);
+	rte_vhost_driver_callback_register(&virtio_net_device_ops);
 
+	rte_vhost_driver_session_start();
 	return 0;
 
 }

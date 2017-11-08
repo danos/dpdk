@@ -97,8 +97,7 @@ struct rte_kvargs {
  *   - A pointer to an allocated rte_kvargs structure on success
  *   - NULL on error
  */
-struct rte_kvargs *rte_kvargs_parse(const char *args,
-		const char *const valid_keys[]);
+struct rte_kvargs *rte_kvargs_parse(const char *args, const char *valid_keys[]);
 
 /**
  * Free a rte_kvargs structure

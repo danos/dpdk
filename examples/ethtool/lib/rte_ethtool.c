@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2015 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -36,10 +36,6 @@
 #include <rte_version.h>
 #include <rte_ethdev.h>
 #include <rte_ether.h>
-#include <rte_pci.h>
-#ifdef RTE_LIBRTE_IXGBE_PMD
-#include <rte_pmd_ixgbe.h>
-#endif
 #include "rte_ethtool.h"
 
 #define PKTPOOL_SIZE 512
@@ -52,20 +48,11 @@ rte_ethtool_get_drvinfo(uint8_t port_id, struct ethtool_drvinfo *drvinfo)
 	struct rte_eth_dev_info dev_info;
 	struct rte_dev_reg_info reg_info;
 	int n;
-	int ret;
 
 	if (drvinfo == NULL)
 		return -EINVAL;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-
-	ret = rte_eth_dev_fw_version_get(port_id, drvinfo->fw_version,
-			      sizeof(drvinfo->fw_version));
-	if (ret < 0)
-		printf("firmware version get error: (%s)\n", strerror(-ret));
-	else if (ret > 0)
-		printf("Insufficient fw version buffer size, "
-		       "the minimum size should be %d\n", ret);
 
 	memset(&dev_info, 0, sizeof(dev_info));
 	rte_eth_dev_info_get(port_id, &dev_info);
@@ -74,7 +61,6 @@ rte_ethtool_get_drvinfo(uint8_t port_id, struct ethtool_drvinfo *drvinfo)
 		dev_info.driver_name);
 	snprintf(drvinfo->version, sizeof(drvinfo->version), "%s",
 		rte_version());
-	/* TODO: replace bus_info by rte_devargs.name */
 	if (dev_info.pci_dev)
 		snprintf(drvinfo->bus_info, sizeof(drvinfo->bus_info),
 			"%04x:%02x:%02x.%x",
@@ -372,12 +358,9 @@ rte_ethtool_net_set_rx_mode(uint8_t port_id)
 	num_vfs = dev_info.max_vfs;
 
 	/* Set VF vf_rx_mode, VF unsupport status is discard */
-	for (vf = 0; vf < num_vfs; vf++) {
-#ifdef RTE_LIBRTE_IXGBE_PMD
-		rte_pmd_ixgbe_set_vf_rxmode(port_id, vf,
+	for (vf = 0; vf < num_vfs; vf++)
+		rte_eth_dev_set_vf_rxmode(port_id, vf,
 			ETH_VMDQ_ACCEPT_UNTAG, 0);
-#endif
-	}
 
 	/* Enable Rx vlan filter, VF unspport status is discard */
 	rte_eth_dev_set_vlan_offload(port_id, ETH_VLAN_FILTER_MASK);

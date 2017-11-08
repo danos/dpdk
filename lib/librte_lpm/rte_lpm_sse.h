@@ -78,8 +78,7 @@ rte_lpm_lookupx4(const struct rte_lpm *lpm, xmm_t ip, uint32_t hop[4],
 
 	/* extract values from tbl24[] */
 	idx = _mm_cvtsi128_si64(i24);
-	/* With -O0 option, gcc 4.8 - 5.4 fails to fold sizeof() into a constant */
-	i24 = _mm_srli_si128(i24, /* sizeof(uint64_t) */ 8);
+	i24 = _mm_srli_si128(i24, sizeof(uint64_t));
 
 	ptbl = (const uint32_t *)&lpm->tbl24[(uint32_t)idx];
 	tbl[0] = *ptbl;

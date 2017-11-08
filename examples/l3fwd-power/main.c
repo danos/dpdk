@@ -52,6 +52,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -73,6 +74,7 @@
 #include <rte_string_fns.h>
 #include <rte_timer.h>
 #include <rte_power.h>
+#include <rte_eal.h>
 #include <rte_spinlock.h>
 
 #define RTE_LOGTYPE_L3FWD_POWER RTE_LOGTYPE_USER1
@@ -129,9 +131,9 @@
  */
 
 #define NB_MBUF RTE_MAX	( \
-	(nb_ports*nb_rx_queue*nb_rxd + \
+	(nb_ports*nb_rx_queue*RTE_TEST_RX_DESC_DEFAULT + \
 	nb_ports*nb_lcores*MAX_PKT_BURST + \
-	nb_ports*n_tx_queue*nb_txd + \
+	nb_ports*n_tx_queue*RTE_TEST_TX_DESC_DEFAULT + \
 	nb_lcores*MEMPOOL_CACHE_SIZE), \
 	(unsigned)8192)
 
@@ -162,8 +164,6 @@ static uint32_t enabled_port_mask = 0;
 static int promiscuous_on = 0;
 /* NUMA is enabled by default. */
 static int numa_on = 1;
-static int parse_ptype; /**< Parse packet type using rx callback, and */
-			/**< disabled by default */
 
 enum freq_scale_hint_t
 {
@@ -243,7 +243,7 @@ static struct rte_mempool * pktmbuf_pool[NB_SOCKETS];
 
 #if (APP_LOOKUP_METHOD == APP_LOOKUP_EXACT_MATCH)
 
-#ifdef RTE_ARCH_X86
+#ifdef RTE_MACHINE_CPUFLAG_SSE4_2
 #include <rte_hash_crc.h>
 #define DEFAULT_HASH_FUNC       rte_hash_crc
 #else
@@ -377,7 +377,6 @@ static void
 signal_exit_now(int sigtype)
 {
 	unsigned lcore_id;
-	unsigned int portid, nb_ports;
 	int ret;
 
 	if (sigtype == SIGINT) {
@@ -391,15 +390,6 @@ signal_exit_now(int sigtype)
 				rte_exit(EXIT_FAILURE, "Power management "
 					"library de-initialization failed on "
 							"core%u\n", lcore_id);
-		}
-
-		nb_ports = rte_eth_dev_count();
-		for (portid = 0; portid < nb_ports; portid++) {
-			if ((enabled_port_mask & (1 << portid)) == 0)
-				continue;
-
-			rte_eth_dev_stop(portid);
-			rte_eth_dev_close(portid);
 		}
 	}
 
@@ -615,48 +605,6 @@ get_ipv4_dst_port(struct ipv4_hdr *ipv4_hdr, uint8_t portid,
 			next_hop : portid);
 }
 #endif
-
-static inline void
-parse_ptype_one(struct rte_mbuf *m)
-{
-	struct ether_hdr *eth_hdr;
-	uint32_t packet_type = RTE_PTYPE_UNKNOWN;
-	uint16_t ether_type;
-
-	eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
-	ether_type = eth_hdr->ether_type;
-	if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_IPv4))
-		packet_type |= RTE_PTYPE_L3_IPV4_EXT_UNKNOWN;
-	else if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_IPv6))
-		packet_type |= RTE_PTYPE_L3_IPV6_EXT_UNKNOWN;
-
-	m->packet_type = packet_type;
-}
-
-static uint16_t
-cb_parse_ptype(uint8_t port __rte_unused, uint16_t queue __rte_unused,
-	       struct rte_mbuf *pkts[], uint16_t nb_pkts,
-	       uint16_t max_pkts __rte_unused,
-	       void *user_param __rte_unused)
-{
-	unsigned int i;
-
-	for (i = 0; i < nb_pkts; ++i)
-		parse_ptype_one(pkts[i]);
-
-	return nb_pkts;
-}
-
-static int
-add_cb_parse_ptype(uint8_t portid, uint16_t queueid)
-{
-	printf("Port %d: softly parse packet type info\n", portid);
-	if (rte_eth_add_rx_callback(portid, queueid, cb_parse_ptype, NULL))
-		return 0;
-
-	printf("Failed to add rx callback: port=%d\n", portid);
-	return -1;
-}
 
 static inline void
 l3fwd_simple_forward(struct rte_mbuf *m, uint8_t portid,
@@ -1160,8 +1108,7 @@ print_usage(const char *prgname)
 		"  --config (port,queue,lcore): rx queues configuration\n"
 		"  --no-numa: optional, disable numa awareness\n"
 		"  --enable-jumbo: enable jumbo frame"
-		" which max packet len is PKTLEN in decimal (64-9600)\n"
-		"  --parse-ptype: parse packet type by software\n",
+		" which max packet len is PKTLEN in decimal (64-9600)\n",
 		prgname);
 }
 
@@ -1255,8 +1202,6 @@ parse_config(const char *q_arg)
 	return 0;
 }
 
-#define CMD_LINE_OPT_PARSE_PTYPE "parse-ptype"
-
 /* Parse the argument given in the command line of the application */
 static int
 parse_args(int argc, char **argv)
@@ -1269,7 +1214,6 @@ parse_args(int argc, char **argv)
 		{"config", 1, 0, 0},
 		{"no-numa", 0, 0, 0},
 		{"enable-jumbo", 0, 0, 0},
-		{CMD_LINE_OPT_PARSE_PTYPE, 0, 0, 0},
 		{NULL, 0, 0, 0}
 	};
 
@@ -1340,13 +1284,6 @@ parse_args(int argc, char **argv)
 				(unsigned int)port_conf.rxmode.max_rx_pkt_len);
 			}
 
-			if (!strncmp(lgopts[option_index].name,
-				     CMD_LINE_OPT_PARSE_PTYPE,
-				     sizeof(CMD_LINE_OPT_PARSE_PTYPE))) {
-				printf("soft parse-ptype is enabled\n");
-				parse_ptype = 1;
-			}
-
 			break;
 
 		default:
@@ -1359,7 +1296,7 @@ parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 1; /* reset getopt lib */
+	optind = 0; /* reset getopt lib */
 	return ret;
 }
 
@@ -1594,50 +1531,6 @@ check_all_ports_link_status(uint8_t port_num, uint32_t port_mask)
 	}
 }
 
-static int check_ptype(uint8_t portid)
-{
-	int i, ret;
-	int ptype_l3_ipv4 = 0;
-#if (APP_LOOKUP_METHOD == APP_LOOKUP_EXACT_MATCH)
-	int ptype_l3_ipv6 = 0;
-#endif
-	uint32_t ptype_mask = RTE_PTYPE_L3_MASK;
-
-	ret = rte_eth_dev_get_supported_ptypes(portid, ptype_mask, NULL, 0);
-	if (ret <= 0)
-		return 0;
-
-	uint32_t ptypes[ret];
-
-	ret = rte_eth_dev_get_supported_ptypes(portid, ptype_mask, ptypes, ret);
-	for (i = 0; i < ret; ++i) {
-		if (ptypes[i] & RTE_PTYPE_L3_IPV4)
-			ptype_l3_ipv4 = 1;
-#if (APP_LOOKUP_METHOD == APP_LOOKUP_EXACT_MATCH)
-		if (ptypes[i] & RTE_PTYPE_L3_IPV6)
-			ptype_l3_ipv6 = 1;
-#endif
-	}
-
-	if (ptype_l3_ipv4 == 0)
-		printf("port %d cannot parse RTE_PTYPE_L3_IPV4\n", portid);
-
-#if (APP_LOOKUP_METHOD == APP_LOOKUP_EXACT_MATCH)
-	if (ptype_l3_ipv6 == 0)
-		printf("port %d cannot parse RTE_PTYPE_L3_IPV6\n", portid);
-#endif
-
-#if (APP_LOOKUP_METHOD == APP_LOOKUP_LPM)
-	if (ptype_l3_ipv4)
-#else /* APP_LOOKUP_EXACT_MATCH */
-	if (ptype_l3_ipv4 && ptype_l3_ipv6)
-#endif
-		return 1;
-
-	return 0;
-
-}
-
 int
 main(int argc, char **argv)
 {
@@ -1723,13 +1616,6 @@ main(int argc, char **argv)
 		if (ret < 0)
 			rte_exit(EXIT_FAILURE, "Cannot configure device: "
 					"err=%d, port=%d\n", ret, portid);
-
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-						       &nb_txd);
-		if (ret < 0)
-			rte_exit(EXIT_FAILURE,
-				 "Cannot adjust number of descriptors: err=%d, port=%d\n",
-				 ret, portid);
 
 		rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);
 		print_ethaddr(" Address:", &ports_eth_addr[portid]);
@@ -1836,14 +1722,6 @@ main(int argc, char **argv)
 				rte_exit(EXIT_FAILURE,
 					"rte_eth_rx_queue_setup: err=%d, "
 						"port=%d\n", ret, portid);
-
-			if (parse_ptype) {
-				if (add_cb_parse_ptype(portid, queueid) < 0)
-					rte_exit(EXIT_FAILURE,
-						 "Fail to add ptype cb\n");
-			} else if (!check_ptype(portid))
-				rte_exit(EXIT_FAILURE,
-					 "PMD can not provide needed ptypes\n");
 		}
 	}
 

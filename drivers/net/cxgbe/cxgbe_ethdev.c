@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2014-2017 Chelsio Communications.
+ *   Copyright(c) 2014-2016 Chelsio Communications.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -57,7 +57,7 @@
 #include <rte_alarm.h>
 #include <rte_ether.h>
 #include <rte_ethdev.h>
-#include <rte_ethdev_pci.h>
+#include <rte_atomic.h>
 #include <rte_malloc.h>
 #include <rte_random.h>
 #include <rte_dev.h>
@@ -68,7 +68,7 @@
  * Macros needed to support the PCI Device ID Table ...
  */
 #define CH_PCI_DEVICE_ID_TABLE_DEFINE_BEGIN \
-	static const struct rte_pci_id cxgb4_pci_tbl[] = {
+	static struct rte_pci_id cxgb4_pci_tbl[] = {
 #define CH_PCI_DEVICE_ID_FUNCTION 0x4
 
 #define PCI_VENDOR_ID_CHELSIO 0x1425
@@ -103,8 +103,7 @@ static uint16_t cxgbe_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 		pkts_remain = nb_pkts - total_sent;
 
 		for (pkts_sent = 0; pkts_sent < pkts_remain; pkts_sent++) {
-			ret = t4_eth_xmit(txq, tx_pkts[total_sent + pkts_sent],
-					  nb_pkts);
+			ret = t4_eth_xmit(txq, tx_pkts[total_sent + pkts_sent]);
 			if (ret < 0)
 				break;
 		}
@@ -148,8 +147,6 @@ static void cxgbe_dev_info_get(struct rte_eth_dev *eth_dev,
 		.nb_align = 1,
 	};
 
-	device_info->pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
-
 	device_info->min_rx_bufsize = CXGBE_MIN_RX_BUFSIZE;
 	device_info->max_rx_pktlen = CXGBE_MAX_RX_PKTLEN;
 	device_info->max_rx_queues = max_queues;
@@ -174,7 +171,7 @@ static void cxgbe_dev_info_get(struct rte_eth_dev *eth_dev,
 
 	device_info->rx_desc_lim = cxgbe_desc_lim;
 	device_info->tx_desc_lim = cxgbe_desc_lim;
-	cxgbe_get_speed_caps(pi, &device_info->speed_capa);
+	device_info->speed_capa = ETH_LINK_SPEED_10G | ETH_LINK_SPEED_40G;
 }
 
 static void cxgbe_dev_promiscuous_enable(struct rte_eth_dev *eth_dev)
@@ -337,8 +334,6 @@ static int cxgbe_dev_start(struct rte_eth_dev *eth_dev)
 		if (err < 0)
 			goto out;
 	}
-
-	cxgbe_enable_rx_queues(pi);
 
 	err = setup_rss(pi);
 	if (err)
@@ -619,7 +614,7 @@ static int cxgbe_dev_rx_queue_setup(struct rte_eth_dev *eth_dev,
 
 	err = t4_sge_alloc_rxq(adapter, &rxq->rspq, false, eth_dev, msi_idx,
 			       &rxq->fl, t4_ethrx_handler,
-			       t4_get_tp_ch_map(adapter, pi->tx_chan), mp,
+			       t4_get_mps_bg_map(adapter, pi->tx_chan), mp,
 			       queue_idx, socket_id);
 
 	dev_debug(adapter, "%s: err = %d; port_id = %d; cntxt_id = %u\n",
@@ -659,6 +654,8 @@ static void cxgbe_dev_stats_get(struct rte_eth_dev *eth_dev,
 	cxgbe_stats_get(pi, &ps);
 
 	/* RX Stats */
+	eth_stats->ipackets = ps.rx_frames;
+	eth_stats->ibytes   = ps.rx_octets;
 	eth_stats->imissed  = ps.rx_ovflow0 + ps.rx_ovflow1 +
 			      ps.rx_ovflow2 + ps.rx_ovflow3 +
 			      ps.rx_trunc0 + ps.rx_trunc1 +
@@ -678,8 +675,6 @@ static void cxgbe_dev_stats_get(struct rte_eth_dev *eth_dev,
 
 		eth_stats->q_ipackets[i] = rxq->stats.pkts;
 		eth_stats->q_ibytes[i] = rxq->stats.rx_bytes;
-		eth_stats->ipackets += eth_stats->q_ipackets[i];
-		eth_stats->ibytes += eth_stats->q_ibytes[i];
 	}
 
 	for (i = 0; i < pi->n_tx_qsets; i++) {
@@ -1010,7 +1005,7 @@ static int eth_cxgbe_dev_init(struct rte_eth_dev *eth_dev)
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
 
-	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+	pci_dev = eth_dev->pci_dev;
 
 	snprintf(name, sizeof(name), "cxgbeadapter%d", eth_dev->data->port_id);
 	adapter = rte_zmalloc(name, sizeof(*adapter), 0);
@@ -1042,25 +1037,16 @@ out_free_adapter:
 	return err;
 }
 
-static int eth_cxgbe_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
-	struct rte_pci_device *pci_dev)
-{
-	return rte_eth_dev_pci_generic_probe(pci_dev,
-		sizeof(struct port_info), eth_cxgbe_dev_init);
-}
-
-static int eth_cxgbe_pci_remove(struct rte_pci_device *pci_dev)
-{
-	return rte_eth_dev_pci_generic_remove(pci_dev, NULL);
-}
-
-static struct rte_pci_driver rte_cxgbe_pmd = {
-	.id_table = cxgb4_pci_tbl,
-	.drv_flags = RTE_PCI_DRV_NEED_MAPPING,
-	.probe = eth_cxgbe_pci_probe,
-	.remove = eth_cxgbe_pci_remove,
+static struct eth_driver rte_cxgbe_pmd = {
+	.pci_drv = {
+		.id_table = cxgb4_pci_tbl,
+		.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
+		.probe = rte_eth_dev_pci_probe,
+		.remove = rte_eth_dev_pci_remove,
+	},
+	.eth_dev_init = eth_cxgbe_dev_init,
+	.dev_private_size = sizeof(struct port_info),
 };
 
-RTE_PMD_REGISTER_PCI(net_cxgbe, rte_cxgbe_pmd);
+RTE_PMD_REGISTER_PCI(net_cxgbe, rte_cxgbe_pmd.pci_drv);
 RTE_PMD_REGISTER_PCI_TABLE(net_cxgbe, cxgb4_pci_tbl);
-RTE_PMD_REGISTER_KMOD_DEP(net_cxgbe, "* igb_uio | uio_pci_generic | vfio-pci");

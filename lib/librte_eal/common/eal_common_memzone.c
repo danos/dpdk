@@ -189,8 +189,7 @@ memzone_reserve_aligned_thread_unsafe(const char *name, size_t len,
 		return NULL;
 	}
 
-	if ((socket_id != SOCKET_ID_ANY) &&
-	    (socket_id >= RTE_MAX_NUMA_NODES || socket_id < 0)) {
+	if ((socket_id != SOCKET_ID_ANY) && (socket_id >= RTE_MAX_NUMA_NODES)) {
 		rte_errno = EINVAL;
 		return NULL;
 	}

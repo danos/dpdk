@@ -39,7 +39,6 @@
 #include <rte_memzone.h>
 #include <rte_malloc_heap.h>
 #include <rte_rwlock.h>
-#include <rte_pause.h>
 
 #ifdef __cplusplus
 extern "C" {

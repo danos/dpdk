@@ -45,7 +45,8 @@
  * Interrupts
  */
 
-static void bnxt_int_handler(void *param)
+static void bnxt_int_handler(struct rte_intr_handle *handle __rte_unused,
+			     void *param)
 {
 	struct rte_eth_dev *eth_dev = (struct rte_eth_dev *)param;
 	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
@@ -66,26 +67,16 @@ static void bnxt_int_handler(void *param)
 			/* Handle any async event */
 			bnxt_handle_async_event(bp, cmp);
 			break;
-		case CMPL_BASE_TYPE_HWRM_FWD_REQ:
+		case CMPL_BASE_TYPE_HWRM_FWD_RESP:
 			/* Handle HWRM forwarded responses */
 			bnxt_handle_fwd_req(bp, cmp);
 			break;
 		default:
 			/* Ignore any other events */
-			if (cmp->type & rte_cpu_to_le_16(0x01)) {
-				if (!CMP_VALID(cmp, raw_cons,
-					       cpr->cp_ring_struct))
-					goto no_more;
-			}
-			RTE_LOG(INFO, PMD,
-				"Ignoring %02x completion\n", CMP_TYPE(cmp));
 			break;
 		}
 		raw_cons = NEXT_RAW_CMP(raw_cons);
-
-	};
-no_more:
-	cpr->cp_raw_cons = raw_cons;
+	}
 	B_CP_DB_REARM(cpr, cpr->cp_raw_cons);
 }
 
@@ -112,15 +103,14 @@ void bnxt_disable_int(struct bnxt *bp)
 	struct bnxt_cp_ring_info *cpr = bp->def_cp_ring;
 
 	/* Only the default completion ring */
-	if (cpr != NULL && cpr->cp_doorbell != NULL)
-		B_CP_DB_DISARM(cpr);
+	B_CP_DIS_DB(cpr, cpr->cp_raw_cons);
 }
 
 void bnxt_enable_int(struct bnxt *bp)
 {
 	struct bnxt_cp_ring_info *cpr = bp->def_cp_ring;
 
-	B_CP_DB_ARM(cpr);
+	B_CP_DB_REARM(cpr, cpr->cp_raw_cons);
 }
 
 int bnxt_setup_int(struct bnxt *bp)
@@ -137,7 +127,7 @@ int bnxt_setup_int(struct bnxt *bp)
 		for (i = 0; i < total_vecs; i++) {
 			bp->irq_tbl[i].vector = i;
 			snprintf(bp->irq_tbl[i].name, len,
-				 "%s-%d", bp->eth_dev->device->name, i);
+				 "%s-%d", bp->eth_dev->data->name, i);
 			bp->irq_tbl[i].handler = bnxt_int_handler;
 		}
 	} else {
@@ -147,7 +137,7 @@ int bnxt_setup_int(struct bnxt *bp)
 	return 0;
 
 setup_exit:
-	RTE_LOG(ERR, PMD, "bnxt_irq_tbl setup failed\n");
+	RTE_LOG(ERR, PMD, "bnxt_irq_tbl setup failed");
 	return rc;
 }
 

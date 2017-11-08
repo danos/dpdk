@@ -1,6 +1,6 @@
 #   BSD LICENSE
 #
-#   Copyright (C) Cavium, Inc 2015. All rights reserved.
+#   Copyright (C) Cavium networks 2015. All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions
@@ -12,7 +12,7 @@
 #       notice, this list of conditions and the following disclaimer in
 #       the documentation and/or other materials provided with the
 #       distribution.
-#     * Neither the name of Cavium, Inc nor the names of its
+#     * Neither the name of Cavium networks nor the names of its
 #       contributors may be used to endorse or promote products derived
 #       from this software without specific prior written permission.
 #
@@ -47,7 +47,7 @@
 #
 
 # ARCH =
-# CROSS =
+CROSS ?= aarch64-thunderx-linux-gnu-
 # MACHINE_CFLAGS =
 # MACHINE_LDFLAGS =
 # MACHINE_ASFLAGS =
@@ -55,4 +55,4 @@
 # CPU_LDFLAGS =
 # CPU_ASFLAGS =
 
-MACHINE_CFLAGS += -march=armv8-a+crc+crypto -mcpu=thunderx
+MACHINE_CFLAGS += -march=armv8-a+crc -mcpu=thunderx

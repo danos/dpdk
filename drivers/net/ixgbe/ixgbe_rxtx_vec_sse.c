@@ -82,13 +82,24 @@ ixgbe_rxq_rearm(struct ixgbe_rx_queue *rxq)
 	/* Initialize the mbufs in vector, process 2 mbufs in one loop */
 	for (i = 0; i < RTE_IXGBE_RXQ_REARM_THRESH; i += 2, rxep += 2) {
 		__m128i vaddr0, vaddr1;
+		uintptr_t p0, p1;
 
 		mb0 = rxep[0].mbuf;
 		mb1 = rxep[1].mbuf;
 
+		/*
+		 * Flush mbuf with pkt template.
+		 * Data to be rearmed is 6 bytes long.
+		 * Though, RX will overwrite ol_flags that are coming next
+		 * anyway. So overwrite whole 8 bytes with one load:
+		 * 6 bytes of rearm_data plus first 2 bytes of ol_flags.
+		 */
+		p0 = (uintptr_t)&mb0->rearm_data;
+		*(uint64_t *)p0 = rxq->mbuf_initializer;
+		p1 = (uintptr_t)&mb1->rearm_data;
+		*(uint64_t *)p1 = rxq->mbuf_initializer;
+
 		/* load buf_addr(lo 64bit) and buf_physaddr(hi 64bit) */
-		RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, buf_physaddr) !=
-				offsetof(struct rte_mbuf, buf_addr) + 8);
 		vaddr0 = _mm_loadu_si128((__m128i *)&(mb0->buf_addr));
 		vaddr1 = _mm_loadu_si128((__m128i *)&(mb1->buf_addr));
 
@@ -122,12 +133,23 @@ ixgbe_rxq_rearm(struct ixgbe_rx_queue *rxq)
 	IXGBE_PCI_REG_WRITE(rxq->rdt_reg_addr, rx_id);
 }
 
+/* Handling the offload flags (olflags) field takes computation
+ * time when receiving packets. Therefore we provide a flag to disable
+ * the processing of the olflags field when they are not needed. This
+ * gives improved performance, at the cost of losing the offload info
+ * in the received packet
+ */
+#ifdef RTE_IXGBE_RX_OLFLAGS_ENABLE
+
 static inline void
-desc_to_olflags_v(__m128i descs[4], __m128i mbuf_init, uint8_t vlan_flags,
+desc_to_olflags_v(__m128i descs[4], uint8_t vlan_flags,
 	struct rte_mbuf **rx_pkts)
 {
 	__m128i ptype0, ptype1, vtag0, vtag1, csum;
-	__m128i rearm0, rearm1, rearm2, rearm3;
+	union {
+		uint16_t e[4];
+		uint64_t dword;
+	} vol;
 
 	/* mask everything except rss type */
 	const __m128i rsstype_msk = _mm_set_epi16(
@@ -206,93 +228,18 @@ desc_to_olflags_v(__m128i descs[4], __m128i mbuf_init, uint8_t vlan_flags,
 	vtag1 = _mm_or_si128(vtag0, vtag1);
 
 	vtag1 = _mm_or_si128(ptype0, vtag1);
+	vol.dword = _mm_cvtsi128_si64(vtag1);
 
-	/*
-	 * At this point, we have the 4 sets of flags in the low 64-bits
-	 * of vtag1 (4x16).
-	 * We want to extract these, and merge them with the mbuf init data
-	 * so we can do a single 16-byte write to the mbuf to set the flags
-	 * and all the other initialization fields. Extracting the
-	 * appropriate flags means that we have to do a shift and blend for
-	 * each mbuf before we do the write.
-	 */
-	rearm0 = _mm_blend_epi16(mbuf_init, _mm_slli_si128(vtag1, 8), 0x10);
-	rearm1 = _mm_blend_epi16(mbuf_init, _mm_slli_si128(vtag1, 6), 0x10);
-	rearm2 = _mm_blend_epi16(mbuf_init, _mm_slli_si128(vtag1, 4), 0x10);
-	rearm3 = _mm_blend_epi16(mbuf_init, _mm_slli_si128(vtag1, 2), 0x10);
-
-	/* write the rearm data and the olflags in one write */
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, ol_flags) !=
-			offsetof(struct rte_mbuf, rearm_data) + 8);
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, rearm_data) !=
-			RTE_ALIGN(offsetof(struct rte_mbuf, rearm_data), 16));
-	_mm_store_si128((__m128i *)&rx_pkts[0]->rearm_data, rearm0);
-	_mm_store_si128((__m128i *)&rx_pkts[1]->rearm_data, rearm1);
-	_mm_store_si128((__m128i *)&rx_pkts[2]->rearm_data, rearm2);
-	_mm_store_si128((__m128i *)&rx_pkts[3]->rearm_data, rearm3);
+	rx_pkts[0]->ol_flags = vol.e[0];
+	rx_pkts[1]->ol_flags = vol.e[1];
+	rx_pkts[2]->ol_flags = vol.e[2];
+	rx_pkts[3]->ol_flags = vol.e[3];
 }
-
-static inline uint32_t get_packet_type(int index,
-				       uint32_t pkt_info,
-				       uint32_t etqf_check,
-				       uint32_t tunnel_check)
-{
-	if (etqf_check & (0x02 << (index * RTE_IXGBE_DESCS_PER_LOOP)))
-		return RTE_PTYPE_UNKNOWN;
-
-	if (tunnel_check & (0x02 << (index * RTE_IXGBE_DESCS_PER_LOOP))) {
-		pkt_info &= IXGBE_PACKET_TYPE_MASK_TUNNEL;
-		return ptype_table_tn[pkt_info];
-	}
-
-	pkt_info &= IXGBE_PACKET_TYPE_MASK_82599;
-	return ptype_table[pkt_info];
-}
-
-static inline void
-desc_to_ptype_v(__m128i descs[4], uint16_t pkt_type_mask,
-		struct rte_mbuf **rx_pkts)
-{
-	__m128i etqf_mask = _mm_set_epi64x(0x800000008000LL, 0x800000008000LL);
-	__m128i ptype_mask = _mm_set_epi32(
-		pkt_type_mask, pkt_type_mask, pkt_type_mask, pkt_type_mask);
-	__m128i tunnel_mask =
-		_mm_set_epi64x(0x100000001000LL, 0x100000001000LL);
-
-	uint32_t etqf_check, tunnel_check, pkt_info;
-
-	__m128i ptype0 = _mm_unpacklo_epi32(descs[0], descs[2]);
-	__m128i ptype1 = _mm_unpacklo_epi32(descs[1], descs[3]);
-
-	/* interleave low 32 bits,
-	 * now we have 4 ptypes in a XMM register
-	 */
-	ptype0 = _mm_unpacklo_epi32(ptype0, ptype1);
-
-	/* create a etqf bitmask based on the etqf bit. */
-	etqf_check = _mm_movemask_epi8(_mm_and_si128(ptype0, etqf_mask));
-
-	/* shift left by IXGBE_PACKET_TYPE_SHIFT, and apply ptype mask */
-	ptype0 = _mm_and_si128(_mm_srli_epi32(ptype0, IXGBE_PACKET_TYPE_SHIFT),
-			       ptype_mask);
-
-	/* create a tunnel bitmask based on the tunnel bit */
-	tunnel_check = _mm_movemask_epi8(
-		_mm_slli_epi32(_mm_and_si128(ptype0, tunnel_mask), 0x3));
-
-	pkt_info = _mm_extract_epi32(ptype0, 0);
-	rx_pkts[0]->packet_type =
-		get_packet_type(0, pkt_info, etqf_check, tunnel_check);
-	pkt_info = _mm_extract_epi32(ptype0, 1);
-	rx_pkts[1]->packet_type =
-		get_packet_type(1, pkt_info, etqf_check, tunnel_check);
-	pkt_info = _mm_extract_epi32(ptype0, 2);
-	rx_pkts[2]->packet_type =
-		get_packet_type(2, pkt_info, etqf_check, tunnel_check);
-	pkt_info = _mm_extract_epi32(ptype0, 3);
-	rx_pkts[3]->packet_type =
-		get_packet_type(3, pkt_info, etqf_check, tunnel_check);
-}
+#else
+#define desc_to_olflags_v(desc, vlan_flags, rx_pkts) do { \
+		RTE_SET_USED(vlan_flags); \
+	} while (0)
+#endif
 
 /*
  * vPMD raw receive routine, only accept(nb_pkts >= RTE_IXGBE_DESCS_PER_LOOP)
@@ -320,17 +267,7 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 				-rxq->crc_len, /* sub crc on pkt_len */
 				0, 0            /* ignore pkt_type field */
 			);
-	/*
-	 * compile-time check the above crc_adjust layout is correct.
-	 * NOTE: the first field (lowest address) is given last in set_epi16
-	 * call above.
-	 */
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, pkt_len) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 4);
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, data_len) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 8);
 	__m128i dd_check, eop_check;
-	__m128i mbuf_init;
 	uint8_t vlan_flags;
 
 	/* nb_pkts shall be less equal than RTE_IXGBE_MAX_RX_BURST */
@@ -375,21 +312,6 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 		0xFF, 0xFF,  /* skip 32 bit pkt_type */
 		0xFF, 0xFF
 		);
-	/*
-	 * Compile-time verify the shuffle mask
-	 * NOTE: some field positions already verified above, but duplicated
-	 * here for completeness in case of future modifications.
-	 */
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, pkt_len) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 4);
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, data_len) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 8);
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, vlan_tci) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 10);
-	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, hash) !=
-			offsetof(struct rte_mbuf, rx_descriptor_fields1) + 12);
-
-	mbuf_init = _mm_set_epi64x(0, rxq->mbuf_initializer);
 
 	/* Cache is empty -> need to scan the buffer rings, but first move
 	 * the next 'n' mbufs into the cache
@@ -471,7 +393,7 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 		sterr_tmp1 = _mm_unpackhi_epi32(descs[1], descs[0]);
 
 		/* set ol_flags with vlan packet type */
-		desc_to_olflags_v(descs, mbuf_init, vlan_flags, &rx_pkts[pos]);
+		desc_to_olflags_v(descs, vlan_flags, &rx_pkts[pos]);
 
 		/* D.2 pkt 3,4 set in_port/nb_seg and remove crc */
 		pkt_mb4 = _mm_add_epi16(pkt_mb4, crc_adjust);
@@ -511,6 +433,12 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 			/* store the resulting 32-bit value */
 			*(int *)split_packet = _mm_cvtsi128_si32(eop_bits);
 			split_packet += RTE_IXGBE_DESCS_PER_LOOP;
+
+			/* zero-out next pointers */
+			rx_pkts[pos]->next = NULL;
+			rx_pkts[pos + 1]->next = NULL;
+			rx_pkts[pos + 2]->next = NULL;
+			rx_pkts[pos + 3]->next = NULL;
 		}
 
 		/* C.3 calc available number of desc */
@@ -522,8 +450,6 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 				pkt_mb2);
 		_mm_storeu_si128((void *)&rx_pkts[pos]->rx_descriptor_fields1,
 				pkt_mb1);
-
-		desc_to_ptype_v(descs, rxq->pkt_type_mask, &rx_pkts[pos]);
 
 		/* C.4 calc avaialbe number of desc */
 		var = __builtin_popcountll(_mm_cvtsi128_si64(staterr));
@@ -619,8 +545,8 @@ vtx(volatile union ixgbe_adv_tx_desc *txdp,
 }
 
 uint16_t
-ixgbe_xmit_fixed_burst_vec(void *tx_queue, struct rte_mbuf **tx_pkts,
-			   uint16_t nb_pkts)
+ixgbe_xmit_pkts_vec(void *tx_queue, struct rte_mbuf **tx_pkts,
+		       uint16_t nb_pkts)
 {
 	struct ixgbe_tx_queue *txq = (struct ixgbe_tx_queue *)tx_queue;
 	volatile union ixgbe_adv_tx_desc *txdp;

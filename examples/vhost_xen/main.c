@@ -48,7 +48,6 @@
 #include <rte_ethdev.h>
 #include <rte_log.h>
 #include <rte_string_fns.h>
-#include <rte_pause.h>
 
 #include "main.h"
 #include "virtio-net.h"
@@ -279,8 +278,7 @@ port_init(uint8_t port, struct rte_mempool *mbuf_pool)
 	struct rte_eth_rxconf *rxconf;
 	struct rte_eth_conf port_conf;
 	uint16_t rx_rings, tx_rings = (uint16_t)rte_lcore_count();
-	uint16_t rx_ring_size = RTE_TEST_RX_DESC_DEFAULT;
-	uint16_t tx_ring_size = RTE_TEST_TX_DESC_DEFAULT;
+	const uint16_t rx_ring_size = RTE_TEST_RX_DESC_DEFAULT, tx_ring_size = RTE_TEST_TX_DESC_DEFAULT;
 	int retval;
 	uint16_t q;
 
@@ -307,17 +305,6 @@ port_init(uint8_t port, struct rte_mempool *mbuf_pool)
 	retval = rte_eth_dev_configure(port, rx_rings, tx_rings, &port_conf);
 	if (retval != 0)
 		return retval;
-
-	retval = rte_eth_dev_adjust_nb_rx_tx_desc(port, &rx_ring_size,
-		&tx_ring_size);
-	if (retval != 0)
-		return retval;
-	if (rx_ring_size > RTE_TEST_RX_DESC_DEFAULT ||
-		tx_ring_size > RTE_TEST_TX_DESC_DEFAULT) {
-		RTE_LOG(ERR, VHOST_PORT, "Mbuf pool has an insufficient size for "
-			"port %u.\n", port);
-		return -1;
-	}
 
 	rte_eth_dev_info_get(port, &dev_info);
 	rxconf = &dev_info.default_rxconf;
@@ -523,7 +510,7 @@ static unsigned check_ports_num(unsigned nb_ports)
  * Function to convert guest physical addresses to vhost virtual addresses. This
  * is used to convert virtio buffer addresses.
  */
-static __rte_always_inline uint64_t
+static inline uint64_t __attribute__((always_inline))
 gpa_to_vva(struct virtio_net *dev, uint64_t guest_pa)
 {
 	struct virtio_memory_regions *region;
@@ -538,7 +525,7 @@ gpa_to_vva(struct virtio_net *dev, uint64_t guest_pa)
 			break;
 		}
 	}
-	RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") GPA %p| VVA %p\n",
+	RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") GPA %p| VVA %p\n",
 		dev->device_fh, (void*)(uintptr_t)guest_pa, (void*)(uintptr_t)vhost_va);
 
 	return vhost_va;
@@ -547,10 +534,10 @@ gpa_to_vva(struct virtio_net *dev, uint64_t guest_pa)
 /*
  * This function adds buffers to the virtio devices RX virtqueue. Buffers can
  * be received from the physical port or from another virtio device. A packet
- * count is returned to indicate the number of packets that were successfully
+ * count is returned to indicate the number of packets that were succesfully
  * added to the RX queue.
  */
-static __rte_always_inline uint32_t
+static inline uint32_t __attribute__((always_inline))
 virtio_dev_rx(struct virtio_net *dev, struct rte_mbuf **pkts, uint32_t count)
 {
 	struct vhost_virtqueue *vq;
@@ -568,7 +555,7 @@ virtio_dev_rx(struct virtio_net *dev, struct rte_mbuf **pkts, uint32_t count)
 	uint8_t success = 0;
 	void *userdata;
 
-	RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") virtio_dev_rx()\n", dev->device_fh);
+	RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") virtio_dev_rx()\n", dev->device_fh);
 	vq = dev->virtqueue_rx;
 	count = (count > MAX_PKT_BURST) ? MAX_PKT_BURST : count;
 	/* As many data cores may want access to available buffers, they need to be reserved. */
@@ -593,7 +580,7 @@ virtio_dev_rx(struct virtio_net *dev, struct rte_mbuf **pkts, uint32_t count)
 									res_end_idx);
 	} while (unlikely(success == 0));
 	res_cur_idx = res_base_idx;
-	RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") Current Index %d| End Index %d\n",
+	RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") Current Index %d| End Index %d\n",
 		dev->device_fh, res_cur_idx, res_end_idx);
 
 	/* Prefetch available ring to retrieve indexes. */
@@ -675,7 +662,7 @@ virtio_dev_rx(struct virtio_net *dev, struct rte_mbuf **pkts, uint32_t count)
 /*
  * Compares a packet destination MAC address to a device MAC address.
  */
-static __rte_always_inline int
+static inline int __attribute__((always_inline))
 ether_addr_cmp(struct ether_addr *ea, struct ether_addr *eb)
 {
 	return ((*(uint64_t *)ea ^ *(uint64_t *)eb) & MAC_ADDR_CMP) == 0;
@@ -770,7 +757,7 @@ unlink_vmdq(struct virtio_net *dev)
  * Check if the packet destination MAC address is for a local device. If so then put
  * the packet on that devices RX queue. If not then return.
  */
-static __rte_always_inline unsigned
+static inline unsigned __attribute__((always_inline))
 virtio_tx_local(struct virtio_net *dev, struct rte_mbuf *m)
 {
 	struct virtio_net_data_ll *dev_ll;
@@ -788,7 +775,7 @@ virtio_tx_local(struct virtio_net *dev, struct rte_mbuf *m)
 
 			/* Drop the packet if the TX packet is destined for the TX device. */
 			if (dev_ll->dev->device_fh == dev->device_fh) {
-				RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") TX: "
+				RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") TX: "
 					"Source and destination MAC addresses are the same. "
 					"Dropping packet.\n",
 					dev_ll->dev->device_fh);
@@ -796,12 +783,12 @@ virtio_tx_local(struct virtio_net *dev, struct rte_mbuf *m)
 			}
 
 
-			RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") TX: "
+			RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") TX: "
 				"MAC address is local\n", dev_ll->dev->device_fh);
 
 			if (dev_ll->dev->remove) {
 				/*drop the packet if the device is marked for removal*/
-				RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") "
+				RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") "
 					"Device is marked for removal\n",
 					dev_ll->dev->device_fh);
 			} else {
@@ -827,7 +814,7 @@ virtio_tx_local(struct virtio_net *dev, struct rte_mbuf *m)
  * This function routes the TX packet to the correct interface. This may be a local device
  * or the physical port.
  */
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 virtio_tx_route(struct virtio_net* dev, struct rte_mbuf *m, struct rte_mempool *mbuf_pool, uint16_t vlan_tag)
 {
 	struct mbuf_table *tx_q;
@@ -842,7 +829,7 @@ virtio_tx_route(struct virtio_net* dev, struct rte_mbuf *m, struct rte_mempool *
 		return;
 	}
 
-	RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") TX: "
+	RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") TX: "
 		"MAC address is external\n", dev->device_fh);
 
 	/*Add packet to the port tx queue*/
@@ -896,7 +883,7 @@ virtio_tx_route(struct virtio_net* dev, struct rte_mbuf *m, struct rte_mempool *
 	return;
 }
 
-static __rte_always_inline void
+static inline void __attribute__((always_inline))
 virtio_dev_tx(struct virtio_net* dev, struct rte_mempool *mbuf_pool)
 {
 	struct rte_mbuf m;
@@ -916,7 +903,7 @@ virtio_dev_tx(struct virtio_net* dev, struct rte_mempool *mbuf_pool)
 	if (vq->last_used_idx == avail_idx)
 		return;
 
-	RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") virtio_dev_tx()\n",
+	RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") virtio_dev_tx()\n",
 		dev->device_fh);
 
 	/* Prefetch available ring to retrieve head indexes. */
@@ -926,7 +913,7 @@ virtio_dev_tx(struct virtio_net* dev, struct rte_mempool *mbuf_pool)
 	free_entries = avail_idx - vq->last_used_idx;
 	free_entries = unlikely(free_entries < MAX_PKT_BURST) ? free_entries : MAX_PKT_BURST;
 
-	RTE_LOG_DP(DEBUG, VHOST_DATA, "(%" PRIu64 ") Buffers available %d\n",
+	RTE_LOG(DEBUG, VHOST_DATA, "(%" PRIu64 ") Buffers available %d\n",
 		dev->device_fh, free_entries);
 	/* Retrieve all of the head indexes first to avoid caching issues. */
 	for (i = 0; i < free_entries; i++)
@@ -1016,7 +1003,7 @@ switch_worker(__attribute__((unused)) void *arg)
 		if (unlikely(diff_tsc > drain_tsc)) {
 
 			if (tx_q->len) {
-				RTE_LOG_DP(DEBUG, VHOST_DATA,
+				RTE_LOG(DEBUG, VHOST_DATA,
 					"TX queue drained after timeout with burst size %u\n",
 					tx_q->len);
 

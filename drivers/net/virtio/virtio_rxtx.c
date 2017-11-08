@@ -72,15 +72,6 @@
 #define VIRTIO_SIMPLE_FLAGS ((uint32_t)ETH_TXQ_FLAGS_NOMULTSEGS | \
 	ETH_TXQ_FLAGS_NOOFFLOADS)
 
-int
-virtio_dev_rx_queue_done(void *rxq, uint16_t offset)
-{
-	struct virtnet_rx *rxvq = rxq;
-	struct virtqueue *vq = rxvq->vq;
-
-	return VIRTQUEUE_NUSED(vq) >= offset;
-}
-
 static void
 vq_ring_free_chain(struct virtqueue *vq, uint16_t desc_idx)
 {
@@ -133,7 +124,7 @@ virtqueue_dequeue_burst_rx(struct virtqueue *vq, struct rte_mbuf **rx_pkts,
 		cookie = (struct rte_mbuf *)vq->vq_descx[desc_idx].cookie;
 
 		if (unlikely(cookie == NULL)) {
-			PMD_DRV_LOG(ERR, "vring descriptor with no mbuf cookie at %u",
+			PMD_DRV_LOG(ERR, "vring descriptor with no mbuf cookie at %u\n",
 				vq->vq_used_cons_idx);
 			break;
 		}
@@ -725,7 +716,7 @@ virtio_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 {
 	struct virtnet_rx *rxvq = rx_queue;
 	struct virtqueue *vq = rxvq->vq;
-	struct virtio_hw *hw = vq->hw;
+	struct virtio_hw *hw;
 	struct rte_mbuf *rxm, *new_mbuf;
 	uint16_t nb_used, num, nb_rx;
 	uint32_t len[VIRTIO_MBUF_BURST_SZ];
@@ -736,23 +727,20 @@ virtio_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 	int offload;
 	struct virtio_net_hdr *hdr;
 
-	nb_rx = 0;
-	if (unlikely(hw->started == 0))
-		return nb_rx;
-
 	nb_used = VIRTQUEUE_NUSED(vq);
 
 	virtio_rmb();
 
-	num = likely(nb_used <= nb_pkts) ? nb_used : nb_pkts;
-	if (unlikely(num > VIRTIO_MBUF_BURST_SZ))
-		num = VIRTIO_MBUF_BURST_SZ;
+	num = (uint16_t)(likely(nb_used <= nb_pkts) ? nb_used : nb_pkts);
+	num = (uint16_t)(likely(num <= VIRTIO_MBUF_BURST_SZ) ? num : VIRTIO_MBUF_BURST_SZ);
 	if (likely(num > DESC_PER_CACHELINE))
 		num = num - ((vq->vq_used_cons_idx + num) % DESC_PER_CACHELINE);
 
 	num = virtqueue_dequeue_burst_rx(vq, rcv_pkts, len, num);
 	PMD_RX_LOG(DEBUG, "used:%d dequeue:%d", nb_used, num);
 
+	hw = vq->hw;
+	nb_rx = 0;
 	nb_enqueued = 0;
 	hdr_size = hw->vtnet_hdr_size;
 	offload = rx_offload_enabled(hw);
@@ -775,6 +763,8 @@ virtio_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 		rxm->ol_flags = 0;
 		rxm->vlan_tci = 0;
 
+		rxm->nb_segs = 1;
+		rxm->next = NULL;
 		rxm->pkt_len = (uint32_t)(len[i] - hdr_size);
 		rxm->data_len = (uint16_t)(len[i] - hdr_size);
 
@@ -794,7 +784,7 @@ virtio_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 
 		rx_pkts[nb_rx++] = rxm;
 
-		rxvq->stats.bytes += rxm->pkt_len;
+		rxvq->stats.bytes += rx_pkts[nb_rx - 1]->pkt_len;
 		virtio_update_packet_stats(&rxvq->stats, rxm);
 	}
 
@@ -837,7 +827,7 @@ virtio_recv_mergeable_pkts(void *rx_queue,
 {
 	struct virtnet_rx *rxvq = rx_queue;
 	struct virtqueue *vq = rxvq->vq;
-	struct virtio_hw *hw = vq->hw;
+	struct virtio_hw *hw;
 	struct rte_mbuf *rxm, *new_mbuf;
 	uint16_t nb_used, num, nb_rx;
 	uint32_t len[VIRTIO_MBUF_BURST_SZ];
@@ -851,16 +841,14 @@ virtio_recv_mergeable_pkts(void *rx_queue,
 	uint32_t hdr_size;
 	int offload;
 
-	nb_rx = 0;
-	if (unlikely(hw->started == 0))
-		return nb_rx;
-
 	nb_used = VIRTQUEUE_NUSED(vq);
 
 	virtio_rmb();
 
 	PMD_RX_LOG(DEBUG, "used:%d", nb_used);
 
+	hw = vq->hw;
+	nb_rx = 0;
 	i = 0;
 	nb_enqueued = 0;
 	seg_num = 0;
@@ -903,6 +891,7 @@ virtio_recv_mergeable_pkts(void *rx_queue,
 
 		rxm->data_off = RTE_PKTMBUF_HEADROOM;
 		rxm->nb_segs = seg_num;
+		rxm->next = NULL;
 		rxm->ol_flags = 0;
 		rxm->vlan_tci = 0;
 		rxm->pkt_len = (uint32_t)(len[0] - hdr_size);
@@ -947,6 +936,7 @@ virtio_recv_mergeable_pkts(void *rx_queue,
 				rxm = rcv_pkts[extra_idx];
 
 				rxm->data_off = RTE_PKTMBUF_HEADROOM - hdr_size;
+				rxm->next = NULL;
 				rxm->pkt_len = (uint32_t)(len[extra_idx]);
 				rxm->data_len = (uint16_t)(len[extra_idx]);
 
@@ -1010,11 +1000,8 @@ virtio_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 	struct virtqueue *vq = txvq->vq;
 	struct virtio_hw *hw = vq->hw;
 	uint16_t hdr_size = hw->vtnet_hdr_size;
-	uint16_t nb_used, nb_tx = 0;
+	uint16_t nb_used, nb_tx;
 	int error;
-
-	if (unlikely(hw->started == 0))
-		return nb_tx;
 
 	if (unlikely(nb_pkts < 1))
 		return nb_pkts;
@@ -1040,8 +1027,7 @@ virtio_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		}
 
 		/* optimize ring usage */
-		if ((vtpci_with_feature(hw, VIRTIO_F_ANY_LAYOUT) ||
-		      vtpci_with_feature(hw, VIRTIO_F_VERSION_1)) &&
+		if (vtpci_with_feature(hw, VIRTIO_F_ANY_LAYOUT) &&
 		    rte_mbuf_refcnt_read(txm) == 1 &&
 		    RTE_MBUF_DIRECT(txm) &&
 		    txm->nb_segs == 1 &&

@@ -69,14 +69,21 @@ void bnxt_init_vnics(struct bnxt *bp)
 	uint16_t max_vnics;
 	int i, j;
 
-	max_vnics = bp->max_vnics;
+	if (BNXT_PF(bp)) {
+		struct bnxt_pf_info *pf = &bp->pf;
+
+		max_vnics = pf->max_vnics;
+	} else {
+		struct bnxt_vf_info *vf = &bp->vf;
+
+		max_vnics = vf->max_vnics;
+	}
 	STAILQ_INIT(&bp->free_vnic_list);
 	for (i = 0; i < max_vnics; i++) {
 		vnic = &bp->vnic_info[i];
 		vnic->fw_vnic_id = (uint16_t)HWRM_NA_SIGNATURE;
-		vnic->rss_rule = (uint16_t)HWRM_NA_SIGNATURE;
-		vnic->cos_rule = (uint16_t)HWRM_NA_SIGNATURE;
-		vnic->lb_rule = (uint16_t)HWRM_NA_SIGNATURE;
+		vnic->fw_rss_cos_lb_ctx = (uint16_t)HWRM_NA_SIGNATURE;
+		vnic->ctx_is_rss_cos_lb = HW_CONTEXT_NONE;
 
 		for (j = 0; j < MAX_QUEUES_PER_VNIC; j++)
 			vnic->fw_grp_ids[j] = (uint16_t)HWRM_NA_SIGNATURE;
@@ -170,13 +177,19 @@ int bnxt_alloc_vnic_attributes(struct bnxt *bp)
 	char mz_name[RTE_MEMZONE_NAMESIZE];
 	uint32_t entry_length = RTE_CACHE_LINE_ROUNDUP(
 				HW_HASH_INDEX_SIZE * sizeof(*vnic->rss_table) +
-				HW_HASH_KEY_SIZE +
-				BNXT_MAX_MC_ADDRS * ETHER_ADDR_LEN);
+				HW_HASH_KEY_SIZE);
 	uint16_t max_vnics;
 	int i;
-	phys_addr_t mz_phys_addr;
 
-	max_vnics = bp->max_vnics;
+	if (BNXT_PF(bp)) {
+		struct bnxt_pf_info *pf = &bp->pf;
+
+		max_vnics = pf->max_vnics;
+	} else {
+		struct bnxt_vf_info *vf = &bp->vf;
+
+		max_vnics = vf->max_vnics;
+	}
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
 		 "bnxt_%04x:%02x:%02x:%02x_vnicattr", pdev->addr.domain,
 		 pdev->addr.bus, pdev->addr.devid, pdev->addr.function);
@@ -191,19 +204,6 @@ int bnxt_alloc_vnic_attributes(struct bnxt *bp)
 		if (!mz)
 			return -ENOMEM;
 	}
-	mz_phys_addr = mz->phys_addr;
-	if ((unsigned long)mz->addr == mz_phys_addr) {
-		RTE_LOG(WARNING, PMD,
-			"Memzone physical address same as virtual.\n");
-		RTE_LOG(WARNING, PMD,
-			"Using rte_mem_virt2phy()\n");
-		mz_phys_addr = rte_mem_virt2phy(mz->addr);
-		if (mz_phys_addr == 0) {
-			RTE_LOG(ERR, PMD,
-			"unable to map vnic address to physical memory\n");
-			return -ENOMEM;
-		}
-	}
 
 	for (i = 0; i < max_vnics; i++) {
 		vnic = &bp->vnic_info[i];
@@ -213,16 +213,12 @@ int bnxt_alloc_vnic_attributes(struct bnxt *bp)
 			(void *)((char *)mz->addr + (entry_length * i));
 		memset(vnic->rss_table, -1, entry_length);
 
-		vnic->rss_table_dma_addr = mz_phys_addr + (entry_length * i);
+		vnic->rss_table_dma_addr = mz->phys_addr + (entry_length * i);
 		vnic->rss_hash_key = (void *)((char *)vnic->rss_table +
 			     HW_HASH_INDEX_SIZE * sizeof(*vnic->rss_table));
 
 		vnic->rss_hash_key_dma_addr = vnic->rss_table_dma_addr +
 			     HW_HASH_INDEX_SIZE * sizeof(*vnic->rss_table);
-		vnic->mc_list = (void *)((char *)vnic->rss_hash_key +
-				HW_HASH_KEY_SIZE);
-		vnic->mc_list_dma_addr = vnic->rss_hash_key_dma_addr +
-				HW_HASH_KEY_SIZE;
 	}
 
 	return 0;
@@ -236,7 +232,15 @@ void bnxt_free_vnic_mem(struct bnxt *bp)
 	if (bp->vnic_info == NULL)
 		return;
 
-	max_vnics = bp->max_vnics;
+	if (BNXT_PF(bp)) {
+		struct bnxt_pf_info *pf = &bp->pf;
+
+		max_vnics = pf->max_vnics;
+	} else {
+		struct bnxt_vf_info *vf = &bp->vf;
+
+		max_vnics = vf->max_vnics;
+	}
 	for (i = 0; i < max_vnics; i++) {
 		vnic = &bp->vnic_info[i];
 		if (vnic->fw_vnic_id != (uint16_t)HWRM_NA_SIGNATURE) {
@@ -254,7 +258,15 @@ int bnxt_alloc_vnic_mem(struct bnxt *bp)
 	struct bnxt_vnic_info *vnic_mem;
 	uint16_t max_vnics;
 
-	max_vnics = bp->max_vnics;
+	if (BNXT_PF(bp)) {
+		struct bnxt_pf_info *pf = &bp->pf;
+
+		max_vnics = pf->max_vnics;
+	} else {
+		struct bnxt_vf_info *vf = &bp->vf;
+
+		max_vnics = vf->max_vnics;
+	}
 	/* Allocate memory for VNIC pool and filter pool */
 	vnic_mem = rte_zmalloc("bnxt_vnic_info",
 			       max_vnics * sizeof(struct bnxt_vnic_info), 0);

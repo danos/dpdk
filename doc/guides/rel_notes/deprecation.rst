@@ -8,115 +8,66 @@ API and ABI deprecation notices are to be posted here.
 Deprecation Notices
 -------------------
 
-* eal: the following functions are deprecated starting from 17.05 and will
-  be removed in 17.11:
+* igb_uio: iomem mapping and sysfs files created for iomem and ioport in
+  igb_uio will be removed, because we are able to detect these from what Linux
+  has exposed, like the way we have done with uio-pci-generic. This change
+  targets release 17.02.
 
-  - ``rte_set_log_level``, replaced by ``rte_log_set_global_level``
-  - ``rte_get_log_level``, replaced by ``rte_log_get_global_level``
-  - ``rte_set_log_type``, replaced by ``rte_log_set_level``
-  - ``rte_get_log_type``, replaced by ``rte_log_get_level``
+* ABI/API changes are planned for 17.02: ``rte_device``, ``rte_driver`` will be
+  impacted because of introduction of a new ``rte_bus`` hierarchy. This would
+  also impact the way devices are identified by EAL. A bus-device-driver model
+  will be introduced providing a hierarchical view of devices.
 
-* eal: several API and ABI changes are planned for ``rte_devargs`` in v17.11.
-  The format of device command line parameters will change. The bus will need
-  to be explicitly stated in the device declaration. The enum ``rte_devtype``
-  was used to identify a bus and will disappear.
-  The structure ``rte_devargs`` will change.
-  The ``rte_devargs_list`` will be made private.
-  The following functions are deprecated starting from 17.08 and will either be
-  modified or removed in 17.11:
+* ``eth_driver`` is planned to be removed in 17.02. This currently serves as
+  a placeholder for PMDs to register themselves. Changes for ``rte_bus`` will
+  provide a way to handle device initialization currently being done in
+  ``eth_driver``.
 
-  - ``rte_eal_devargs_add``
-  - ``rte_eal_devargs_type_count``
-  - ``rte_eal_parse_devargs_str``, replaced by ``rte_eal_devargs_parse``
+* In 17.02 ABI changes are planned: the ``rte_eth_dev`` structure will be
+  extended with new function pointer ``tx_pkt_prepare`` allowing verification
+  and processing of packet burst to meet HW specific requirements before
+  transmit. Also new fields will be added to the ``rte_eth_desc_lim`` structure:
+  ``nb_seg_max`` and ``nb_mtu_seg_max`` providing information about number of
+  segments limit to be transmitted by device for TSO/non-TSO packets.
 
-* eal: the support of Xen dom0 will be removed from EAL in 17.11; and with
-  that, drivers/net/xenvirt and examples/vhost_xen will also be removed.
+* In 17.02 ABI change is planned: the ``rte_eth_dev_info`` structure
+  will be extended with a new member ``fw_version`` in order to store
+  the NIC firmware version.
 
-* eal: An ABI change is planned for 17.11 to make DPDK aware of IOVA address
-  translation scheme.
-  Reference to phys address in EAL data-structure or functions may change to
-  IOVA address or more appropriate name.
-  The change will be only for the name.
-  Functional aspects of the API or data-structure will remain same.
+* ethdev: an API change is planned for 17.02 for the function
+  ``_rte_eth_dev_callback_process``. In 17.02 the function will return an ``int``
+  instead of ``void`` and a fourth parameter ``void *ret_param`` will be added.
+
+* ethdev: for 17.02 it is planned to deprecate the following five functions
+  and move them in ixgbe:
+
+  ``rte_eth_dev_set_vf_rxmode``
+
+  ``rte_eth_dev_set_vf_rx``
+
+  ``rte_eth_dev_set_vf_tx``
+
+  ``rte_eth_dev_set_vf_vlan_filter``
+
+  ``rte_eth_set_vf_rate_limit``
+
+* ABI changes are planned for 17.02 in the ``rte_mbuf`` structure: some fields
+  may be reordered to facilitate the writing of ``data_off``, ``refcnt``, and
+  ``nb_segs`` in one operation, because some platforms have an overhead if the
+  store address is not naturally aligned. Other mbuf fields, such as the
+  ``port`` field, may be moved or removed as part of this mbuf work. A
+  ``timestamp`` will also be added.
 
 * The mbuf flags PKT_RX_VLAN_PKT and PKT_RX_QINQ_PKT are deprecated and
   are respectively replaced by PKT_RX_VLAN_STRIPPED and
   PKT_RX_QINQ_STRIPPED, that are better described. The old flags and
-  their behavior will be kept until 17.08 and will be removed in 17.11.
+  their behavior will be kept until 16.11 and will be removed in 17.02.
 
-* mempool: The following will be modified in 17.11:
+* mempool: The functions ``rte_mempool_count`` and ``rte_mempool_free_count``
+  will be removed in 17.02.
+  They are replaced by ``rte_mempool_avail_count`` and
+  ``rte_mempool_in_use_count`` respectively.
 
-  - ``rte_mempool_xmem_size`` and ``rte_mempool_xmem_usage`` need to know
-    the mempool flag status so adding new param rte_mempool in those API.
-  - Removing __rte_unused int flag param from ``rte_mempool_generic_put``
-    and ``rte_mempool_generic_get`` API.
-  - ``rte_mempool`` flags data type will changed from int to
-    unsigned int.
-
-* ethdev: Tx offloads will no longer be enabled by default in 17.11.
-  Instead, the ``rte_eth_txmode`` structure will be extended with
-  bit field to enable each Tx offload.
-  Besides of making the Rx/Tx configuration API more consistent for the
-  application, PMDs will be able to provide a better out of the box performance.
-  As part of the work, ``ETH_TXQ_FLAGS_NO*`` will be superseded as well.
-
-* ethdev: the legacy filter API, including
-  ``rte_eth_dev_filter_supported()``, ``rte_eth_dev_filter_ctrl()`` as well
-  as filter types MACVLAN, ETHERTYPE, FLEXIBLE, SYN, NTUPLE, TUNNEL, FDIR,
-  HASH and L2_TUNNEL, is superseded by the generic flow API (rte_flow) in
-  PMDs that implement the latter.
-  Target release for removal of the legacy API will be defined once most
-  PMDs have switched to rte_flow.
-
-* ethdev: The device flag advertizing hotplug capability
-  ``RTE_ETH_DEV_DETACHABLE`` is not needed anymore and will be removed in
-  v17.11.
-  This capability is verified upon calling the relevant hotplug functions in EAL
-  by checking that the ``unplug`` ops is set in the bus. This verification is
-  done by the EAL and not by the ``ethdev`` layer anymore. Users relying on this
-  flag being present only have to remove their checks to follow the change.
-
-* ABI/API changes are planned for 17.11 in all structures which include port_id
-  definition such as "rte_eth_dev_data", "rte_port_ethdev_reader_params",
-  "rte_port_ethdev_writer_params", and so on. The definition of port_id will be
-  changed from 8 bits to 16 bits in order to support more than 256 ports in
-  DPDK. All APIs which have port_id parameter will be changed at the same time.
-
-* ethdev: An ABI change is planned for 17.11 for the structure rte_eth_dev_data.
-  The size of the unique name will increase RTE_ETH_NAME_MAX_LEN from 32 to
-  64 characters to allow using a globally unique identifier (GUID) in this field.
-
-* ethdev: new parameters - ``rte_security_capabilities`` and
-  ``rte_security_ops`` will be added to ``rte_eth_dev_info`` and
-  ``rte_eth_dev`` respectively  to support security operations like
-  ipsec inline.
-
-* cryptodev: new parameters - ``rte_security_capabilities`` and
-  ``rte_security_ops`` will be added to ``rte_cryptodev_info`` and
-  ``rte_cryptodev`` respectively to support security protocol offloaded
-  operations.
-
-* cryptodev: the following function is deprecated starting from 17.08 and will
-  be removed in 17.11:
-
-  - ``rte_cryptodev_create_vdev``
-
-* cryptodev: the following function will be static in 17.11 and included
-  by all crypto drivers, therefore, will not be public:
-
-  - ``rte_cryptodev_vdev_pmd_init``
-
-* cryptodev: the following function will have an extra parameter, passing a
-  statically allocated crypto driver structure, instead of calling malloc,
-  in 17.11:
-
-  - ``rte_cryptodev_allocate_driver``
-
-* librte_meter: The API will change to accommodate configuration profiles.
-  Most of the API functions will have an additional opaque parameter.
-
-* librte_table: The ``key_mask`` parameter will be added to all the hash tables
-  that currently do not have it, as well as to the hash compute function prototype.
-  The non-"do-sig" versions of the hash tables will be removed
-  (including the ``signature_offset`` parameter)
-  and the "do-sig" versions renamed accordingly.
+* mempool: The functions for single/multi producer/consumer are deprecated
+  and will be removed in 17.02.
+  It is replaced by ``rte_mempool_generic_get/put`` functions.

@@ -35,9 +35,6 @@
 
 #include "aesni_mb_ops.h"
 
-#define CRYPTODEV_NAME_AESNI_MB_PMD	crypto_aesni_mb
-/**< AES-NI Multi buffer PMD device name */
-
 #define MB_LOG_ERR(fmt, args...) \
 	RTE_LOG(ERR, CRYPTODEV, "[%s] %s() line %u: " fmt "\n",  \
 			RTE_STR(CRYPTODEV_NAME_AESNI_MB_PMD), \
@@ -91,7 +88,6 @@ static const unsigned auth_truncated_digest_byte_lengths[] = {
 		[SHA_384]	= 24,
 		[SHA_512]	= 32,
 		[AES_XCBC]	= 12,
-		[NULL_HASH]     = 0
 };
 
 /**
@@ -115,7 +111,6 @@ static const unsigned auth_digest_byte_lengths[] = {
 		[SHA_384]	= 48,
 		[SHA_512]	= 64,
 		[AES_XCBC]	= 16,
-		[NULL_HASH]     = 0
 };
 
 /**
@@ -130,13 +125,6 @@ get_digest_byte_length(JOB_HASH_ALG algo)
 	return auth_digest_byte_lengths[algo];
 }
 
-enum aesni_mb_operation {
-	AESNI_MB_OP_HASH_CIPHER,
-	AESNI_MB_OP_CIPHER_HASH,
-	AESNI_MB_OP_HASH_ONLY,
-	AESNI_MB_OP_CIPHER_ONLY,
-	AESNI_MB_OP_NOT_SUPPORTED
-};
 
 /** private data structure for each virtual AESNI device */
 struct aesni_mb_private {
@@ -154,12 +142,12 @@ struct aesni_mb_qp {
 	/**< Queue Pair Identifier */
 	char name[RTE_CRYPTODEV_NAME_LEN];
 	/**< Unique Queue Pair Name */
-	const struct aesni_mb_op_fns *op_fns;
+	const struct aesni_mb_ops *ops;
 	/**< Vector mode dependent pointer table of the multi-buffer APIs */
 	MB_MGR mb_mgr;
 	/**< Multi-buffer instance */
-	struct rte_ring *ingress_queue;
-       /**< Ring for placing operations ready for processing */
+	struct rte_ring *processed_ops;
+	/**< Ring for placing process operations */
 	struct rte_mempool *sess_mp;
 	/**< Session Mempool */
 	struct rte_cryptodev_stats stats;
@@ -170,11 +158,6 @@ struct aesni_mb_qp {
 /** AES-NI multi-buffer private session structure */
 struct aesni_mb_session {
 	JOB_CHAIN_ORDER chain_order;
-	struct {
-		uint16_t length;
-		uint16_t offset;
-	} iv;
-	/**< IV parameters */
 
 	/** Cipher Parameters */
 	struct {
@@ -202,8 +185,6 @@ struct aesni_mb_session {
 	/** Authentication Parameters */
 	struct {
 		JOB_HASH_ALG algo; /**< Authentication Algorithm */
-		enum rte_crypto_auth_operation operation;
-		/**< auth operation generate or verify */
 		union {
 			struct {
 				uint8_t inner[128] __rte_aligned(16);
@@ -235,7 +216,7 @@ struct aesni_mb_session {
  *
  */
 extern int
-aesni_mb_set_session_parameters(const struct aesni_mb_op_fns *mb_ops,
+aesni_mb_set_session_parameters(const struct aesni_mb_ops *mb_ops,
 		struct aesni_mb_session *sess,
 		const struct rte_crypto_sym_xform *xform);
 

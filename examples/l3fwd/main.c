@@ -52,6 +52,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -473,13 +474,6 @@ parse_eth_dest(const char *optarg)
 #define MAX_JUMBO_PKT_LEN  9600
 #define MEMPOOL_CACHE_SIZE 256
 
-static const char short_options[] =
-	"p:"  /* portmask */
-	"P"   /* promiscuous */
-	"L"   /* enable long prefix match */
-	"E"   /* enable exact match */
-	;
-
 #define CMD_LINE_OPT_CONFIG "config"
 #define CMD_LINE_OPT_ETH_DEST "eth-dest"
 #define CMD_LINE_OPT_NO_NUMA "no-numa"
@@ -487,31 +481,6 @@ static const char short_options[] =
 #define CMD_LINE_OPT_ENABLE_JUMBO "enable-jumbo"
 #define CMD_LINE_OPT_HASH_ENTRY_NUM "hash-entry-num"
 #define CMD_LINE_OPT_PARSE_PTYPE "parse-ptype"
-enum {
-	/* long options mapped to a short option */
-
-	/* first long only option value must be >= 256, so that we won't
-	 * conflict with short options */
-	CMD_LINE_OPT_MIN_NUM = 256,
-	CMD_LINE_OPT_CONFIG_NUM,
-	CMD_LINE_OPT_ETH_DEST_NUM,
-	CMD_LINE_OPT_NO_NUMA_NUM,
-	CMD_LINE_OPT_IPV6_NUM,
-	CMD_LINE_OPT_ENABLE_JUMBO_NUM,
-	CMD_LINE_OPT_HASH_ENTRY_NUM_NUM,
-	CMD_LINE_OPT_PARSE_PTYPE_NUM,
-};
-
-static const struct option lgopts[] = {
-	{CMD_LINE_OPT_CONFIG, 1, 0, CMD_LINE_OPT_CONFIG_NUM},
-	{CMD_LINE_OPT_ETH_DEST, 1, 0, CMD_LINE_OPT_ETH_DEST_NUM},
-	{CMD_LINE_OPT_NO_NUMA, 0, 0, CMD_LINE_OPT_NO_NUMA_NUM},
-	{CMD_LINE_OPT_IPV6, 0, 0, CMD_LINE_OPT_IPV6_NUM},
-	{CMD_LINE_OPT_ENABLE_JUMBO, 0, 0, CMD_LINE_OPT_ENABLE_JUMBO_NUM},
-	{CMD_LINE_OPT_HASH_ENTRY_NUM, 1, 0, CMD_LINE_OPT_HASH_ENTRY_NUM_NUM},
-	{CMD_LINE_OPT_PARSE_PTYPE, 0, 0, CMD_LINE_OPT_PARSE_PTYPE_NUM},
-	{NULL, 0, 0, 0}
-};
 
 /*
  * This expression is used to calculate the number of mbufs needed
@@ -521,10 +490,10 @@ static const struct option lgopts[] = {
  * value of 8192
  */
 #define NB_MBUF RTE_MAX(	\
-	(nb_ports*nb_rx_queue*nb_rxd +		\
-	nb_ports*nb_lcores*MAX_PKT_BURST +	\
-	nb_ports*n_tx_queue*nb_txd +		\
-	nb_lcores*MEMPOOL_CACHE_SIZE),		\
+	(nb_ports*nb_rx_queue*RTE_TEST_RX_DESC_DEFAULT +	\
+	nb_ports*nb_lcores*MAX_PKT_BURST +			\
+	nb_ports*n_tx_queue*RTE_TEST_TX_DESC_DEFAULT +		\
+	nb_lcores*MEMPOOL_CACHE_SIZE),				\
 	(unsigned)8192)
 
 /* Parse the argument given in the command line of the application */
@@ -535,6 +504,16 @@ parse_args(int argc, char **argv)
 	char **argvopt;
 	int option_index;
 	char *prgname = argv[0];
+	static struct option lgopts[] = {
+		{CMD_LINE_OPT_CONFIG, 1, 0, 0},
+		{CMD_LINE_OPT_ETH_DEST, 1, 0, 0},
+		{CMD_LINE_OPT_NO_NUMA, 0, 0, 0},
+		{CMD_LINE_OPT_IPV6, 0, 0, 0},
+		{CMD_LINE_OPT_ENABLE_JUMBO, 0, 0, 0},
+		{CMD_LINE_OPT_HASH_ENTRY_NUM, 1, 0, 0},
+		{CMD_LINE_OPT_PARSE_PTYPE, 0, 0, 0},
+		{NULL, 0, 0, 0}
+	};
 
 	argvopt = argv;
 
@@ -555,7 +534,7 @@ parse_args(int argc, char **argv)
 		"L3FWD: LPM and EM are mutually exclusive, select only one";
 	const char *str13 = "L3FWD: LPM or EM none selected, default LPM on";
 
-	while ((opt = getopt_long(argc, argvopt, short_options,
+	while ((opt = getopt_long(argc, argvopt, "p:PLE",
 				lgopts, &option_index)) != EOF) {
 
 		switch (opt) {
@@ -568,7 +547,6 @@ parse_args(int argc, char **argv)
 				return -1;
 			}
 			break;
-
 		case 'P':
 			printf("%s\n", str2);
 			promiscuous_on = 1;
@@ -585,71 +563,89 @@ parse_args(int argc, char **argv)
 			break;
 
 		/* long options */
-		case CMD_LINE_OPT_CONFIG_NUM:
-			ret = parse_config(optarg);
-			if (ret) {
-				printf("%s\n", str5);
-				print_usage(prgname);
-				return -1;
-			}
-			break;
+		case 0:
+			if (!strncmp(lgopts[option_index].name,
+					CMD_LINE_OPT_CONFIG,
+					sizeof(CMD_LINE_OPT_CONFIG))) {
 
-		case CMD_LINE_OPT_ETH_DEST_NUM:
-			parse_eth_dest(optarg);
-			break;
-
-		case CMD_LINE_OPT_NO_NUMA_NUM:
-			printf("%s\n", str6);
-			numa_on = 0;
-			break;
-
-		case CMD_LINE_OPT_IPV6_NUM:
-			printf("%sn", str7);
-			ipv6 = 1;
-			break;
-
-		case CMD_LINE_OPT_ENABLE_JUMBO_NUM: {
-			struct option lenopts = {
-				"max-pkt-len", required_argument, 0, 0
-			};
-
-			printf("%s\n", str8);
-			port_conf.rxmode.jumbo_frame = 1;
-
-			/*
-			 * if no max-pkt-len set, use the default
-			 * value ETHER_MAX_LEN.
-			 */
-			if (getopt_long(argc, argvopt, "",
-					&lenopts, &option_index) == 0) {
-				ret = parse_max_pkt_len(optarg);
-				if ((ret < 64) ||
-					(ret > MAX_JUMBO_PKT_LEN)) {
-					printf("%s\n", str9);
+				ret = parse_config(optarg);
+				if (ret) {
+					printf("%s\n", str5);
 					print_usage(prgname);
 					return -1;
 				}
-				port_conf.rxmode.max_rx_pkt_len = ret;
 			}
-			printf("%s %u\n", str10,
+
+			if (!strncmp(lgopts[option_index].name,
+					CMD_LINE_OPT_ETH_DEST,
+					sizeof(CMD_LINE_OPT_ETH_DEST))) {
+					parse_eth_dest(optarg);
+			}
+
+			if (!strncmp(lgopts[option_index].name,
+					CMD_LINE_OPT_NO_NUMA,
+					sizeof(CMD_LINE_OPT_NO_NUMA))) {
+				printf("%s\n", str6);
+				numa_on = 0;
+			}
+
+			if (!strncmp(lgopts[option_index].name,
+				CMD_LINE_OPT_IPV6,
+				sizeof(CMD_LINE_OPT_IPV6))) {
+				printf("%sn", str7);
+				ipv6 = 1;
+			}
+
+			if (!strncmp(lgopts[option_index].name,
+					CMD_LINE_OPT_ENABLE_JUMBO,
+					sizeof(CMD_LINE_OPT_ENABLE_JUMBO))) {
+				struct option lenopts = {
+					"max-pkt-len", required_argument, 0, 0
+				};
+
+				printf("%s\n", str8);
+				port_conf.rxmode.jumbo_frame = 1;
+
+				/*
+				 * if no max-pkt-len set, use the default
+				 * value ETHER_MAX_LEN.
+				 */
+				if (0 == getopt_long(argc, argvopt, "",
+						&lenopts, &option_index)) {
+					ret = parse_max_pkt_len(optarg);
+					if ((ret < 64) ||
+						(ret > MAX_JUMBO_PKT_LEN)) {
+						printf("%s\n", str9);
+						print_usage(prgname);
+						return -1;
+					}
+					port_conf.rxmode.max_rx_pkt_len = ret;
+				}
+				printf("%s %u\n", str10,
 				(unsigned int)port_conf.rxmode.max_rx_pkt_len);
-			break;
-		}
-
-		case CMD_LINE_OPT_HASH_ENTRY_NUM_NUM:
-			ret = parse_hash_entry_number(optarg);
-			if ((ret > 0) && (ret <= L3FWD_HASH_ENTRIES)) {
-				hash_entry_number = ret;
-			} else {
-				printf("%s\n", str11);
-				print_usage(prgname);
-				return -1;
 			}
-			break;
 
-		case CMD_LINE_OPT_PARSE_PTYPE_NUM:
-			printf("soft parse-ptype is enabled\n");
-			parse_ptype = 1;
+			if (!strncmp(lgopts[option_index].name,
+				CMD_LINE_OPT_HASH_ENTRY_NUM,
+				sizeof(CMD_LINE_OPT_HASH_ENTRY_NUM))) {
+
+				ret = parse_hash_entry_number(optarg);
+				if ((ret > 0) && (ret <= L3FWD_HASH_ENTRIES)) {
+					hash_entry_number = ret;
+				} else {
+					printf("%s\n", str11);
+					print_usage(prgname);
+					return -1;
+				}
+			}
+
+			if (!strncmp(lgopts[option_index].name,
+				     CMD_LINE_OPT_PARSE_PTYPE,
+				     sizeof(CMD_LINE_OPT_PARSE_PTYPE))) {
+				printf("soft parse-ptype is enabled\n");
+				parse_ptype = 1;
+			}
+
 			break;
 
 		default:
@@ -687,7 +683,7 @@ parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 1; /* reset getopt lib */
+	optind = 0; /* reset getopt lib */
 	return ret;
 }
 
@@ -916,13 +912,6 @@ main(int argc, char **argv)
 			rte_exit(EXIT_FAILURE,
 				"Cannot configure device: err=%d, port=%d\n",
 				ret, portid);
-
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-						       &nb_txd);
-		if (ret < 0)
-			rte_exit(EXIT_FAILURE,
-				 "Cannot adjust number of descriptors: err=%d, "
-				 "port=%d\n", ret, portid);
 
 		rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);
 		print_ethaddr(" Address:", &ports_eth_addr[portid]);

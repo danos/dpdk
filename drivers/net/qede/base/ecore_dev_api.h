@@ -58,38 +58,18 @@ enum _ecore_status_t ecore_resc_alloc(struct ecore_dev *p_dev);
 void ecore_resc_setup(struct ecore_dev *p_dev);
 
 struct ecore_hw_init_params {
-	/* Tunnelling parameters */
-	struct ecore_tunnel_info *p_tunn;
-
+	/* tunnelling parameters */
+	struct ecore_tunn_start_params *p_tunn;
 	bool b_hw_start;
-
-	/* Interrupt mode [msix, inta, etc.] to use */
+	/* interrupt mode [msix, inta, etc.] to use */
 	enum ecore_int_mode int_mode;
+/* npar tx switching to be used for vports configured for tx-switching */
 
-	/* NPAR tx switching to be used for vports configured for tx-switching
-	 */
 	bool allow_npar_tx_switch;
-
-	/* Binary fw data pointer in binary fw file */
+	/* binary fw data pointer in binary fw file */
 	const u8 *bin_fw_data;
-
-	/* Indicates whether the driver is running over a crash kernel.
-	 * As part of the load request, this will be used for providing the
-	 * driver role to the MFW.
-	 * In case of a crash kernel over PDA - this should be set to false.
-	 */
-	bool is_crash_kernel;
-
-	/* The timeout value that the MFW should use when locking the engine for
-	 * the driver load process.
-	 * A value of '0' means the default value, and '255' means no timeout.
-	 */
-	u8 mfw_timeout_val;
-#define ECORE_LOAD_REQ_LOCK_TO_DEFAULT	0
-#define ECORE_LOAD_REQ_LOCK_TO_NONE	255
-
-	/* Avoid engine reset when first PF loads on it */
-	bool avoid_eng_reset;
+	/* the OS Epoch time in seconds */
+	u32 epoch;
 };
 
 /**
@@ -151,50 +131,22 @@ void ecore_prepare_hibernate(struct ecore_dev *p_dev);
  */
 void ecore_hw_start_fastpath(struct ecore_hwfn *p_hwfn);
 
-enum ecore_hw_prepare_result {
-	ECORE_HW_PREPARE_SUCCESS,
-
-	/* FAILED results indicate probe has failed & cleaned up */
-	ECORE_HW_PREPARE_FAILED_ENG2,
-	ECORE_HW_PREPARE_FAILED_ME,
-	ECORE_HW_PREPARE_FAILED_MEM,
-	ECORE_HW_PREPARE_FAILED_DEV,
-	ECORE_HW_PREPARE_FAILED_NVM,
-
-	/* BAD results indicate probe is passed even though some wrongness
-	 * has occurred; Trying to actually use [I.e., hw_init()] might have
-	 * dire reprecautions.
-	 */
-	ECORE_HW_PREPARE_BAD_IOV,
-	ECORE_HW_PREPARE_BAD_MCP,
-	ECORE_HW_PREPARE_BAD_IGU,
-};
+/**
+ * @brief ecore_hw_reset -
+ *
+ * @param p_dev
+ *
+ * @return enum _ecore_status_t
+ */
+enum _ecore_status_t ecore_hw_reset(struct ecore_dev *p_dev);
 
 struct ecore_hw_prepare_params {
-	/* Personality to initialize */
+	/* personality to initialize */
 	int personality;
-
-	/* Force the driver's default resource allocation */
+	/* force the driver's default resource allocation */
 	bool drv_resc_alloc;
-
-	/* Check the reg_fifo after any register access */
+	/* check the reg_fifo after any register access */
 	bool chk_reg_fifo;
-
-	/* Request the MFW to initiate PF FLR */
-	bool initiate_pf_flr;
-
-	/* The OS Epoch time in seconds */
-	u32 epoch;
-
-	/* Allow the MFW to collect a crash dump */
-	bool allow_mdump;
-
-	/* Allow prepare to pass even if some initializations are failing.
-	 * If set, the `p_prepare_res' field would be set with the return,
-	 * and might allow probe to pass even if there are certain issues.
-	 */
-	bool b_relaxed_probe;
-	enum ecore_hw_prepare_result p_relaxed_res;
 };
 
 /**
@@ -241,7 +193,7 @@ void ecore_ptt_release(struct ecore_hwfn *p_hwfn,
 		       struct ecore_ptt *p_ptt);
 
 #ifndef __EXTRACT__LINUX__
-struct ecore_eth_stats_common {
+struct ecore_eth_stats {
 	u64 no_buff_discards;
 	u64 packet_too_big_discard;
 	u64 ttl0_discard;
@@ -273,6 +225,11 @@ struct ecore_eth_stats_common {
 	u64 rx_256_to_511_byte_packets;
 	u64 rx_512_to_1023_byte_packets;
 	u64 rx_1024_to_1518_byte_packets;
+	u64 rx_1519_to_1522_byte_packets;
+	u64 rx_1519_to_2047_byte_packets;
+	u64 rx_2048_to_4095_byte_packets;
+	u64 rx_4096_to_9216_byte_packets;
+	u64 rx_9217_to_16383_byte_packets;
 	u64 rx_crc_errors;
 	u64 rx_mac_crtl_frames;
 	u64 rx_pause_frames;
@@ -289,8 +246,14 @@ struct ecore_eth_stats_common {
 	u64 tx_256_to_511_byte_packets;
 	u64 tx_512_to_1023_byte_packets;
 	u64 tx_1024_to_1518_byte_packets;
+	u64 tx_1519_to_2047_byte_packets;
+	u64 tx_2048_to_4095_byte_packets;
+	u64 tx_4096_to_9216_byte_packets;
+	u64 tx_9217_to_16383_byte_packets;
 	u64 tx_pause_frames;
 	u64 tx_pfc_frames;
+	u64 tx_lpi_entry_count;
+	u64 tx_total_collisions;
 	u64 brb_truncates;
 	u64 brb_discards;
 	u64 rx_mac_bytes;
@@ -303,33 +266,6 @@ struct ecore_eth_stats_common {
 	u64 tx_mac_mc_packets;
 	u64 tx_mac_bc_packets;
 	u64 tx_mac_ctrl_frames;
-};
-
-struct ecore_eth_stats_bb {
-	u64 rx_1519_to_1522_byte_packets;
-	u64 rx_1519_to_2047_byte_packets;
-	u64 rx_2048_to_4095_byte_packets;
-	u64 rx_4096_to_9216_byte_packets;
-	u64 rx_9217_to_16383_byte_packets;
-	u64 tx_1519_to_2047_byte_packets;
-	u64 tx_2048_to_4095_byte_packets;
-	u64 tx_4096_to_9216_byte_packets;
-	u64 tx_9217_to_16383_byte_packets;
-	u64 tx_lpi_entry_count;
-	u64 tx_total_collisions;
-};
-
-struct ecore_eth_stats_ah {
-	u64 rx_1519_to_max_byte_packets;
-	u64 tx_1519_to_max_byte_packets;
-};
-
-struct ecore_eth_stats {
-	struct ecore_eth_stats_common common;
-	union {
-		struct ecore_eth_stats_bb bb;
-		struct ecore_eth_stats_ah ah;
-	};
 };
 #endif
 
@@ -432,8 +368,7 @@ ecore_chain_alloc(struct ecore_dev *p_dev,
 		  enum ecore_chain_cnt_type cnt_type,
 		  u32 num_elems,
 		  osal_size_t elem_size,
-		  struct ecore_chain *p_chain,
-		  struct ecore_chain_ext_pbl *ext_pbl);
+		  struct ecore_chain *p_chain);
 
 /**
  * @brief ecore_chain_free - Free chain DMA memory
@@ -580,36 +515,41 @@ enum _ecore_status_t ecore_final_cleanup(struct ecore_hwfn	*p_hwfn,
 					 struct ecore_ptt	*p_ptt,
 					 u16			id,
 					 bool			is_vf);
-/**
- * @brief ecore_set_queue_coalesce - Configure coalesce parameters for Rx and
- *    Tx queue. The fact that we can configure coalescing to up to 511, but on
- *    varying accuracy [the bigger the value the less accurate] up to a mistake
- *    of 3usec for the highest values.
- *    While the API allows setting coalescing per-qid, all queues sharing a SB
- *    should be in same range [i.e., either 0-0x7f, 0x80-0xff or 0x100-0x1ff]
- *    otherwise configuration would break.
- *
- * @param p_hwfn
- * @param rx_coal - Rx Coalesce value in micro seconds.
- * @param tx_coal - TX Coalesce value in micro seconds.
- * @param p_handle
- *
- * @return enum _ecore_status_t
- **/
-enum _ecore_status_t
-ecore_set_queue_coalesce(struct ecore_hwfn *p_hwfn, u16 rx_coal,
-			 u16 tx_coal, void *p_handle);
 
 /**
- * @brief ecore_pglueb_set_pfid_enable - Enable or disable PCI BUS MASTER
+ * @brief ecore_set_rxq_coalesce - Configure coalesce parameters for an Rx queue
+ *    The fact that we can configure coalescing to up to 511, but on varying
+ *    accuracy [the bigger the value the less accurate] up to a mistake of 3usec
+ *    for the highest values.
  *
  * @param p_hwfn
  * @param p_ptt
- * @param b_enable - true/false
+ * @param coalesce - Coalesce value in micro seconds.
+ * @param qid - Queue index.
+ * @param qid - SB Id
  *
  * @return enum _ecore_status_t
  */
-enum _ecore_status_t ecore_pglueb_set_pfid_enable(struct ecore_hwfn *p_hwfn,
-						  struct ecore_ptt *p_ptt,
-						  bool b_enable);
+enum _ecore_status_t ecore_set_rxq_coalesce(struct ecore_hwfn *p_hwfn,
+					    struct ecore_ptt *p_ptt,
+					    u16 coalesce, u8 qid, u16 sb_id);
+
+/**
+ * @brief ecore_set_txq_coalesce - Configure coalesce parameters for a Tx queue
+ *    While the API allows setting coalescing per-qid, all tx queues sharing a
+ *    SB should be in same range [i.e., either 0-0x7f, 0x80-0xff or 0x100-0x1ff]
+ *    otherwise configuration would break.
+ *
+ * @param p_hwfn
+ * @param p_ptt
+ * @param coalesce - Coalesce value in micro seconds.
+ * @param qid - Queue index.
+ * @param qid - SB Id
+ *
+ * @return enum _ecore_status_t
+ */
+enum _ecore_status_t ecore_set_txq_coalesce(struct ecore_hwfn *p_hwfn,
+					    struct ecore_ptt *p_ptt,
+					    u16 coalesce, u8 qid, u16 sb_id);
+
 #endif

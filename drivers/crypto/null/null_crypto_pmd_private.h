@@ -35,9 +35,6 @@
 
 #include "rte_config.h"
 
-#define CRYPTODEV_NAME_NULL_PMD		crypto_null
-/**< Null crypto PMD device name */
-
 #define NULL_CRYPTO_LOG_ERR(fmt, args...) \
 	RTE_LOG(ERR, CRYPTODEV, "[%s] %s() line %u: " fmt "\n",  \
 			RTE_STR(CRYPTODEV_NAME_NULL_PMD), \

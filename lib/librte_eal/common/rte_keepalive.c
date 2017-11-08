@@ -38,6 +38,7 @@
 #include <rte_log.h>
 #include <rte_keepalive.h>
 #include <rte_malloc.h>
+#include <rte_cycles.h>
 
 struct rte_keepalive {
 	/** Core Liveness. */

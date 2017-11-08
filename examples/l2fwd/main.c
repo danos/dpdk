@@ -54,6 +54,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -391,29 +392,6 @@ l2fwd_parse_timer_period(const char *q_arg)
 	return n;
 }
 
-static const char short_options[] =
-	"p:"  /* portmask */
-	"q:"  /* number of queues */
-	"T:"  /* timer period */
-	;
-
-#define CMD_LINE_OPT_MAC_UPDATING "mac-updating"
-#define CMD_LINE_OPT_NO_MAC_UPDATING "no-mac-updating"
-
-enum {
-	/* long options mapped to a short option */
-
-	/* first long only option value must be >= 256, so that we won't
-	 * conflict with short options */
-	CMD_LINE_OPT_MIN_NUM = 256,
-};
-
-static const struct option lgopts[] = {
-	{ CMD_LINE_OPT_MAC_UPDATING, no_argument, &mac_updating, 1},
-	{ CMD_LINE_OPT_NO_MAC_UPDATING, no_argument, &mac_updating, 0},
-	{NULL, 0, 0, 0}
-};
-
 /* Parse the argument given in the command line of the application */
 static int
 l2fwd_parse_args(int argc, char **argv)
@@ -422,10 +400,15 @@ l2fwd_parse_args(int argc, char **argv)
 	char **argvopt;
 	int option_index;
 	char *prgname = argv[0];
+	static struct option lgopts[] = {
+		{ "mac-updating", no_argument, &mac_updating, 1},
+		{ "no-mac-updating", no_argument, &mac_updating, 0},
+		{NULL, 0, 0, 0}
+	};
 
 	argvopt = argv;
 
-	while ((opt = getopt_long(argc, argvopt, short_options,
+	while ((opt = getopt_long(argc, argvopt, "p:q:T:",
 				  lgopts, &option_index)) != EOF) {
 
 		switch (opt) {
@@ -474,7 +457,7 @@ l2fwd_parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 1; /* reset getopt lib */
+	optind = 0; /* reset getopt lib */
 	return ret;
 }
 
@@ -664,13 +647,6 @@ main(int argc, char **argv)
 		if (ret < 0)
 			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d, port=%u\n",
 				  ret, (unsigned) portid);
-
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-						       &nb_txd);
-		if (ret < 0)
-			rte_exit(EXIT_FAILURE,
-				 "Cannot adjust number of descriptors: err=%d, port=%u\n",
-				 ret, (unsigned) portid);
 
 		rte_eth_macaddr_get(portid,&l2fwd_ports_eth_addr[portid]);
 

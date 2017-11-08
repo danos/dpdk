@@ -56,8 +56,10 @@
 #include <rte_lcore.h>
 #include <rte_atomic.h>
 #include <rte_branch_prediction.h>
+#include <rte_memory.h>
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
+#include <rte_memcpy.h>
 #include <rte_interrupts.h>
 #include <rte_pci.h>
 #include <rte_ether.h>
@@ -68,8 +70,6 @@
 #include <rte_sctp.h>
 #include <rte_prefetch.h>
 #include <rte_string_fns.h>
-#include <rte_flow.h>
-#include <rte_gro.h>
 #include "testpmd.h"
 
 #define IP_DEFTTL  64   /* from RFC 1340. */
@@ -110,6 +110,15 @@ struct simple_gre_hdr {
 	uint16_t flags;
 	uint16_t proto;
 } __attribute__((__packed__));
+
+static uint16_t
+get_psd_sum(void *l3_hdr, uint16_t ethertype, uint64_t ol_flags)
+{
+	if (ethertype == _htons(ETHER_TYPE_IPv4))
+		return rte_ipv4_phdr_cksum(l3_hdr, ol_flags);
+	else /* assume ethertype == ETHER_TYPE_IPv6 */
+		return rte_ipv6_phdr_cksum(l3_hdr, ol_flags);
+}
 
 static uint16_t
 get_udptcp_checksum(void *l3_hdr, void *l4_hdr, uint16_t ethertype)
@@ -361,9 +370,11 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
 		/* do not recalculate udp cksum if it was 0 */
 		if (udp_hdr->dgram_cksum != 0) {
 			udp_hdr->dgram_cksum = 0;
-			if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_UDP_CKSUM)
+			if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_UDP_CKSUM) {
 				ol_flags |= PKT_TX_UDP_CKSUM;
-			else {
+				udp_hdr->dgram_cksum = get_psd_sum(l3_hdr,
+					info->ethertype, ol_flags);
+			} else {
 				udp_hdr->dgram_cksum =
 					get_udptcp_checksum(l3_hdr, udp_hdr,
 						info->ethertype);
@@ -372,11 +383,15 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
 	} else if (info->l4_proto == IPPROTO_TCP) {
 		tcp_hdr = (struct tcp_hdr *)((char *)l3_hdr + info->l3_len);
 		tcp_hdr->cksum = 0;
-		if (tso_segsz)
+		if (tso_segsz) {
 			ol_flags |= PKT_TX_TCP_SEG;
-		else if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_TCP_CKSUM)
+			tcp_hdr->cksum = get_psd_sum(l3_hdr, info->ethertype,
+				ol_flags);
+		} else if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_TCP_CKSUM) {
 			ol_flags |= PKT_TX_TCP_CKSUM;
-		else {
+			tcp_hdr->cksum = get_psd_sum(l3_hdr, info->ethertype,
+				ol_flags);
+		} else {
 			tcp_hdr->cksum =
 				get_udptcp_checksum(l3_hdr, tcp_hdr,
 					info->ethertype);
@@ -416,7 +431,7 @@ process_outer_cksums(void *outer_l3_hdr, struct testpmd_offload_info *info,
 			ol_flags |= PKT_TX_OUTER_IP_CKSUM;
 		else
 			ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
-	} else
+	} else if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM)
 		ol_flags |= PKT_TX_OUTER_IPV6;
 
 	if (info->outer_l4_proto != IPPROTO_UDP)
@@ -582,7 +597,7 @@ pkt_copy_split(const struct rte_mbuf *pkt)
 		rc = mbuf_copy_split(pkt, md, seglen, nb_seg);
 		if (rc < 0)
 			RTE_LOG(ERR, USER1,
-				"mbuf_copy_split for %p(len=%u, nb_seg=%u) "
+				"mbuf_copy_split for %p(len=%u, nb_seg=%hhu) "
 				"into %u segments failed with error code: %d\n",
 				pkt, pkt->pkt_len, pkt->nb_segs, nb_seg, rc);
 
@@ -633,7 +648,6 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 	void *l3_hdr = NULL, *outer_l3_hdr = NULL; /* can be IPv4 or IPv6 */
 	uint16_t nb_rx;
 	uint16_t nb_tx;
-	uint16_t nb_prep;
 	uint16_t i;
 	uint64_t rx_ol_flags, tx_ol_flags;
 	uint16_t testpmd_ol_flags;
@@ -657,10 +671,6 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 				 nb_pkt_per_burst);
 	if (unlikely(nb_rx == 0))
 		return;
-	if (unlikely(gro_ports[fs->rx_port].enable))
-		nb_rx = rte_gro_reassemble_burst(pkts_burst,
-				nb_rx,
-				&(gro_ports[fs->rx_port].param));
 
 #ifdef RTE_TEST_PMD_RECORD_BURST_STATS
 	fs->rx_burst_stats.pkt_burst_spread[nb_rx]++;
@@ -759,9 +769,7 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 
 		if (info.is_tunnel == 1) {
 			if (info.tunnel_tso_segsz ||
-			    (testpmd_ol_flags &
-			    TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM) ||
-			    (tx_ol_flags & PKT_TX_OUTER_IPV6)) {
+			    testpmd_ol_flags & TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM) {
 				m->outer_l2_len = info.outer_l2_len;
 				m->outer_l3_len = info.outer_l3_len;
 				m->l2_len = info.l2_len;
@@ -806,7 +814,7 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 			char buf[256];
 
 			printf("-----------------\n");
-			printf("port=%u, mbuf=%p, pkt_len=%u, nb_segs=%u:\n",
+			printf("port=%u, mbuf=%p, pkt_len=%u, nb_segs=%hhu:\n",
 				fs->rx_port, m, m->pkt_len, m->nb_segs);
 			/* dump rx parsed packet info */
 			rte_get_rx_ol_flag_list(rx_ol_flags, buf, sizeof(buf));
@@ -831,9 +839,8 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 					"m->l4_len=%d\n",
 					m->l2_len, m->l3_len, m->l4_len);
 			if (info.is_tunnel == 1) {
-				if ((testpmd_ol_flags &
-				    TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM) ||
-				    (tx_ol_flags & PKT_TX_OUTER_IPV6))
+				if (testpmd_ol_flags &
+				    TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM)
 					printf("tx: m->outer_l2_len=%d "
 						"m->outer_l3_len=%d\n",
 						m->outer_l2_len,
@@ -850,16 +857,7 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 			printf("\n");
 		}
 	}
-
-	nb_prep = rte_eth_tx_prepare(fs->tx_port, fs->tx_queue,
-			pkts_burst, nb_rx);
-	if (nb_prep != nb_rx)
-		printf("Preparing packet burst to transmit failed: %s\n",
-				rte_strerror(rte_errno));
-
-	nb_tx = rte_eth_tx_burst(fs->tx_port, fs->tx_queue, pkts_burst,
-			nb_prep);
-
+	nb_tx = rte_eth_tx_burst(fs->tx_port, fs->tx_queue, pkts_burst, nb_rx);
 	/*
 	 * Retry if necessary
 	 */

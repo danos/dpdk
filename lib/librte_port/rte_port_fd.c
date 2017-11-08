@@ -67,7 +67,7 @@ static void *
 rte_port_fd_reader_create(void *params, int socket_id)
 {
 	struct rte_port_fd_reader_params *conf =
-			params;
+			(struct rte_port_fd_reader_params *) params;
 	struct rte_port_fd_reader *port;
 
 	/* Check input parameters */
@@ -107,11 +107,16 @@ rte_port_fd_reader_create(void *params, int socket_id)
 static int
 rte_port_fd_reader_rx(void *port, struct rte_mbuf **pkts, uint32_t n_pkts)
 {
-	struct rte_port_fd_reader *p = port;
-	uint32_t i, j;
+	struct rte_port_fd_reader *p = (struct rte_port_fd_reader *) port;
+	uint32_t i;
 
-	if (rte_pktmbuf_alloc_bulk(p->mempool, pkts, n_pkts) != 0)
+	if (rte_mempool_get_bulk(p->mempool, (void **) pkts, n_pkts) != 0)
 		return 0;
+
+	for (i = 0; i < n_pkts; i++) {
+		rte_mbuf_refcnt_set(pkts[i], 1);
+		rte_pktmbuf_reset(pkts[i]);
+	}
 
 	for (i = 0; i < n_pkts; i++) {
 		struct rte_mbuf *pkt = pkts[i];
@@ -126,12 +131,12 @@ rte_port_fd_reader_rx(void *port, struct rte_mbuf **pkts, uint32_t n_pkts)
 		pkt->pkt_len = n_bytes;
 	}
 
-	for (j = i; j < n_pkts; j++)
-		rte_pktmbuf_free(pkts[j]);
+	for ( ; i < n_pkts; i++)
+		rte_pktmbuf_free(pkts[i]);
 
 	RTE_PORT_FD_READER_STATS_PKTS_IN_ADD(p, i);
 
-	return i;
+	return n_pkts;
 }
 
 static int
@@ -151,7 +156,7 @@ static int rte_port_fd_reader_stats_read(void *port,
 		struct rte_port_in_stats *stats, int clear)
 {
 	struct rte_port_fd_reader *p =
-			port;
+			(struct rte_port_fd_reader *) port;
 
 	if (stats != NULL)
 		memcpy(stats, &p->stats, sizeof(p->stats));
@@ -192,7 +197,7 @@ static void *
 rte_port_fd_writer_create(void *params, int socket_id)
 {
 	struct rte_port_fd_writer_params *conf =
-		params;
+		(struct rte_port_fd_writer_params *) params;
 	struct rte_port_fd_writer *port;
 
 	/* Check input parameters */
@@ -248,7 +253,7 @@ static int
 rte_port_fd_writer_tx(void *port, struct rte_mbuf *pkt)
 {
 	struct rte_port_fd_writer *p =
-		port;
+		(struct rte_port_fd_writer *) port;
 
 	p->tx_buf[p->tx_buf_count++] = pkt;
 	RTE_PORT_FD_WRITER_STATS_PKTS_IN_ADD(p, 1);
@@ -264,7 +269,7 @@ rte_port_fd_writer_tx_bulk(void *port,
 	uint64_t pkts_mask)
 {
 	struct rte_port_fd_writer *p =
-		port;
+		(struct rte_port_fd_writer *) port;
 	uint32_t tx_buf_count = p->tx_buf_count;
 
 	if ((pkts_mask & (pkts_mask + 1)) == 0) {
@@ -296,7 +301,7 @@ static int
 rte_port_fd_writer_flush(void *port)
 {
 	struct rte_port_fd_writer *p =
-		port;
+		(struct rte_port_fd_writer *) port;
 
 	if (p->tx_buf_count > 0)
 		send_burst(p);
@@ -322,7 +327,7 @@ static int rte_port_fd_writer_stats_read(void *port,
 		struct rte_port_out_stats *stats, int clear)
 {
 	struct rte_port_fd_writer *p =
-		port;
+		(struct rte_port_fd_writer *) port;
 
 	if (stats != NULL)
 		memcpy(stats, &p->stats, sizeof(p->stats));
@@ -364,7 +369,7 @@ static void *
 rte_port_fd_writer_nodrop_create(void *params, int socket_id)
 {
 	struct rte_port_fd_writer_nodrop_params *conf =
-			params;
+			(struct rte_port_fd_writer_nodrop_params *) params;
 	struct rte_port_fd_writer_nodrop *port;
 
 	/* Check input parameters */
@@ -433,7 +438,7 @@ static int
 rte_port_fd_writer_nodrop_tx(void *port, struct rte_mbuf *pkt)
 {
 	struct rte_port_fd_writer_nodrop *p =
-		port;
+		(struct rte_port_fd_writer_nodrop *) port;
 
 	p->tx_buf[p->tx_buf_count++] = pkt;
 	RTE_PORT_FD_WRITER_NODROP_STATS_PKTS_IN_ADD(p, 1);
@@ -449,7 +454,7 @@ rte_port_fd_writer_nodrop_tx_bulk(void *port,
 	uint64_t pkts_mask)
 {
 	struct rte_port_fd_writer_nodrop *p =
-		port;
+		(struct rte_port_fd_writer_nodrop *) port;
 	uint32_t tx_buf_count = p->tx_buf_count;
 
 	if ((pkts_mask & (pkts_mask + 1)) == 0) {
@@ -481,7 +486,7 @@ static int
 rte_port_fd_writer_nodrop_flush(void *port)
 {
 	struct rte_port_fd_writer_nodrop *p =
-		port;
+		(struct rte_port_fd_writer_nodrop *) port;
 
 	if (p->tx_buf_count > 0)
 		send_burst_nodrop(p);
@@ -507,7 +512,7 @@ static int rte_port_fd_writer_nodrop_stats_read(void *port,
 		struct rte_port_out_stats *stats, int clear)
 {
 	struct rte_port_fd_writer_nodrop *p =
-		port;
+		(struct rte_port_fd_writer_nodrop *) port;
 
 	if (stats != NULL)
 		memcpy(stats, &p->stats, sizeof(p->stats));

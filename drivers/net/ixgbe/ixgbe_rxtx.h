@@ -67,7 +67,7 @@
 #define RTE_IXGBE_MAX_RX_BURST          RTE_IXGBE_RXQ_REARM_THRESH
 #endif
 
-#define RX_RING_SZ ((IXGBE_MAX_RING_DESC + RTE_PMD_IXGBE_RX_MAX_BURST) * \
+#define RX_RING_SZ ((IXGBE_MAX_RING_DESC + RTE_IXGBE_DESCS_PER_LOOP - 1) * \
 		    sizeof(union ixgbe_adv_rx_desc))
 
 #ifdef RTE_PMD_PACKET_PREFETCH
@@ -80,16 +80,10 @@
 #define RTE_IXGBE_WAIT_100_US               100
 #define RTE_IXGBE_VMTXSW_REGISTER_COUNT     2
 
-#define IXGBE_TX_MAX_SEG                    40
-
 #define IXGBE_PACKET_TYPE_MASK_82599        0X7F
 #define IXGBE_PACKET_TYPE_MASK_X550         0X10FF
 #define IXGBE_PACKET_TYPE_MASK_TUNNEL       0XFF
 #define IXGBE_PACKET_TYPE_TUNNEL_BIT        0X1000
-
-#define IXGBE_PACKET_TYPE_MAX               0X80
-#define IXGBE_PACKET_TYPE_TN_MAX            0X100
-#define IXGBE_PACKET_TYPE_SHIFT             0X04
 
 /**
  * Structure associated with each descriptor of the RX ring of a RX queue.
@@ -313,13 +307,10 @@ int ixgbe_rx_vec_dev_conf_condition_check(struct rte_eth_dev *dev);
 int ixgbe_rxq_vec_setup(struct ixgbe_rx_queue *rxq);
 void ixgbe_rx_queue_release_mbufs_vec(struct ixgbe_rx_queue *rxq);
 
-extern const uint32_t ptype_table[IXGBE_PACKET_TYPE_MAX];
-extern const uint32_t ptype_table_tn[IXGBE_PACKET_TYPE_TN_MAX];
-
 #ifdef RTE_IXGBE_INC_VECTOR
 
-uint16_t ixgbe_xmit_fixed_burst_vec(void *tx_queue, struct rte_mbuf **tx_pkts,
-				    uint16_t nb_pkts);
+uint16_t ixgbe_xmit_pkts_vec(void *tx_queue, struct rte_mbuf **tx_pkts,
+		uint16_t nb_pkts);
 int ixgbe_txq_vec_setup(struct ixgbe_tx_queue *txq);
 
 #endif /* RTE_IXGBE_INC_VECTOR */

@@ -39,9 +39,6 @@ SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rxq.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_txq.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rxtx.c
-ifeq ($(CONFIG_RTE_ARCH_X86_64),y)
-SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rxtx_vec_sse.c
-endif
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_trigger.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_ethdev.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_mac.c
@@ -51,11 +48,17 @@ SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_stats.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rss.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_fdir.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_mr.c
-SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow.c
+
+# Dependencies.
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += lib/librte_ether
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += lib/librte_mbuf
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += lib/librte_eal
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += lib/librte_mempool
+DEPDIRS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += lib/librte_kvargs
 
 # Basic CFLAGS.
 CFLAGS += -O3
-CFLAGS += -std=c11 -Wall -Wextra
+CFLAGS += -std=gnu99 -Wall -Wextra
 CFLAGS += -g
 CFLAGS += -I.
 CFLAGS += -D_BSD_SOURCE
@@ -101,13 +104,8 @@ endif
 
 mlx5_autoconf.h.new: FORCE
 
-mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
+mlx5_autoconf.h.new: $(RTE_SDK)/scripts/auto-config-h.sh
 	$Q $(RM) -f -- '$@'
-	$Q sh -- '$<' '$@' \
-		HAVE_VERBS_IBV_EXP_FLOW_SPEC_ACTION_DROP \
-		infiniband/verbs_exp.h \
-		enum IBV_EXP_FLOW_SPEC_ACTION_DROP \
-		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
 		HAVE_VERBS_IBV_EXP_CQ_COMPRESSED_CQE \
 		infiniband/verbs_exp.h \
@@ -137,11 +135,6 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		HAVE_ETHTOOL_LINK_MODE_100G \
 		/usr/include/linux/ethtool.h \
 		enum ETHTOOL_LINK_MODE_100000baseKR4_Full_BIT \
-		$(AUTOCONF_OUTPUT)
-	$Q sh -- '$<' '$@' \
-		HAVE_UPDATE_CQ_CI \
-		infiniband/mlx5_hw.h \
-		func ibv_mlx5_exp_update_cq_ci \
 		$(AUTOCONF_OUTPUT)
 
 # Create mlx5_autoconf.h or update it in case it differs from the new one.

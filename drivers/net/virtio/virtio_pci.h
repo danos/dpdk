@@ -106,7 +106,6 @@ struct virtnet_ctl;
 /* The feature bitmap for virtio net */
 #define VIRTIO_NET_F_CSUM	0	/* Host handles pkts w/ partial csum */
 #define VIRTIO_NET_F_GUEST_CSUM	1	/* Guest handles pkts w/ partial csum */
-#define VIRTIO_NET_F_MTU	3	/* Initial MTU advice. */
 #define VIRTIO_NET_F_MAC	5	/* Host has given MAC address. */
 #define VIRTIO_NET_F_GUEST_TSO4	7	/* Guest can handle TSOv4 in. */
 #define VIRTIO_NET_F_GUEST_TSO6	8	/* Guest can handle TSOv6 in. */
@@ -237,9 +236,6 @@ struct virtio_pci_ops {
 
 	uint16_t (*set_config_irq)(struct virtio_hw *hw, uint16_t vec);
 
-	uint16_t (*set_queue_irq)(struct virtio_hw *hw, struct virtqueue *vq,
-			uint16_t vec);
-
 	uint16_t (*get_queue_num)(struct virtio_hw *hw, uint16_t queue_id);
 	int (*setup_queue)(struct virtio_hw *hw, struct virtqueue *vq);
 	void (*del_queue)(struct virtio_hw *hw, struct virtqueue *vq);
@@ -254,7 +250,6 @@ struct virtio_hw {
 	uint64_t    guest_features;
 	uint32_t    max_queue_pairs;
 	uint16_t    started;
-	uint16_t	max_mtu;
 	uint16_t    vtnet_hdr_size;
 	uint8_t	    vlan_strip;
 	uint8_t	    use_msix;
@@ -265,6 +260,7 @@ struct virtio_hw {
 	uint32_t    notify_off_multiplier;
 	uint8_t     *isr;
 	uint16_t    *notify_base;
+	struct rte_pci_device *dev;
 	struct virtio_pci_common_cfg *common_cfg;
 	struct virtio_net_config *dev_cfg;
 	void	    *virtio_user_dev;
@@ -300,7 +296,6 @@ struct virtio_net_config {
 	/* See VIRTIO_NET_F_STATUS and VIRTIO_NET_S_* above */
 	uint16_t   status;
 	uint16_t   max_virtqueue_pairs;
-	uint16_t   mtu;
 } __attribute__((packed));
 
 /*
@@ -321,7 +316,8 @@ vtpci_with_feature(struct virtio_hw *hw, uint64_t bit)
 /*
  * Function declaration from virtio_pci.c
  */
-int vtpci_init(struct rte_pci_device *dev, struct virtio_hw *hw);
+int vtpci_init(struct rte_pci_device *, struct virtio_hw *,
+	       uint32_t *dev_flags);
 void vtpci_reset(struct virtio_hw *);
 
 void vtpci_reinit_complete(struct virtio_hw *);
@@ -336,6 +332,8 @@ void vtpci_write_dev_config(struct virtio_hw *, size_t, const void *, int);
 void vtpci_read_dev_config(struct virtio_hw *, size_t, void *, int);
 
 uint8_t vtpci_isr(struct virtio_hw *);
+
+uint16_t vtpci_irq_config(struct virtio_hw *, uint16_t);
 
 extern const struct virtio_pci_ops legacy_ops;
 extern const struct virtio_pci_ops modern_ops;

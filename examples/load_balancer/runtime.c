@@ -49,6 +49,7 @@
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
 #include <rte_eal.h>
+#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -143,10 +144,9 @@ app_lcore_io_rx_buffer_to_send (
 	ret = rte_ring_sp_enqueue_bulk(
 		lp->rx.rings[worker],
 		(void **) lp->rx.mbuf_out[worker].array,
-		bsz,
-		NULL);
+		bsz);
 
-	if (unlikely(ret == 0)) {
+	if (unlikely(ret == -ENOBUFS)) {
 		uint32_t k;
 		for (k = 0; k < bsz; k ++) {
 			struct rte_mbuf *m = lp->rx.mbuf_out[worker].array[k];
@@ -310,10 +310,9 @@ app_lcore_io_rx_flush(struct app_lcore_params_io *lp, uint32_t n_workers)
 		ret = rte_ring_sp_enqueue_bulk(
 			lp->rx.rings[worker],
 			(void **) lp->rx.mbuf_out[worker].array,
-			lp->rx.mbuf_out[worker].n_mbufs,
-			NULL);
+			lp->rx.mbuf_out[worker].n_mbufs);
 
-		if (unlikely(ret == 0)) {
+		if (unlikely(ret < 0)) {
 			uint32_t k;
 			for (k = 0; k < lp->rx.mbuf_out[worker].n_mbufs; k ++) {
 				struct rte_mbuf *pkt_to_free = lp->rx.mbuf_out[worker].array[k];
@@ -348,11 +347,11 @@ app_lcore_io_tx(
 			ret = rte_ring_sc_dequeue_bulk(
 				ring,
 				(void **) &lp->tx.mbuf_out[port].array[n_mbufs],
-				bsz_rd,
-				NULL);
+				bsz_rd);
 
-			if (unlikely(ret == 0))
+			if (unlikely(ret == -ENOENT)) {
 				continue;
+			}
 
 			n_mbufs += bsz_rd;
 
@@ -506,11 +505,11 @@ app_lcore_worker(
 		ret = rte_ring_sc_dequeue_bulk(
 			ring_in,
 			(void **) lp->mbuf_in.array,
-			bsz_rd,
-			NULL);
+			bsz_rd);
 
-		if (unlikely(ret == 0))
+		if (unlikely(ret == -ENOENT)) {
 			continue;
+		}
 
 #if APP_WORKER_DROP_ALL_PACKETS
 		for (j = 0; j < bsz_rd; j ++) {
@@ -558,12 +557,11 @@ app_lcore_worker(
 			ret = rte_ring_sp_enqueue_bulk(
 				lp->rings_out[port],
 				(void **) lp->mbuf_out[port].array,
-				bsz_wr,
-				NULL);
+				bsz_wr);
 
 #if APP_STATS
 			lp->rings_out_iters[port] ++;
-			if (ret > 0) {
+			if (ret == 0) {
 				lp->rings_out_count[port] += 1;
 			}
 			if (lp->rings_out_iters[port] == APP_STATS){
@@ -576,7 +574,7 @@ app_lcore_worker(
 			}
 #endif
 
-			if (unlikely(ret == 0)) {
+			if (unlikely(ret == -ENOBUFS)) {
 				uint32_t k;
 				for (k = 0; k < bsz_wr; k ++) {
 					struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
@@ -611,10 +609,9 @@ app_lcore_worker_flush(struct app_lcore_params_worker *lp)
 		ret = rte_ring_sp_enqueue_bulk(
 			lp->rings_out[port],
 			(void **) lp->mbuf_out[port].array,
-			lp->mbuf_out[port].n_mbufs,
-			NULL);
+			lp->mbuf_out[port].n_mbufs);
 
-		if (unlikely(ret == 0)) {
+		if (unlikely(ret < 0)) {
 			uint32_t k;
 			for (k = 0; k < lp->mbuf_out[port].n_mbufs; k ++) {
 				struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];

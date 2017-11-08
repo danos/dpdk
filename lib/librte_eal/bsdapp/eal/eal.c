@@ -45,6 +45,7 @@
 #include <stddef.h>
 #include <errno.h>
 #include <limits.h>
+#include <errno.h>
 #include <sys/mman.h>
 #include <sys/queue.h>
 
@@ -55,20 +56,18 @@
 #include <rte_launch.h>
 #include <rte_eal.h>
 #include <rte_eal_memconfig.h>
-#include <rte_errno.h>
 #include <rte_per_lcore.h>
 #include <rte_lcore.h>
-#include <rte_service_component.h>
 #include <rte_log.h>
 #include <rte_random.h>
 #include <rte_cycles.h>
 #include <rte_string_fns.h>
 #include <rte_cpuflags.h>
 #include <rte_interrupts.h>
-#include <rte_bus.h>
 #include <rte_pci.h>
 #include <rte_dev.h>
 #include <rte_devargs.h>
+#include <rte_common.h>
 #include <rte_version.h>
 #include <rte_atomic.h>
 #include <malloc_heap.h>
@@ -194,7 +193,7 @@ rte_eal_config_create(void)
 		rte_panic("Cannot mmap memory for rte_config\n");
 	}
 	memcpy(rte_mem_cfg_addr, &early_mem_config, sizeof(early_mem_config));
-	rte_config.mem_config = rte_mem_cfg_addr;
+	rte_config.mem_config = (struct rte_mem_config *) rte_mem_cfg_addr;
 }
 
 /* attach to an existing shared memory config */
@@ -219,7 +218,7 @@ rte_eal_config_attach(void)
 	if (rte_mem_cfg_addr == MAP_FAILED)
 		rte_panic("Cannot mmap memory for rte_config\n");
 
-	rte_config.mem_config = rte_mem_cfg_addr;
+	rte_config.mem_config = (struct rte_mem_config *) rte_mem_cfg_addr;
 }
 
 /* Detect if we are a primary or a secondary process */
@@ -321,6 +320,8 @@ eal_log_level_parse(int argc, char **argv)
 	argvopt = argv;
 	optind = 1;
 	optreset = 1;
+
+	eal_reset_internal_config(&internal_config);
 
 	while ((opt = getopt_long(argc, argvopt, eal_short_options,
 				  eal_long_options, &option_index)) != EOF) {
@@ -485,12 +486,6 @@ rte_eal_iopl_init(void)
 	return 0;
 }
 
-static void rte_eal_init_alert(const char *msg)
-{
-	fprintf(stderr, "EAL: FATAL: %s\n", msg);
-	RTE_LOG(ERR, EAL, "%s\n", msg);
-}
-
 /* Launch threads, called at application init(). */
 int
 rte_eal_init(int argc, char **argv)
@@ -502,47 +497,29 @@ rte_eal_init(int argc, char **argv)
 	char thread_name[RTE_MAX_THREAD_NAME_LEN];
 
 	/* checks if the machine is adequate */
-	if (!rte_cpu_is_supported()) {
-		rte_eal_init_alert("unsupported cpu type.");
-		rte_errno = ENOTSUP;
-		return -1;
-	}
+	rte_cpu_check_supported();
 
-	if (!rte_atomic32_test_and_set(&run_once)) {
-		rte_eal_init_alert("already called initialization.");
-		rte_errno = EALREADY;
+	if (!rte_atomic32_test_and_set(&run_once))
 		return -1;
-	}
 
 	thread_id = pthread_self();
 
-	eal_reset_internal_config(&internal_config);
-
-	/* set log level as early as possible */
 	eal_log_level_parse(argc, argv);
 
-	if (rte_eal_cpu_init() < 0) {
-		rte_eal_init_alert("Cannot detect lcores.");
-		rte_errno = ENOTSUP;
-		return -1;
-	}
+	/* set log level as early as possible */
+	rte_set_log_level(internal_config.log_level);
+
+	if (rte_eal_cpu_init() < 0)
+		rte_panic("Cannot detect lcores\n");
 
 	fctret = eal_parse_args(argc, argv);
-	if (fctret < 0) {
-		rte_eal_init_alert("Invalid 'command line' arguments.");
-		rte_errno = EINVAL;
-		rte_atomic32_clear(&run_once);
-		return -1;
-	}
+	if (fctret < 0)
+		exit(1);
 
 	if (internal_config.no_hugetlbfs == 0 &&
 			internal_config.process_type != RTE_PROC_SECONDARY &&
-			eal_hugepage_info_init() < 0) {
-		rte_eal_init_alert("Cannot get hugepage information.");
-		rte_errno = EACCES;
-		rte_atomic32_clear(&run_once);
-		return -1;
-	}
+			eal_hugepage_info_init() < 0)
+		rte_panic("Cannot get hugepage information\n");
 
 	if (internal_config.memory == 0 && internal_config.force_sockets == 0) {
 		if (internal_config.no_hugetlbfs)
@@ -566,45 +543,31 @@ rte_eal_init(int argc, char **argv)
 
 	rte_config_init();
 
-	if (rte_eal_memory_init() < 0) {
-		rte_eal_init_alert("Cannot init memory\n");
-		rte_errno = ENOMEM;
-		return -1;
-	}
+	if (rte_eal_memory_init() < 0)
+		rte_panic("Cannot init memory\n");
 
-	if (rte_eal_memzone_init() < 0) {
-		rte_eal_init_alert("Cannot init memzone\n");
-		rte_errno = ENODEV;
-		return -1;
-	}
+	if (rte_eal_memzone_init() < 0)
+		rte_panic("Cannot init memzone\n");
 
-	if (rte_eal_tailqs_init() < 0) {
-		rte_eal_init_alert("Cannot init tail queues for objects\n");
-		rte_errno = EFAULT;
-		return -1;
-	}
+	if (rte_eal_tailqs_init() < 0)
+		rte_panic("Cannot init tail queues for objects\n");
 
-	if (rte_eal_alarm_init() < 0) {
-		rte_eal_init_alert("Cannot init interrupt-handling thread\n");
-		/* rte_eal_alarm_init sets rte_errno on failure. */
-		return -1;
-	}
+	if (rte_eal_alarm_init() < 0)
+		rte_panic("Cannot init interrupt-handling thread\n");
 
-	if (rte_eal_intr_init() < 0) {
-		rte_eal_init_alert("Cannot init interrupt-handling thread\n");
-		return -1;
-	}
+	if (rte_eal_intr_init() < 0)
+		rte_panic("Cannot init interrupt-handling thread\n");
 
-	if (rte_eal_timer_init() < 0) {
-		rte_eal_init_alert("Cannot init HPET or TSC timers\n");
-		rte_errno = ENOTSUP;
-		return -1;
-	}
+	if (rte_eal_timer_init() < 0)
+		rte_panic("Cannot init HPET or TSC timers\n");
+
+	if (rte_eal_pci_init() < 0)
+		rte_panic("Cannot init PCI\n");
 
 	eal_check_mem_on_local_socket();
 
 	if (eal_plugins_init() < 0)
-		rte_eal_init_alert("Cannot init plugins\n");
+		rte_panic("Cannot init plugins\n");
 
 	eal_thread_init_master(rte_config.master_lcore);
 
@@ -614,16 +577,8 @@ rte_eal_init(int argc, char **argv)
 		rte_config.master_lcore, thread_id, cpuset,
 		ret == 0 ? "" : "...");
 
-	if (eal_option_device_parse()) {
-		rte_errno = ENODEV;
-		return -1;
-	}
-
-	if (rte_bus_scan()) {
-		rte_eal_init_alert("Cannot scan the buses for devices\n");
-		rte_errno = ENODEV;
-		return -1;
-	}
+	if (rte_eal_dev_init() < 0)
+		rte_panic("Cannot init pmd devices\n");
 
 	RTE_LCORE_FOREACH_SLAVE(i) {
 
@@ -657,29 +612,9 @@ rte_eal_init(int argc, char **argv)
 	rte_eal_mp_remote_launch(sync_func, NULL, SKIP_MASTER);
 	rte_eal_mp_wait_lcore();
 
-	/* initialize services so vdevs register service during bus_probe. */
-	ret = rte_service_init();
-	if (ret) {
-		rte_eal_init_alert("rte_service_init() failed\n");
-		rte_errno = ENOEXEC;
-		return -1;
-	}
-
-	/* Probe all the buses and devices/drivers on them */
-	if (rte_bus_probe()) {
-		rte_eal_init_alert("Cannot probe devices\n");
-		rte_errno = ENOTSUP;
-		return -1;
-	}
-
-	/* initialize default service/lcore mappings and start running. Ignore
-	 * -ENOTSUP, as it indicates no service coremask passed to EAL.
-	 */
-	ret = rte_service_start_with_defaults();
-	if (ret < 0 && ret != -ENOTSUP) {
-		rte_errno = ENOEXEC;
-		return -1;
-	}
+	/* Probe & Initialize PCI devices */
+	if (rte_eal_pci_probe())
+		rte_panic("Cannot probe PCI\n");
 
 	rte_eal_mcfg_complete();
 

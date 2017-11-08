@@ -102,9 +102,9 @@ Limitations
 *       The framework can only be enabled with Linux. BSD is not supported.
 
 *       To detach a port, the port should be backed by a device that igb_uio
-        or VFIO manages.
+        manages. VFIO is not supported.
 
 *       Not all PMDs support detaching feature.
         To know whether a PMD can support detaching, search for the
-        "RTE_ETH_DEV_DETACHABLE" flag in rte_eth_dev::data::dev_flags. If the flag is
+        "RTE_PCI_DRV_DETACHABLE" flag in PMD implementation. If the flag is
         defined in the PMD, detaching is supported.

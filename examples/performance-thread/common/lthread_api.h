@@ -124,10 +124,6 @@
 #ifndef LTHREAD_H
 #define LTHREAD_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdint.h>
 #include <sys/socket.h>
 #include <fcntl.h>
@@ -832,9 +828,5 @@ int lthread_cond_signal(struct lthread_cond *c);
   *  EINVAL was not a an initialised condition variable
   */
 int lthread_cond_broadcast(struct lthread_cond *c);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif				/* LTHREAD_H */

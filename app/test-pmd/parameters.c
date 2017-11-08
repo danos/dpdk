@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2017 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #include <sys/queue.h>
 #include <sys/stat.h>
@@ -75,7 +76,6 @@
 #ifdef RTE_LIBRTE_PMD_BOND
 #include <rte_eth_bond.h>
 #endif
-#include <rte_flow.h>
 
 #include "testpmd.h"
 
@@ -85,10 +85,8 @@ usage(char* progname)
 	printf("usage: %s "
 #ifdef RTE_LIBRTE_CMDLINE
 	       "[--interactive|-i] "
-	       "[--cmdline-file=FILENAME] "
 #endif
 	       "[--help|-h] | [--auto-start|-a] | ["
-	       "--tx-first | --stats-period=PERIOD | "
 	       "--coremask=COREMASK --portmask=PORTMASK --numa "
 	       "--mbuf-size= | --total-num-mbufs= | "
 	       "--nb-cores= | --nb-ports= | "
@@ -104,15 +102,10 @@ usage(char* progname)
 	       progname);
 #ifdef RTE_LIBRTE_CMDLINE
 	printf("  --interactive: run in interactive mode.\n");
-	printf("  --cmdline-file: execute cli commands before startup.\n");
 #endif
 	printf("  --auto-start: start forwarding on init "
 	       "[always when non-interactive].\n");
 	printf("  --help: display this message and quit.\n");
-	printf("  --tx-first: start forwarding sending a burst first "
-	       "(only if interactive is disabled).\n");
-	printf("  --stats-period=PERIOD: statistics will be shown "
-	       "every PERIOD seconds (only if interactive is disabled).\n");
 	printf("  --nb-cores=N: set the number of forwarding cores "
 	       "(1 <= N <= %d).\n", nb_lcores);
 	printf("  --nb-ports=N: set the number of forwarding ports "
@@ -155,10 +148,6 @@ usage(char* progname)
 	       "the packet will be enqueued into the rx drop-queue. "
 	       "If the drop-queue doesn't exist, the packet is dropped. "
 	       "By default drop-queue=127.\n");
-#ifdef RTE_LIBRTE_LATENCY_STATS
-	printf("  --latencystats=N: enable latency and jitter statistcs "
-	       "monitoring on forwarding lcore id N.\n");
-#endif
 	printf("  --disable-crc-strip: disable CRC stripping by hardware.\n");
 	printf("  --enable-lro: enable large receive offload.\n");
 	printf("  --enable-rx-cksum: enable rx hardware checksum offload.\n");
@@ -206,16 +195,6 @@ usage(char* progname)
 		" or total packet length.\n");
 	printf("  --disable-link-check: disable check on link status when "
 	       "starting/stopping ports.\n");
-	printf("  --no-lsc-interrupt: disable link status change interrupt.\n");
-	printf("  --no-rmv-interrupt: disable device removal interrupt.\n");
-	printf("  --bitrate-stats=N: set the logical core N to perform "
-		"bit-rate calculation.\n");
-	printf("  --print-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|all>: "
-	       "enable print of designated event or all of them.\n");
-	printf("  --mask-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|all>: "
-	       "disable print of designated event or all of them.\n");
-	printf("  --flow-isolate-all: "
-	       "requests flow API isolated mode on all ports at initialization time.\n");
 }
 
 #ifdef RTE_LIBRTE_CMDLINE
@@ -375,18 +354,6 @@ parse_queue_stats_mapping_config(const char *q_arg, int is_rx)
 	return 0;
 }
 
-static void
-print_invalid_socket_id_error(void)
-{
-	unsigned int i = 0;
-
-	printf("Invalid socket id, options are: ");
-	for (i = 0; i < num_sockets; i++) {
-		printf("%u%s", socket_ids[i],
-		      (i == num_sockets - 1) ? "\n" : ",");
-	}
-}
-
 static int
 parse_portnuma_config(const char *q_arg)
 {
@@ -426,14 +393,15 @@ parse_portnuma_config(const char *q_arg)
 		port_id = (uint8_t)int_fld[FLD_PORT];
 		if (port_id_is_invalid(port_id, ENABLED_WARN)) {
 			printf("Valid port range is [0");
-			RTE_ETH_FOREACH_DEV(pid)
+			FOREACH_PORT(pid, ports)
 				printf(", %d", pid);
 			printf("]\n");
 			return -1;
 		}
 		socket_id = (uint8_t)int_fld[FLD_SOCKET];
-		if (new_socket_id(socket_id)) {
-			print_invalid_socket_id_error();
+		if(socket_id >= max_socket) {
+			printf("Invalid socket id, range is [0, %d]\n",
+				 max_socket - 1);
 			return -1;
 		}
 		port_numa[port_id] = socket_id;
@@ -485,14 +453,15 @@ parse_ringnuma_config(const char *q_arg)
 		port_id = (uint8_t)int_fld[FLD_PORT];
 		if (port_id_is_invalid(port_id, ENABLED_WARN)) {
 			printf("Valid port range is [0");
-			RTE_ETH_FOREACH_DEV(pid)
+			FOREACH_PORT(pid, ports)
 				printf(", %d", pid);
 			printf("]\n");
 			return -1;
 		}
 		socket_id = (uint8_t)int_fld[FLD_SOCKET];
-		if (new_socket_id(socket_id)) {
-			print_invalid_socket_id_error();
+		if (socket_id >= max_socket) {
+			printf("Invalid socket id, range is [0, %d]\n",
+				max_socket - 1);
 			return -1;
 		}
 		ring_flag = (uint8_t)int_fld[FLD_FLAG];
@@ -523,38 +492,6 @@ parse_ringnuma_config(const char *q_arg)
 	return 0;
 }
 
-static int
-parse_event_printing_config(const char *optarg, int enable)
-{
-	uint32_t mask = 0;
-
-	if (!strcmp(optarg, "unknown"))
-		mask = UINT32_C(1) << RTE_ETH_EVENT_UNKNOWN;
-	else if (!strcmp(optarg, "intr_lsc"))
-		mask = UINT32_C(1) << RTE_ETH_EVENT_INTR_LSC;
-	else if (!strcmp(optarg, "queue_state"))
-		mask = UINT32_C(1) << RTE_ETH_EVENT_QUEUE_STATE;
-	else if (!strcmp(optarg, "intr_reset"))
-		mask = UINT32_C(1) << RTE_ETH_EVENT_INTR_RESET;
-	else if (!strcmp(optarg, "vf_mbox"))
-		mask = UINT32_C(1) << RTE_ETH_EVENT_VF_MBOX;
-	else if (!strcmp(optarg, "macsec"))
-		mask = UINT32_C(1) << RTE_ETH_EVENT_MACSEC;
-	else if (!strcmp(optarg, "intr_rmv"))
-		mask = UINT32_C(1) << RTE_ETH_EVENT_INTR_RMV;
-	else if (!strcmp(optarg, "all"))
-		mask = ~UINT32_C(0);
-	else {
-		fprintf(stderr, "Invalid event: %s\n", optarg);
-		return -1;
-	}
-	if (enable)
-		event_print_mask |= mask;
-	else
-		event_print_mask &= ~mask;
-	return 0;
-}
-
 void
 launch_args_parse(int argc, char** argv)
 {
@@ -567,20 +504,16 @@ launch_args_parse(int argc, char** argv)
 		{ "help",			0, 0, 0 },
 #ifdef RTE_LIBRTE_CMDLINE
 		{ "interactive",		0, 0, 0 },
-		{ "cmdline-file",		1, 0, 0 },
 		{ "auto-start",			0, 0, 0 },
 		{ "eth-peers-configfile",	1, 0, 0 },
 		{ "eth-peer",			1, 0, 0 },
 #endif
-		{ "tx-first",			0, 0, 0 },
-		{ "stats-period",		1, 0, 0 },
 		{ "ports",			1, 0, 0 },
 		{ "nb-cores",			1, 0, 0 },
 		{ "nb-ports",			1, 0, 0 },
 		{ "coremask",			1, 0, 0 },
 		{ "portmask",			1, 0, 0 },
 		{ "numa",			0, 0, 0 },
-		{ "no-numa",			0, 0, 0 },
 		{ "mp-anon",			0, 0, 0 },
 		{ "port-numa-config",           1, 0, 0 },
 		{ "ring-numa-config",           1, 0, 0 },
@@ -592,13 +525,7 @@ launch_args_parse(int argc, char** argv)
 		{ "pkt-filter-report-hash",     1, 0, 0 },
 		{ "pkt-filter-size",            1, 0, 0 },
 		{ "pkt-filter-drop-queue",      1, 0, 0 },
-#ifdef RTE_LIBRTE_LATENCY_STATS
-		{ "latencystats",               1, 0, 0 },
-#endif
-#ifdef RTE_LIBRTE_BITRATE
-		{ "bitrate-stats",              1, 0, 0 },
-#endif
-		{ "disable-crc-strip",          0, 0, 0 },
+		{ "disable-crc-strip",                  0, 0, 0 },
 		{ "enable-lro",                 0, 0, 0 },
 		{ "enable-rx-cksum",            0, 0, 0 },
 		{ "enable-scatter",             0, 0, 0 },
@@ -631,13 +558,8 @@ launch_args_parse(int argc, char** argv)
 		{ "tx-queue-stats-mapping",	1, 0, 0 },
 		{ "rx-queue-stats-mapping",	1, 0, 0 },
 		{ "no-flush-rx",	0, 0, 0 },
-		{ "flow-isolate-all",	        0, 0, 0 },
 		{ "txpkts",			1, 0, 0 },
 		{ "disable-link-check",		0, 0, 0 },
-		{ "no-lsc-interrupt",		0, 0, 0 },
-		{ "no-rmv-interrupt",		0, 0, 0 },
-		{ "print-event",		1, 0, 0 },
-		{ "mask-event",			1, 0, 0 },
 		{ 0, 0, 0, 0 },
 	};
 
@@ -672,33 +594,9 @@ launch_args_parse(int argc, char** argv)
 				printf("Interactive-mode selected\n");
 				interactive = 1;
 			}
-			if (!strcmp(lgopts[opt_idx].name, "cmdline-file")) {
-				printf("CLI commands to be read from %s\n",
-				       optarg);
-				snprintf(cmdline_filename,
-					 sizeof(cmdline_filename), "%s",
-					 optarg);
-			}
 			if (!strcmp(lgopts[opt_idx].name, "auto-start")) {
 				printf("Auto-start selected\n");
 				auto_start = 1;
-			}
-			if (!strcmp(lgopts[opt_idx].name, "tx-first")) {
-				printf("Ports to start sending a burst of "
-						"packets first\n");
-				tx_first = 1;
-			}
-			if (!strcmp(lgopts[opt_idx].name, "stats-period")) {
-				char *end = NULL;
-				unsigned int n;
-
-				n = strtoul(optarg, &end, 10);
-				if ((optarg[0] == '\0') || (end == NULL) ||
-						(*end != '\0'))
-					break;
-
-				stats_period = n;
-				break;
 			}
 			if (!strcmp(lgopts[opt_idx].name,
 				    "eth-peers-configfile")) {
@@ -752,10 +650,12 @@ launch_args_parse(int argc, char** argv)
 				parse_fwd_coremask(optarg);
 			if (!strcmp(lgopts[opt_idx].name, "portmask"))
 				parse_fwd_portmask(optarg);
-			if (!strcmp(lgopts[opt_idx].name, "no-numa"))
-				numa_support = 0;
-			if (!strcmp(lgopts[opt_idx].name, "numa"))
+			if (!strcmp(lgopts[opt_idx].name, "numa")) {
 				numa_support = 1;
+				memset(port_numa,NUMA_NO_CONFIG,RTE_MAX_ETHPORTS);
+				memset(rxring_numa,NUMA_NO_CONFIG,RTE_MAX_ETHPORTS);
+				memset(txring_numa,NUMA_NO_CONFIG,RTE_MAX_ETHPORTS);
+			}
 			if (!strcmp(lgopts[opt_idx].name, "mp-anon")) {
 				mp_anon = 1;
 			}
@@ -770,13 +670,12 @@ launch_args_parse(int argc, char** argv)
 					   "invalid ring-numa configuration\n");
 			if (!strcmp(lgopts[opt_idx].name, "socket-num")) {
 				n = atoi(optarg);
-				if (!new_socket_id((uint8_t)n)) {
+				if((uint8_t)n < max_socket)
 					socket_num = (uint8_t)n;
-				} else {
-					print_invalid_socket_id_error();
+				else
 					rte_exit(EXIT_FAILURE,
-						"Invalid socket id");
-				}
+						"The socket number should be < %d\n",
+						max_socket);
 			}
 			if (!strcmp(lgopts[opt_idx].name, "mbuf-size")) {
 				n = atoi(optarg);
@@ -866,31 +765,6 @@ launch_args_parse(int argc, char** argv)
 						 "drop queue %d invalid - must"
 						 "be >= 0 \n", n);
 			}
-#ifdef RTE_LIBRTE_LATENCY_STATS
-			if (!strcmp(lgopts[opt_idx].name,
-				    "latencystats")) {
-				n = atoi(optarg);
-				if (n >= 0) {
-					latencystats_lcore_id = (lcoreid_t) n;
-					latencystats_enabled = 1;
-				} else
-					rte_exit(EXIT_FAILURE,
-						 "invalid lcore id %d for latencystats"
-						 " must be >= 0\n", n);
-			}
-#endif
-#ifdef RTE_LIBRTE_BITRATE
-			if (!strcmp(lgopts[opt_idx].name, "bitrate-stats")) {
-				n = atoi(optarg);
-				if (n >= 0) {
-					bitrate_lcore_id = (lcoreid_t) n;
-					bitrate_enabled = 1;
-				} else
-					rte_exit(EXIT_FAILURE,
-						 "invalid lcore id %d for bitrate stats"
-						 " must be >= 0\n", n);
-			}
-#endif
 			if (!strcmp(lgopts[opt_idx].name, "disable-crc-strip"))
 				rx_mode.hw_strip_crc = 0;
 			if (!strcmp(lgopts[opt_idx].name, "enable-lro"))
@@ -1103,22 +977,6 @@ launch_args_parse(int argc, char** argv)
 				no_flush_rx = 1;
 			if (!strcmp(lgopts[opt_idx].name, "disable-link-check"))
 				no_link_check = 1;
-			if (!strcmp(lgopts[opt_idx].name, "no-lsc-interrupt"))
-				lsc_interrupt = 0;
-			if (!strcmp(lgopts[opt_idx].name, "no-rmv-interrupt"))
-				rmv_interrupt = 0;
-			if (!strcmp(lgopts[opt_idx].name, "flow-isolate-all"))
-				flow_isolate_all = 1;
-			if (!strcmp(lgopts[opt_idx].name, "print-event"))
-				if (parse_event_printing_config(optarg, 1)) {
-					rte_exit(EXIT_FAILURE,
-						 "invalid print-event argument\n");
-				}
-			if (!strcmp(lgopts[opt_idx].name, "mask-event"))
-				if (parse_event_printing_config(optarg, 0)) {
-					rte_exit(EXIT_FAILURE,
-						 "invalid mask-event argument\n");
-				}
 
 			break;
 		case 'h':

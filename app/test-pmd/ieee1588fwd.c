@@ -34,7 +34,6 @@
 
 #include <rte_cycles.h>
 #include <rte_ethdev.h>
-#include <rte_flow.h>
 
 #include "testpmd.h"
 

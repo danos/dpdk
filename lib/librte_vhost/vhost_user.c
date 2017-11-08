@@ -51,9 +51,6 @@
 #include "vhost.h"
 #include "vhost_user.h"
 
-#define VIRTIO_MIN_MTU 68
-#define VIRTIO_MAX_MTU 65535
-
 static const char *vhost_message_str[VHOST_USER_MAX] = {
 	[VHOST_USER_NONE] = "VHOST_USER_NONE",
 	[VHOST_USER_GET_FEATURES] = "VHOST_USER_GET_FEATURES",
@@ -75,7 +72,6 @@ static const char *vhost_message_str[VHOST_USER_MAX] = {
 	[VHOST_USER_GET_QUEUE_NUM]  = "VHOST_USER_GET_QUEUE_NUM",
 	[VHOST_USER_SET_VRING_ENABLE]  = "VHOST_USER_SET_VRING_ENABLE",
 	[VHOST_USER_SEND_RARP]  = "VHOST_USER_SEND_RARP",
-	[VHOST_USER_NET_SET_MTU]  = "VHOST_USER_NET_SET_MTU",
 };
 
 static uint64_t
@@ -92,7 +88,7 @@ static void
 free_mem_region(struct virtio_net *dev)
 {
 	uint32_t i;
-	struct rte_vhost_mem_region *reg;
+	struct virtio_memory_region *reg;
 
 	if (!dev || !dev->mem)
 		return;
@@ -114,10 +110,6 @@ vhost_backend_cleanup(struct virtio_net *dev)
 		rte_free(dev->mem);
 		dev->mem = NULL;
 	}
-
-	free(dev->guest_pages);
-	dev->guest_pages = NULL;
-
 	if (dev->log_addr) {
 		munmap((void *)(uintptr_t)dev->log_addr, dev->log_size);
 		dev->log_addr = 0;
@@ -139,7 +131,7 @@ vhost_user_reset_owner(struct virtio_net *dev)
 {
 	if (dev->flags & VIRTIO_DEV_RUNNING) {
 		dev->flags &= ~VIRTIO_DEV_RUNNING;
-		dev->notify_ops->destroy_device(dev->vid);
+		notify_ops->destroy_device(dev->vid);
 	}
 
 	cleanup_device(dev, 0);
@@ -151,12 +143,9 @@ vhost_user_reset_owner(struct virtio_net *dev)
  * The features that we support are requested.
  */
 static uint64_t
-vhost_user_get_features(struct virtio_net *dev)
+vhost_user_get_features(void)
 {
-	uint64_t features = 0;
-
-	rte_vhost_driver_get_features(dev->ifname, &features);
-	return features;
+	return VHOST_FEATURES;
 }
 
 /*
@@ -165,20 +154,8 @@ vhost_user_get_features(struct virtio_net *dev)
 static int
 vhost_user_set_features(struct virtio_net *dev, uint64_t features)
 {
-	uint64_t vhost_features = 0;
-
-	rte_vhost_driver_get_features(dev->ifname, &vhost_features);
-	if (features & ~vhost_features) {
-		RTE_LOG(ERR, VHOST_CONFIG,
-			"(%d) received invalid negotiated features.\n",
-			dev->vid);
+	if (features & ~VHOST_FEATURES)
 		return -1;
-	}
-
-	if ((dev->flags & VIRTIO_DEV_RUNNING) && dev->features != features) {
-		if (dev->notify_ops->features_changed)
-			dev->notify_ops->features_changed(dev->vid, features);
-	}
 
 	dev->features = features;
 	if (dev->features &
@@ -201,11 +178,11 @@ vhost_user_set_features(struct virtio_net *dev, uint64_t features)
  */
 static int
 vhost_user_set_vring_num(struct virtio_net *dev,
-			 VhostUserMsg *msg)
+			 struct vhost_vring_state *state)
 {
-	struct vhost_virtqueue *vq = dev->virtqueue[msg->payload.state.index];
+	struct vhost_virtqueue *vq = dev->virtqueue[state->index];
 
-	vq->size = msg->payload.state.num;
+	vq->size = state->num;
 
 	if (dev->dequeue_zero_copy) {
 		vq->nr_zmbuf = 0;
@@ -246,6 +223,13 @@ numa_realloc(struct virtio_net *dev, int index)
 	struct vhost_virtqueue *old_vq, *vq;
 	int ret;
 
+	/*
+	 * vq is allocated on pairs, we should try to do realloc
+	 * on first queue of one queue pair only.
+	 */
+	if (index % VIRTIO_QNUM != 0)
+		return dev;
+
 	old_dev = dev;
 	vq = old_vq = dev->virtqueue[index];
 
@@ -263,11 +247,12 @@ numa_realloc(struct virtio_net *dev, int index)
 	if (oldnode != newnode) {
 		RTE_LOG(INFO, VHOST_CONFIG,
 			"reallocate vq from %d to %d node\n", oldnode, newnode);
-		vq = rte_malloc_socket(NULL, sizeof(*vq), 0, newnode);
+		vq = rte_malloc_socket(NULL, sizeof(*vq) * VIRTIO_QNUM, 0,
+				       newnode);
 		if (!vq)
 			return dev;
 
-		memcpy(vq, old_vq, sizeof(*vq));
+		memcpy(vq, old_vq, sizeof(*vq) * VIRTIO_QNUM);
 		rte_free(old_vq);
 	}
 
@@ -295,6 +280,7 @@ numa_realloc(struct virtio_net *dev, int index)
 
 out:
 	dev->virtqueue[index] = vq;
+	dev->virtqueue[index + 1] = vq + 1;
 	vhost_devices[dev->vid] = dev;
 
 	return dev;
@@ -314,7 +300,7 @@ numa_realloc(struct virtio_net *dev, int index __rte_unused)
 static uint64_t
 qva_to_vva(struct virtio_net *dev, uint64_t qva)
 {
-	struct rte_vhost_mem_region *reg;
+	struct virtio_memory_region *reg;
 	uint32_t i;
 
 	/* Find the region where the address lives. */
@@ -336,7 +322,7 @@ qva_to_vva(struct virtio_net *dev, uint64_t qva)
  * This function then converts these to our address space.
  */
 static int
-vhost_user_set_vring_addr(struct virtio_net *dev, VhostUserMsg *msg)
+vhost_user_set_vring_addr(struct virtio_net *dev, struct vhost_vring_addr *addr)
 {
 	struct vhost_virtqueue *vq;
 
@@ -344,11 +330,11 @@ vhost_user_set_vring_addr(struct virtio_net *dev, VhostUserMsg *msg)
 		return -1;
 
 	/* addr->index refers to the queue index. The txq 1, rxq is 0. */
-	vq = dev->virtqueue[msg->payload.addr.index];
+	vq = dev->virtqueue[addr->index];
 
 	/* The addresses are converted from QEMU virtual to Vhost virtual. */
 	vq->desc = (struct vring_desc *)(uintptr_t)qva_to_vva(dev,
-			msg->payload.addr.desc_user_addr);
+			addr->desc_user_addr);
 	if (vq->desc == 0) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"(%d) failed to find desc ring address.\n",
@@ -356,11 +342,11 @@ vhost_user_set_vring_addr(struct virtio_net *dev, VhostUserMsg *msg)
 		return -1;
 	}
 
-	dev = numa_realloc(dev, msg->payload.addr.index);
-	vq = dev->virtqueue[msg->payload.addr.index];
+	dev = numa_realloc(dev, addr->index);
+	vq = dev->virtqueue[addr->index];
 
 	vq->avail = (struct vring_avail *)(uintptr_t)qva_to_vva(dev,
-			msg->payload.addr.avail_user_addr);
+			addr->avail_user_addr);
 	if (vq->avail == 0) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"(%d) failed to find avail ring address.\n",
@@ -369,7 +355,7 @@ vhost_user_set_vring_addr(struct virtio_net *dev, VhostUserMsg *msg)
 	}
 
 	vq->used = (struct vring_used *)(uintptr_t)qva_to_vva(dev,
-			msg->payload.addr.used_user_addr);
+			addr->used_user_addr);
 	if (vq->used == 0) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"(%d) failed to find used ring address.\n",
@@ -386,7 +372,7 @@ vhost_user_set_vring_addr(struct virtio_net *dev, VhostUserMsg *msg)
 		vq->last_avail_idx = vq->used->idx;
 	}
 
-	vq->log_guest_addr = msg->payload.addr.log_guest_addr;
+	vq->log_guest_addr = addr->log_guest_addr;
 
 	LOG_DEBUG(VHOST_CONFIG, "(%d) mapped address desc: %p\n",
 			dev->vid, vq->desc);
@@ -405,12 +391,10 @@ vhost_user_set_vring_addr(struct virtio_net *dev, VhostUserMsg *msg)
  */
 static int
 vhost_user_set_vring_base(struct virtio_net *dev,
-			  VhostUserMsg *msg)
+			  struct vhost_vring_state *state)
 {
-	dev->virtqueue[msg->payload.state.index]->last_used_idx  =
-			msg->payload.state.num;
-	dev->virtqueue[msg->payload.state.index]->last_avail_idx =
-			msg->payload.state.num;
+	dev->virtqueue[state->index]->last_used_idx  = state->num;
+	dev->virtqueue[state->index]->last_avail_idx = state->num;
 
 	return 0;
 }
@@ -444,7 +428,7 @@ add_one_guest_page(struct virtio_net *dev, uint64_t guest_phys_addr,
 }
 
 static void
-add_guest_pages(struct virtio_net *dev, struct rte_vhost_mem_region *reg,
+add_guest_pages(struct virtio_net *dev, struct virtio_memory_region *reg,
 		uint64_t page_size)
 {
 	uint64_t reg_size = reg->size;
@@ -504,13 +488,19 @@ static int
 vhost_user_set_mem_table(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 {
 	struct VhostUserMemory memory = pmsg->payload.memory;
-	struct rte_vhost_mem_region *reg;
+	struct virtio_memory_region *reg;
 	void *mmap_addr;
 	uint64_t mmap_size;
 	uint64_t mmap_offset;
 	uint64_t alignment;
 	uint32_t i;
 	int fd;
+
+	/* Remove from the data plane. */
+	if (dev->flags & VIRTIO_DEV_RUNNING) {
+		dev->flags &= ~VIRTIO_DEV_RUNNING;
+		notify_ops->destroy_device(dev->vid);
+	}
 
 	if (dev->mem) {
 		free_mem_region(dev);
@@ -523,17 +513,10 @@ vhost_user_set_mem_table(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 		dev->max_guest_pages = 8;
 		dev->guest_pages = malloc(dev->max_guest_pages *
 						sizeof(struct guest_page));
-		if (dev->guest_pages == NULL) {
-			RTE_LOG(ERR, VHOST_CONFIG,
-				"(%d) failed to allocate memory "
-				"for dev->guest_pages\n",
-				dev->vid);
-			return -1;
-		}
 	}
 
-	dev->mem = rte_zmalloc("vhost-mem-table", sizeof(struct rte_vhost_memory) +
-		sizeof(struct rte_vhost_mem_region) * memory.nregions, 0);
+	dev->mem = rte_zmalloc("vhost-mem-table", sizeof(struct virtio_memory) +
+		sizeof(struct virtio_memory_region) * memory.nregions, 0);
 	if (dev->mem == NULL) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"(%d) failed to allocate memory for dev->mem\n",
@@ -628,17 +611,18 @@ vq_is_ready(struct vhost_virtqueue *vq)
 static int
 virtio_is_ready(struct virtio_net *dev)
 {
-	struct vhost_virtqueue *vq;
+	struct vhost_virtqueue *rvq, *tvq;
 	uint32_t i;
 
-	if (dev->nr_vring == 0)
-		return 0;
+	for (i = 0; i < dev->virt_qp_nb; i++) {
+		rvq = dev->virtqueue[i * VIRTIO_QNUM + VIRTIO_RXQ];
+		tvq = dev->virtqueue[i * VIRTIO_QNUM + VIRTIO_TXQ];
 
-	for (i = 0; i < dev->nr_vring; i++) {
-		vq = dev->virtqueue[i];
-
-		if (!vq_is_ready(vq))
+		if (!vq_is_ready(rvq) || !vq_is_ready(tvq)) {
+			RTE_LOG(INFO, VHOST_CONFIG,
+				"virtio is not ready for processing.\n");
 			return 0;
+		}
 	}
 
 	RTE_LOG(INFO, VHOST_CONFIG,
@@ -651,6 +635,7 @@ vhost_user_set_vring_call(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 {
 	struct vhost_vring_file file;
 	struct vhost_virtqueue *vq;
+	uint32_t cur_qp_idx;
 
 	file.index = pmsg->payload.u64 & VHOST_USER_VRING_IDX_MASK;
 	if (pmsg->payload.u64 & VHOST_USER_VRING_NOFD_MASK)
@@ -660,13 +645,29 @@ vhost_user_set_vring_call(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 	RTE_LOG(INFO, VHOST_CONFIG,
 		"vring call idx:%d file:%d\n", file.index, file.fd);
 
+	/*
+	 * FIXME: VHOST_SET_VRING_CALL is the first per-vring message
+	 * we get, so we do vring queue pair allocation here.
+	 */
+	cur_qp_idx = file.index / VIRTIO_QNUM;
+	if (cur_qp_idx + 1 > dev->virt_qp_nb) {
+		if (alloc_vring_queue_pair(dev, cur_qp_idx) < 0)
+			return;
+	}
+
 	vq = dev->virtqueue[file.index];
+	assert(vq != NULL);
+
 	if (vq->callfd >= 0)
 		close(vq->callfd);
 
 	vq->callfd = file.fd;
 }
 
+/*
+ *  In vhost-user, when we receive kick message, will test whether virtio
+ *  device is ready for packet processing.
+ */
 static void
 vhost_user_set_vring_kick(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 {
@@ -685,6 +686,16 @@ vhost_user_set_vring_kick(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 	if (vq->kickfd >= 0)
 		close(vq->kickfd);
 	vq->kickfd = file.fd;
+
+	if (virtio_is_ready(dev) && !(dev->flags & VIRTIO_DEV_RUNNING)) {
+		if (dev->dequeue_zero_copy) {
+			RTE_LOG(INFO, VHOST_CONFIG,
+				"dequeue zero copy is enabled\n");
+		}
+
+		if (notify_ops->new_device(dev->vid) == 0)
+			dev->flags |= VIRTIO_DEV_RUNNING;
+	}
 }
 
 static void
@@ -708,24 +719,21 @@ free_zmbufs(struct vhost_virtqueue *vq)
  */
 static int
 vhost_user_get_vring_base(struct virtio_net *dev,
-			  VhostUserMsg *msg)
+			  struct vhost_vring_state *state)
 {
-	struct vhost_virtqueue *vq = dev->virtqueue[msg->payload.state.index];
+	struct vhost_virtqueue *vq = dev->virtqueue[state->index];
 
 	/* We have to stop the queue (virtio) if it is running. */
 	if (dev->flags & VIRTIO_DEV_RUNNING) {
 		dev->flags &= ~VIRTIO_DEV_RUNNING;
-		dev->notify_ops->destroy_device(dev->vid);
+		notify_ops->destroy_device(dev->vid);
 	}
 
-	dev->flags &= ~VIRTIO_DEV_READY;
-
 	/* Here we are safe to get the last used index */
-	msg->payload.state.num = vq->last_used_idx;
+	state->num = vq->last_used_idx;
 
 	RTE_LOG(INFO, VHOST_CONFIG,
-		"vring base idx:%d file:%d\n", msg->payload.state.index,
-		msg->payload.state.num);
+		"vring base idx:%d file:%d\n", state->index, state->num);
 	/*
 	 * Based on current qemu vhost-user implementation, this message is
 	 * sent and only sent in vhost_vring_stop.
@@ -750,19 +758,18 @@ vhost_user_get_vring_base(struct virtio_net *dev,
  */
 static int
 vhost_user_set_vring_enable(struct virtio_net *dev,
-			    VhostUserMsg *msg)
+			    struct vhost_vring_state *state)
 {
-	int enable = (int)msg->payload.state.num;
+	int enable = (int)state->num;
 
 	RTE_LOG(INFO, VHOST_CONFIG,
 		"set queue enable: %d to qp idx: %d\n",
-		enable, msg->payload.state.index);
+		enable, state->index);
 
-	if (dev->notify_ops->vring_state_changed)
-		dev->notify_ops->vring_state_changed(dev->vid,
-				msg->payload.state.index, enable);
+	if (notify_ops->vring_state_changed)
+		notify_ops->vring_state_changed(dev->vid, state->index, enable);
 
-	dev->virtqueue[msg->payload.state.index]->enabled = enable;
+	dev->virtqueue[state->index]->enabled = enable;
 
 	return 0;
 }
@@ -858,22 +865,6 @@ vhost_user_send_rarp(struct virtio_net *dev, struct VhostUserMsg *msg)
 	return 0;
 }
 
-static int
-vhost_user_net_set_mtu(struct virtio_net *dev, struct VhostUserMsg *msg)
-{
-	if (msg->payload.u64 < VIRTIO_MIN_MTU ||
-			msg->payload.u64 > VIRTIO_MAX_MTU) {
-		RTE_LOG(ERR, VHOST_CONFIG, "Invalid MTU size (%"PRIu64")\n",
-				msg->payload.u64);
-
-		return -1;
-	}
-
-	dev->mtu = msg->payload.u64;
-
-	return 0;
-}
-
 /* return bytes# of read on success or negative val on failure. */
 static int
 read_vhost_message(int sockfd, struct VhostUserMsg *msg)
@@ -913,7 +904,6 @@ send_vhost_message(int sockfd, struct VhostUserMsg *msg)
 		return 0;
 
 	msg->flags &= ~VHOST_USER_VERSION_MASK;
-	msg->flags &= ~VHOST_USER_NEED_REPLY;
 	msg->flags |= VHOST_USER_VERSION;
 	msg->flags |= VHOST_USER_REPLY_MASK;
 
@@ -921,44 +911,6 @@ send_vhost_message(int sockfd, struct VhostUserMsg *msg)
 		VHOST_USER_HDR_SIZE + msg->size, NULL, 0);
 
 	return ret;
-}
-
-/*
- * Allocate a queue pair if it hasn't been allocated yet
- */
-static int
-vhost_user_check_and_alloc_queue_pair(struct virtio_net *dev, VhostUserMsg *msg)
-{
-	uint16_t vring_idx;
-
-	switch (msg->request) {
-	case VHOST_USER_SET_VRING_KICK:
-	case VHOST_USER_SET_VRING_CALL:
-	case VHOST_USER_SET_VRING_ERR:
-		vring_idx = msg->payload.u64 & VHOST_USER_VRING_IDX_MASK;
-		break;
-	case VHOST_USER_SET_VRING_NUM:
-	case VHOST_USER_SET_VRING_BASE:
-	case VHOST_USER_SET_VRING_ENABLE:
-		vring_idx = msg->payload.state.index;
-		break;
-	case VHOST_USER_SET_VRING_ADDR:
-		vring_idx = msg->payload.addr.index;
-		break;
-	default:
-		return 0;
-	}
-
-	if (vring_idx >= VHOST_MAX_VRING) {
-		RTE_LOG(ERR, VHOST_CONFIG,
-			"invalid vring index: %u\n", vring_idx);
-		return -1;
-	}
-
-	if (dev->virtqueue[vring_idx])
-		return 0;
-
-	return alloc_vring_queue(dev, vring_idx);
 }
 
 int
@@ -971,16 +923,6 @@ vhost_user_msg_handler(int vid, int fd)
 	dev = get_device(vid);
 	if (dev == NULL)
 		return -1;
-
-	if (!dev->notify_ops) {
-		dev->notify_ops = vhost_driver_callback_get(dev->ifname);
-		if (!dev->notify_ops) {
-			RTE_LOG(ERR, VHOST_CONFIG,
-				"failed to get callback ops for driver %s\n",
-				dev->ifname);
-			return -1;
-		}
-	}
 
 	ret = read_vhost_message(fd, &msg);
 	if (ret <= 0 || msg.request >= VHOST_USER_MAX) {
@@ -997,20 +939,11 @@ vhost_user_msg_handler(int vid, int fd)
 		return -1;
 	}
 
-	ret = 0;
 	RTE_LOG(INFO, VHOST_CONFIG, "read message %s\n",
 		vhost_message_str[msg.request]);
-
-	ret = vhost_user_check_and_alloc_queue_pair(dev, &msg);
-	if (ret < 0) {
-		RTE_LOG(ERR, VHOST_CONFIG,
-			"failed to alloc queue\n");
-		return -1;
-	}
-
 	switch (msg.request) {
 	case VHOST_USER_GET_FEATURES:
-		msg.payload.u64 = vhost_user_get_features(dev);
+		msg.payload.u64 = vhost_user_get_features();
 		msg.size = sizeof(msg.payload.u64);
 		send_vhost_message(fd, &msg);
 		break;
@@ -1035,7 +968,7 @@ vhost_user_msg_handler(int vid, int fd)
 		break;
 
 	case VHOST_USER_SET_MEM_TABLE:
-		ret = vhost_user_set_mem_table(dev, &msg);
+		vhost_user_set_mem_table(dev, &msg);
 		break;
 
 	case VHOST_USER_SET_LOG_BASE:
@@ -1051,17 +984,17 @@ vhost_user_msg_handler(int vid, int fd)
 		break;
 
 	case VHOST_USER_SET_VRING_NUM:
-		vhost_user_set_vring_num(dev, &msg);
+		vhost_user_set_vring_num(dev, &msg.payload.state);
 		break;
 	case VHOST_USER_SET_VRING_ADDR:
-		vhost_user_set_vring_addr(dev, &msg);
+		vhost_user_set_vring_addr(dev, &msg.payload.addr);
 		break;
 	case VHOST_USER_SET_VRING_BASE:
-		vhost_user_set_vring_base(dev, &msg);
+		vhost_user_set_vring_base(dev, &msg.payload.state);
 		break;
 
 	case VHOST_USER_GET_VRING_BASE:
-		vhost_user_get_vring_base(dev, &msg);
+		ret = vhost_user_get_vring_base(dev, &msg.payload.state);
 		msg.size = sizeof(msg.payload.state);
 		send_vhost_message(fd, &msg);
 		break;
@@ -1086,40 +1019,15 @@ vhost_user_msg_handler(int vid, int fd)
 		break;
 
 	case VHOST_USER_SET_VRING_ENABLE:
-		vhost_user_set_vring_enable(dev, &msg);
+		vhost_user_set_vring_enable(dev, &msg.payload.state);
 		break;
 	case VHOST_USER_SEND_RARP:
 		vhost_user_send_rarp(dev, &msg);
 		break;
 
-	case VHOST_USER_NET_SET_MTU:
-		ret = vhost_user_net_set_mtu(dev, &msg);
-		break;
-
 	default:
-		ret = -1;
 		break;
 
-	}
-
-	if (msg.flags & VHOST_USER_NEED_REPLY) {
-		msg.payload.u64 = !!ret;
-		msg.size = sizeof(msg.payload.u64);
-		send_vhost_message(fd, &msg);
-	}
-
-	if (!(dev->flags & VIRTIO_DEV_RUNNING) && virtio_is_ready(dev)) {
-		dev->flags |= VIRTIO_DEV_READY;
-
-		if (!(dev->flags & VIRTIO_DEV_RUNNING)) {
-			if (dev->dequeue_zero_copy) {
-				RTE_LOG(INFO, VHOST_CONFIG,
-						"dequeue zero copy is enabled\n");
-			}
-
-			if (dev->notify_ops->new_device(dev->vid) == 0)
-				dev->flags |= VIRTIO_DEV_RUNNING;
-		}
 	}
 
 	return 0;

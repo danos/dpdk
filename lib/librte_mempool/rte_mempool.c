@@ -476,7 +476,7 @@ rte_mempool_populate_virt(struct rte_mempool *mp, char *addr,
 		/* required for xen_dom0 to get the machine address */
 		paddr = rte_mem_phy2mch(-1, paddr);
 
-		if (paddr == RTE_BAD_PHYS_ADDR && rte_eal_has_hugepages()) {
+		if (paddr == RTE_BAD_PHYS_ADDR) {
 			ret = -EINVAL;
 			goto fail;
 		}
@@ -818,6 +818,7 @@ rte_mempool_create_empty(const char *name, unsigned n, unsigned elt_size,
 		goto exit_unlock;
 	}
 	mp->mz = mz;
+	mp->socket_id = socket_id;
 	mp->size = n;
 	mp->flags = flags;
 	mp->socket_id = socket_id;
@@ -868,7 +869,6 @@ rte_mempool_create(const char *name, unsigned n, unsigned elt_size,
 	rte_mempool_obj_cb_t *obj_init, void *obj_init_arg,
 	int socket_id, unsigned flags)
 {
-	int ret;
 	struct rte_mempool *mp;
 
 	mp = rte_mempool_create_empty(name, n, elt_size, cache_size,
@@ -881,16 +881,13 @@ rte_mempool_create(const char *name, unsigned n, unsigned elt_size,
 	 * set the correct index into the table of ops structs.
 	 */
 	if ((flags & MEMPOOL_F_SP_PUT) && (flags & MEMPOOL_F_SC_GET))
-		ret = rte_mempool_set_ops_byname(mp, "ring_sp_sc", NULL);
+		rte_mempool_set_ops_byname(mp, "ring_sp_sc", NULL);
 	else if (flags & MEMPOOL_F_SP_PUT)
-		ret = rte_mempool_set_ops_byname(mp, "ring_sp_mc", NULL);
+		rte_mempool_set_ops_byname(mp, "ring_sp_mc", NULL);
 	else if (flags & MEMPOOL_F_SC_GET)
-		ret = rte_mempool_set_ops_byname(mp, "ring_mp_sc", NULL);
+		rte_mempool_set_ops_byname(mp, "ring_mp_sc", NULL);
 	else
-		ret = rte_mempool_set_ops_byname(mp, "ring_mp_mc", NULL);
-
-	if (ret)
-		goto fail;
+		rte_mempool_set_ops_byname(mp, "ring_mp_mc", NULL);
 
 	/* call the mempool priv initializer */
 	if (mp_init)
@@ -1001,6 +998,12 @@ rte_mempool_in_use_count(const struct rte_mempool *mp)
 	return mp->size - rte_mempool_avail_count(mp);
 }
 
+unsigned int
+rte_mempool_count(const struct rte_mempool *mp)
+{
+	return rte_mempool_avail_count(mp);
+}
+
 /* dump the cache status */
 static unsigned
 rte_mempool_dump_cache(FILE *f, const struct rte_mempool *mp)
@@ -1044,7 +1047,7 @@ void rte_mempool_check_cookies(const struct rte_mempool *mp,
 	/* Force to drop the "const" attribute. This is done only when
 	 * DEBUG is enabled */
 	tmp = (void *) obj_table_const;
-	obj_table = tmp;
+	obj_table = (void **) tmp;
 
 	while (n--) {
 		obj = obj_table[n];
