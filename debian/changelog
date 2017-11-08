@@ -7,6 +7,7 @@ dpdk (17.11-rc3-1~git1) UNRELEASED; urgency=medium
     librte-security17.11, librte-mempool-octeontx17.11,
     librte-flow-classify17.11, librte-gso17.11, librte-member17.11,
     librte-pci17.11, librte-pmd-softnic17.11, librte-bus-vdev17.11.
+  * Drop mk-* patches for reproducible builds, merged upstream.
 
  -- Luca Boccassi <lboccass@brocade.com>  Mon, 16 Oct 2017 14:47:09 +0100
 
