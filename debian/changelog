@@ -18,6 +18,8 @@ dpdk (17.11-rc3-1~git1) UNRELEASED; urgency=medium
   * Revert: d/rules: use new dh option names - Ubuntu 16.04 does not
     have a debhelper that supports the new option, so use the old
     ones for now.
+  * Drop librte-pmd-xenvirt17.11, deprecated upstream, and related
+    build-dependencies.
 
  -- Luca Boccassi <lboccass@brocade.com>  Mon, 16 Oct 2017 14:47:09 +0100
 
