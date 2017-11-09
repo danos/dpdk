@@ -15,6 +15,9 @@ dpdk (17.11-rc3-1~git1) UNRELEASED; urgency=medium
   * Build-Depend on debhelper (>= 9.20160709) | dh-systemd to keep
     compatibility with Ubuntu 16.04, which does not yet have that
     of debhelper.
+  * Revert: d/rules: use new dh option names - Ubuntu 16.04 does not
+    have a debhelper that supports the new option, so use the old
+    ones for now.
 
  -- Luca Boccassi <lboccass@brocade.com>  Mon, 16 Oct 2017 14:47:09 +0100
 
