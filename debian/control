@@ -14,8 +14,6 @@ Build-Depends: debhelper (>= 9),
                libcap-dev,
                libpcap-dev,
                libnuma-dev,
-               libxen-dev [amd64 arm64 i386],
-               libxenstore3.0 [amd64 arm64 i386],
                python3,
                python3-sphinx <!nodoc>,
                python3-sphinx-rtd-theme <!nodoc>,
@@ -683,19 +681,6 @@ Description: Data Plane Development Kit (librte-pmd-vmxnet3-uio runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pmd_vmxnet3_uio.
-
-Package: librte-pmd-xenvirt17.11
-Architecture: amd64 arm64 i386
-Multi-Arch: same
-Homepage: http://dpdk.org/doc/guides/xen/pkt_switch.html#xen-pmd-frontend-prerequisites
-Pre-Depends: ${misc:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}
-Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte-pmd-xenvirt runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the runtime libraries for librte_pmd_xenvirt.
 
 Package: librte-pmd-qede17.11
 Architecture: amd64 arm64 i386 ppc64el

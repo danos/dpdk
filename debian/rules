@@ -181,13 +181,8 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
-		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
 		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/dpdk-pmds/",' \
 		$(DPDK_STATIC_DIR)/.config
-	# xen not available on ppc64el
-ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
-	sed -ri -e 's,(LIBRTE_PMD_XENVIRT=).*,\1n,' $(DPDK_STATIC_DIR)/.config
-endif
 endif
 	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
 		$(DPDK_STATIC_DIR)/.config
