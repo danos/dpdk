@@ -23,6 +23,7 @@ dpdk (16.11.3-1~git1) UNRELEASED; urgency=medium
   * Revert: d/rules: use new dh option names - Ubuntu 16.04 does not
     have a debhelper that supports the new option, so use the old
     ones for now.
+  * Correctly parse upstream version when using ~rc instead of -rc.
 
   [ Christian Ehrhardt ]
   * d/rules: use new dh option names
