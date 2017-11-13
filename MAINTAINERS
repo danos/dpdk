@@ -247,11 +247,13 @@ F: test/test/test_mbuf.c
 
 Ethernet API
 M: Thomas Monjalon <thomas@monjalon.net>
+T: git://dpdk.org/next/dpdk-next-net
 F: lib/librte_ether/
 F: devtools/test-null.sh
 
 Flow API
 M: Adrien Mazarguil <adrien.mazarguil@6wind.com>
+T: git://dpdk.org/next/dpdk-next-net
 F: lib/librte_ether/rte_flow*
 
 Traffic Management API - EXPERIMENTAL
@@ -265,6 +267,7 @@ F: lib/librte_ether/rte_mtr*
 
 Crypto API
 M: Declan Doherty <declan.doherty@intel.com>
+T: git://dpdk.org/next/dpdk-next-crypto
 F: lib/librte_cryptodev/
 F: test/test/test_cryptodev*
 F: examples/l2fwd-crypto/
@@ -297,6 +300,7 @@ PCI bus driver
 F: drivers/bus/pci/
 
 VDEV bus driver
+M: Jianfeng Tan <jianfeng.tan@intel.com>
 F: drivers/bus/vdev/
 
 
@@ -412,13 +416,13 @@ F: doc/guides/nics/intel_vf.rst
 F: doc/guides/nics/features/i40e*.ini
 
 Intel fm10k
-M: Jing Chen <jing.d.chen@intel.com>
+M: Qi Zhang <qi.z.zhang@intel.com>
+M: Xiao Wang <xiao.w.wang@intel.com>
 F: drivers/net/fm10k/
 F: doc/guides/nics/features/fm10k*.ini
 
 Mellanox mlx4
 M: Adrien Mazarguil <adrien.mazarguil@6wind.com>
-M: Nelio Laranjeiro <nelio.laranjeiro@6wind.com>
 F: drivers/net/mlx4/
 F: doc/guides/nics/mlx4.rst
 F: doc/guides/nics/features/mlx4.ini
@@ -878,7 +882,7 @@ F: examples/timer/
 F: doc/guides/sample_app_ug/timer.rst
 
 Job statistics
-M: Pawel Wodkowski <pawelx.wodkowski@intel.com>
+M: Pablo de Lara <pablo.de.lara.guarch@intel.com>
 F: lib/librte_jobstats/
 F: examples/l2fwd-jobstats/
 F: doc/guides/sample_app_ug/l2_forward_job_stats.rst
@@ -996,7 +1000,6 @@ F: examples/performance-thread/
 F: doc/guides/sample_app_ug/performance_thread.rst
 
 M: Pablo de Lara <pablo.de.lara.guarch@intel.com>
-M: Daniel Mrzyglod <danielx.t.mrzyglod@intel.com>
 F: examples/ptpclient/
 
 F: examples/quota_watermark/

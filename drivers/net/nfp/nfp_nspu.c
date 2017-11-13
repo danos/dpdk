@@ -341,7 +341,12 @@ nfp_fw_upload(nspu_desc_t *nspu_desc)
 		return -ENOENT;
 	}
 
-	fstat(fw_f, &file_stat);
+	if (fstat(fw_f, &file_stat) < 0) {
+		RTE_LOG(INFO, PMD, "Firmware file %s/%s size is unknown",
+			DEFAULT_FW_PATH, DEFAULT_FW_FILENAME);
+		close(fw_f);
+		return -ENOENT;
+	}
 
 	fsize = file_stat.st_size;
 	RTE_LOG(DEBUG, PMD, "Firmware file with size: %" PRIu64 "\n",
@@ -351,12 +356,14 @@ nfp_fw_upload(nspu_desc_t *nspu_desc)
 		RTE_LOG(INFO, PMD, "fw file too big: %" PRIu64
 				   " bytes (%" PRIu64 " max)",
 				  (uint64_t)fsize, (uint64_t)size);
+		close(fw_f);
 		return -EINVAL;
 	}
 
 	fw_buf = malloc((size_t)size);
 	if (!fw_buf) {
 		RTE_LOG(INFO, PMD, "malloc failed for fw buffer");
+		close(fw_f);
 		return -ENOMEM;
 	}
 	memset(fw_buf, 0, size);
@@ -367,12 +374,14 @@ nfp_fw_upload(nspu_desc_t *nspu_desc)
 				   "Just %" PRIu64 " of %" PRIu64 " bytes read.",
 				   (uint64_t)bytes, (uint64_t)fsize);
 		free(fw_buf);
+		close(fw_f);
 		return -EIO;
 	}
 
 	ret = nspu_command(nspu_desc, NSP_CMD_FW_LOAD, 0, 1, fw_buf, 0, bytes);
 
 	free(fw_buf);
+	close(fw_f);
 
 	return ret;
 }
@@ -411,6 +420,9 @@ nfp_nspu_set_bar_from_symbl(nspu_desc_t *desc, const char *symbl,
 	int ret = 0;
 
 	sym_buf = malloc(desc->buf_size);
+	if (!sym_buf)
+		return -ENOMEM;
+
 	strncpy(sym_buf, symbl, strlen(symbl));
 	ret = nspu_command(desc, NSP_CMD_GET_SYMBOL, 1, 1, sym_buf,
 			   NFP_SYM_DESC_LEN, strlen(symbl));
@@ -554,6 +566,7 @@ nfp_nsp_eth_config(nspu_desc_t *desc, int port, int up)
 			   NSP_ETH_TABLE_SIZE, 0);
 	if (ret) {
 		rte_spinlock_unlock(&desc->nsp_lock);
+		free(entries);
 		return ret;
 	}
 
@@ -574,6 +587,7 @@ nfp_nsp_eth_config(nspu_desc_t *desc, int port, int up)
 
 	if (i == NSP_ETH_MAX_COUNT) {
 		rte_spinlock_unlock(&desc->nsp_lock);
+		free(entries);
 		return -EINVAL;
 	}
 
@@ -598,6 +612,7 @@ nfp_nsp_eth_config(nspu_desc_t *desc, int port, int up)
 				"Hw ethernet port %d configure failed\n", port);
 	}
 	rte_spinlock_unlock(&desc->nsp_lock);
+	free(entries);
 	return ret;
 }
 
@@ -606,10 +621,14 @@ nfp_nsp_eth_read_table(nspu_desc_t *desc, union eth_table_entry **table)
 {
 	int ret;
 
+	if (!table)
+		return -EINVAL;
+
 	RTE_LOG(INFO, PMD, "Reading hw ethernet table...\n");
+
 	/* port 0 allocates the eth table and read it using NSPU */
 	*table = malloc(NSP_ETH_TABLE_SIZE);
-	if (!table)
+	if (!*table)
 		return -ENOMEM;
 
 	ret = nspu_command(desc, NSP_CMD_READ_ETH_TABLE, 1, 0, *table,

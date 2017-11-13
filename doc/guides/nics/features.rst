@@ -136,6 +136,18 @@ invoke rte_eth_tx_burst() concurrently on the same Tx queue without SW lock.
 * **[related]  API**: ``rte_eth_tx_burst()``.
 
 
+.. _nic_features_fast_mbuf_free:
+
+Fast mbuf free
+--------------
+
+Supports optimization for fast release of mbufs following successful Tx.
+Requires that per queue, all mbufs come from the same mempool and has refcnt = 1.
+
+* **[uses]       rte_eth_txconf,rte_eth_txmode**: ``offloads:DEV_TX_OFFLOAD_MBUF_FAST_FREE``.
+* **[provides]   rte_eth_dev_info**: ``tx_offload_capa,tx_queue_offload_capa:DEV_TX_OFFLOAD_MBUF_FAST_FREE``.
+
+
 .. _nic_features_free_tx_mbuf_on_demand:
 
 Free Tx mbuf on demand
@@ -494,6 +506,23 @@ Supports adding traffic mirroring rules.
 * **[related]    API**: ``rte_eth_mirror_rule_set()``, ``rte_eth_mirror_rule_reset()``.
 
 
+.. _nic_features_inline_crypto_doc:
+
+Inline crypto
+-------------
+
+Supports inline crypto processing (eg. inline IPsec). See Security library and PMD documentation for more details.
+
+* **[uses]       rte_eth_rxconf,rte_eth_rxmode**: ``offloads:DEV_RX_OFFLOAD_SECURITY``,
+* **[uses]       rte_eth_txconf,rte_eth_txmode**: ``offloads:DEV_TX_OFFLOAD_SECURITY``.
+* **[implements] rte_security_ops**: ``session_create``, ``session_update``,
+  ``session_stats_get``, ``session_destroy``, ``set_pkt_metadata``, ``capabilities_get``.
+* **[provides] rte_eth_dev_info**: ``rx_offload_capa,rx_queue_offload_capa:DEV_RX_OFFLOAD_SECURITY``,
+  ``tx_offload_capa,tx_queue_offload_capa:DEV_TX_OFFLOAD_SECURITY``.
+* **[provides]   mbuf**: ``mbuf.ol_flags:PKT_RX_SEC_OFFLOAD``,
+  ``mbuf.ol_flags:PKT_TX_SEC_OFFLOAD``, ``mbuf.ol_flags:PKT_RX_SEC_OFFLOAD_FAILED``.
+
+
 .. _nic_features_crc_offload:
 
 CRC offload
@@ -639,15 +668,6 @@ Supports packet type parsing and returns a list of supported types.
 
 
 .. _nic_features_timesync:
-
-Mbuf fast free
---------------
-
-Supports optimization for fast release of mbufs following successful Tx.
-Requires that per queue, all mbufs come from the same mempool and has refcnt = 1.
-
-* **[uses]       rte_eth_txconf,rte_eth_txmode**: ``offloads:DEV_TX_OFFLOAD_MBUF_FAST_FREE``.
-* **[provides]   rte_eth_dev_info**: ``tx_offload_capa,tx_queue_offload_capa:DEV_TX_OFFLOAD_MBUF_FAST_FREE``.
 
 Timesync
 --------
