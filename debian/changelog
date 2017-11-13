@@ -1,6 +1,6 @@
-dpdk (17.11~rc3-1~git1) UNRELEASED; urgency=medium
+dpdk (17.11~rc4-1~git1) UNRELEASED; urgency=medium
 
-  * New upstream RC 17.11-rc3.
+  * New upstream RC 17.11-rc4.
   * Bump ABI version of packages from 17.08 to 17.11.
   * Fix upstream version parsing in d/rules to account for -rcX.
   * Add packages for new libraries/PMDs: librte-bus-pci17.11,
