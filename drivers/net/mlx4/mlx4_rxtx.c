@@ -336,6 +336,7 @@ mlx4_txq_complete(struct txq *txq, const unsigned int elts_n,
 {
 	unsigned int elts_comp = txq->elts_comp;
 	unsigned int elts_tail = txq->elts_tail;
+	unsigned int sq_tail = sq->tail;
 	struct mlx4_cq *cq = &txq->mcq;
 	volatile struct mlx4_cqe *cqe;
 	uint32_t cons_index = cq->cons_index;
@@ -372,13 +373,13 @@ mlx4_txq_complete(struct txq *txq, const unsigned int elts_n,
 			rte_be_to_cpu_16(cqe->wqe_index) & sq->txbb_cnt_mask;
 		do {
 			/* Free next descriptor. */
-			nr_txbbs +=
+			sq_tail += nr_txbbs;
+			nr_txbbs =
 				mlx4_txq_stamp_freed_wqe(sq,
-				     (sq->tail + nr_txbbs) & sq->txbb_cnt_mask,
-				     !!((sq->tail + nr_txbbs) & sq->txbb_cnt));
+				     sq_tail & sq->txbb_cnt_mask,
+				     !!(sq_tail & sq->txbb_cnt));
 			pkts++;
-		} while (((sq->tail + nr_txbbs) & sq->txbb_cnt_mask) !=
-			 new_index);
+		} while ((sq_tail & sq->txbb_cnt_mask) != new_index);
 		cons_index++;
 	} while (1);
 	if (unlikely(pkts == 0))
@@ -386,7 +387,7 @@ mlx4_txq_complete(struct txq *txq, const unsigned int elts_n,
 	/* Update CQ. */
 	cq->cons_index = cons_index;
 	*cq->set_ci_db = rte_cpu_to_be_32(cq->cons_index & MLX4_CQ_DB_CI_MASK);
-	sq->tail = sq->tail + nr_txbbs;
+	sq->tail = sq_tail + nr_txbbs;
 	/* Update the list of packets posted for transmission. */
 	elts_comp -= pkts;
 	assert(elts_comp <= txq->elts_comp);
@@ -751,7 +752,8 @@ mlx4_tx_burst(void *dpdk_txq, struct rte_mbuf **pkts, uint16_t pkts_n)
  *   Packet type for struct rte_mbuf.
  */
 static inline uint32_t
-rxq_cq_to_pkt_type(volatile struct mlx4_cqe *cqe)
+rxq_cq_to_pkt_type(volatile struct mlx4_cqe *cqe,
+		   uint32_t l2tun_offload)
 {
 	uint8_t idx = 0;
 	uint32_t pinfo = rte_be_to_cpu_32(cqe->vlan_my_qpn);
@@ -762,7 +764,7 @@ rxq_cq_to_pkt_type(volatile struct mlx4_cqe *cqe)
 	 *  bit[7] - MLX4_CQE_L2_TUNNEL
 	 *  bit[6] - MLX4_CQE_L2_TUNNEL_IPV4
 	 */
-	if (!(pinfo & MLX4_CQE_L2_VLAN_MASK) && (pinfo & MLX4_CQE_L2_TUNNEL))
+	if (l2tun_offload && (pinfo & MLX4_CQE_L2_TUNNEL))
 		idx |= ((pinfo & MLX4_CQE_L2_TUNNEL) >> 20) |
 		       ((pinfo & MLX4_CQE_L2_TUNNEL_IPV4) >> 19);
 	/*
@@ -960,7 +962,8 @@ mlx4_rx_burst(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 			}
 			pkt = seg;
 			/* Update packet information. */
-			pkt->packet_type = rxq_cq_to_pkt_type(cqe);
+			pkt->packet_type =
+				rxq_cq_to_pkt_type(cqe, rxq->l2tun_offload);
 			pkt->ol_flags = 0;
 			pkt->pkt_len = len;
 			if (rxq->csum | rxq->csum_l2tun) {
