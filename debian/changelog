@@ -28,6 +28,8 @@ dpdk (16.11.3-1~git1) UNRELEASED; urgency=medium
   [ Christian Ehrhardt ]
   * d/rules: use new dh option names
   * d/rules: properly enable dpdk systemd service
+  * d/control: improve dpdk-pmdinfo user experience by making
+    python-pyelftools a recommended dependency.
 
  -- Luca Boccassi <luca.boccassi@gmail.com>  Wed, 30 Aug 2017 15:11:09 +0100
 
