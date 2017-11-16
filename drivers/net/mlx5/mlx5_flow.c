@@ -1930,6 +1930,7 @@ priv_flow_create(struct priv *priv,
 	flow->queues = (uint16_t (*)[])(flow + 1);
 	memcpy(flow->queues, parser.queues, parser.queues_n * sizeof(uint16_t));
 	flow->queues_n = parser.queues_n;
+	flow->mark = parser.mark;
 	/* Copy RSS configuration. */
 	flow->rss_conf = parser.rss_conf;
 	flow->rss_conf.rss_key = flow->rss_key;
@@ -2915,8 +2916,8 @@ priv_fdir_filter_delete(struct priv *priv,
 			if (memcmp(spec, flow_spec,
 				   RTE_MIN(attr_h->size, flow_h->size)))
 				goto wrong_flow;
-			spec = (void *)((uintptr_t)attr + attr_h->size);
-			flow_spec = (void *)((uintptr_t)flow_attr +
+			spec = (void *)((uintptr_t)spec + attr_h->size);
+			flow_spec = (void *)((uintptr_t)flow_spec +
 					     flow_h->size);
 		}
 		/* At this point, the flow match. */
