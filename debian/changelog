@@ -1,5 +1,6 @@
-dpdk (17.11~rc4-1~git1) UNRELEASED; urgency=medium
+dpdk (17.11~rc4-1~git1ubuntu1) UNRELEASED; urgency=medium
 
+  [ Luca Boccassi ]
   * New upstream RC 17.11-rc4.
   * Bump ABI version of packages from 17.08 to 17.11.
   * Fix upstream version parsing in d/rules to account for -rcX.
@@ -22,7 +23,11 @@ dpdk (17.11~rc4-1~git1) UNRELEASED; urgency=medium
     build-dependencies.
   * Correctly parse upstream version when using ~rc instead of -rc.
 
- -- Luca Boccassi <lboccass@brocade.com>  Mon, 16 Oct 2017 14:47:09 +0100
+  [ Christian Ehrhardt ]
+  * d/control: improve dpdk-pmdinfo user experience by making
+    python-pyelftools a recommended dependency.
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
 
 dpdk (17.08-1~git1) UNRELEASED; urgency=medium
 
