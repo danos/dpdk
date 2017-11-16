@@ -1,7 +1,8 @@
-dpdk (17.11~rc4-1~git1ubuntu1) UNRELEASED; urgency=medium
+dpdk (17.11-1~git1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
-  * New upstream RC 17.11-rc4.
+  * New upstream release 17.11; for a full list of changes see:
+    http://dpdk.org/doc/guides/rel_notes/release_17_11.html
   * Bump ABI version of packages from 17.08 to 17.11.
   * Fix upstream version parsing in d/rules to account for -rcX.
   * Add packages for new libraries/PMDs: librte-bus-pci17.11,
