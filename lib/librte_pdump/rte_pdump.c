@@ -139,7 +139,7 @@ pdump_pktmbuf_copy(struct rte_mbuf *m, struct rte_mempool *mp)
 {
 	struct rte_mbuf *m_dup, *seg, **prev;
 	uint32_t pktlen;
-	uint8_t nseg;
+	uint16_t nseg;
 
 	m_dup = rte_pktmbuf_alloc(mp);
 	if (unlikely(m_dup == NULL))
@@ -353,7 +353,7 @@ set_pdump_rxtx_cbs(struct pdump_request *p)
 				&port);
 		if (ret < 0) {
 			RTE_LOG(ERR, PDUMP,
-				"failed to get potid for device id=%s\n",
+				"failed to get port id for device id=%s\n",
 				p->data.en_v1.device);
 			return -EINVAL;
 		}
@@ -365,7 +365,7 @@ set_pdump_rxtx_cbs(struct pdump_request *p)
 				&port);
 		if (ret < 0) {
 			RTE_LOG(ERR, PDUMP,
-				"failed to get potid for device id=%s\n",
+				"failed to get port id for device id=%s\n",
 				p->data.dis_v1.device);
 			return -EINVAL;
 		}
