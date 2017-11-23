@@ -31,7 +31,7 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
   * d/control: improve dpdk-pmdinfo user experience by making
     python-pyelftools a recommended dependency.
   * d/control: add librte-pmd-octeontx17.11
-  * d/t/control: fix test dependencies for s390x.
+  * d/t/control: fix test dependencies for s390x (Closes: #882480).
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
 
