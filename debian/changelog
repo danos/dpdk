@@ -1,3 +1,51 @@
+dpdk (17.11-1~git1) UNRELEASED; urgency=medium
+
+  [ Luca Boccassi ]
+  * Add librte-pmd-failsafe package.
+  * Drop mk-order-CFLAGS-so-that-ISCDIR-comes-before-IRTE_OUT.patch and
+    add mk-install-symlinks-before-build-step.patch which has the same
+    result but is much simpler and easier to maintain.
+  * Build-Depend on debhelper (>= 9.20160709) rather than dh-systemd as
+    latter is deprecated. Fixes Lintian Error:
+      build-depends-on-obsolete-package
+  * Build-Depend on the Python 3 version of the Sphinx packages to fix
+    Lintian Warning: build-depends-on-python-sphinx-only
+  * New upstream release 17.11; for a full list of changes see:
+    http://dpdk.org/doc/guides/rel_notes/release_17_11.html
+  * Bump ABI version of packages from 17.08 to 17.11.
+  * Fix upstream version parsing in d/rules to account for -rcX.
+  * Add packages for new libraries/PMDs: librte-bus-pci17.11,
+    librte-security17.11, librte-mempool-octeontx17.11,
+    librte-flow-classify17.11, librte-gso17.11, librte-member17.11,
+    librte-pci17.11, librte-pmd-softnic17.11, librte-bus-vdev17.11.
+  * Drop mk-* patches for reproducible builds, merged upstream.
+  * Refresh fix-vhost-user-socket-permission.patch to remove fuzz from
+    17.11-rc3.
+  * Switch generated dependencies to Python 3 due to switch to Python 3
+    Sphinx.
+  * Build-Depend on debhelper (>= 9.20160709) | dh-systemd to keep
+    compatibility with Ubuntu 16.04, which does not yet have that
+    of debhelper.
+  * Revert: d/rules: use new dh option names - Ubuntu 16.04 does not
+    have a debhelper that supports the new option, so use the old
+    ones for now.
+  * Drop librte-pmd-xenvirt17.11, deprecated upstream, and related
+    build-dependencies.
+  * Correctly parse upstream version when using ~rc instead of -rc.
+  * Update symbols files for 17.11.
+  * Backport testpmd-link-virtio.patch to link testpmd with the virtio
+    pmd to fix failure to run in VMs with virtio based interfaces
+
+  [ Christian Ehrhardt ]
+  * d/rules: use new dh option names
+  * d/rules: properly enable dpdk systemd service
+  * d/control: improve dpdk-pmdinfo user experience by making
+    python-pyelftools a recommended dependency.
+  * d/control: add librte-pmd-octeontx17.11
+  * d/t/control: fix test dependencies for s390x (Closes: #882480).
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
+
 dpdk (17.08-4) experimental; urgency=medium
 
   * Drop mk-order-CFLAGS-so-that-ISCDIR-comes-before-IRTE_OUT.patch and

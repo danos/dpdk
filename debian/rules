@@ -7,7 +7,7 @@ export DH_OPTIONS=-v
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
 include /usr/share/dpkg/default.mk
 
-DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '.'  -f1-2)
+DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '-' -f1 | cut -d '.'  -f1-2 | cut -d '~' -f1)
 
 # see FEATURE AREAS in dpkg-buildflags(1)
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
@@ -121,11 +121,11 @@ build:
 	fi
 	sh debian/prep-modules $(KSRC)
 	cat debian/control.modules >> debian/control
-	dh $@ --with python2,dkms
+	dh $@ --with python3,dkms,systemd
 endif
 
 %:
-	dh $@ --with python2,dkms
+	dh $@ --with python3,dkms,systemd
 
 override_dh_gencontrol:
 	dh_gencontrol
@@ -181,13 +181,8 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
-		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
 		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/dpdk-pmds/",' \
 		$(DPDK_STATIC_DIR)/.config
-	# xen not available on ppc64el
-ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
-	sed -ri -e 's,(LIBRTE_PMD_XENVIRT=).*,\1n,' $(DPDK_STATIC_DIR)/.config
-endif
 endif
 	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
 		$(DPDK_STATIC_DIR)/.config
