@@ -1,4 +1,4 @@
-dpdk (17.11-1~git1) UNRELEASED; urgency=medium
+dpdk (17.11-1) experimental; urgency=medium
 
   [ Luca Boccassi ]
   * Add librte-pmd-failsafe package.
@@ -44,7 +44,7 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
   * d/control: add librte-pmd-octeontx17.11
   * d/t/control: fix test dependencies for s390x (Closes: #882480).
 
- -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
+ -- Luca Boccassi <bluca@debian.org>  Thu, 23 Nov 2017 17:50:12 +0000
 
 dpdk (17.08-4) experimental; urgency=medium
 
