@@ -27,6 +27,9 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
   * Backport testpmd-link-virtio.patch to link testpmd with the virtio
     pmd to fix failure to run in VMs with virtio based interfaces
   * Bump Standards-Version to 4.1.1, no changes.
+  * Add dependency on Python to dpdk-doc for diagram-generator.py and
+    pipeline-to-core-mapping.py. Fixes Lintian Error:
+    python-script-but-no-python-dep
 
   [ Christian Ehrhardt ]
   * d/control: improve dpdk-pmdinfo user experience by making
