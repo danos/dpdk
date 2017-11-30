@@ -1,4 +1,4 @@
-dpdk (16.11.3-1) UNRELEASED; urgency=medium
+dpdk (16.11.3-1) unstable; urgency=medium
 
   [ Luca Boccassi ]
   * Merge stable update to 16.11.3; For a list of changes see
@@ -27,7 +27,7 @@ dpdk (16.11.3-1) UNRELEASED; urgency=medium
   * d/rules: properly enable dpdk systemd service
   * d/t/control: fix test dependencies for s390x.
 
- -- Luca Boccassi <luca.boccassi@gmail.com>  Wed, 30 Aug 2017 15:11:09 +0100
+ -- Luca Boccassi <bluca@debian.org>  Thu, 30 Nov 2017 18:41:35 +0000
 
 dpdk (16.11.2-4) unstable; urgency=medium
 
