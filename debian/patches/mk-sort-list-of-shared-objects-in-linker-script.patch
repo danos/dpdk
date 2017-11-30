@@ -6,10 +6,10 @@ This means the content libdpdk.so linker script might change between
 builds from the same sources.
 Run the list through sort to ensure reproducibility.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25861/
+Origin: http://dpdk.org/dev/patchwork/patch/27507/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-06-24
+Last-Update: 2017-08-10
 ---
  mk/rte.combinedlib.mk | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
