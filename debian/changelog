@@ -15,8 +15,6 @@ dpdk (16.11.3-1~git1) UNRELEASED; urgency=medium
   * Build-Depend on the Python 3 version of the Sphinx packages to fix
     Lintian Warning: build-depends-on-python-sphinx-only
   * Fix upstream version parsing in d/rules to account for -rcX.
-  * Switch generated dependencies to Python 3 due to switch to Python 3
-    Sphinx.
   * Build-Depend on debhelper (>= 9.20160709) | dh-systemd to keep
     compatibility with Ubuntu 16.04, which does not yet have that
     of debhelper.
