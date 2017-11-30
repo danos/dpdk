@@ -25,9 +25,6 @@ dpdk (16.11.3-1~git1) UNRELEASED; urgency=medium
     ones for now.
   * Correctly parse upstream version when using ~rc instead of -rc.
   * Bump Standards-Version to 4.1.1, no changes.
-  * Add dependency on Python to dpdk-doc for diagram-generator.py and
-    pipeline-to-core-mapping.py. Fixes Lintian Error:
-    python-script-but-no-python-dep
 
   [ Christian Ehrhardt ]
   * d/rules: use new dh option names
