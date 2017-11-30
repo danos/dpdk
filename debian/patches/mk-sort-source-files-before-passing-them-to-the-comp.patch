@@ -3,10 +3,10 @@ Description: mk: sort source files before passing them to the compiler
 In order to achieve reproducible builds, always use the same
 order when listing files for compilation.
 
-Origin: http://dpdk.org/dev/patchwork/patch/25864/
+Origin: http://dpdk.org/dev/patchwork/patch/27510/
 Forwarded: yes
 Author: Luca Boccassi <luca.boccassi@gmail.com>
-Last-Update: 2017-06-24
+Last-Update: 2017-08-10
 ---
  drivers/net/cxgbe/Makefile    | 2 +-
  drivers/net/e1000/Makefile    | 2 +-

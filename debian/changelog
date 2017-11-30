@@ -1,3 +1,34 @@
+dpdk (16.11.3-1) unstable; urgency=medium
+
+  [ Luca Boccassi ]
+  * Merge stable update to 16.11.3; For a list of changes see
+    http://dpdk.org/ml/archives/announce/2017-August/000143.html
+  * Fix reproducibility of librte-eal linuxapp.
+  * Mark build-dependencies needed for documentation builds with the <!nodoc>
+    build-profile to fully implement support for it.
+  * Bump Standards-Version to 4.1.0. Relevant changes are nodoc support and
+    build reprodicibility.
+  * Switch to debian.org email address.
+  * Build-Depend on debhelper (>= 9.20160709) rather than dh-systemd as
+    latter is deprecated. Fixes Lintian Error:
+      build-depends-on-obsolete-package
+  * Fix upstream version parsing in d/rules to account for -rcX.
+  * Build-Depend on debhelper (>= 9.20160709) | dh-systemd to keep
+    compatibility with Ubuntu 16.04, which does not yet have that
+    of debhelper.
+  * Revert: d/rules: use new dh option names - Ubuntu 16.04 does not
+    have a debhelper that supports the new option, so use the old
+    ones for now.
+  * Correctly parse upstream version when using ~rc instead of -rc.
+  * Bump Standards-Version to 4.1.1, no changes.
+
+  [ Christian Ehrhardt ]
+  * d/rules: use new dh option names
+  * d/rules: properly enable dpdk systemd service
+  * d/t/control: fix test dependencies for s390x.
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 30 Nov 2017 18:41:35 +0000
+
 dpdk (16.11.2-4) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
