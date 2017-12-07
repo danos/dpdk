@@ -1,26 +1,26 @@
 Source: dpdk
 Priority: optional
 Maintainer: Debian DPDK Maintainers <pkg-dpdk-devel@lists.alioth.debian.org>
-Uploaders: Luca Boccassi <luca.boccassi@gmail.com>,
+Uploaders: Luca Boccassi <bluca@debian.org>,
            Christian Ehrhardt <christian.ehrhardt@canonical.com>,
            Santiago Ruano Rincón <santiagorr@riseup.net>
 Build-Depends: debhelper (>= 9),
+               debhelper (>= 9.20160709) | dh-systemd (>= 1.5),
                dh-python,
-               dh-systemd (>= 1.5),
                dkms,
-               doxygen,
-               graphviz,
-               inkscape,
+               doxygen <!nodoc>,
+               graphviz <!nodoc>,
+               inkscape <!nodoc>,
                libcap-dev,
                libpcap-dev,
                libxen-dev [amd64 arm64 i386],
                libxenstore3.0 [amd64 arm64 i386],
                python,
-               python-sphinx,
-               python-sphinx-rtd-theme,
-               texlive-fonts-recommended,
-               texlive-latex-extra
-Standards-Version: 4.0.0
+               python-sphinx <!nodoc>,
+               python-sphinx-rtd-theme <!nodoc>,
+               texlive-fonts-recommended <!nodoc>,
+               texlive-latex-extra <!nodoc>
+Standards-Version: 4.1.1
 Section: libs
 Homepage: http://www.dpdk.org
 Vcs-Git: https://gerrit.fd.io/r/deb_dpdk
