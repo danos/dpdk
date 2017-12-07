@@ -1,3 +1,9 @@
+dpdk (16.11.3-1~bpo9+1) stretch-backports; urgency=low
+
+  * Rebuild for stretch-backports
+
+ -- Santiago R.R. <santigorr@riseup.net>  Wed, 08 Nov 2017 17:54:40 +0100
+
 dpdk (16.11.3-1) unstable; urgency=medium
 
   [ Luca Boccassi ]
