@@ -8,7 +8,6 @@ nicvf-0004-net-thunderx-sync-mailbox-definitions-with-Linux-PF-.patch
 nicvf-0005-net-thunderx-wait-to-complete-during-link-update.patch
 nicvf-0007-net-thunderx-disable-PMD-for-old-compilers.patch
 nicvf-0009-config-set-cache-line-as-128B-for-generic-arm64.patch
-kni-fix-ethtool-build-with-kernel-4.11.patch
 igb_uio-switch-to-new-irq-function-for-MSI-X.patch
 mk-use-make-silent-flag-to-print-HTML-doc-version.patch
 mk-fix-excluding-.doctrees-when-installing-docs.patch
