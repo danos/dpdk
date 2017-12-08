@@ -231,7 +231,7 @@ enic_free_rq_buf(struct rte_mbuf **mbuf)
 		return;
 
 	rte_pktmbuf_free(*mbuf);
-	mbuf = NULL;
+	*mbuf = NULL;
 }
 
 void enic_init_vnic_resources(struct enic *enic)
@@ -375,6 +375,7 @@ enic_alloc_consistent(void *priv, size_t size,
 		pr_err("%s : Failed to allocate memory for memzone list\n",
 		       __func__);
 		rte_memzone_free(rz);
+		return NULL;
 	}
 
 	mze->rz = rz;
@@ -1124,11 +1125,12 @@ static int
 enic_reinit_rq(struct enic *enic, unsigned int rq_idx)
 {
 	struct vnic_rq *sop_rq, *data_rq;
-	unsigned int cq_idx = enic_cq_rq(enic, rq_idx);
+	unsigned int cq_idx;
 	int rc = 0;
 
 	sop_rq = &enic->rq[enic_rte_rq_idx_to_sop_idx(rq_idx)];
 	data_rq = &enic->rq[enic_rte_rq_idx_to_data_idx(rq_idx)];
+	cq_idx = rq_idx;
 
 	vnic_cq_clean(&enic->cq[cq_idx]);
 	vnic_cq_init(&enic->cq[cq_idx],

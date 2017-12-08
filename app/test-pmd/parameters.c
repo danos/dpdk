@@ -360,7 +360,8 @@ parse_portnuma_config(const char *q_arg)
 	char s[256];
 	const char *p, *p0 = q_arg;
 	char *end;
-	uint8_t i,port_id,socket_id;
+	uint8_t i, socket_id;
+	portid_t port_id;
 	unsigned size;
 	enum fieldnames {
 		FLD_PORT = 0,
@@ -390,8 +391,9 @@ parse_portnuma_config(const char *q_arg)
 			if (errno != 0 || end == str_fld[i] || int_fld[i] > 255)
 				return -1;
 		}
-		port_id = (uint8_t)int_fld[FLD_PORT];
-		if (port_id_is_invalid(port_id, ENABLED_WARN)) {
+		port_id = (portid_t)int_fld[FLD_PORT];
+		if (port_id_is_invalid(port_id, ENABLED_WARN) ||
+			port_id == (portid_t)RTE_PORT_ALL) {
 			printf("Valid port range is [0");
 			FOREACH_PORT(pid, ports)
 				printf(", %d", pid);
@@ -416,7 +418,8 @@ parse_ringnuma_config(const char *q_arg)
 	char s[256];
 	const char *p, *p0 = q_arg;
 	char *end;
-	uint8_t i,port_id,ring_flag,socket_id;
+	uint8_t i, ring_flag, socket_id;
+	portid_t port_id;
 	unsigned size;
 	enum fieldnames {
 		FLD_PORT = 0,
@@ -450,8 +453,9 @@ parse_ringnuma_config(const char *q_arg)
 			if (errno != 0 || end == str_fld[i] || int_fld[i] > 255)
 				return -1;
 		}
-		port_id = (uint8_t)int_fld[FLD_PORT];
-		if (port_id_is_invalid(port_id, ENABLED_WARN)) {
+		port_id = (portid_t)int_fld[FLD_PORT];
+		if (port_id_is_invalid(port_id, ENABLED_WARN) ||
+			port_id == (portid_t)RTE_PORT_ALL) {
 			printf("Valid port range is [0");
 			FOREACH_PORT(pid, ports)
 				printf(", %d", pid);
@@ -806,7 +810,7 @@ launch_args_parse(int argc, char** argv)
 					port_topology = PORT_TOPOLOGY_LOOP;
 				else
 					rte_exit(EXIT_FAILURE, "port-topology %s invalid -"
-						 " must be: paired or chained \n",
+						 " must be: paired, chained or loop\n",
 						 optarg);
 			}
 			if (!strcmp(lgopts[opt_idx].name, "forward-mode"))

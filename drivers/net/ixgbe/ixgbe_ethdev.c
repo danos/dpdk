@@ -3230,6 +3230,7 @@ ixgbe_dev_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 	link.link_status = ETH_LINK_DOWN;
 	link.link_speed = 0;
 	link.link_duplex = ETH_LINK_HALF_DUPLEX;
+	link.link_autoneg = ETH_LINK_AUTONEG;
 	memset(&old, 0, sizeof(old));
 	rte_ixgbe_dev_atomic_read_link_status(dev, &old);
 
@@ -4250,6 +4251,15 @@ ixgbevf_dev_start(struct rte_eth_dev *dev)
 	}
 	ixgbevf_configure_msix(dev);
 
+	/* When a VF port is bound to VFIO-PCI, only miscellaneous interrupt
+	 * is mapped to VFIO vector 0 in eth_ixgbevf_dev_init( ).
+	 * If previous VFIO interrupt mapping setting in eth_ixgbevf_dev_init( )
+	 * is not cleared, it will fail when following rte_intr_enable( ) tries
+	 * to map Rx queue interrupt to other VFIO vectors.
+	 * So clear uio/vfio intr/evevnfd first to avoid failure.
+	 */
+	rte_intr_disable(intr_handle);
+
 	rte_intr_enable(intr_handle);
 
 	/* Re-enable interrupt for VF */
@@ -5013,13 +5023,13 @@ ixgbe_mirror_rule_set(struct rte_eth_dev *dev,
 	IXGBE_WRITE_REG(hw, IXGBE_MRCTL(rule_id), mr_ctl);
 
 	/* write pool mirrror control  register */
-	if (mirror_conf->rule_type == ETH_MIRROR_VIRTUAL_POOL_UP) {
+	if (mirror_conf->rule_type & ETH_MIRROR_VIRTUAL_POOL_UP) {
 		IXGBE_WRITE_REG(hw, IXGBE_VMRVM(rule_id), mp_lsb);
 		IXGBE_WRITE_REG(hw, IXGBE_VMRVM(rule_id + rule_mr_offset),
 				mp_msb);
 	}
 	/* write VLAN mirrror control  register */
-	if (mirror_conf->rule_type == ETH_MIRROR_VLAN) {
+	if (mirror_conf->rule_type & ETH_MIRROR_VLAN) {
 		IXGBE_WRITE_REG(hw, IXGBE_VMRVLAN(rule_id), mv_lsb);
 		IXGBE_WRITE_REG(hw, IXGBE_VMRVLAN(rule_id + rule_mr_offset),
 				mv_msb);
@@ -6778,6 +6788,8 @@ ixgbe_dev_get_dcb_info(struct rte_eth_dev *dev,
 	struct ixgbe_dcb_config *dcb_config =
 			IXGBE_DEV_PRIVATE_TO_DCB_CFG(dev->data->dev_private);
 	struct ixgbe_dcb_tc_config *tc;
+	struct rte_eth_dcb_tc_queue_mapping *tc_queue;
+	uint8_t nb_tcs;
 	uint8_t i, j;
 
 	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_DCB_FLAG)
@@ -6785,19 +6797,31 @@ ixgbe_dev_get_dcb_info(struct rte_eth_dev *dev,
 	else
 		dcb_info->nb_tcs = 1;
 
+	tc_queue = &dcb_info->tc_queue;
+	nb_tcs = dcb_info->nb_tcs;
+
 	if (dcb_config->vt_mode) { /* vt is enabled*/
 		struct rte_eth_vmdq_dcb_conf *vmdq_rx_conf =
 				&dev->data->dev_conf.rx_adv_conf.vmdq_dcb_conf;
 		for (i = 0; i < ETH_DCB_NUM_USER_PRIORITIES; i++)
 			dcb_info->prio_tc[i] = vmdq_rx_conf->dcb_tc[i];
-		for (i = 0; i < vmdq_rx_conf->nb_queue_pools; i++) {
-			for (j = 0; j < dcb_info->nb_tcs; j++) {
-				dcb_info->tc_queue.tc_rxq[i][j].base =
-						i * dcb_info->nb_tcs + j;
-				dcb_info->tc_queue.tc_rxq[i][j].nb_queue = 1;
-				dcb_info->tc_queue.tc_txq[i][j].base =
-						i * dcb_info->nb_tcs + j;
-				dcb_info->tc_queue.tc_txq[i][j].nb_queue = 1;
+		if (RTE_ETH_DEV_SRIOV(dev).active > 0) {
+			for (j = 0; j < nb_tcs; j++) {
+				tc_queue->tc_rxq[0][j].base = j;
+				tc_queue->tc_rxq[0][j].nb_queue = 1;
+				tc_queue->tc_txq[0][j].base = j;
+				tc_queue->tc_txq[0][j].nb_queue = 1;
+			}
+		} else {
+			for (i = 0; i < vmdq_rx_conf->nb_queue_pools; i++) {
+				for (j = 0; j < nb_tcs; j++) {
+					tc_queue->tc_rxq[i][j].base =
+						i * nb_tcs + j;
+					tc_queue->tc_rxq[i][j].nb_queue = 1;
+					tc_queue->tc_txq[i][j].base =
+						i * nb_tcs + j;
+					tc_queue->tc_txq[i][j].nb_queue = 1;
+				}
 			}
 		}
 	} else { /* vt is disabled*/

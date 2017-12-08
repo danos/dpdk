@@ -224,8 +224,10 @@ nic_stats_display(portid_t port_id)
 	if (diff_cycles > 0)
 		diff_cycles = prev_cycles[port_id] - diff_cycles;
 
-	diff_pkts_rx = stats.ipackets - prev_pkts_rx[port_id];
-	diff_pkts_tx = stats.opackets - prev_pkts_tx[port_id];
+	diff_pkts_rx = (stats.ipackets > prev_pkts_rx[port_id]) ?
+		(stats.ipackets - prev_pkts_rx[port_id]) : 0;
+	diff_pkts_tx = (stats.opackets > prev_pkts_tx[port_id]) ?
+		(stats.opackets - prev_pkts_tx[port_id]) : 0;
 	prev_pkts_rx[port_id] = stats.ipackets;
 	prev_pkts_tx[port_id] = stats.opackets;
 	mpps_rx = diff_cycles > 0 ?
@@ -1197,7 +1199,7 @@ simple_fwd_config_setup(void)
 		fwd_streams[i]->rx_queue  = 0;
 		fwd_streams[i]->tx_port   = fwd_ports_ids[j];
 		fwd_streams[i]->tx_queue  = 0;
-		fwd_streams[i]->peer_addr = j;
+		fwd_streams[i]->peer_addr = fwd_streams[i]->tx_port;
 		fwd_streams[i]->retry_enabled = retry_enabled;
 
 		if (port_topology == PORT_TOPOLOGY_PAIRED) {
@@ -1205,7 +1207,7 @@ simple_fwd_config_setup(void)
 			fwd_streams[j]->rx_queue  = 0;
 			fwd_streams[j]->tx_port   = fwd_ports_ids[i];
 			fwd_streams[j]->tx_queue  = 0;
-			fwd_streams[j]->peer_addr = i;
+			fwd_streams[j]->peer_addr = fwd_streams[j]->tx_port;
 			fwd_streams[j]->retry_enabled = retry_enabled;
 		}
 	}
