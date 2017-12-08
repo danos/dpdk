@@ -106,6 +106,8 @@ static struct rte_pci_id bnxt_pci_id_map[] = {
 	ETH_RSS_NONFRAG_IPV6_TCP |	\
 	ETH_RSS_NONFRAG_IPV6_UDP)
 
+static void bnxt_print_link_info(struct rte_eth_dev *eth_dev);
+
 /***********************/
 
 /*
@@ -261,6 +263,7 @@ static int bnxt_init_chip(struct bnxt *bp)
 			goto err_out;
 		}
 	}
+	bnxt_print_link_info(bp->eth_dev);
 
 	return 0;
 
@@ -325,8 +328,13 @@ static void bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 	dev_info->min_rx_bufsize = 1;
 	dev_info->max_rx_pktlen = BNXT_MAX_MTU + ETHER_HDR_LEN + ETHER_CRC_LEN
 				  + VLAN_TAG_SIZE;
-	dev_info->rx_offload_capa = 0;
-	dev_info->tx_offload_capa = DEV_TX_OFFLOAD_IPV4_CKSUM |
+	dev_info->rx_offload_capa = DEV_RX_OFFLOAD_VLAN_STRIP |
+					DEV_RX_OFFLOAD_IPV4_CKSUM |
+					DEV_RX_OFFLOAD_UDP_CKSUM |
+					DEV_RX_OFFLOAD_TCP_CKSUM |
+					DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM;
+	dev_info->tx_offload_capa = DEV_TX_OFFLOAD_VLAN_INSERT |
+					DEV_TX_OFFLOAD_IPV4_CKSUM |
 					DEV_TX_OFFLOAD_TCP_CKSUM |
 					DEV_TX_OFFLOAD_UDP_CKSUM |
 					DEV_TX_OFFLOAD_TCP_TSO;
@@ -410,20 +418,6 @@ static int bnxt_dev_configure_op(struct rte_eth_dev *eth_dev)
 	return 0;
 }
 
-static inline int
-rte_bnxt_atomic_write_link_status(struct rte_eth_dev *eth_dev,
-				struct rte_eth_link *link)
-{
-	struct rte_eth_link *dst = &eth_dev->data->dev_link;
-	struct rte_eth_link *src = link;
-
-	if (rte_atomic64_cmpset((uint64_t *)dst, *(uint64_t *)dst,
-					*(uint64_t *)src) == 0)
-		return 1;
-
-	return 0;
-}
-
 static void bnxt_print_link_info(struct rte_eth_dev *eth_dev)
 {
 	struct rte_eth_link *link = &eth_dev->data->dev_link;
@@ -476,7 +470,7 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 
 	bnxt_enable_int(bp);
 
-	bnxt_link_update_op(eth_dev, 0);
+	bnxt_link_update_op(eth_dev, 1);
 	return 0;
 
 error:
@@ -492,9 +486,14 @@ error:
 static int bnxt_dev_set_link_up_op(struct rte_eth_dev *eth_dev)
 {
 	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	int rc = 0;
 
-	eth_dev->data->dev_link.link_status = 1;
-	bnxt_set_hwrm_link_config(bp, true);
+	if (!bp->link_info.link_up)
+		rc = bnxt_set_hwrm_link_config(bp, true);
+	if (!rc)
+		eth_dev->data->dev_link.link_status = 1;
+
+	bnxt_print_link_info(eth_dev);
 	return 0;
 }
 
@@ -504,6 +503,8 @@ static int bnxt_dev_set_link_down_op(struct rte_eth_dev *eth_dev)
 
 	eth_dev->data->dev_link.link_status = 0;
 	bnxt_set_hwrm_link_config(bp, false);
+	bp->link_info.link_up = 0;
+
 	return 0;
 }
 
@@ -550,13 +551,14 @@ static void bnxt_mac_addr_remove_op(struct rte_eth_dev *eth_dev,
 	uint64_t pool_mask = eth_dev->data->mac_pool_sel[index];
 	struct bnxt_vnic_info *vnic;
 	struct bnxt_filter_info *filter, *temp_filter;
-	int i;
+	uint32_t pool = RTE_MIN(MAX_FF_POOLS, ETH_64_POOLS);
+	uint32_t i;
 
 	/*
 	 * Loop through all VNICs from the specified filter flow pools to
 	 * remove the corresponding MAC addr filter
 	 */
-	for (i = 0; i < MAX_FF_POOLS; i++) {
+	for (i = 0; i < pool; i++) {
 		if (!(pool_mask & (1ULL << i)))
 			continue;
 
@@ -645,7 +647,8 @@ out:
 	/* Timed out or success */
 	if (new.link_status != eth_dev->data->dev_link.link_status ||
 	new.link_speed != eth_dev->data->dev_link.link_speed) {
-		rte_bnxt_atomic_write_link_status(eth_dev, &new);
+		memcpy(&eth_dev->data->dev_link, &new,
+			sizeof(struct rte_eth_link));
 		bnxt_print_link_info(eth_dev);
 	}
 
