@@ -83,12 +83,6 @@
 /* Flow control default timer */
 #define I40E_DEFAULT_PAUSE_TIME 0xFFFFU
 
-/* Flow control default high water */
-#define I40E_DEFAULT_HIGH_WATER (0x1C40/1024)
-
-/* Flow control default low water */
-#define I40E_DEFAULT_LOW_WATER  (0x1A40/1024)
-
 /* Flow control enable fwd bit */
 #define I40E_PRTMAC_FWD_CTRL   0x00000001
 
@@ -97,6 +91,12 @@
 
 /* Kilobytes shift */
 #define I40E_KILOSHIFT 10
+
+/* Flow control default high water */
+#define I40E_DEFAULT_HIGH_WATER (0xF2000 >> I40E_KILOSHIFT)
+
+/* Flow control default low water */
+#define I40E_DEFAULT_LOW_WATER  (0xF2000 >> I40E_KILOSHIFT)
 
 /* Receive Average Packet Size in Byte*/
 #define I40E_PACKET_AVERAGE_SIZE 128
@@ -422,6 +422,12 @@ static int i40e_dev_sync_phy_type(struct i40e_hw *hw);
 static void i40e_configure_registers(struct i40e_hw *hw);
 static void i40e_hw_init(struct rte_eth_dev *dev);
 static int i40e_config_qinq(struct i40e_hw *hw, struct i40e_vsi *vsi);
+static enum i40e_status_code i40e_aq_del_mirror_rule(struct i40e_hw *hw,
+						     uint16_t seid,
+						     uint16_t rule_type,
+						     uint16_t *entries,
+						     uint16_t count,
+						     uint16_t rule_id);
 static int i40e_mirror_rule_set(struct rte_eth_dev *dev,
 			struct rte_eth_mirror_conf *mirror_conf,
 			uint8_t sw_id, uint8_t on);
@@ -723,23 +729,22 @@ RTE_PMD_REGISTER_PCI_TABLE(net_i40e, pci_id_i40e_map);
 static inline void i40e_GLQF_reg_init(struct i40e_hw *hw)
 {
 	/*
-	 * Initialize registers for flexible payload, which should be set by NVM.
-	 * This should be removed from code once it is fixed in NVM.
+	 * Force global configuration for flexible payload
+	 * to the first 16 bytes of the corresponding L2/L3/L4 paylod.
+	 * This should be removed from code once proper
+	 * configuration API is added to avoid configuration conflicts
+	 * between ports of the same device.
 	 */
-	I40E_WRITE_REG(hw, I40E_GLQF_ORT(18), 0x00000030);
-	I40E_WRITE_REG(hw, I40E_GLQF_ORT(19), 0x00000030);
-	I40E_WRITE_REG(hw, I40E_GLQF_ORT(26), 0x0000002B);
-	I40E_WRITE_REG(hw, I40E_GLQF_ORT(30), 0x0000002B);
 	I40E_WRITE_REG(hw, I40E_GLQF_ORT(33), 0x000000E0);
 	I40E_WRITE_REG(hw, I40E_GLQF_ORT(34), 0x000000E3);
 	I40E_WRITE_REG(hw, I40E_GLQF_ORT(35), 0x000000E6);
-	I40E_WRITE_REG(hw, I40E_GLQF_ORT(20), 0x00000031);
-	I40E_WRITE_REG(hw, I40E_GLQF_ORT(23), 0x00000031);
-	I40E_WRITE_REG(hw, I40E_GLQF_ORT(63), 0x0000002D);
-	I40E_WRITE_REG(hw, I40E_GLQF_PIT(16), 0x00007480);
-	I40E_WRITE_REG(hw, I40E_GLQF_PIT(17), 0x00007440);
 
-	/* Initialize registers for parsing packet type of QinQ */
+	/*
+	 * Initialize registers for parsing packet type of QinQ
+	 * This should be removed from code once proper
+	 * configuration API is added to avoid configuration conflicts
+	 * between ports of the same device.
+	 */
 	I40E_WRITE_REG(hw, I40E_GLQF_ORT(40), 0x00000029);
 	I40E_WRITE_REG(hw, I40E_GLQF_PIT(9), 0x00009420);
 }
@@ -1819,7 +1824,6 @@ i40e_dev_stop(struct rte_eth_dev *dev)
 {
 	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 	struct i40e_vsi *main_vsi = pf->main_vsi;
-	struct i40e_mirror_rule *p_mirror;
 	struct rte_intr_handle *intr_handle = &dev->pci_dev->intr_handle;
 	int i;
 
@@ -1845,13 +1849,6 @@ i40e_dev_stop(struct rte_eth_dev *dev)
 	/* Set link down */
 	i40e_dev_set_link_down(dev);
 
-	/* Remove all mirror rules */
-	while ((p_mirror = TAILQ_FIRST(&pf->mirror_list))) {
-		TAILQ_REMOVE(&pf->mirror_list, p_mirror, rules);
-		rte_free(p_mirror);
-	}
-	pf->nb_mirror_rule = 0;
-
 	if (!rte_intr_allow_others(intr_handle))
 		/* resume to the default handler */
 		rte_intr_callback_register(intr_handle,
@@ -1871,13 +1868,35 @@ i40e_dev_close(struct rte_eth_dev *dev)
 {
 	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+	struct i40e_mirror_rule *p_mirror;
 	uint32_t reg;
 	int i;
+	int ret;
 
 	PMD_INIT_FUNC_TRACE();
 
 	i40e_dev_stop(dev);
 	hw->adapter_stopped = 1;
+
+	/* Remove all mirror rules */
+	while ((p_mirror = TAILQ_FIRST(&pf->mirror_list))) {
+		ret = i40e_aq_del_mirror_rule(hw,
+					      pf->main_vsi->veb->seid,
+					      p_mirror->rule_type,
+					      p_mirror->entries,
+					      p_mirror->num_entries,
+					      p_mirror->id);
+		if (ret < 0)
+			PMD_DRV_LOG(ERR, "failed to remove mirror rule: "
+				    "status = %d, aq_err = %d.", ret,
+				    hw->aq.asq_last_status);
+
+		/* remove mirror software resource anyway */
+		TAILQ_REMOVE(&pf->mirror_list, p_mirror, rules);
+		rte_free(p_mirror);
+		pf->nb_mirror_rule--;
+	}
+
 	i40e_dev_free_queues(dev);
 
 	/* Disable interrupt */
@@ -2376,13 +2395,14 @@ i40e_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	/* call read registers - updates values, now write them to struct */
 	i40e_read_stats_registers(pf, hw);
 
-	stats->ipackets = pf->main_vsi->eth_stats.rx_unicast +
-			pf->main_vsi->eth_stats.rx_multicast +
-			pf->main_vsi->eth_stats.rx_broadcast -
+	stats->ipackets = ns->eth.rx_unicast +
+			ns->eth.rx_multicast +
+			ns->eth.rx_broadcast -
+			ns->eth.rx_discards -
 			pf->main_vsi->eth_stats.rx_discards;
-	stats->opackets = pf->main_vsi->eth_stats.tx_unicast +
-			pf->main_vsi->eth_stats.tx_multicast +
-			pf->main_vsi->eth_stats.tx_broadcast;
+	stats->opackets = ns->eth.tx_unicast +
+			ns->eth.tx_multicast +
+			ns->eth.tx_broadcast;
 	stats->ibytes   = ns->eth.rx_bytes;
 	stats->obytes   = ns->eth.tx_bytes;
 	stats->oerrors  = ns->eth.tx_errors +
@@ -2879,6 +2899,13 @@ i40e_flow_ctrl_get(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
 	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 
 	fc_conf->pause_time = pf->fc_conf.pause_time;
+
+	/* read out from register, in case they are modified by other port */
+	pf->fc_conf.high_water[I40E_MAX_TRAFFIC_CLASS] =
+		I40E_READ_REG(hw, I40E_GLRPB_GHW) >> I40E_KILOSHIFT;
+	pf->fc_conf.low_water[I40E_MAX_TRAFFIC_CLASS] =
+		I40E_READ_REG(hw, I40E_GLRPB_GLW) >> I40E_KILOSHIFT;
+
 	fc_conf->high_water =  pf->fc_conf.high_water[I40E_MAX_TRAFFIC_CLASS];
 	fc_conf->low_water = pf->fc_conf.low_water[I40E_MAX_TRAFFIC_CLASS];
 
@@ -8354,7 +8381,7 @@ i40e_pctype_to_flowtype(enum i40e_filter_pctype pctype)
 
 /* For both X710 and XL710 */
 #define I40E_GL_SWR_PRI_JOIN_MAP_0_VALUE_1	0x10000200
-#define I40E_GL_SWR_PRI_JOIN_MAP_0_VALUE_2	0x20000200
+#define I40E_GL_SWR_PRI_JOIN_MAP_0_VALUE_2	0x203F0200
 #define I40E_GL_SWR_PRI_JOIN_MAP_0		0x26CE00
 
 #define I40E_GL_SWR_PRI_JOIN_MAP_2_VALUE 0x011f0200
