@@ -1,3 +1,9 @@
+dpdk (16.11.4-1~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+
+ -- Luca Boccassi <bluca@debian.org>  Sat, 16 Dec 2017 15:03:05 +0000
+
 dpdk (16.11.4-1) unstable; urgency=medium
 
   * Merge stable update to 16.11.4; For a list of changes see
