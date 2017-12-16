@@ -857,6 +857,8 @@ nfp_net_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 
 	/* RTE_ETHDEV_QUEUE_STAT_CNTRS default value is 16 */
 
+	memset(&nfp_dev_stats, 0, sizeof(nfp_dev_stats));
+
 	/* reading per RX ring stats */
 	for (i = 0; i < dev->data->nb_rx_queues; i++) {
 		if (i == RTE_ETHDEV_QUEUE_STAT_CNTRS)
@@ -2120,7 +2122,8 @@ nfp_net_reta_update(struct rte_eth_dev *dev,
 				reta &= ~(0xFF << (8 * j));
 			reta |= reta_conf[idx].reta[shift + j] << (8 * j);
 		}
-		nn_cfg_writel(hw, NFP_NET_CFG_RSS_ITBL + shift, reta);
+		nn_cfg_writel(hw, NFP_NET_CFG_RSS_ITBL + (idx * 64) + shift,
+			      reta);
 	}
 
 	update = NFP_NET_CFG_UPDATE_RSS;
@@ -2167,7 +2170,8 @@ nfp_net_reta_query(struct rte_eth_dev *dev,
 		if (!mask)
 			continue;
 
-		reta = nn_cfg_readl(hw, NFP_NET_CFG_RSS_ITBL + shift);
+		reta = nn_cfg_readl(hw, NFP_NET_CFG_RSS_ITBL + (idx * 64) +
+				    shift);
 		for (j = 0; j < 4; j++) {
 			if (!(mask & (0x1 << j)))
 				continue;
@@ -2216,6 +2220,9 @@ nfp_net_rss_hash_update(struct rte_eth_dev *dev,
 		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV6 |
 				NFP_NET_CFG_RSS_IPV6_TCP |
 				NFP_NET_CFG_RSS_IPV6_UDP;
+
+	cfg_rss_ctrl |= NFP_NET_CFG_RSS_MASK;
+	cfg_rss_ctrl |= NFP_NET_CFG_RSS_TOEPLITZ;
 
 	/* configuring where to apply the RSS hash */
 	nn_cfg_writel(hw, NFP_NET_CFG_RSS_CTRL, cfg_rss_ctrl);

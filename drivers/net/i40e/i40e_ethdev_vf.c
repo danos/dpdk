@@ -68,7 +68,6 @@
 #include "i40e_ethdev.h"
 #include "i40e_pf.h"
 #define I40EVF_VSI_DEFAULT_MSIX_INTR     1
-#define I40EVF_VSI_DEFAULT_MSIX_INTR_LNX 0
 
 /* busy wait delay in msec */
 #define I40EVF_BUSY_WAIT_DELAY 10
@@ -723,11 +722,12 @@ i40evf_config_irq_map(struct rte_eth_dev *dev)
 	uint32_t vector_id;
 	int i, err;
 
-	if (rte_intr_allow_others(intr_handle)) {
+	if (dev->data->dev_conf.intr_conf.rxq != 0 &&
+	    rte_intr_allow_others(intr_handle)) {
 		if (vf->version_major == I40E_DPDK_VERSION_MAJOR)
 			vector_id = I40EVF_VSI_DEFAULT_MSIX_INTR;
 		else
-			vector_id = I40EVF_VSI_DEFAULT_MSIX_INTR_LNX;
+			vector_id = I40E_RX_VEC_START;
 	} else {
 		vector_id = I40E_MISC_VEC_ID;
 	}
@@ -859,7 +859,7 @@ i40evf_add_mac_addr(struct rte_eth_dev *dev,
 	int err;
 	struct vf_cmd_info args;
 
-	if (i40e_validate_mac_addr(addr->addr_bytes) != I40E_SUCCESS) {
+	if (is_zero_ether_addr(addr)) {
 		PMD_DRV_LOG(ERR, "Invalid mac:%x:%x:%x:%x:%x:%x",
 			    addr->addr_bytes[0], addr->addr_bytes[1],
 			    addr->addr_bytes[2], addr->addr_bytes[3],
@@ -952,15 +952,73 @@ i40evf_update_stats(struct rte_eth_dev *dev, struct i40e_eth_stats **pstats)
 	return 0;
 }
 
+static void
+i40evf_stat_update_48(uint64_t *offset,
+		   uint64_t *stat)
+{
+	if (*stat >= *offset)
+		*stat = *stat - *offset;
+	else
+		*stat = (uint64_t)((*stat +
+			((uint64_t)1 << I40E_48_BIT_WIDTH)) - *offset);
+
+	*stat &= I40E_48_BIT_MASK;
+}
+
+static void
+i40evf_stat_update_32(uint64_t *offset,
+		   uint64_t *stat)
+{
+	if (*stat >= *offset)
+		*stat = (uint64_t)(*stat - *offset);
+	else
+		*stat = (uint64_t)((*stat +
+			((uint64_t)1 << I40E_32_BIT_WIDTH)) - *offset);
+}
+
+static void
+i40evf_update_vsi_stats(struct i40e_vsi *vsi,
+					struct i40e_eth_stats *nes)
+{
+	struct i40e_eth_stats *oes = &vsi->eth_stats_offset;
+
+	i40evf_stat_update_48(&oes->rx_bytes,
+			    &nes->rx_bytes);
+	i40evf_stat_update_48(&oes->rx_unicast,
+			    &nes->rx_unicast);
+	i40evf_stat_update_48(&oes->rx_multicast,
+			    &nes->rx_multicast);
+	i40evf_stat_update_48(&oes->rx_broadcast,
+			    &nes->rx_broadcast);
+	i40evf_stat_update_32(&oes->rx_discards,
+				&nes->rx_discards);
+	i40evf_stat_update_32(&oes->rx_unknown_protocol,
+			    &nes->rx_unknown_protocol);
+	i40evf_stat_update_48(&oes->tx_bytes,
+			    &nes->tx_bytes);
+	i40evf_stat_update_48(&oes->tx_unicast,
+			    &nes->tx_unicast);
+	i40evf_stat_update_48(&oes->tx_multicast,
+			    &nes->tx_multicast);
+	i40evf_stat_update_48(&oes->tx_broadcast,
+			    &nes->tx_broadcast);
+	i40evf_stat_update_32(&oes->tx_errors, &nes->tx_errors);
+	i40evf_stat_update_32(&oes->tx_discards, &nes->tx_discards);
+}
+
 static int
 i40evf_get_statics(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 {
 	int ret;
 	struct i40e_eth_stats *pstats = NULL;
+	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
+	struct i40e_vsi *vsi = &vf->vsi;
 
 	ret = i40evf_update_stats(dev, &pstats);
 	if (ret != 0)
 		return 0;
+
+	i40evf_update_vsi_stats(vsi, pstats);
 
 	stats->ipackets = pstats->rx_unicast + pstats->rx_multicast +
 						pstats->rx_broadcast;
@@ -984,7 +1042,7 @@ i40evf_dev_xstats_reset(struct rte_eth_dev *dev)
 	i40evf_update_stats(dev, &pstats);
 
 	/* set stats offset base on current values */
-	vf->vsi.eth_stats_offset = vf->vsi.eth_stats;
+	vf->vsi.eth_stats_offset = *pstats;
 }
 
 static int i40evf_dev_xstats_get_names(__rte_unused struct rte_eth_dev *dev,
@@ -1008,6 +1066,8 @@ static int i40evf_dev_xstats_get(struct rte_eth_dev *dev,
 	int ret;
 	unsigned i;
 	struct i40e_eth_stats *pstats = NULL;
+	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
+	struct i40e_vsi *vsi = &vf->vsi;
 
 	if (n < I40EVF_NB_XSTATS)
 		return I40EVF_NB_XSTATS;
@@ -1018,6 +1078,8 @@ static int i40evf_dev_xstats_get(struct rte_eth_dev *dev,
 
 	if (!xstats)
 		return 0;
+
+	i40evf_update_vsi_stats(vsi, pstats);
 
 	/* loop over xstats array and values from pstats */
 	for (i = 0; i < I40EVF_NB_XSTATS; i++) {
@@ -1210,29 +1272,29 @@ i40evf_init_vf(struct rte_eth_dev *dev)
 	/* VF reset, shutdown admin queue and initialize again */
 	if (i40e_shutdown_adminq(hw) != I40E_SUCCESS) {
 		PMD_INIT_LOG(ERR, "i40e_shutdown_adminq failed");
-		return -1;
+		goto err;
 	}
 
 	i40e_init_adminq_parameter(hw);
 	if (i40e_init_adminq(hw) != I40E_SUCCESS) {
 		PMD_INIT_LOG(ERR, "init_adminq failed");
-		return -1;
+		goto err;
 	}
 	vf->aq_resp = rte_zmalloc("vf_aq_resp", I40E_AQ_BUF_SZ, 0);
 	if (!vf->aq_resp) {
 		PMD_INIT_LOG(ERR, "unable to allocate vf_aq_resp memory");
-			goto err_aq;
+		goto err_aq;
 	}
 	if (i40evf_check_api_version(dev) != 0) {
 		PMD_INIT_LOG(ERR, "check_api version failed");
-		goto err_aq;
+		goto err_api;
 	}
 	bufsz = sizeof(struct i40e_virtchnl_vf_resource) +
 		(I40E_MAX_VF_VSI * sizeof(struct i40e_virtchnl_vsi_resource));
 	vf->vf_res = rte_zmalloc("vf_res", bufsz, 0);
 	if (!vf->vf_res) {
 		PMD_INIT_LOG(ERR, "unable to allocate vf_res memory");
-			goto err_aq;
+		goto err_api;
 	}
 
 	if (i40evf_get_vf_resource(dev) != 0) {
@@ -1279,6 +1341,9 @@ i40evf_init_vf(struct rte_eth_dev *dev)
 
 err_alloc:
 	rte_free(vf->vf_res);
+	vf->vsi_res = NULL;
+err_api:
+	rte_free(vf->aq_resp);
 err_aq:
 	i40e_shutdown_adminq(hw); /* ignore error */
 err:
@@ -1439,7 +1504,6 @@ i40evf_dev_interrupt_handler(__rte_unused struct rte_intr_handle *handle,
 
 done:
 	i40evf_enable_irq0(hw);
-	rte_intr_enable(&dev->pci_dev->intr_handle);
 }
 
 static int
@@ -2090,7 +2154,20 @@ i40evf_dev_start(struct rte_eth_dev *dev)
 		goto err_mac;
 	}
 
+	/* When a VF port is bound to VFIO-PCI, only miscellaneous interrupt
+	 * is mapped to VFIO vector 0 in i40evf_dev_init( ).
+	 * If previous VFIO interrupt mapping set in i40evf_dev_init( ) is
+	 * not cleared, it will fail when rte_intr_enable( ) tries to map Rx
+	 * queue interrupt to other VFIO vectors.
+	 * So clear uio/vfio intr/evevnfd first to avoid failure.
+	 */
+	if (dev->data->dev_conf.intr_conf.rxq != 0) {
+		rte_intr_disable(intr_handle);
+		rte_intr_enable(intr_handle);
+	}
+
 	i40evf_enable_queues_intr(dev);
+
 	return 0;
 
 err_mac:
@@ -2160,6 +2237,8 @@ i40evf_dev_link_update(struct rte_eth_dev *dev,
 	new_link.link_duplex = ETH_LINK_FULL_DUPLEX;
 	new_link.link_status = vf->link_up ? ETH_LINK_UP :
 					     ETH_LINK_DOWN;
+	new_link.link_autoneg =
+		dev->data->dev_conf.link_speeds & ETH_LINK_SPEED_FIXED;
 
 	i40evf_dev_atomic_write_link_status(dev, &new_link);
 
