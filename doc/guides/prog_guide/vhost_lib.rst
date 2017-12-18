@@ -53,7 +53,7 @@ vhost library should be able to:
 Vhost API Overview
 ------------------
 
-The following is an overview of the Vhost API functions:
+The following is an overview of some key Vhost API functions:
 
 * ``rte_vhost_driver_register(path, flags)``
 
@@ -95,7 +95,7 @@ The following is an overview of the Vhost API functions:
     * for VM2NIC case, the ``nb_tx_desc`` has to be small enough: <= 64 if virtio
       indirect feature is not enabled and <= 128 if it is enabled.
 
-      The is because when dequeue zero copy is enabled, guest Tx used vring will
+      This is because when dequeue zero copy is enabled, guest Tx used vring will
       be updated only when corresponding mbuf is freed. Thus, the nb_tx_desc
       has to be small enough so that the PMD driver will run out of available
       Tx descriptors and free mbufs timely. Otherwise, guest Tx vring would be
@@ -110,13 +110,27 @@ The following is an overview of the Vhost API functions:
       of those segments, thus the fewer the segments, the quicker we will get
       the mapping. NOTE: we may speed it by using tree searching in future.
 
-* ``rte_vhost_driver_session_start()``
+  - ``RTE_VHOST_USER_IOMMU_SUPPORT``
 
-  This function starts the vhost session loop to handle vhost messages. It
-  starts an infinite loop, therefore it should be called in a dedicated
-  thread.
+    IOMMU support will be enabled when this flag is set. It is disabled by
+    default.
 
-* ``rte_vhost_driver_callback_register(virtio_net_device_ops)``
+    Enabling this flag makes possible to use guest vIOMMU to protect vhost
+    from accessing memory the virtio device isn't allowed to, when the feature
+    is negotiated and an IOMMU device is declared.
+
+    However, this feature enables vhost-user's reply-ack protocol feature,
+    which implementation is buggy in Qemu v2.7.0-v2.9.0 when doing multiqueue.
+    Enabling this flag with these Qemu version results in Qemu being blocked
+    when multiple queue pairs are declared.
+
+* ``rte_vhost_driver_set_features(path, features)``
+
+  This function sets the feature bits the vhost-user driver supports. The
+  vhost-user driver could be vhost-user net, yet it could be something else,
+  say, vhost-user SCSI.
+
+* ``rte_vhost_driver_callback_register(path, vhost_device_ops)``
 
   This function registers a set of callbacks, to let DPDK applications take
   the appropriate action when some events happen. The following events are
@@ -124,18 +138,46 @@ The following is an overview of the Vhost API functions:
 
   * ``new_device(int vid)``
 
-    This callback is invoked when a virtio net device becomes ready. ``vid``
-    is the virtio net device ID.
+    This callback is invoked when a virtio device becomes ready. ``vid``
+    is the vhost device ID.
 
   * ``destroy_device(int vid)``
 
-    This callback is invoked when a virtio net device shuts down (or when the
-    vhost connection is broken).
+    This callback is invoked when a virtio device is paused or shut down.
 
   * ``vring_state_changed(int vid, uint16_t queue_id, int enable)``
 
     This callback is invoked when a specific queue's state is changed, for
     example to enabled or disabled.
+
+  * ``features_changed(int vid, uint64_t features)``
+
+    This callback is invoked when the features is changed. For example,
+    ``VHOST_F_LOG_ALL`` will be set/cleared at the start/end of live
+    migration, respectively.
+
+  * ``new_connection(int vid)``
+
+    This callback is invoked on new vhost-user socket connection. If DPDK
+    acts as the server the device should not be deleted before
+    ``destroy_connection`` callback is received.
+
+  * ``destroy_connection(int vid)``
+
+    This callback is invoked when vhost-user socket connection is closed.
+    It indicates that device with id ``vid`` is no longer in use and can be
+    safely deleted.
+
+* ``rte_vhost_driver_disable/enable_features(path, features))``
+
+  This function disables/enables some features. For example, it can be used to
+  disable mergeable buffers and TSO features, which both are enabled by
+  default.
+
+* ``rte_vhost_driver_start(path)``
+
+  This function triggers the vhost-user negotiation. It should be invoked at
+  the end of initializing a vhost-user driver.
 
 * ``rte_vhost_enqueue_burst(vid, queue_id, pkts, count)``
 
@@ -144,13 +186,6 @@ The following is an overview of the Vhost API functions:
 * ``rte_vhost_dequeue_burst(vid, queue_id, mbuf_pool, pkts, count)``
 
   Receives (dequeues) ``count`` packets from guest, and stored them at ``pkts``.
-
-* ``rte_vhost_feature_disable/rte_vhost_feature_enable(feature_mask)``
-
-  This function disables/enables some features. For example, it can be used to
-  disable mergeable buffers and TSO features, which both are enabled by
-  default.
-
 
 Vhost-user Implementations
 --------------------------

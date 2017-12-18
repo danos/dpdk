@@ -49,6 +49,7 @@
 #include <rte_ip.h>
 #include <rte_eal.h>
 #include <rte_malloc.h>
+#include <rte_bus_pci.h>
 
 #include "app.h"
 #include "pipeline.h"
@@ -69,7 +70,8 @@ static void
 app_init_core_map(struct app_params *app)
 {
 	APP_LOG(app, HIGH, "Initializing CPU core map ...");
-	app->core_map = cpu_core_map_init(4, 32, 4, 0);
+	app->core_map = cpu_core_map_init(RTE_MAX_NUMA_NODES, RTE_MAX_LCORE,
+				4, 0);
 
 	if (app->core_map == NULL)
 		rte_panic("Cannot create CPU core map\n");
@@ -295,11 +297,6 @@ app_init_eal(struct app_params *app)
 		app->eal_argv[n_args++] = strdup(buffer);
 	}
 
-	if ((p->xen_dom0_present) && (p->xen_dom0)) {
-		snprintf(buffer, sizeof(buffer), "--xen-dom0");
-		app->eal_argv[n_args++] = strdup(buffer);
-	}
-
 	snprintf(buffer, sizeof(buffer), "--");
 	app->eal_argv[n_args++] = strdup(buffer);
 
@@ -329,16 +326,14 @@ app_init_mempool(struct app_params *app)
 		struct app_mempool_params *p = &app->mempool_params[i];
 
 		APP_LOG(app, HIGH, "Initializing %s ...", p->name);
-		app->mempool[i] = rte_mempool_create(
-				p->name,
-				p->pool_size,
-				p->buffer_size,
-				p->cache_size,
-				sizeof(struct rte_pktmbuf_pool_private),
-				rte_pktmbuf_pool_init, NULL,
-				rte_pktmbuf_init, NULL,
-				p->cpu_socket_id,
-				0);
+		app->mempool[i] = rte_pktmbuf_pool_create(
+			p->name,
+			p->pool_size,
+			p->cache_size,
+			0, /* priv_size */
+			p->buffer_size -
+				sizeof(struct rte_mbuf), /* mbuf data size */
+			p->cpu_socket_id);
 
 		if (app->mempool[i] == NULL)
 			rte_panic("%s init error\n", p->name);
@@ -718,7 +713,8 @@ app_link_up_internal(struct app_params *app, struct app_link_params *cp)
 
 	/* PMD link up */
 	status = rte_eth_dev_set_link_up(cp->pmd_id);
-	if (status < 0)
+	/* Do not panic if PMD does not provide link up functionality */
+	if (status < 0 && status != -ENOTSUP)
 		rte_panic("%s (%" PRIu32 "): PMD set link up error %"
 			PRId32 "\n", cp->name, cp->pmd_id, status);
 
@@ -734,7 +730,8 @@ app_link_down_internal(struct app_params *app, struct app_link_params *cp)
 
 	/* PMD link down */
 	status = rte_eth_dev_set_link_down(cp->pmd_id);
-	if (status < 0)
+	/* Do not panic if PMD does not provide link down functionality */
+	if (status < 0 && status != -ENOTSUP)
 		rte_panic("%s (%" PRIu32 "): PMD set link down error %"
 			PRId32 "\n", cp->name, cp->pmd_id, status);
 
@@ -1002,16 +999,30 @@ app_init_link(struct app_params *app)
 			struct app_pktq_hwq_in_params *p_rxq =
 				&app->hwq_in_params[j];
 			uint32_t rxq_link_id, rxq_queue_id;
+			uint16_t nb_rxd = p_rxq->size;
 
 			sscanf(p_rxq->name, "RXQ%" PRIu32 ".%" PRIu32,
 				&rxq_link_id, &rxq_queue_id);
 			if (rxq_link_id != link_id)
 				continue;
 
+			status = rte_eth_dev_adjust_nb_rx_tx_desc(
+				p_link->pmd_id,
+				&nb_rxd,
+				NULL);
+			if (status < 0)
+				rte_panic("%s (%" PRIu32 "): "
+					"%s adjust number of Rx descriptors "
+					"error (%" PRId32 ")\n",
+					p_link->name,
+					p_link->pmd_id,
+					p_rxq->name,
+					status);
+
 			status = rte_eth_rx_queue_setup(
 				p_link->pmd_id,
 				rxq_queue_id,
-				p_rxq->size,
+				nb_rxd,
 				app_get_cpu_socket_id(p_link->pmd_id),
 				&p_rxq->conf,
 				app->mempool[p_rxq->mempool_id]);
@@ -1029,16 +1040,30 @@ app_init_link(struct app_params *app)
 			struct app_pktq_hwq_out_params *p_txq =
 				&app->hwq_out_params[j];
 			uint32_t txq_link_id, txq_queue_id;
+			uint16_t nb_txd = p_txq->size;
 
 			sscanf(p_txq->name, "TXQ%" PRIu32 ".%" PRIu32,
 				&txq_link_id, &txq_queue_id);
 			if (txq_link_id != link_id)
 				continue;
 
+			status = rte_eth_dev_adjust_nb_rx_tx_desc(
+				p_link->pmd_id,
+				NULL,
+				&nb_txd);
+			if (status < 0)
+				rte_panic("%s (%" PRIu32 "): "
+					"%s adjust number of Tx descriptors "
+					"error (%" PRId32 ")\n",
+					p_link->name,
+					p_link->pmd_id,
+					p_txq->name,
+					status);
+
 			status = rte_eth_tx_queue_setup(
 				p_link->pmd_id,
 				txq_queue_id,
-				p_txq->size,
+				nb_txd,
 				app_get_cpu_socket_id(p_link->pmd_id),
 				&p_txq->conf);
 			if (status < 0)
@@ -1207,7 +1232,7 @@ app_init_tap(struct app_params *app)
 
 #ifdef RTE_LIBRTE_KNI
 static int
-kni_config_network_interface(uint8_t port_id, uint8_t if_up) {
+kni_config_network_interface(uint16_t port_id, uint8_t if_up) {
 	int ret = 0;
 
 	if (port_id >= rte_eth_dev_count())
@@ -1221,7 +1246,7 @@ kni_config_network_interface(uint8_t port_id, uint8_t if_up) {
 }
 
 static int
-kni_change_mtu(uint8_t port_id, unsigned new_mtu) {
+kni_change_mtu(uint16_t port_id, unsigned int new_mtu) {
 	int ret;
 
 	if (port_id >= rte_eth_dev_count())

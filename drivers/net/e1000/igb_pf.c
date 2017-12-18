@@ -39,6 +39,7 @@
 #include <stdarg.h>
 #include <inttypes.h>
 
+#include <rte_bus_pci.h>
 #include <rte_interrupts.h>
 #include <rte_log.h>
 #include <rte_debug.h>
@@ -57,7 +58,9 @@
 static inline uint16_t
 dev_num_vf(struct rte_eth_dev *eth_dev)
 {
-	return eth_dev->pci_dev->max_vfs;
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+
+	return pci_dev->max_vfs;
 }
 
 static inline

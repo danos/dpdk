@@ -270,6 +270,7 @@ struct opt_tag {
 
 static const struct opt_tag opt_tags[] = {
 	{"_param_string_export", "params"},
+	{"_kmod_dep_export", "kmod"},
 };
 
 static int complete_pmd_entry(struct elf_info *info, struct pmd_driver *drv)
@@ -400,7 +401,7 @@ static void output_pmd_info_string(struct elf_info *info, char *outfile)
 
 int main(int argc, char **argv)
 {
-	struct elf_info info;
+	struct elf_info info = {0};
 	int rc = 1;
 
 	if (argc < 3) {

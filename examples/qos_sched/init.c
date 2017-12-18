@@ -100,12 +100,14 @@ static const struct rte_eth_conf port_conf = {
 };
 
 static int
-app_init_port(uint8_t portid, struct rte_mempool *mp)
+app_init_port(uint16_t portid, struct rte_mempool *mp)
 {
 	int ret;
 	struct rte_eth_link link;
 	struct rte_eth_rxconf rx_conf;
 	struct rte_eth_txconf tx_conf;
+	uint16_t rx_size;
+	uint16_t tx_size;
 
 	/* check if port already initialized (multistream configuration) */
 	if (app_inited_port_mask & (1u << portid))
@@ -127,34 +129,48 @@ app_init_port(uint8_t portid, struct rte_mempool *mp)
 	tx_conf.tx_deferred_start = 0;
 
 	/* init port */
-	RTE_LOG(INFO, APP, "Initializing port %"PRIu8"... ", portid);
+	RTE_LOG(INFO, APP, "Initializing port %"PRIu16"... ", portid);
 	fflush(stdout);
 	ret = rte_eth_dev_configure(portid, 1, 1, &port_conf);
 	if (ret < 0)
-		rte_exit(EXIT_FAILURE, "Cannot configure device: "
-				"err=%d, port=%"PRIu8"\n", ret, portid);
+		rte_exit(EXIT_FAILURE,
+			 "Cannot configure device: err=%d, port=%u\n",
+			 ret, portid);
+
+	rx_size = ring_conf.rx_size;
+	tx_size = ring_conf.tx_size;
+	ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &rx_size, &tx_size);
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE,
+			 "rte_eth_dev_adjust_nb_rx_tx_desc: err=%d,port=%u\n",
+			 ret, portid);
+	ring_conf.rx_size = rx_size;
+	ring_conf.tx_size = tx_size;
 
 	/* init one RX queue */
 	fflush(stdout);
 	ret = rte_eth_rx_queue_setup(portid, 0, (uint16_t)ring_conf.rx_size,
 		rte_eth_dev_socket_id(portid), &rx_conf, mp);
 	if (ret < 0)
-		rte_exit(EXIT_FAILURE, "rte_eth_tx_queue_setup: "
-				"err=%d, port=%"PRIu8"\n", ret, portid);
+		rte_exit(EXIT_FAILURE,
+			 "rte_eth_tx_queue_setup: err=%d, port=%u\n",
+			 ret, portid);
 
 	/* init one TX queue */
 	fflush(stdout);
 	ret = rte_eth_tx_queue_setup(portid, 0,
 		(uint16_t)ring_conf.tx_size, rte_eth_dev_socket_id(portid), &tx_conf);
 	if (ret < 0)
-		rte_exit(EXIT_FAILURE, "rte_eth_tx_queue_setup: err=%d, "
-				"port=%"PRIu8" queue=%d\n", ret, portid, 0);
+		rte_exit(EXIT_FAILURE,
+			 "rte_eth_tx_queue_setup: err=%d, port=%u queue=%d\n",
+			 ret, portid, 0);
 
 	/* Start device */
 	ret = rte_eth_dev_start(portid);
 	if (ret < 0)
-		rte_exit(EXIT_FAILURE, "rte_pmd_port_start: "
-				"err=%d, port=%"PRIu8"\n", ret, portid);
+		rte_exit(EXIT_FAILURE,
+			 "rte_pmd_port_start: err=%d, port=%u\n",
+			 ret, portid);
 
 	printf("done: ");
 
@@ -247,7 +263,7 @@ app_init_sched_port(uint32_t portid, uint32_t socketid)
 	uint32_t pipe, subport;
 	int err;
 
-	rte_eth_link_get((uint8_t)portid, &link);
+	rte_eth_link_get(portid, &link);
 
 	port_params.socket = socketid;
 	port_params.rate = (uint64_t) link.link_speed * 1000 * 1000 / 8;

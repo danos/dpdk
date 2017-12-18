@@ -48,7 +48,7 @@ Supported cipher algorithms:
 * ``RTE_CRYPTO_CIPHER_AES_CBC``
 * ``RTE_CRYPTO_CIPHER_AES_CTR``
 * ``RTE_CRYPTO_CIPHER_3DES_CTR``
-* ``RTE_CRYPTO_CIPHER_AES_GCM``
+* ``RTE_CRYPTO_CIPHER_DES_DOCSISBPI``
 
 Supported authentication algorithms:
 * ``RTE_CRYPTO_AUTH_AES_GMAC``
@@ -64,6 +64,10 @@ Supported authentication algorithms:
 * ``RTE_CRYPTO_AUTH_SHA256_HMAC``
 * ``RTE_CRYPTO_AUTH_SHA384_HMAC``
 * ``RTE_CRYPTO_AUTH_SHA512_HMAC``
+
+Supported AEAD algorithms:
+* ``RTE_CRYPTO_AEAD_AES_GCM``
+* ``RTE_CRYPTO_AEAD_AES_CCM``
 
 
 Installation
@@ -98,7 +102,7 @@ To verify real traffic l2fwd-crypto example can be used with this command:
 
 .. code-block:: console
 
-	sudo ./build/l2fwd-crypto -c 0x3 -n 4 --vdev "crypto_openssl"
+	sudo ./build/l2fwd-crypto -l 0-1 -n 4 --vdev "crypto_openssl"
 	--vdev "crypto_openssl"-- -p 0x3 --chain CIPHER_HASH
 	--cipher_op ENCRYPT --cipher_algo AES_CBC
 	--cipher_key 00:01:02:03:04:05:06:07:08:09:0a:0b:0c:0d:0e:0f
@@ -112,6 +116,7 @@ Limitations
 -----------
 
 * Maximum number of sessions is 2048.
-* Chained mbufs are not supported.
+* Chained mbufs are supported only for source mbuf (destination must be
+  contiguous).
 * Hash only is not supported for GCM and GMAC.
 * Cipher only is not supported for GCM and GMAC.

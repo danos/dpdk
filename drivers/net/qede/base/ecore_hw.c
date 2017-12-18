@@ -64,7 +64,9 @@ enum _ecore_status_t ecore_ptt_pool_alloc(struct ecore_hwfn *p_hwfn)
 	}
 
 	p_hwfn->p_ptt_pool = p_pool;
+#ifdef CONFIG_ECORE_LOCK_ALLOC
 	OSAL_SPIN_LOCK_ALLOC(p_hwfn, &p_pool->lock);
+#endif
 	OSAL_SPIN_LOCK_INIT(&p_pool->lock);
 
 	return ECORE_SUCCESS;
@@ -83,10 +85,11 @@ void ecore_ptt_invalidate(struct ecore_hwfn *p_hwfn)
 
 void ecore_ptt_pool_free(struct ecore_hwfn *p_hwfn)
 {
+#ifdef CONFIG_ECORE_LOCK_ALLOC
 	if (p_hwfn->p_ptt_pool)
 		OSAL_SPIN_LOCK_DEALLOC(&p_hwfn->p_ptt_pool->lock);
+#endif
 	OSAL_FREE(p_hwfn->p_dev, p_hwfn->p_ptt_pool);
-	p_hwfn->p_ptt_pool = OSAL_NULL;
 }
 
 struct ecore_ptt *ecore_ptt_acquire(struct ecore_hwfn *p_hwfn)
@@ -133,7 +136,7 @@ void ecore_ptt_release(struct ecore_hwfn *p_hwfn, struct ecore_ptt *p_ptt)
 	OSAL_SPIN_UNLOCK(&p_hwfn->p_ptt_pool->lock);
 }
 
-static u32 ecore_ptt_get_hw_addr(struct ecore_hwfn *p_hwfn, struct ecore_ptt *p_ptt)
+static u32 ecore_ptt_get_hw_addr(struct ecore_ptt *p_ptt)
 {
 	/* The HW is using DWORDS and we need to translate it to Bytes */
 	return OSAL_LE32_TO_CPU(p_ptt->pxp.offset) << 2;
@@ -156,7 +159,7 @@ void ecore_ptt_set_win(struct ecore_hwfn *p_hwfn,
 {
 	u32 prev_hw_addr;
 
-	prev_hw_addr = ecore_ptt_get_hw_addr(p_hwfn, p_ptt);
+	prev_hw_addr = ecore_ptt_get_hw_addr(p_ptt);
 
 	if (new_hw_addr == prev_hw_addr)
 		return;
@@ -178,7 +181,7 @@ void ecore_ptt_set_win(struct ecore_hwfn *p_hwfn,
 static u32 ecore_set_ptt(struct ecore_hwfn *p_hwfn,
 			 struct ecore_ptt *p_ptt, u32 hw_addr)
 {
-	u32 win_hw_addr = ecore_ptt_get_hw_addr(p_hwfn, p_ptt);
+	u32 win_hw_addr = ecore_ptt_get_hw_addr(p_ptt);
 	u32 offset;
 
 	offset = hw_addr - win_hw_addr;
@@ -496,8 +499,8 @@ static u32 ecore_dmae_idx_to_go_cmd(u8 idx)
 	return DMAE_REG_GO_C0 + (idx << 2);
 }
 
-static enum _ecore_status_t
-ecore_dmae_post_command(struct ecore_hwfn *p_hwfn, struct ecore_ptt *p_ptt)
+static enum _ecore_status_t ecore_dmae_post_command(struct ecore_hwfn *p_hwfn,
+						    struct ecore_ptt *p_ptt)
 {
 	struct dmae_cmd *p_command = p_hwfn->dmae_info.p_dmae_cmd;
 	u8 idx_cmd = p_hwfn->dmae_info.channel, i;
@@ -741,10 +744,10 @@ ecore_dmae_execute_sub_operation(struct ecore_hwfn *p_hwfn,
 
 	if (ecore_status != ECORE_SUCCESS) {
 		DP_NOTICE(p_hwfn, ECORE_MSG_HW,
-			  "ecore_dmae_host2grc: Wait Failed. source_addr"
-			  " 0x%lx, grc_addr 0x%lx, size_in_dwords 0x%x\n",
+			  "Wait Failed. source_addr 0x%lx, grc_addr 0x%lx, size_in_dwords 0x%x, intermediate buffer 0x%lx.\n",
 			  (unsigned long)src_addr, (unsigned long)dst_addr,
-			  length_dw);
+			  length_dw,
+			  (unsigned long)p_hwfn->dmae_info.intermediate_buffer_phys_addr);
 		return ecore_status;
 	}
 
@@ -773,6 +776,27 @@ ecore_dmae_execute_command(struct ecore_hwfn *p_hwfn,
 	u16 length_limit = DMAE_MAX_RW_SIZE;
 	enum _ecore_status_t ecore_status = ECORE_SUCCESS;
 	u32 offset = 0;
+
+	if (p_hwfn->p_dev->recov_in_prog) {
+		DP_VERBOSE(p_hwfn, ECORE_MSG_HW,
+			   "Recovery is in progress. Avoid DMAE transaction [{src: addr 0x%lx, type %d}, {dst: addr 0x%lx, type %d}, size %d].\n",
+			   (unsigned long)src_addr, src_type,
+			   (unsigned long)dst_addr, dst_type,
+			   size_in_dwords);
+		/* Return success to let the flow to be completed successfully
+		 * w/o any error handling.
+		 */
+		return ECORE_SUCCESS;
+	}
+
+	if (!cmd) {
+		DP_NOTICE(p_hwfn, true,
+			  "ecore_dmae_execute_sub_operation failed. Invalid state. source_addr 0x%lx, destination addr 0x%lx, size_in_dwords 0x%x\n",
+			  (unsigned long)src_addr,
+			  (unsigned long)dst_addr,
+			  length_cur);
+		return ECORE_INVAL;
+	}
 
 	ecore_dmae_opcode(p_hwfn,
 			  (src_type == ECORE_DMAE_ADDRESS_GRC),
@@ -904,44 +928,6 @@ ecore_dmae_host2host(struct ecore_hwfn *p_hwfn,
 	OSAL_MUTEX_RELEASE(&p_hwfn->dmae_info.mutex);
 
 	return rc;
-}
-
-u16 ecore_get_qm_pq(struct ecore_hwfn *p_hwfn,
-		    enum protocol_type proto,
-		    union ecore_qm_pq_params *p_params)
-{
-	u16 pq_id = 0;
-
-	if ((proto == PROTOCOLID_CORE ||
-	     proto == PROTOCOLID_ETH) && !p_params) {
-		DP_NOTICE(p_hwfn, true,
-			  "Protocol %d received NULL PQ params\n", proto);
-		return 0;
-	}
-
-	switch (proto) {
-	case PROTOCOLID_CORE:
-		if (p_params->core.tc == LB_TC)
-			pq_id = p_hwfn->qm_info.pure_lb_pq;
-		else if (p_params->core.tc == OOO_LB_TC)
-			pq_id = p_hwfn->qm_info.ooo_pq;
-		else
-			pq_id = p_hwfn->qm_info.offload_pq;
-		break;
-	case PROTOCOLID_ETH:
-		pq_id = p_params->eth.tc;
-		/* TODO - multi-CoS for VFs? */
-		if (p_params->eth.is_vf)
-			pq_id += p_hwfn->qm_info.vf_queues_offset +
-			    p_params->eth.vf_id;
-		break;
-	default:
-		pq_id = 0;
-	}
-
-	pq_id = CM_TX_PQ_BASE + pq_id + RESC_START(p_hwfn, ECORE_PQ);
-
-	return pq_id;
 }
 
 void ecore_hw_err_notify(struct ecore_hwfn *p_hwfn,

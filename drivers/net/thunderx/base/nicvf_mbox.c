@@ -1,7 +1,7 @@
 /*
  *   BSD LICENSE
  *
- *   Copyright (C) Cavium networks Ltd. 2016.
+ *   Copyright (C) Cavium, Inc. 2016.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Cavium networks nor the names of its
+ *     * Neither the name of Cavium, Inc nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -62,9 +62,6 @@ static const char *mbox_message[NIC_MBOX_MSG_MAX] =  {
 	[NIC_MBOX_MSG_RESET_STAT_COUNTER] = "NIC_MBOX_MSG_RESET_STAT_COUNTER",
 	[NIC_MBOX_MSG_CFG_DONE]           = "NIC_MBOX_MSG_CFG_DONE",
 	[NIC_MBOX_MSG_SHUTDOWN]           = "NIC_MBOX_MSG_SHUTDOWN",
-	[NIC_MBOX_MSG_RES_BIT]            = "NIC_MBOX_MSG_RES_BIT",
-	[NIC_MBOX_MSG_RSS_SIZE_RES_BIT]   = "NIC_MBOX_MSG_RSS_SIZE",
-	[NIC_MBOX_MSG_ALLOC_SQS_RES_BIT]  = "NIC_MBOX_MSG_ALLOC_SQS",
 };
 
 static inline const char * __attribute__((unused))
@@ -176,7 +173,7 @@ nicvf_handle_mbx_intr(struct nicvf *nic)
 	case NIC_MBOX_MSG_NACK:
 		nic->pf_nacked = true;
 		break;
-	case NIC_MBOX_MSG_RSS_SIZE_RES_BIT:
+	case NIC_MBOX_MSG_RSS_SIZE:
 		nic->rss_info.rss_size = mbx.rss_size.ind_tbl_size;
 		nic->pf_acked = true;
 		break;
@@ -186,7 +183,7 @@ nicvf_handle_mbx_intr(struct nicvf *nic)
 		nic->speed = mbx.link_status.speed;
 		nic->pf_acked = true;
 		break;
-	case NIC_MBOX_MSG_ALLOC_SQS_RES_BIT:
+	case NIC_MBOX_MSG_ALLOC_SQS:
 		assert_primary(nic);
 		if (mbx.sqs_alloc.qs_count != nic->sqs_count) {
 			nicvf_log_error("Received %" PRIu8 "/%" PRIu8
@@ -331,7 +328,7 @@ nicvf_mbox_qset_config(struct nicvf *nic, struct pf_qs_cfg *qs_cfg)
 {
 	struct nic_mbx mbx = { .msg = { 0 } };
 
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#if NICVF_BYTE_ORDER == NICVF_BIG_ENDIAN
 	qs_cfg->be = 1;
 #endif
 	/* Send a mailbox msg to PF to config Qset */

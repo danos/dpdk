@@ -43,7 +43,9 @@ DPDK documentation
    testpmd_app_ug/index
    nics/index
    cryptodevs/index
-   xen/index
+   eventdevs/index
+   mempool/index
+   platform/index
    contributing/index
    rel_notes/index
    faq/index

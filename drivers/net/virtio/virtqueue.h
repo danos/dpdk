@@ -38,7 +38,6 @@
 
 #include <rte_atomic.h>
 #include <rte_memory.h>
-#include <rte_memzone.h>
 #include <rte_mempool.h>
 
 #include "virtio_pci.h"
@@ -80,7 +79,7 @@ struct rte_mbuf;
 #define VIRTIO_MBUF_ADDR(mb, vq) \
 	((uint64_t)(*(uintptr_t *)((uintptr_t)(mb) + (vq)->offset)))
 #else
-#define VIRTIO_MBUF_ADDR(mb, vq) ((mb)->buf_physaddr)
+#define VIRTIO_MBUF_ADDR(mb, vq) ((mb)->buf_iova)
 #endif
 
 /**
@@ -143,8 +142,8 @@ struct virtio_net_ctrl_mac {
 } __attribute__((__packed__));
 
 #define VIRTIO_NET_CTRL_MAC    1
- #define VIRTIO_NET_CTRL_MAC_TABLE_SET        0
- #define VIRTIO_NET_CTRL_MAC_ADDR_SET         1
+#define VIRTIO_NET_CTRL_MAC_TABLE_SET        0
+#define VIRTIO_NET_CTRL_MAC_ADDR_SET         1
 
 /**
  * Control VLAN filtering
@@ -204,8 +203,8 @@ struct virtqueue {
 		struct virtnet_ctl cq;
 	};
 
-	phys_addr_t vq_ring_mem; /**< physical address of vring,
-				  * or virtual address for virtio_user. */
+	rte_iova_t vq_ring_mem; /**< physical address of vring,
+	                         * or virtual address for virtio_user. */
 
 	/**
 	 * Head of the free chain in the descriptor table. If
@@ -280,7 +279,21 @@ vring_desc_init(struct vring_desc *dp, uint16_t n)
 /**
  * Tell the backend not to interrupt us.
  */
-void virtqueue_disable_intr(struct virtqueue *vq);
+static inline void
+virtqueue_disable_intr(struct virtqueue *vq)
+{
+	vq->vq_ring.avail->flags |= VRING_AVAIL_F_NO_INTERRUPT;
+}
+
+/**
+ * Tell the backend to interrupt us.
+ */
+static inline void
+virtqueue_enable_intr(struct virtqueue *vq)
+{
+	vq->vq_ring.avail->flags &= (~VRING_AVAIL_F_NO_INTERRUPT);
+}
+
 /**
  *  Dump virtqueue internal structures, for debug purpose only.
  */

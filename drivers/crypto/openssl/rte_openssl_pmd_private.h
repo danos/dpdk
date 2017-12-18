@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2016-2017 Intel Corporation. All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -34,8 +34,11 @@
 #define _OPENSSL_PMD_PRIVATE_H_
 
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <openssl/des.h>
 
+#define CRYPTODEV_NAME_OPENSSL_PMD	crypto_openssl
+/**< Open SSL Crypto PMD device name */
 
 #define OPENSSL_LOG_ERR(fmt, args...) \
 	RTE_LOG(ERR, CRYPTODEV, "[%s] %s() line %u: " fmt "\n",  \
@@ -57,11 +60,14 @@
 #define OPENSSL_LOG_DBG(fmt, args...)
 #endif
 
+/* Maximum length for digest (SHA-512 needs 64 bytes) */
+#define DIGEST_LENGTH_MAX 64
 
 /** OPENSSL operation order mode enumerator */
 enum openssl_chain_order {
 	OPENSSL_CHAIN_ONLY_CIPHER,
 	OPENSSL_CHAIN_ONLY_AUTH,
+	OPENSSL_CHAIN_CIPHER_BPI,
 	OPENSSL_CHAIN_CIPHER_AUTH,
 	OPENSSL_CHAIN_AUTH_CIPHER,
 	OPENSSL_CHAIN_COMBINED,
@@ -100,12 +106,26 @@ struct openssl_qp {
 	/**< Session Mempool */
 	struct rte_cryptodev_stats stats;
 	/**< Queue pair statistics */
+	uint8_t temp_digest[DIGEST_LENGTH_MAX];
+	/**< Buffer used to store the digest generated
+	 * by the driver when verifying a digest provided
+	 * by the user (using authentication verify operation)
+	 */
 } __rte_cache_aligned;
 
 /** OPENSSL crypto private session structure */
 struct openssl_session {
 	enum openssl_chain_order chain_order;
 	/**< chain order mode */
+
+	struct {
+		uint16_t length;
+		uint16_t offset;
+	} iv;
+	/**< IV parameters */
+
+	enum rte_crypto_aead_algorithm aead_algo;
+	/**< AEAD algorithm */
 
 	/** Cipher Parameters */
 	struct {
@@ -127,6 +147,7 @@ struct openssl_session {
 		/**< pointer to EVP algorithm function */
 		EVP_CIPHER_CTX *ctx;
 		/**< pointer to EVP context structure */
+		EVP_CIPHER_CTX *bpi_ctx;
 	} cipher;
 
 	/** Authentication Parameters */
@@ -151,10 +172,15 @@ struct openssl_session {
 				/**< pointer to EVP key */
 				const EVP_MD *evp_algo;
 				/**< pointer to EVP algorithm function */
-				EVP_MD_CTX *ctx;
+				HMAC_CTX *ctx;
 				/**< pointer to EVP context structure */
 			} hmac;
 		};
+
+		uint16_t aad_length;
+		/**< AAD length */
+		uint16_t digest_length;
+		/**< digest length */
 	} auth;
 
 } __rte_cache_aligned;

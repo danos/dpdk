@@ -41,37 +41,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <rte_virtio_net.h>
-
-/**
- * Disable features in feature_mask.
- *
- * @param feature_mask
- *  Vhost features defined in "linux/virtio_net.h".
- * @return
- *  - On success, zero.
- *  - On failure, a negative value.
- */
-int rte_eth_vhost_feature_disable(uint64_t feature_mask);
-
-/**
- * Enable features in feature_mask.
- *
- * @param feature_mask
- *  Vhost features defined in "linux/virtio_net.h".
- * @return
- *  - On success, zero.
- *  - On failure, a negative value.
- */
-int rte_eth_vhost_feature_enable(uint64_t feature_mask);
-
-/**
- * Returns currently supported vhost features.
- *
- * @return
- *  Vhost features defined in "linux/virtio_net.h".
- */
-uint64_t rte_eth_vhost_feature_get(void);
+#include <rte_vhost.h>
 
 /*
  * Event description.
@@ -99,7 +69,7 @@ struct rte_eth_vhost_queue_event {
  *  - On success, zero.
  *  - On failure, a negative value.
  */
-int rte_eth_vhost_get_queue_event(uint8_t port_id,
+int rte_eth_vhost_get_queue_event(uint16_t port_id,
 		struct rte_eth_vhost_queue_event *event);
 
 /**
@@ -109,7 +79,7 @@ int rte_eth_vhost_get_queue_event(uint8_t port_id,
  *  - On success, the 'vid' associated with 'port_id'.
  *  - On failure, a negative value.
  */
-int rte_eth_vhost_get_vid_from_port_id(uint8_t port_id);
+int rte_eth_vhost_get_vid_from_port_id(uint16_t port_id);
 
 #ifdef __cplusplus
 }

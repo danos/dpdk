@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2016-2017 Intel Corporation. All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -57,7 +57,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 16,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -78,7 +78,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 16,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -99,7 +99,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 20,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -120,7 +120,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 20,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -141,7 +141,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 28,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -162,7 +162,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 28,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -183,31 +183,31 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 32,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
 	{	/* SHA256 */
-			.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
-			{.sym = {
-				.xform_type = RTE_CRYPTO_SYM_XFORM_AUTH,
-				{.auth = {
-					.algo = RTE_CRYPTO_AUTH_SHA256,
-					.block_size = 64,
-					.key_size = {
-						.min = 0,
-						.max = 0,
-						.increment = 0
-					},
-					.digest_size = {
-						.min = 32,
-						.max = 32,
-						.increment = 0
-					},
-					.aad_size = { 0 }
-				}, }
+		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
+		{.sym = {
+			.xform_type = RTE_CRYPTO_SYM_XFORM_AUTH,
+			{.auth = {
+				.algo = RTE_CRYPTO_AUTH_SHA256,
+				.block_size = 64,
+				.key_size = {
+					.min = 0,
+					.max = 0,
+					.increment = 0
+				},
+				.digest_size = {
+					.min = 32,
+					.max = 32,
+					.increment = 0
+				},
+				.iv_size = { 0 }
 			}, }
-		},
+		}, }
+	},
 	{	/* SHA384 HMAC */
 		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
 		{.sym = {
@@ -225,7 +225,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 48,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -246,7 +246,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 48,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -267,7 +267,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 64,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -288,7 +288,7 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 64,
 					.increment = 0
 				},
-				.aad_size = { 0 }
+				.iv_size = { 0 }
 			}, }
 		}, }
 	},
@@ -332,12 +332,12 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 			}, }
 		}, }
 	},
-	{	/* AES GCM (AUTH) */
+	{	/* AES GCM */
 		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
 		{.sym = {
-			.xform_type = RTE_CRYPTO_SYM_XFORM_AUTH,
-			{.auth = {
-				.algo = RTE_CRYPTO_AUTH_AES_GCM,
+			.xform_type = RTE_CRYPTO_SYM_XFORM_AEAD,
+			{.aead = {
+				.algo = RTE_CRYPTO_AEAD_AES_GCM,
 				.block_size = 16,
 				.key_size = {
 					.min = 16,
@@ -353,27 +353,42 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.min = 0,
 					.max = 65535,
 					.increment = 1
-				}
+				},
+				.iv_size = {
+					.min = 12,
+					.max = 16,
+					.increment = 4
+				},
 			}, }
 		}, }
 	},
-	{	/* AES GCM (CIPHER) */
+	{	/* AES CCM */
 		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
 		{.sym = {
-			.xform_type = RTE_CRYPTO_SYM_XFORM_CIPHER,
-			{.cipher = {
-				.algo = RTE_CRYPTO_CIPHER_AES_GCM,
+			.xform_type = RTE_CRYPTO_SYM_XFORM_AEAD,
+			{.aead = {
+				.algo = RTE_CRYPTO_AEAD_AES_CCM,
 				.block_size = 16,
 				.key_size = {
 					.min = 16,
 					.max = 32,
 					.increment = 8
 				},
-				.iv_size = {
-					.min = 12,
+				.digest_size = {
+					.min = 4,
 					.max = 16,
-					.increment = 4
-				}
+					.increment = 2
+				},
+				.aad_size = {
+					.min = 0,
+					.max = 65535,
+					.increment = 1
+				},
+				.iv_size = {
+					.min = 7,
+					.max = 13,
+					.increment = 1
+				},
 			}, }
 		}, }
 	},
@@ -394,9 +409,9 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.max = 16,
 					.increment = 0
 				},
-				.aad_size = {
-					.min = 8,
-					.max = 65532,
+				.iv_size = {
+					.min = 12,
+					.max = 16,
 					.increment = 4
 				}
 			}, }
@@ -442,6 +457,46 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 			}, }
 		}, }
 	},
+	{	/* DES CBC */
+		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
+		{.sym = {
+			.xform_type = RTE_CRYPTO_SYM_XFORM_CIPHER,
+			{.cipher = {
+				.algo = RTE_CRYPTO_CIPHER_DES_CBC,
+				.block_size = 8,
+				.key_size = {
+					.min = 8,
+					.max = 8,
+					.increment = 0
+				},
+				.iv_size = {
+					.min = 8,
+					.max = 8,
+					.increment = 0
+				}
+			}, }
+		}, }
+	},
+	{	/* DES DOCSIS BPI */
+		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
+		{.sym = {
+			.xform_type = RTE_CRYPTO_SYM_XFORM_CIPHER,
+			{.cipher = {
+				.algo = RTE_CRYPTO_CIPHER_DES_DOCSISBPI,
+				.block_size = 8,
+				.key_size = {
+					.min = 8,
+					.max = 8,
+					.increment = 0
+				},
+				.iv_size = {
+					.min = 8,
+					.max = 8,
+					.increment = 0
+				}
+			}, }
+		}, }
+	},
 
 	RTE_CRYPTODEV_END_OF_CAPABILITIES_LIST()
 };
@@ -449,7 +504,8 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 
 /** Configure device */
 static int
-openssl_pmd_config(__rte_unused struct rte_cryptodev *dev)
+openssl_pmd_config(__rte_unused struct rte_cryptodev *dev,
+		__rte_unused struct rte_cryptodev_config *config)
 {
 	return 0;
 }
@@ -515,7 +571,7 @@ openssl_pmd_info_get(struct rte_cryptodev *dev,
 	struct openssl_private *internals = dev->data->dev_private;
 
 	if (dev_info != NULL) {
-		dev_info->dev_type = dev->dev_type;
+		dev_info->driver_id = dev->driver_id;
 		dev_info->feature_flags = dev->feature_flags;
 		dev_info->capabilities = openssl_pmd_capabilities;
 		dev_info->max_nb_queue_pairs = internals->max_nb_qpairs;
@@ -559,7 +615,7 @@ openssl_pmd_qp_create_processed_ops_ring(struct openssl_qp *qp,
 
 	r = rte_ring_lookup(qp->name);
 	if (r) {
-		if (r->prod.size >= ring_size) {
+		if (rte_ring_get_size(r) >= ring_size) {
 			OPENSSL_LOG_INFO(
 				"Reusing existing ring %s for processed ops",
 				 qp->name);
@@ -581,7 +637,7 @@ openssl_pmd_qp_create_processed_ops_ring(struct openssl_qp *qp,
 static int
 openssl_pmd_qp_setup(struct rte_cryptodev *dev, uint16_t qp_id,
 		const struct rte_cryptodev_qp_conf *qp_conf,
-		 int socket_id)
+		int socket_id, struct rte_mempool *session_pool)
 {
 	struct openssl_qp *qp = NULL;
 
@@ -606,7 +662,7 @@ openssl_pmd_qp_setup(struct rte_cryptodev *dev, uint16_t qp_id,
 	if (qp->processed_ops == NULL)
 		goto qp_setup_cleanup;
 
-	qp->sess_mp = dev->data->session_pool;
+	qp->sess_mp = session_pool;
 
 	memset(&qp->stats, 0, sizeof(qp->stats));
 
@@ -650,36 +706,57 @@ openssl_pmd_session_get_size(struct rte_cryptodev *dev __rte_unused)
 }
 
 /** Configure the session from a crypto xform chain */
-static void *
+static int
 openssl_pmd_session_configure(struct rte_cryptodev *dev __rte_unused,
-		struct rte_crypto_sym_xform *xform,	void *sess)
+		struct rte_crypto_sym_xform *xform,
+		struct rte_cryptodev_sym_session *sess,
+		struct rte_mempool *mempool)
 {
+	void *sess_private_data;
+	int ret;
+
 	if (unlikely(sess == NULL)) {
 		OPENSSL_LOG_ERR("invalid session struct");
-		return NULL;
+		return -EINVAL;
 	}
 
-	if (openssl_set_session_parameters(
-			sess, xform) != 0) {
+	if (rte_mempool_get(mempool, &sess_private_data)) {
+		CDEV_LOG_ERR(
+			"Couldn't get object from session mempool");
+		return -ENOMEM;
+	}
+
+	ret = openssl_set_session_parameters(sess_private_data, xform);
+	if (ret != 0) {
 		OPENSSL_LOG_ERR("failed configure session parameters");
-		return NULL;
+
+		/* Return session to mempool */
+		rte_mempool_put(mempool, sess_private_data);
+		return ret;
 	}
 
-	return sess;
+	set_session_private_data(sess, dev->driver_id,
+			sess_private_data);
+
+	return 0;
 }
 
 
 /** Clear the memory of session so it doesn't leave key material behind */
 static void
-openssl_pmd_session_clear(struct rte_cryptodev *dev __rte_unused, void *sess)
+openssl_pmd_session_clear(struct rte_cryptodev *dev,
+		struct rte_cryptodev_sym_session *sess)
 {
-	/*
-	 * Current just resetting the whole data structure, need to investigate
-	 * whether a more selective reset of key would be more performant
-	 */
-	if (sess) {
-		openssl_reset_session(sess);
-		memset(sess, 0, sizeof(struct openssl_session));
+	uint8_t index = dev->driver_id;
+	void *sess_priv = get_session_private_data(sess, index);
+
+	/* Zero out the whole structure */
+	if (sess_priv) {
+		openssl_reset_session(sess_priv);
+		memset(sess_priv, 0, sizeof(struct openssl_session));
+		struct rte_mempool *sess_mp = rte_mempool_from_obj(sess_priv);
+		set_session_private_data(sess, index, NULL);
+		rte_mempool_put(sess_mp, sess_priv);
 	}
 }
 

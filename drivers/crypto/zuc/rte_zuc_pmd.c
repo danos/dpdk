@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2016-2017 Intel Corporation. All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -31,40 +31,19 @@
  */
 
 #include <rte_common.h>
-#include <rte_config.h>
 #include <rte_hexdump.h>
 #include <rte_cryptodev.h>
 #include <rte_cryptodev_pmd.h>
-#include <rte_vdev.h>
+#include <rte_bus_vdev.h>
 #include <rte_malloc.h>
 #include <rte_cpuflags.h>
 
 #include "rte_zuc_pmd_private.h"
 
-#define ZUC_DIGEST_LENGTH 4
 #define ZUC_MAX_BURST 8
 #define BYTE_LEN 8
 
-/**
- * Global static parameter used to create a unique name for each ZUC
- * crypto device.
- */
-static unsigned unique_name_id;
-
-static inline int
-create_unique_device_name(char *name, size_t size)
-{
-	int ret;
-
-	if (name == NULL)
-		return -EINVAL;
-
-	ret = snprintf(name, size, "%s_%u", RTE_STR(CRYPTODEV_NAME_ZUC_PMD),
-			unique_name_id++);
-	if (ret < 0)
-		return ret;
-	return 0;
-}
+static uint8_t cryptodev_driver_id;
 
 /** Get xform chain order. */
 static enum zuc_operation
@@ -128,13 +107,20 @@ zuc_set_session_parameters(struct zuc_session *sess,
 	case ZUC_OP_NOT_SUPPORTED:
 	default:
 		ZUC_LOG_ERR("Unsupported operation chain order parameter");
-		return -EINVAL;
+		return -ENOTSUP;
 	}
 
 	if (cipher_xform) {
 		/* Only ZUC EEA3 supported */
 		if (cipher_xform->cipher.algo != RTE_CRYPTO_CIPHER_ZUC_EEA3)
+			return -ENOTSUP;
+
+		if (cipher_xform->cipher.iv.length != ZUC_IV_KEY_LENGTH) {
+			ZUC_LOG_ERR("Wrong IV length");
 			return -EINVAL;
+		}
+		sess->cipher_iv_offset = cipher_xform->cipher.iv.offset;
+
 		/* Copy the key */
 		memcpy(sess->pKey_cipher, cipher_xform->cipher.key.data,
 				ZUC_IV_KEY_LENGTH);
@@ -143,8 +129,21 @@ zuc_set_session_parameters(struct zuc_session *sess,
 	if (auth_xform) {
 		/* Only ZUC EIA3 supported */
 		if (auth_xform->auth.algo != RTE_CRYPTO_AUTH_ZUC_EIA3)
+			return -ENOTSUP;
+
+		if (auth_xform->auth.digest_length != ZUC_DIGEST_LENGTH) {
+			ZUC_LOG_ERR("Wrong digest length");
 			return -EINVAL;
+		}
+
 		sess->auth_op = auth_xform->auth.op;
+
+		if (auth_xform->auth.iv.length != ZUC_IV_KEY_LENGTH) {
+			ZUC_LOG_ERR("Wrong IV length");
+			return -EINVAL;
+		}
+		sess->auth_iv_offset = auth_xform->auth.iv.offset;
+
 		/* Copy the key */
 		memcpy(sess->pKey_hash, auth_xform->auth.key.data,
 				ZUC_IV_KEY_LENGTH);
@@ -160,26 +159,39 @@ zuc_set_session_parameters(struct zuc_session *sess,
 static struct zuc_session *
 zuc_get_session(struct zuc_qp *qp, struct rte_crypto_op *op)
 {
-	struct zuc_session *sess;
+	struct zuc_session *sess = NULL;
 
-	if (op->sym->sess_type == RTE_CRYPTO_SYM_OP_WITH_SESSION) {
-		if (unlikely(op->sym->session->dev_type !=
-				RTE_CRYPTODEV_ZUC_PMD))
+	if (op->sess_type == RTE_CRYPTO_OP_WITH_SESSION) {
+		if (likely(op->sym->session != NULL))
+			sess = (struct zuc_session *)get_session_private_data(
+					op->sym->session,
+					cryptodev_driver_id);
+	} else {
+		void *_sess = NULL;
+		void *_sess_private_data = NULL;
+
+		if (rte_mempool_get(qp->sess_mp, (void **)&_sess))
 			return NULL;
 
-		sess = (struct zuc_session *)op->sym->session->_private;
-	} else  {
-		struct rte_cryptodev_session *c_sess = NULL;
-
-		if (rte_mempool_get(qp->sess_mp, (void **)&c_sess))
+		if (rte_mempool_get(qp->sess_mp, (void **)&_sess_private_data))
 			return NULL;
 
-		sess = (struct zuc_session *)c_sess->_private;
+		sess = (struct zuc_session *)_sess_private_data;
 
 		if (unlikely(zuc_set_session_parameters(sess,
-				op->sym->xform) != 0))
-			return NULL;
+				op->sym->xform) != 0)) {
+			rte_mempool_put(qp->sess_mp, _sess);
+			rte_mempool_put(qp->sess_mp, _sess_private_data);
+			sess = NULL;
+		}
+		op->sym->session = (struct rte_cryptodev_sym_session *)_sess;
+		set_session_private_data(op->sym->session, cryptodev_driver_id,
+			_sess_private_data);
 	}
+
+	if (unlikely(sess == NULL))
+		op->status = RTE_CRYPTO_OP_STATUS_INVALID_SESSION;
+
 
 	return sess;
 }
@@ -193,18 +205,11 @@ process_zuc_cipher_op(struct rte_crypto_op **ops,
 	unsigned i;
 	uint8_t processed_ops = 0;
 	uint8_t *src[ZUC_MAX_BURST], *dst[ZUC_MAX_BURST];
-	uint8_t *IV[ZUC_MAX_BURST];
+	uint8_t *iv[ZUC_MAX_BURST];
 	uint32_t num_bytes[ZUC_MAX_BURST];
 	uint8_t *cipher_keys[ZUC_MAX_BURST];
 
 	for (i = 0; i < num_ops; i++) {
-		/* Sanity checks. */
-		if (unlikely(ops[i]->sym->cipher.iv.length != ZUC_IV_KEY_LENGTH)) {
-			ops[i]->status = RTE_CRYPTO_OP_STATUS_INVALID_ARGS;
-			ZUC_LOG_ERR("iv");
-			break;
-		}
-
 		if (((ops[i]->sym->cipher.data.length % BYTE_LEN) != 0)
 				|| ((ops[i]->sym->cipher.data.offset
 					% BYTE_LEN) != 0)) {
@@ -213,6 +218,19 @@ process_zuc_cipher_op(struct rte_crypto_op **ops,
 			break;
 		}
 
+#ifdef RTE_LIBRTE_PMD_ZUC_DEBUG
+		if (!rte_pktmbuf_is_contiguous(ops[i]->sym->m_src) ||
+				(ops[i]->sym->m_dst != NULL &&
+				!rte_pktmbuf_is_contiguous(
+						ops[i]->sym->m_dst))) {
+			ZUC_LOG_ERR("PMD supports only contiguous mbufs, "
+				"op (%p) provides noncontiguous mbuf as "
+				"source/destination buffer.\n", ops[i]);
+			ops[i]->status = RTE_CRYPTO_OP_STATUS_INVALID_ARGS;
+			break;
+		}
+#endif
+
 		src[i] = rte_pktmbuf_mtod(ops[i]->sym->m_src, uint8_t *) +
 				(ops[i]->sym->cipher.data.offset >> 3);
 		dst[i] = ops[i]->sym->m_dst ?
@@ -220,7 +238,8 @@ process_zuc_cipher_op(struct rte_crypto_op **ops,
 				(ops[i]->sym->cipher.data.offset >> 3) :
 			rte_pktmbuf_mtod(ops[i]->sym->m_src, uint8_t *) +
 				(ops[i]->sym->cipher.data.offset >> 3);
-		IV[i] = ops[i]->sym->cipher.iv.data;
+		iv[i] = rte_crypto_op_ctod_offset(ops[i], uint8_t *,
+				session->cipher_iv_offset);
 		num_bytes[i] = ops[i]->sym->cipher.data.length >> 3;
 
 		cipher_keys[i] = session->pKey_cipher;
@@ -228,7 +247,7 @@ process_zuc_cipher_op(struct rte_crypto_op **ops,
 		processed_ops++;
 	}
 
-	sso_zuc_eea3_n_buffer(cipher_keys, IV, src, dst,
+	sso_zuc_eea3_n_buffer(cipher_keys, iv, src, dst,
 			num_bytes, processed_ops);
 
 	return processed_ops;
@@ -236,7 +255,7 @@ process_zuc_cipher_op(struct rte_crypto_op **ops,
 
 /** Generate/verify hash from mbufs with same hash key. */
 static int
-process_zuc_hash_op(struct rte_crypto_op **ops,
+process_zuc_hash_op(struct zuc_qp *qp, struct rte_crypto_op **ops,
 		struct zuc_session *session,
 		uint8_t num_ops)
 {
@@ -245,20 +264,9 @@ process_zuc_hash_op(struct rte_crypto_op **ops,
 	uint8_t *src;
 	uint32_t *dst;
 	uint32_t length_in_bits;
+	uint8_t *iv;
 
 	for (i = 0; i < num_ops; i++) {
-		if (unlikely(ops[i]->sym->auth.aad.length != ZUC_IV_KEY_LENGTH)) {
-			ops[i]->status = RTE_CRYPTO_OP_STATUS_INVALID_ARGS;
-			ZUC_LOG_ERR("aad");
-			break;
-		}
-
-		if (unlikely(ops[i]->sym->auth.digest.length != ZUC_DIGEST_LENGTH)) {
-			ops[i]->status = RTE_CRYPTO_OP_STATUS_INVALID_ARGS;
-			ZUC_LOG_ERR("digest");
-			break;
-		}
-
 		/* Data must be byte aligned */
 		if ((ops[i]->sym->auth.data.offset % BYTE_LEN) != 0) {
 			ops[i]->status = RTE_CRYPTO_OP_STATUS_INVALID_ARGS;
@@ -270,27 +278,24 @@ process_zuc_hash_op(struct rte_crypto_op **ops,
 
 		src = rte_pktmbuf_mtod(ops[i]->sym->m_src, uint8_t *) +
 				(ops[i]->sym->auth.data.offset >> 3);
+		iv = rte_crypto_op_ctod_offset(ops[i], uint8_t *,
+				session->auth_iv_offset);
 
 		if (session->auth_op == RTE_CRYPTO_AUTH_OP_VERIFY) {
-			dst = (uint32_t *)rte_pktmbuf_append(ops[i]->sym->m_src,
-					ops[i]->sym->auth.digest.length);
+			dst = (uint32_t *)qp->temp_digest;
 
 			sso_zuc_eia3_1_buffer(session->pKey_hash,
-					ops[i]->sym->auth.aad.data, src,
+					iv, src,
 					length_in_bits,	dst);
 			/* Verify digest. */
 			if (memcmp(dst, ops[i]->sym->auth.digest.data,
-					ops[i]->sym->auth.digest.length) != 0)
+					ZUC_DIGEST_LENGTH) != 0)
 				ops[i]->status = RTE_CRYPTO_OP_STATUS_AUTH_FAILED;
-
-			/* Trim area used for digest from mbuf. */
-			rte_pktmbuf_trim(ops[i]->sym->m_src,
-					ops[i]->sym->auth.digest.length);
 		} else  {
 			dst = (uint32_t *)ops[i]->sym->auth.digest.data;
 
 			sso_zuc_eia3_1_buffer(session->pKey_hash,
-					ops[i]->sym->auth.aad.data, src,
+					iv, src,
 					length_in_bits, dst);
 		}
 		processed_ops++;
@@ -314,16 +319,16 @@ process_ops(struct rte_crypto_op **ops, struct zuc_session *session,
 				session, num_ops);
 		break;
 	case ZUC_OP_ONLY_AUTH:
-		processed_ops = process_zuc_hash_op(ops, session,
+		processed_ops = process_zuc_hash_op(qp, ops, session,
 				num_ops);
 		break;
 	case ZUC_OP_CIPHER_AUTH:
 		processed_ops = process_zuc_cipher_op(ops, session,
 				num_ops);
-		process_zuc_hash_op(ops, session, processed_ops);
+		process_zuc_hash_op(qp, ops, session, processed_ops);
 		break;
 	case ZUC_OP_AUTH_CIPHER:
-		processed_ops = process_zuc_hash_op(ops, session,
+		processed_ops = process_zuc_hash_op(qp, ops, session,
 				num_ops);
 		process_zuc_cipher_op(ops, session, processed_ops);
 		break;
@@ -340,14 +345,18 @@ process_ops(struct rte_crypto_op **ops, struct zuc_session *session,
 		if (ops[i]->status == RTE_CRYPTO_OP_STATUS_NOT_PROCESSED)
 			ops[i]->status = RTE_CRYPTO_OP_STATUS_SUCCESS;
 		/* Free session if a session-less crypto op. */
-		if (ops[i]->sym->sess_type == RTE_CRYPTO_SYM_OP_SESSIONLESS) {
+		if (ops[i]->sess_type == RTE_CRYPTO_OP_SESSIONLESS) {
+			memset(session, 0, sizeof(struct zuc_session));
+			memset(ops[i]->sym->session, 0,
+					rte_cryptodev_get_header_session_size());
+			rte_mempool_put(qp->sess_mp, session);
 			rte_mempool_put(qp->sess_mp, ops[i]->sym->session);
 			ops[i]->sym->session = NULL;
 		}
 	}
 
 	enqueued_ops = rte_ring_enqueue_burst(qp->processed_ops,
-			(void **)ops, processed_ops);
+			(void **)ops, processed_ops, NULL);
 	qp->qp_stats.enqueued_count += enqueued_ops;
 	*accumulated_enqueued_ops += enqueued_ops;
 
@@ -441,47 +450,31 @@ zuc_pmd_dequeue_burst(void *queue_pair,
 	unsigned nb_dequeued;
 
 	nb_dequeued = rte_ring_dequeue_burst(qp->processed_ops,
-			(void **)c_ops, nb_ops);
+			(void **)c_ops, nb_ops, NULL);
 	qp->qp_stats.dequeued_count += nb_dequeued;
 
 	return nb_dequeued;
 }
 
-static int cryptodev_zuc_remove(const char *name);
+static int cryptodev_zuc_remove(struct rte_vdev_device *vdev);
 
 static int
 cryptodev_zuc_create(const char *name,
-		struct rte_crypto_vdev_init_params *init_params)
+		struct rte_vdev_device *vdev,
+		struct rte_cryptodev_pmd_init_params *init_params)
 {
 	struct rte_cryptodev *dev;
-	char crypto_dev_name[RTE_CRYPTODEV_NAME_MAX_LEN];
 	struct zuc_private *internals;
-	uint64_t cpu_flags = 0;
-
-	/* Check CPU for supported vector instruction set */
-	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_SSE4_1))
-		cpu_flags |= RTE_CRYPTODEV_FF_CPU_SSE;
-	else {
-		ZUC_LOG_ERR("Vector instructions are not supported by CPU");
-		return -EFAULT;
-	}
+	uint64_t cpu_flags = RTE_CRYPTODEV_FF_CPU_SSE;
 
 
-	/* Create a unique device name. */
-	if (create_unique_device_name(crypto_dev_name,
-			RTE_CRYPTODEV_NAME_MAX_LEN) != 0) {
-		ZUC_LOG_ERR("failed to create unique cryptodev name");
-		return -EINVAL;
-	}
-
-	dev = rte_cryptodev_pmd_virtual_dev_init(crypto_dev_name,
-			sizeof(struct zuc_private), init_params->socket_id);
+	dev = rte_cryptodev_pmd_create(name, &vdev->device, init_params);
 	if (dev == NULL) {
 		ZUC_LOG_ERR("failed to create cryptodev vdev");
 		goto init_error;
 	}
 
-	dev->dev_type = RTE_CRYPTODEV_ZUC_PMD;
+	dev->driver_id = cryptodev_driver_id;
 	dev->dev_ops = rte_zuc_pmd_ops;
 
 	/* Register RX/TX burst functions for data path. */
@@ -499,45 +492,52 @@ cryptodev_zuc_create(const char *name,
 
 	return 0;
 init_error:
-	ZUC_LOG_ERR("driver %s: cryptodev_zuc_create failed", name);
+	ZUC_LOG_ERR("driver %s: cryptodev_zuc_create failed",
+			init_params->name);
 
-	cryptodev_zuc_remove(crypto_dev_name);
+	cryptodev_zuc_remove(vdev);
 	return -EFAULT;
 }
 
 static int
-cryptodev_zuc_probe(const char *name,
-		const char *input_args)
+cryptodev_zuc_probe(struct rte_vdev_device *vdev)
 {
-	struct rte_crypto_vdev_init_params init_params = {
-		RTE_CRYPTODEV_VDEV_DEFAULT_MAX_NB_QUEUE_PAIRS,
-		RTE_CRYPTODEV_VDEV_DEFAULT_MAX_NB_SESSIONS,
-		rte_socket_id()
+	struct rte_cryptodev_pmd_init_params init_params = {
+		"",
+		sizeof(struct zuc_private),
+		rte_socket_id(),
+		RTE_CRYPTODEV_PMD_DEFAULT_MAX_NB_QUEUE_PAIRS,
+		RTE_CRYPTODEV_PMD_DEFAULT_MAX_NB_SESSIONS
 	};
+	const char *name;
+	const char *input_args;
 
-	rte_cryptodev_parse_vdev_init_params(&init_params, input_args);
+	name = rte_vdev_device_name(vdev);
+	if (name == NULL)
+		return -EINVAL;
+	input_args = rte_vdev_device_args(vdev);
 
-	RTE_LOG(INFO, PMD, "Initialising %s on NUMA node %d\n", name,
-			init_params.socket_id);
-	RTE_LOG(INFO, PMD, "  Max number of queue pairs = %d\n",
-			init_params.max_nb_queue_pairs);
-	RTE_LOG(INFO, PMD, "  Max number of sessions = %d\n",
-			init_params.max_nb_sessions);
+	rte_cryptodev_pmd_parse_input_args(&init_params, input_args);
 
-	return cryptodev_zuc_create(name, &init_params);
+	return cryptodev_zuc_create(name, vdev, &init_params);
 }
 
 static int
-cryptodev_zuc_remove(const char *name)
+cryptodev_zuc_remove(struct rte_vdev_device *vdev)
 {
+
+	struct rte_cryptodev *cryptodev;
+	const char *name;
+
+	name = rte_vdev_device_name(vdev);
 	if (name == NULL)
 		return -EINVAL;
 
-	RTE_LOG(INFO, PMD, "Closing ZUC crypto device %s"
-			" on numa socket %u\n",
-			name, rte_socket_id());
+	cryptodev = rte_cryptodev_pmd_get_named_dev(name);
+	if (cryptodev == NULL)
+		return -ENODEV;
 
-	return 0;
+	return rte_cryptodev_pmd_destroy(cryptodev);
 }
 
 static struct rte_vdev_driver cryptodev_zuc_pmd_drv = {
@@ -545,8 +545,12 @@ static struct rte_vdev_driver cryptodev_zuc_pmd_drv = {
 	.remove = cryptodev_zuc_remove
 };
 
+static struct cryptodev_driver zuc_crypto_drv;
+
 RTE_PMD_REGISTER_VDEV(CRYPTODEV_NAME_ZUC_PMD, cryptodev_zuc_pmd_drv);
 RTE_PMD_REGISTER_PARAM_STRING(CRYPTODEV_NAME_ZUC_PMD,
 	"max_nb_queue_pairs=<int> "
 	"max_nb_sessions=<int> "
 	"socket_id=<int>");
+RTE_PMD_REGISTER_CRYPTO_DRIVER(zuc_crypto_drv, cryptodev_zuc_pmd_drv,
+		cryptodev_driver_id);

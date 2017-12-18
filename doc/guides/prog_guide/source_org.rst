@@ -108,7 +108,6 @@ The drivers directory has a *net* subdirectory which contains::
     +-- szedata2           # SZEDATA2 poll mode driver
     +-- virtio             # Virtio poll mode driver
     +-- vmxnet3            # VMXNET3 poll mode driver
-    +-- xenvirt            # Xen virtio poll mode driver
 
 .. note::
 
@@ -140,7 +139,6 @@ The examples directory contains sample applications that show how libraries can 
 
     examples
     +-- cmdline            # Example of using the cmdline library
-    +-- dpdk_qat           # Sample integration with Intel QuickAssist
     +-- exception_path     # Sending packets to and from Linux TAP device
     +-- helloworld         # Basic Hello World example
     +-- ip_reassembly      # Example showing IP reassembly

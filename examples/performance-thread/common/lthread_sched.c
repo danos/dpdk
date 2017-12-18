@@ -117,8 +117,7 @@ uint64_t diag_mask;
 
 
 /* constructor */
-void lthread_sched_ctor(void) __attribute__ ((constructor));
-void lthread_sched_ctor(void)
+RTE_INIT(lthread_sched_ctor)
 {
 	memset(schedcore, 0, sizeof(schedcore));
 	rte_atomic16_init(&num_schedulers);
@@ -369,8 +368,8 @@ void lthread_scheduler_shutdown_all(void)
 /*
  * Resume a suspended lthread
  */
-static inline void
-_lthread_resume(struct lthread *lt) __attribute__ ((always_inline));
+static __rte_always_inline void
+_lthread_resume(struct lthread *lt);
 static inline void _lthread_resume(struct lthread *lt)
 {
 	struct lthread_sched *sched = THIS_SCHED;

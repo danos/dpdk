@@ -49,17 +49,14 @@
 #include <rte_cycles.h>
 #include <rte_memory.h>
 #include <rte_memcpy.h>
-#include <rte_memzone.h>
 #include <rte_launch.h>
 #include <rte_eal.h>
 #include <rte_per_lcore.h>
 #include <rte_lcore.h>
 #include <rte_atomic.h>
 #include <rte_branch_prediction.h>
-#include <rte_memory.h>
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
-#include <rte_memcpy.h>
 #include <rte_interrupts.h>
 #include <rte_pci.h>
 #include <rte_ether.h>
@@ -70,6 +67,10 @@
 #include <rte_sctp.h>
 #include <rte_prefetch.h>
 #include <rte_string_fns.h>
+#include <rte_flow.h>
+#include <rte_gro.h>
+#include <rte_gso.h>
+
 #include "testpmd.h"
 
 #define IP_DEFTTL  64   /* from RFC 1340. */
@@ -91,6 +92,7 @@
 /* structure that caches offload info for the current packet */
 struct testpmd_offload_info {
 	uint16_t ethertype;
+	uint8_t gso_enable;
 	uint16_t l2_len;
 	uint16_t l3_len;
 	uint16_t l4_len;
@@ -110,15 +112,6 @@ struct simple_gre_hdr {
 	uint16_t flags;
 	uint16_t proto;
 } __attribute__((__packed__));
-
-static uint16_t
-get_psd_sum(void *l3_hdr, uint16_t ethertype, uint64_t ol_flags)
-{
-	if (ethertype == _htons(ETHER_TYPE_IPv4))
-		return rte_ipv4_phdr_cksum(l3_hdr, ol_flags);
-	else /* assume ethertype == ETHER_TYPE_IPv6 */
-		return rte_ipv6_phdr_cksum(l3_hdr, ol_flags);
-}
 
 static uint16_t
 get_udptcp_checksum(void *l3_hdr, void *l4_hdr, uint16_t ethertype)
@@ -370,11 +363,9 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
 		/* do not recalculate udp cksum if it was 0 */
 		if (udp_hdr->dgram_cksum != 0) {
 			udp_hdr->dgram_cksum = 0;
-			if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_UDP_CKSUM) {
+			if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_UDP_CKSUM)
 				ol_flags |= PKT_TX_UDP_CKSUM;
-				udp_hdr->dgram_cksum = get_psd_sum(l3_hdr,
-					info->ethertype, ol_flags);
-			} else {
+			else {
 				udp_hdr->dgram_cksum =
 					get_udptcp_checksum(l3_hdr, udp_hdr,
 						info->ethertype);
@@ -383,19 +374,17 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
 	} else if (info->l4_proto == IPPROTO_TCP) {
 		tcp_hdr = (struct tcp_hdr *)((char *)l3_hdr + info->l3_len);
 		tcp_hdr->cksum = 0;
-		if (tso_segsz) {
+		if (tso_segsz)
 			ol_flags |= PKT_TX_TCP_SEG;
-			tcp_hdr->cksum = get_psd_sum(l3_hdr, info->ethertype,
-				ol_flags);
-		} else if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_TCP_CKSUM) {
+		else if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_TCP_CKSUM)
 			ol_flags |= PKT_TX_TCP_CKSUM;
-			tcp_hdr->cksum = get_psd_sum(l3_hdr, info->ethertype,
-				ol_flags);
-		} else {
+		else {
 			tcp_hdr->cksum =
 				get_udptcp_checksum(l3_hdr, tcp_hdr,
 					info->ethertype);
 		}
+		if (info->gso_enable)
+			ol_flags |= PKT_TX_TCP_SEG;
 	} else if (info->l4_proto == IPPROTO_SCTP) {
 		sctp_hdr = (struct sctp_hdr *)((char *)l3_hdr + info->l3_len);
 		sctp_hdr->cksum = 0;
@@ -431,7 +420,7 @@ process_outer_cksums(void *outer_l3_hdr, struct testpmd_offload_info *info,
 			ol_flags |= PKT_TX_OUTER_IP_CKSUM;
 		else
 			ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
-	} else if (testpmd_ol_flags & TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM)
+	} else
 		ol_flags |= PKT_TX_OUTER_IPV6;
 
 	if (info->outer_l4_proto != IPPROTO_UDP)
@@ -597,7 +586,7 @@ pkt_copy_split(const struct rte_mbuf *pkt)
 		rc = mbuf_copy_split(pkt, md, seglen, nb_seg);
 		if (rc < 0)
 			RTE_LOG(ERR, USER1,
-				"mbuf_copy_split for %p(len=%u, nb_seg=%hhu) "
+				"mbuf_copy_split for %p(len=%u, nb_seg=%u) "
 				"into %u segments failed with error code: %d\n",
 				pkt, pkt->pkt_len, pkt->nb_segs, nb_seg, rc);
 
@@ -642,12 +631,19 @@ static void
 pkt_burst_checksum_forward(struct fwd_stream *fs)
 {
 	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
+	struct rte_mbuf *gso_segments[GSO_MAX_PKT_BURST];
+	struct rte_gso_ctx *gso_ctx;
+	struct rte_mbuf **tx_pkts_burst;
 	struct rte_port *txp;
 	struct rte_mbuf *m, *p;
 	struct ether_hdr *eth_hdr;
 	void *l3_hdr = NULL, *outer_l3_hdr = NULL; /* can be IPv4 or IPv6 */
+	void **gro_ctx;
+	uint16_t gro_pkts_num;
+	uint8_t gro_enable;
 	uint16_t nb_rx;
 	uint16_t nb_tx;
+	uint16_t nb_prep;
 	uint16_t i;
 	uint64_t rx_ol_flags, tx_ol_flags;
 	uint16_t testpmd_ol_flags;
@@ -655,6 +651,8 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 	uint32_t rx_bad_ip_csum;
 	uint32_t rx_bad_l4_csum;
 	struct testpmd_offload_info info;
+	uint16_t nb_segments = 0;
+	int ret;
 
 #ifdef RTE_TEST_PMD_RECORD_CORE_CYCLES
 	uint64_t start_tsc;
@@ -671,19 +669,21 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 				 nb_pkt_per_burst);
 	if (unlikely(nb_rx == 0))
 		return;
-
 #ifdef RTE_TEST_PMD_RECORD_BURST_STATS
 	fs->rx_burst_stats.pkt_burst_spread[nb_rx]++;
 #endif
 	fs->rx_packets += nb_rx;
 	rx_bad_ip_csum = 0;
 	rx_bad_l4_csum = 0;
+	gro_enable = gro_ports[fs->rx_port].enable;
 
 	txp = &ports[fs->tx_port];
 	testpmd_ol_flags = txp->tx_ol_flags;
 	memset(&info, 0, sizeof(info));
 	info.tso_segsz = txp->tso_segsz;
 	info.tunnel_tso_segsz = txp->tunnel_tso_segsz;
+	if (gso_ports[fs->tx_port].enable)
+		info.gso_enable = 1;
 
 	for (i = 0; i < nb_rx; i++) {
 		if (likely(i < nb_rx - 1))
@@ -769,7 +769,9 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 
 		if (info.is_tunnel == 1) {
 			if (info.tunnel_tso_segsz ||
-			    testpmd_ol_flags & TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM) {
+			    (testpmd_ol_flags &
+			    TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM) ||
+			    (tx_ol_flags & PKT_TX_OUTER_IPV6)) {
 				m->outer_l2_len = info.outer_l2_len;
 				m->outer_l3_len = info.outer_l3_len;
 				m->l2_len = info.l2_len;
@@ -814,7 +816,7 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 			char buf[256];
 
 			printf("-----------------\n");
-			printf("port=%u, mbuf=%p, pkt_len=%u, nb_segs=%hhu:\n",
+			printf("port=%u, mbuf=%p, pkt_len=%u, nb_segs=%u:\n",
 				fs->rx_port, m, m->pkt_len, m->nb_segs);
 			/* dump rx parsed packet info */
 			rte_get_rx_ol_flag_list(rx_ol_flags, buf, sizeof(buf));
@@ -839,8 +841,9 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 					"m->l4_len=%d\n",
 					m->l2_len, m->l3_len, m->l4_len);
 			if (info.is_tunnel == 1) {
-				if (testpmd_ol_flags &
-				    TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM)
+				if ((testpmd_ol_flags &
+				    TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM) ||
+				    (tx_ol_flags & PKT_TX_OUTER_IPV6))
 					printf("tx: m->outer_l2_len=%d "
 						"m->outer_l3_len=%d\n",
 						m->outer_l2_len,
@@ -857,7 +860,60 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 			printf("\n");
 		}
 	}
-	nb_tx = rte_eth_tx_burst(fs->tx_port, fs->tx_queue, pkts_burst, nb_rx);
+
+	if (unlikely(gro_enable)) {
+		if (gro_flush_cycles == GRO_DEFAULT_FLUSH_CYCLES) {
+			nb_rx = rte_gro_reassemble_burst(pkts_burst, nb_rx,
+					&(gro_ports[fs->rx_port].param));
+		} else {
+			gro_ctx = current_fwd_lcore()->gro_ctx;
+			nb_rx = rte_gro_reassemble(pkts_burst, nb_rx, gro_ctx);
+
+			if (++fs->gro_times >= gro_flush_cycles) {
+				gro_pkts_num = rte_gro_get_pkt_count(gro_ctx);
+				if (gro_pkts_num > MAX_PKT_BURST - nb_rx)
+					gro_pkts_num = MAX_PKT_BURST - nb_rx;
+
+				nb_rx += rte_gro_timeout_flush(gro_ctx, 0,
+						RTE_GRO_TCP_IPV4,
+						&pkts_burst[nb_rx],
+						gro_pkts_num);
+				fs->gro_times = 0;
+			}
+		}
+	}
+
+	if (gso_ports[fs->tx_port].enable == 0)
+		tx_pkts_burst = pkts_burst;
+	else {
+		gso_ctx = &(current_fwd_lcore()->gso_ctx);
+		gso_ctx->gso_size = gso_max_segment_size;
+		for (i = 0; i < nb_rx; i++) {
+			ret = rte_gso_segment(pkts_burst[i], gso_ctx,
+					&gso_segments[nb_segments],
+					GSO_MAX_PKT_BURST - nb_segments);
+			if (ret >= 0)
+				nb_segments += ret;
+			else {
+				RTE_LOG(DEBUG, USER1,
+						"Unable to segment packet");
+				rte_pktmbuf_free(pkts_burst[i]);
+			}
+		}
+
+		tx_pkts_burst = gso_segments;
+		nb_rx = nb_segments;
+	}
+
+	nb_prep = rte_eth_tx_prepare(fs->tx_port, fs->tx_queue,
+			tx_pkts_burst, nb_rx);
+	if (nb_prep != nb_rx)
+		printf("Preparing packet burst to transmit failed: %s\n",
+				rte_strerror(rte_errno));
+
+	nb_tx = rte_eth_tx_burst(fs->tx_port, fs->tx_queue, tx_pkts_burst,
+			nb_prep);
+
 	/*
 	 * Retry if necessary
 	 */
@@ -866,7 +922,7 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 		while (nb_tx < nb_rx && retry++ < burst_tx_retry_num) {
 			rte_delay_us(burst_tx_delay_time);
 			nb_tx += rte_eth_tx_burst(fs->tx_port, fs->tx_queue,
-					&pkts_burst[nb_tx], nb_rx - nb_tx);
+					&tx_pkts_burst[nb_tx], nb_rx - nb_tx);
 		}
 	}
 	fs->tx_packets += nb_tx;
@@ -879,9 +935,10 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 	if (unlikely(nb_tx < nb_rx)) {
 		fs->fwd_dropped += (nb_rx - nb_tx);
 		do {
-			rte_pktmbuf_free(pkts_burst[nb_tx]);
+			rte_pktmbuf_free(tx_pkts_burst[nb_tx]);
 		} while (++nb_tx < nb_rx);
 	}
+
 #ifdef RTE_TEST_PMD_RECORD_CORE_CYCLES
 	end_tsc = rte_rdtsc();
 	core_cycles = (end_tsc - start_tsc);

@@ -41,7 +41,7 @@
 #define RING_NEXT(ring, idx)		(((idx) + 1) & (ring)->ring_mask)
 
 #define RTE_MBUF_DATA_DMA_ADDR(mb) \
-	((uint64_t)((mb)->buf_physaddr + (mb)->data_off))
+	((uint64_t)((mb)->buf_iova + (mb)->data_off))
 
 #define DB_IDX_MASK						0xffffff
 #define DB_IDX_VALID						(0x1 << 26)
@@ -57,7 +57,8 @@
 #define DEFAULT_RX_RING_SIZE	256
 #define DEFAULT_TX_RING_SIZE	256
 
-#define MAX_TPA		128
+#define BNXT_TPA_MAX		64
+#define AGG_RING_SIZE_FACTOR	2
 
 /* These assume 4k pages */
 #define MAX_RX_DESC_CNT (8 * 1024)
@@ -65,10 +66,11 @@
 #define MAX_CP_DESC_CNT (16 * 1024)
 
 #define INVALID_HW_RING_ID      ((uint16_t)-1)
+#define INVALID_STATS_CTX_ID		((uint16_t)-1)
 
 struct bnxt_ring {
 	void			*bd;
-	phys_addr_t		bd_dma;
+	rte_iova_t		bd_dma;
 	uint32_t		ring_size;
 	uint32_t		ring_mask;
 

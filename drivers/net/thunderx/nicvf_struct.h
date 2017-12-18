@@ -1,7 +1,7 @@
 /*
  *   BSD LICENSE
  *
- *   Copyright (C) Cavium networks Ltd. 2016.
+ *   Copyright (C) Cavium, Inc. 2016.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Cavium networks nor the names of its
+ *     * Neither the name of Cavium, Inc nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -46,7 +46,7 @@ struct nicvf_rbdr {
 	uintptr_t rbdr_status;
 	uintptr_t rbdr_door;
 	struct rbdr_entry_t *desc;
-	nicvf_phys_addr_t phys;
+	nicvf_iova_addr_t phys;
 	uint32_t buffsz;
 	uint32_t tail;
 	uint32_t next_tail;
@@ -56,7 +56,7 @@ struct nicvf_rbdr {
 
 struct nicvf_txq {
 	union sq_entry_t *desc;
-	nicvf_phys_addr_t phys;
+	nicvf_iova_addr_t phys;
 	struct rte_mbuf **txbuffs;
 	uintptr_t sq_head;
 	uintptr_t sq_door;
@@ -72,11 +72,22 @@ struct nicvf_txq {
 	uint16_t tx_free_thresh;
 } __rte_cache_aligned;
 
+union mbuf_initializer {
+	struct {
+		uint16_t data_off;
+		uint16_t refcnt;
+		uint16_t nb_segs;
+		uint16_t port;
+	} fields;
+	uint64_t value;
+};
+
 struct nicvf_rxq {
 	uint64_t mbuf_phys_off;
 	uintptr_t cq_status;
 	uintptr_t cq_door;
-	nicvf_phys_addr_t phys;
+	union mbuf_initializer mbuf_initializer;
+	nicvf_iova_addr_t phys;
 	union cq_entry_t *desc;
 	struct nicvf_rbdr *shared_rbdr;
 	struct nicvf *nic;
@@ -89,7 +100,7 @@ struct nicvf_rxq {
 	uint16_t queue_id;
 	uint16_t precharge_cnt;
 	uint8_t rx_drop_en;
-	uint8_t  port_id;
+	uint16_t port_id;
 	uint8_t  rbptr_offset;
 } __rte_cache_aligned;
 

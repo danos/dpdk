@@ -26,6 +26,7 @@ union ramrod_data {
 	struct tx_queue_stop_ramrod_data		tx_queue_stop;
 	struct vport_start_ramrod_data			vport_start;
 	struct vport_stop_ramrod_data			vport_stop;
+	struct rx_update_gft_filter_data		rx_update_gft;
 	struct vport_update_ramrod_data			vport_update;
 	struct core_rx_start_ramrod_data		core_rx_queue_start;
 	struct core_rx_stop_ramrod_data			core_rx_queue_stop;
@@ -85,6 +86,22 @@ struct ecore_consq {
 	struct ecore_chain	chain;
 };
 
+typedef enum _ecore_status_t
+(*ecore_spq_async_comp_cb)(struct ecore_hwfn *p_hwfn,
+			   u8 opcode,
+			   u16 echo,
+			   union event_ring_data *data,
+			   u8 fw_return_code);
+
+enum _ecore_status_t
+ecore_spq_register_async_cb(struct ecore_hwfn *p_hwfn,
+			    enum protocol_type protocol_id,
+			    ecore_spq_async_comp_cb cb);
+
+void
+ecore_spq_unregister_async_cb(struct ecore_hwfn *p_hwfn,
+			      enum protocol_type protocol_id);
+
 struct ecore_spq {
 	osal_spinlock_t			lock;
 
@@ -123,6 +140,10 @@ struct ecore_spq {
 	u32				comp_count;
 
 	u32				cid;
+
+	u32				db_addr_offset;
+	struct core_db_data		db_data;
+	ecore_spq_async_comp_cb		async_comp_cb[MAX_PROTOCOL_TYPE];
 };
 
 struct ecore_port;
@@ -194,28 +215,23 @@ void ecore_spq_return_entry(struct ecore_hwfn		*p_hwfn,
  * @param p_hwfn
  * @param num_elem number of elements in the eq
  *
- * @return struct ecore_eq* - a newly allocated structure; NULL upon error.
+ * @return enum _ecore_status_t
  */
-struct ecore_eq *ecore_eq_alloc(struct ecore_hwfn	*p_hwfn,
-				 u16			num_elem);
+enum _ecore_status_t ecore_eq_alloc(struct ecore_hwfn	*p_hwfn, u16 num_elem);
 
 /**
- * @brief ecore_eq_setup - Reset the SPQ to its start state.
+ * @brief ecore_eq_setup - Reset the EQ to its start state.
  *
  * @param p_hwfn
- * @param p_eq
  */
-void ecore_eq_setup(struct ecore_hwfn *p_hwfn,
-		    struct ecore_eq   *p_eq);
+void ecore_eq_setup(struct ecore_hwfn *p_hwfn);
 
 /**
- * @brief ecore_eq_deallocate - deallocates the given EQ struct.
+ * @brief ecore_eq_free - deallocates the given EQ struct.
  *
  * @param p_hwfn
- * @param p_eq
  */
-void ecore_eq_free(struct ecore_hwfn *p_hwfn,
-		   struct ecore_eq   *p_eq);
+void ecore_eq_free(struct ecore_hwfn *p_hwfn);
 
 /**
  * @brief ecore_eq_prod_update - update the FW with default EQ producer
@@ -261,32 +277,26 @@ enum _ecore_status_t ecore_spq_completion(struct ecore_hwfn	*p_hwfn,
 u32 ecore_spq_get_cid(struct ecore_hwfn *p_hwfn);
 
 /**
- * @brief ecore_consq_alloc - Allocates & initializes an ConsQ
- *        struct
+ * @brief ecore_consq_alloc - Allocates & initializes an ConsQ struct
  *
  * @param p_hwfn
  *
- * @return struct ecore_eq* - a newly allocated structure; NULL upon error.
+ * @return enum _ecore_status_t
  */
-struct ecore_consq *ecore_consq_alloc(struct ecore_hwfn	*p_hwfn);
+enum _ecore_status_t ecore_consq_alloc(struct ecore_hwfn *p_hwfn);
 
 /**
- * @brief ecore_consq_setup - Reset the ConsQ to its start
- *        state.
+ * @brief ecore_consq_setup - Reset the ConsQ to its start state.
  *
  * @param p_hwfn
- * @param p_eq
  */
-void ecore_consq_setup(struct ecore_hwfn *p_hwfn,
-		    struct ecore_consq   *p_consq);
+void ecore_consq_setup(struct ecore_hwfn *p_hwfn);
 
 /**
  * @brief ecore_consq_free - deallocates the given ConsQ struct.
  *
  * @param p_hwfn
- * @param p_eq
  */
-void ecore_consq_free(struct ecore_hwfn *p_hwfn,
-		   struct ecore_consq   *p_consq);
+void ecore_consq_free(struct ecore_hwfn *p_hwfn);
 
 #endif /* __ECORE_SPQ_H__ */

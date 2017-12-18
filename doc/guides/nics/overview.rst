@@ -48,29 +48,9 @@ There are more differences between drivers regarding some internal properties,
 portability or even documentation availability.
 Most of these differences are summarized below.
 
+More details about features can be found in :doc:`features`.
+
 .. _table_net_pmd_features:
-
-.. raw:: html
-
-   <style>
-      table#id1 th {
-         font-size: 80%;
-         white-space: pre-wrap;
-         text-align: center;
-         vertical-align: top;
-         padding: 2px;
-      }
-      table#id1 th:first-child {
-         vertical-align: bottom;
-      }
-      table#id1 td {
-         font-size: 70%;
-         padding: 1px;
-      }
-      table#id1 td:first-child {
-         padding-left: 1em;
-      }
-   </style>
 
 .. include:: overview_table.txt
 

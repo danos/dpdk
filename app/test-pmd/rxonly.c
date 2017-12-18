@@ -49,14 +49,12 @@
 #include <rte_cycles.h>
 #include <rte_memory.h>
 #include <rte_memcpy.h>
-#include <rte_memzone.h>
 #include <rte_launch.h>
 #include <rte_eal.h>
 #include <rte_per_lcore.h>
 #include <rte_lcore.h>
 #include <rte_atomic.h>
 #include <rte_branch_prediction.h>
-#include <rte_memory.h>
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
 #include <rte_interrupts.h>
@@ -67,6 +65,7 @@
 #include <rte_ip.h>
 #include <rte_udp.h>
 #include <rte_net.h>
+#include <rte_flow.h>
 
 #include "testpmd.h"
 
@@ -100,9 +99,7 @@ pkt_burst_receive(struct fwd_stream *fs)
 	uint64_t start_tsc;
 	uint64_t end_tsc;
 	uint64_t core_cycles;
-#endif
 
-#ifdef RTE_TEST_PMD_RECORD_CORE_CYCLES
 	start_tsc = rte_rdtsc();
 #endif
 
@@ -124,7 +121,7 @@ pkt_burst_receive(struct fwd_stream *fs)
 	 */
 	if (verbose_level > 0)
 		printf("port %u/queue %u: received %u packets\n",
-		       (unsigned) fs->rx_port,
+		       fs->rx_port,
 		       (unsigned) fs->rx_queue,
 		       (unsigned) nb_rx);
 	for (i = 0; i < nb_rx; i++) {
@@ -147,7 +144,8 @@ pkt_burst_receive(struct fwd_stream *fs)
 		if (ol_flags & PKT_RX_RSS_HASH) {
 			printf(" - RSS hash=0x%x", (unsigned) mb->hash.rss);
 			printf(" - RSS queue=0x%x",(unsigned) fs->rx_queue);
-		} else if (ol_flags & PKT_RX_FDIR) {
+		}
+		if (ol_flags & PKT_RX_FDIR) {
 			printf(" - FDIR matched ");
 			if (ol_flags & PKT_RX_FDIR_ID)
 				printf("ID=0x%x",
@@ -159,6 +157,8 @@ pkt_burst_receive(struct fwd_stream *fs)
 				printf("hash=0x%x ID=0x%x ",
 				       mb->hash.fdir.hash, mb->hash.fdir.id);
 		}
+		if (ol_flags & PKT_RX_TIMESTAMP)
+			printf(" - timestamp %"PRIu64" ", mb->timestamp);
 		if (ol_flags & PKT_RX_VLAN_STRIPPED)
 			printf(" - VLAN tci=0x%x", mb->vlan_tci);
 		if (ol_flags & PKT_RX_QINQ_STRIPPED)

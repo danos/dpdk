@@ -39,7 +39,6 @@
 
 #include <rte_cycles.h>
 #include <rte_memory.h>
-#include <rte_memzone.h>
 #include <rte_branch_prediction.h>
 #include <rte_mempool.h>
 #include <rte_malloc.h>
@@ -50,7 +49,6 @@
 #include <rte_string_fns.h>
 #include <rte_errno.h>
 #include <rte_byteorder.h>
-#include <rte_cpuflags.h>
 #include <rte_net.h>
 #include <rte_ip.h>
 #include <rte_udp.h>
@@ -71,6 +69,15 @@
 
 #define VIRTIO_SIMPLE_FLAGS ((uint32_t)ETH_TXQ_FLAGS_NOMULTSEGS | \
 	ETH_TXQ_FLAGS_NOOFFLOADS)
+
+int
+virtio_dev_rx_queue_done(void *rxq, uint16_t offset)
+{
+	struct virtnet_rx *rxvq = rxq;
+	struct virtqueue *vq = rxvq->vq;
+
+	return VIRTQUEUE_NUSED(vq) >= offset;
+}
 
 void
 vq_ring_free_chain(struct virtqueue *vq, uint16_t desc_idx)
@@ -124,7 +131,7 @@ virtqueue_dequeue_burst_rx(struct virtqueue *vq, struct rte_mbuf **rx_pkts,
 		cookie = (struct rte_mbuf *)vq->vq_descx[desc_idx].cookie;
 
 		if (unlikely(cookie == NULL)) {
-			PMD_DRV_LOG(ERR, "vring descriptor with no mbuf cookie at %u\n",
+			PMD_DRV_LOG(ERR, "vring descriptor with no mbuf cookie at %u",
 				vq->vq_used_cons_idx);
 			break;
 		}
@@ -451,7 +458,7 @@ virtio_dev_rx_queue_setup_finish(struct rte_eth_dev *dev, uint16_t queue_idx)
 	/* Allocate blank mbufs for the each rx descriptor */
 	nbufs = 0;
 
-	if (hw->use_simple_rxtx) {
+	if (hw->use_simple_rx) {
 		for (desc_idx = 0; desc_idx < vq->vq_nentries;
 		     desc_idx++) {
 			vq->vq_ring.avail->ring[desc_idx] = desc_idx;
@@ -473,7 +480,7 @@ virtio_dev_rx_queue_setup_finish(struct rte_eth_dev *dev, uint16_t queue_idx)
 			break;
 
 		/* Enqueue allocated buffers */
-		if (hw->use_simple_rxtx)
+		if (hw->use_simple_rx)
 			error = virtqueue_enqueue_recv_refill_simple(vq, m);
 		else
 			error = virtqueue_enqueue_recv_refill(vq, m);
@@ -494,31 +501,6 @@ virtio_dev_rx_queue_setup_finish(struct rte_eth_dev *dev, uint16_t queue_idx)
 	VIRTQUEUE_DUMP(vq);
 
 	return 0;
-}
-
-static void
-virtio_update_rxtx_handler(struct rte_eth_dev *dev,
-			   const struct rte_eth_txconf *tx_conf)
-{
-	uint8_t use_simple_rxtx = 0;
-	struct virtio_hw *hw = dev->data->dev_private;
-
-#if defined RTE_ARCH_X86
-	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_SSE3))
-		use_simple_rxtx = 1;
-#elif defined RTE_ARCH_ARM64 || defined CONFIG_RTE_ARCH_ARM
-	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_NEON))
-		use_simple_rxtx = 1;
-#endif
-	/* Use simple rx/tx func if single segment and no offloads */
-	if (use_simple_rxtx &&
-	    (tx_conf->txq_flags & VIRTIO_SIMPLE_FLAGS) == VIRTIO_SIMPLE_FLAGS &&
-	    !vtpci_with_feature(hw, VIRTIO_NET_F_MRG_RXBUF)) {
-		PMD_INIT_LOG(INFO, "Using simple rx/tx path");
-		dev->tx_pkt_burst = virtio_xmit_pkts_simple;
-		dev->rx_pkt_burst = virtio_recv_pkts_vec;
-		hw->use_simple_rxtx = use_simple_rxtx;
-	}
 }
 
 /*
@@ -543,7 +525,9 @@ virtio_dev_tx_queue_setup(struct rte_eth_dev *dev,
 
 	PMD_INIT_FUNC_TRACE();
 
-	virtio_update_rxtx_handler(dev, tx_conf);
+	/* cannot use simple rxtx funcs with multisegs or offloads */
+	if ((tx_conf->txq_flags & VIRTIO_SIMPLE_FLAGS) != VIRTIO_SIMPLE_FLAGS)
+		hw->use_simple_tx = 0;
 
 	if (nb_desc == 0 || nb_desc > vq->vq_nentries)
 		nb_desc = vq->vq_nentries;
@@ -585,7 +569,7 @@ virtio_dev_tx_queue_setup_finish(struct rte_eth_dev *dev,
 
 	PMD_INIT_FUNC_TRACE();
 
-	if (hw->use_simple_rxtx) {
+	if (hw->use_simple_tx) {
 		for (desc_idx = 0; desc_idx < mid_idx; desc_idx++) {
 			vq->vq_ring.avail->ring[desc_idx] =
 				desc_idx + mid_idx;
@@ -744,7 +728,7 @@ virtio_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 {
 	struct virtnet_rx *rxvq = rx_queue;
 	struct virtqueue *vq = rxvq->vq;
-	struct virtio_hw *hw;
+	struct virtio_hw *hw = vq->hw;
 	struct rte_mbuf *rxm, *new_mbuf;
 	uint16_t nb_used, num, nb_rx;
 	uint32_t len[VIRTIO_MBUF_BURST_SZ];
@@ -755,20 +739,23 @@ virtio_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 	int offload;
 	struct virtio_net_hdr *hdr;
 
+	nb_rx = 0;
+	if (unlikely(hw->started == 0))
+		return nb_rx;
+
 	nb_used = VIRTQUEUE_NUSED(vq);
 
 	virtio_rmb();
 
-	num = (uint16_t)(likely(nb_used <= nb_pkts) ? nb_used : nb_pkts);
-	num = (uint16_t)(likely(num <= VIRTIO_MBUF_BURST_SZ) ? num : VIRTIO_MBUF_BURST_SZ);
+	num = likely(nb_used <= nb_pkts) ? nb_used : nb_pkts;
+	if (unlikely(num > VIRTIO_MBUF_BURST_SZ))
+		num = VIRTIO_MBUF_BURST_SZ;
 	if (likely(num > DESC_PER_CACHELINE))
 		num = num - ((vq->vq_used_cons_idx + num) % DESC_PER_CACHELINE);
 
 	num = virtqueue_dequeue_burst_rx(vq, rcv_pkts, len, num);
 	PMD_RX_LOG(DEBUG, "used:%d dequeue:%d", nb_used, num);
 
-	hw = vq->hw;
-	nb_rx = 0;
 	nb_enqueued = 0;
 	hdr_size = hw->vtnet_hdr_size;
 	offload = rx_offload_enabled(hw);
@@ -791,8 +778,6 @@ virtio_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 		rxm->ol_flags = 0;
 		rxm->vlan_tci = 0;
 
-		rxm->nb_segs = 1;
-		rxm->next = NULL;
 		rxm->pkt_len = (uint32_t)(len[i] - hdr_size);
 		rxm->data_len = (uint16_t)(len[i] - hdr_size);
 
@@ -812,7 +797,7 @@ virtio_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 
 		rx_pkts[nb_rx++] = rxm;
 
-		rxvq->stats.bytes += rx_pkts[nb_rx - 1]->pkt_len;
+		rxvq->stats.bytes += rxm->pkt_len;
 		virtio_update_packet_stats(&rxvq->stats, rxm);
 	}
 
@@ -855,7 +840,7 @@ virtio_recv_mergeable_pkts(void *rx_queue,
 {
 	struct virtnet_rx *rxvq = rx_queue;
 	struct virtqueue *vq = rxvq->vq;
-	struct virtio_hw *hw;
+	struct virtio_hw *hw = vq->hw;
 	struct rte_mbuf *rxm, *new_mbuf;
 	uint16_t nb_used, num, nb_rx;
 	uint32_t len[VIRTIO_MBUF_BURST_SZ];
@@ -869,14 +854,16 @@ virtio_recv_mergeable_pkts(void *rx_queue,
 	uint32_t hdr_size;
 	int offload;
 
+	nb_rx = 0;
+	if (unlikely(hw->started == 0))
+		return nb_rx;
+
 	nb_used = VIRTQUEUE_NUSED(vq);
 
 	virtio_rmb();
 
 	PMD_RX_LOG(DEBUG, "used:%d", nb_used);
 
-	hw = vq->hw;
-	nb_rx = 0;
 	i = 0;
 	nb_enqueued = 0;
 	seg_num = 0;
@@ -919,7 +906,6 @@ virtio_recv_mergeable_pkts(void *rx_queue,
 
 		rxm->data_off = RTE_PKTMBUF_HEADROOM;
 		rxm->nb_segs = seg_num;
-		rxm->next = NULL;
 		rxm->ol_flags = 0;
 		rxm->vlan_tci = 0;
 		rxm->pkt_len = (uint32_t)(len[0] - hdr_size);
@@ -964,7 +950,6 @@ virtio_recv_mergeable_pkts(void *rx_queue,
 				rxm = rcv_pkts[extra_idx];
 
 				rxm->data_off = RTE_PKTMBUF_HEADROOM - hdr_size;
-				rxm->next = NULL;
 				rxm->pkt_len = (uint32_t)(len[extra_idx]);
 				rxm->data_len = (uint16_t)(len[extra_idx]);
 
@@ -1028,8 +1013,11 @@ virtio_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 	struct virtqueue *vq = txvq->vq;
 	struct virtio_hw *hw = vq->hw;
 	uint16_t hdr_size = hw->vtnet_hdr_size;
-	uint16_t nb_used, nb_tx;
+	uint16_t nb_used, nb_tx = 0;
 	int error;
+
+	if (unlikely(hw->started == 0))
+		return nb_tx;
 
 	if (unlikely(nb_pkts < 1))
 		return nb_pkts;
@@ -1055,7 +1043,8 @@ virtio_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		}
 
 		/* optimize ring usage */
-		if (vtpci_with_feature(hw, VIRTIO_F_ANY_LAYOUT) &&
+		if ((vtpci_with_feature(hw, VIRTIO_F_ANY_LAYOUT) ||
+		      vtpci_with_feature(hw, VIRTIO_F_VERSION_1)) &&
 		    rte_mbuf_refcnt_read(txm) == 1 &&
 		    RTE_MBUF_DIRECT(txm) &&
 		    txm->nb_segs == 1 &&

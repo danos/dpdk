@@ -36,7 +36,7 @@ LIB = librte_vhost.a
 
 EXPORT_MAP := rte_vhost_version.map
 
-LIBABIVER := 3
+LIBABIVER := 4
 
 CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3 -D_FILE_OFFSET_BITS=64
 CFLAGS += -I vhost_user
@@ -45,19 +45,13 @@ LDLIBS += -lpthread
 ifeq ($(CONFIG_RTE_LIBRTE_VHOST_NUMA),y)
 LDLIBS += -lnuma
 endif
+LDLIBS += -lrte_eal -lrte_mempool -lrte_mbuf -lrte_ethdev
 
 # all source are stored in SRCS-y
-SRCS-$(CONFIG_RTE_LIBRTE_VHOST) := fd_man.c socket.c vhost.c vhost_user.c \
-				   virtio_net.c
+SRCS-$(CONFIG_RTE_LIBRTE_VHOST) := fd_man.c iotlb.c socket.c vhost.c \
+					vhost_user.c virtio_net.c
 
 # install includes
-SYMLINK-$(CONFIG_RTE_LIBRTE_VHOST)-include += rte_virtio_net.h
-
-# dependencies
-DEPDIRS-$(CONFIG_RTE_LIBRTE_VHOST) += lib/librte_eal
-DEPDIRS-$(CONFIG_RTE_LIBRTE_VHOST) += lib/librte_ether
-DEPDIRS-$(CONFIG_RTE_LIBRTE_VHOST) += lib/librte_mbuf
-DEPDIRS-$(CONFIG_RTE_LIBRTE_VHOST) += lib/librte_mempool
-DEPDIRS-$(CONFIG_RTE_LIBRTE_VHOST) += lib/librte_net
+SYMLINK-$(CONFIG_RTE_LIBRTE_VHOST)-include += rte_vhost.h
 
 include $(RTE_SDK)/mk/rte.lib.mk

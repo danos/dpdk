@@ -31,8 +31,8 @@
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _RTE_VECT_H_
-#define _RTE_VECT_H_
+#ifndef _RTE_VECT_X86_H_
+#define _RTE_VECT_X86_H_
 
 /**
  * @file
@@ -41,24 +41,11 @@
  */
 
 #include <stdint.h>
+#include "generic/rte_vect.h"
 
 #if (defined(__ICC) || (__GNUC__ == 4 &&  __GNUC_MINOR__ < 4))
 
-#ifdef __SSE__
-#include <xmmintrin.h>
-#endif
-
-#ifdef __SSE2__
-#include <emmintrin.h>
-#endif
-
-#ifdef __SSE3__
-#include <tmmintrin.h>
-#endif
-
-#if defined(__SSE4_2__) || defined(__SSE4_1__)
-#include <smmintrin.h>
-#endif
+#include <smmintrin.h> /* SSE4 */
 
 #if defined(__AVX__)
 #include <immintrin.h>
@@ -133,4 +120,4 @@ __extension__ ({                 \
 }
 #endif
 
-#endif /* _RTE_VECT_H_ */
+#endif /* _RTE_VECT_X86_H_ */
