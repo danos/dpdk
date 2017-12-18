@@ -1,3 +1,9 @@
+dpdk (17.11-3) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 18 Dec 2017 19:17:13 +0000
+
 dpdk (17.11-2) experimental; urgency=medium
 
   * Bump Standards-Version to 4.1.1, no changes.
