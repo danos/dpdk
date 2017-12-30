@@ -244,7 +244,7 @@ Multi-Arch: same
 Homepage: http://dpdk.org/doc/api/rte__gro_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Description: Data Plane Development Kit (librte-eal runtime library)
+Description: Data Plane Development Kit (librte-gro runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
