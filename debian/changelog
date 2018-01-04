@@ -38,6 +38,10 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
     python-pyelftools a recommended dependency.
   * d/control: add librte-pmd-octeontx17.11
   * d/t/control: fix test dependencies for s390x (Closes: #882480).
+  * d/rules: make auto-loaded drivers dir versioned (LP: #1741244).
+    3rd party drivers should drop into the versioned directories now to show
+    their support for that version and to be autoloaded by librte_eal due
+    to that.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
 
