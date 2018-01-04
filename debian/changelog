@@ -1,3 +1,17 @@
+dpdk (17.11-4) UNRELEASED; urgency=medium
+
+  [ Luca Boccassi ]
+  * Fix librte-gro17.11 short description to mention -gro instead of
+    -eal. (Closes: #885832)
+
+  [ Christian Ehrhardt ]
+  * d/rules: make auto-loaded drivers dir versioned (LP: #1741244).
+    3rd party drivers should drop into the versioned directories now to show
+    their support for that version and to be autoloaded by librte_eal due
+    to that.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 18 Dec 2017 19:17:13 +0000
+
 dpdk (17.11-3) unstable; urgency=medium
 
   * Upload to unstable.
