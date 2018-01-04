@@ -1,4 +1,4 @@
-dpdk (17.11-4) UNRELEASED; urgency=medium
+dpdk (17.11-4) unstable; urgency=low
 
   [ Luca Boccassi ]
   * Fix librte-gro17.11 short description to mention -gro instead of
@@ -10,7 +10,7 @@ dpdk (17.11-4) UNRELEASED; urgency=medium
     their support for that version and to be autoloaded by librte_eal due
     to that.
 
- -- Luca Boccassi <bluca@debian.org>  Mon, 18 Dec 2017 19:17:13 +0000
+ -- Luca Boccassi <bluca@debian.org>  Thu, 04 Jan 2018 13:52:07 +0000
 
 dpdk (17.11-3) unstable; urgency=medium
 
