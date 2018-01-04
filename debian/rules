@@ -8,6 +8,7 @@ export DH_OPTIONS=-v
 include /usr/share/dpkg/default.mk
 
 DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '-' -f1 | cut -d '.'  -f1-2 | cut -d '~' -f1)
+DPDK_DRIVER_DIR ?= dpdk-$(DPDK_ABI)-drivers
 
 # see FEATURE AREAS in dpkg-buildflags(1)
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
@@ -181,7 +182,7 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
-		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/dpdk-pmds/",' \
+		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/$(DPDK_DRIVER_DIR)/",' \
 		$(DPDK_STATIC_DIR)/.config
 endif
 	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
@@ -318,17 +319,17 @@ endif
 	  mkdir -p $${LIBD}; \
 	  mv $${lib} $${LIBD}; \
 	  if [ "$${LIBF#librte_pmd_}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/dpdk-pmds; \
-	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
-	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
+	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
+	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/$(DPDK_DRIVER_DIR)/"; \
+	    ln -s --relative --target-directory=$${LIBD}/$(DPDK_DRIVER_DIR)/ $${LIBD}/$${LIBF}; \
 	  fi; \
 	  if [ "$${LIBF#librte_mempool_}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/dpdk-pmds; \
-	    echo "MEMPOOL: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
-	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
+	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
+	    echo "MEMPOOL: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/$(DPDK_DRIVER_DIR)/"; \
+	    ln -s --relative --target-directory=$${LIBD}/$(DPDK_DRIVER_DIR)/ $${LIBD}/$${LIBF}; \
 	  fi; \
 	  if [ "$${LIBF#librte_eal}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/dpdk-pmds; \
+	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
 	  fi; \
 	done
 	# pkg-config
