@@ -38,6 +38,7 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
     with python3. (Closes: #883153)
   * dpdk-doc: mark Python dependency with :any.
   * Bump Standards-Version to 4.1.3 - no changes.
+  * d/control, d/changelog: use HTTPS for dpdk.org links.
 
   [ Christian Ehrhardt ]
   * d/control: improve dpdk-pmdinfo user experience by making
