@@ -32,10 +32,11 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
     python-script-but-no-python-dep
   * Fix librte-gro17.11 short description to mention -gro instead of
     -eal. (Closes: #885832)
-  * dpdk: depend on python-pyelftools| python3-pyelftools since the
-    scripts can work with either version.
+  * dpdk: depend on python3-pyelftools since the scripts can work with either
+    version.
   * dpdk-doc: depend only on python3 since the pipeline tools can work
     with python3. (Closes: #883153)
+  * dpdk/dpdk-doc: change all scripts shebangs from python to python3.
   * dpdk-doc: mark Python dependency with :any.
   * Bump Standards-Version to 4.1.3 - no changes.
   * d/control, d/changelog: use HTTPS for dpdk.org links.
