@@ -62,7 +62,7 @@ Section: doc
 Architecture: all
 Multi-Arch: foreign
 Homepage: http://dpdk.org/doc/guides/index.html
-Depends: libjs-jquery, libjs-underscore, python3, ${misc:Depends}, ${python3:Depends}
+Depends: libjs-jquery, libjs-underscore, python3:any, ${misc:Depends}, ${python3:Depends}
 Recommends: ${python3:Recommends}
 Description: Data Plane Development Kit (documentation)
  DPDK is a set of libraries for fast packet processing. Applications run
