@@ -35,7 +35,7 @@ Depends: hwdata,
          ${python3:Depends},
          ${shlibs:Depends}
 Recommends: ${librte:Recommends},
-            python-pyelftools,
+            python-pyelftools | python3-pyelftools,
 Suggests: dpdk-doc,
           dpdk-igb-uio-dkms (= ${binary:Version}),
           dpdk-rte-kni-dkms (= ${binary:Version}),
