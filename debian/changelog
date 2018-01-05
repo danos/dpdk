@@ -37,6 +37,7 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
   * dpdk-doc: depend only on python3 since the pipeline tools can work
     with python3. (Closes: #883153)
   * dpdk-doc: mark Python dependency with :any.
+  * Bump Standards-Version to 4.1.3 - no changes.
 
   [ Christian Ehrhardt ]
   * d/control: improve dpdk-pmdinfo user experience by making
