@@ -182,8 +182,7 @@ def check_modules():
 
         # special case for vfio_pci (module is named vfio-pci,
         # but its .ko is named vfio_pci)
-        sysfs_mods = map(lambda a:
-                         a if a != 'vfio_pci' else 'vfio-pci', sysfs_mods)
+        sysfs_mods = [a if a != 'vfio_pci' else 'vfio-pci' for a in sysfs_mods]
 
         for mod in mods:
             if mod["Name"] in sysfs_mods:
@@ -328,6 +327,9 @@ def get_crypto_details():
 
     # based on the basic info, get extended text details
     for d in devices.keys():
+        if devices[d]["Class"][0:2] != CRYPTO_BASE_CLASS:
+            continue
+
         # get additional info and add it to existing data
         devices[d] = devices[d].copy()
         devices[d].update(get_pci_device_details(d).items())

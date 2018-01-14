@@ -148,6 +148,20 @@ desc_to_olflags_v(__m128i descs[4], struct rte_mbuf **rx_pkts)
 	const __m128i rss_vlan_msk = _mm_set_epi32(
 			0x1c03804, 0x1c03804, 0x1c03804, 0x1c03804);
 
+	const __m128i cksum_mask = _mm_set_epi32(
+			PKT_RX_IP_CKSUM_GOOD | PKT_RX_IP_CKSUM_BAD |
+			PKT_RX_L4_CKSUM_GOOD | PKT_RX_L4_CKSUM_BAD |
+			PKT_RX_EIP_CKSUM_BAD,
+			PKT_RX_IP_CKSUM_GOOD | PKT_RX_IP_CKSUM_BAD |
+			PKT_RX_L4_CKSUM_GOOD | PKT_RX_L4_CKSUM_BAD |
+			PKT_RX_EIP_CKSUM_BAD,
+			PKT_RX_IP_CKSUM_GOOD | PKT_RX_IP_CKSUM_BAD |
+			PKT_RX_L4_CKSUM_GOOD | PKT_RX_L4_CKSUM_BAD |
+			PKT_RX_EIP_CKSUM_BAD,
+			PKT_RX_IP_CKSUM_GOOD | PKT_RX_IP_CKSUM_BAD |
+			PKT_RX_L4_CKSUM_GOOD | PKT_RX_L4_CKSUM_BAD |
+			PKT_RX_EIP_CKSUM_BAD);
+
 	/* map rss and vlan type to rss hash and vlan flag */
 	const __m128i vlan_flags = _mm_set_epi8(0, 0, 0, 0,
 			0, 0, 0, 0,
@@ -160,14 +174,17 @@ desc_to_olflags_v(__m128i descs[4], struct rte_mbuf **rx_pkts)
 			0, 0, PKT_RX_FDIR, 0);
 
 	const __m128i l3_l4e_flags = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0,
-			PKT_RX_EIP_CKSUM_BAD | PKT_RX_L4_CKSUM_BAD | PKT_RX_IP_CKSUM_BAD,
-			PKT_RX_EIP_CKSUM_BAD | PKT_RX_L4_CKSUM_BAD,
-			PKT_RX_EIP_CKSUM_BAD | PKT_RX_IP_CKSUM_BAD,
-			PKT_RX_EIP_CKSUM_BAD,
-			PKT_RX_L4_CKSUM_BAD | PKT_RX_IP_CKSUM_BAD,
-			PKT_RX_L4_CKSUM_BAD,
-			PKT_RX_IP_CKSUM_BAD,
-			0);
+			/* shift right 1 bit to make sure it not exceed 255 */
+			(PKT_RX_EIP_CKSUM_BAD | PKT_RX_L4_CKSUM_BAD |
+			 PKT_RX_IP_CKSUM_BAD) >> 1,
+			(PKT_RX_IP_CKSUM_GOOD | PKT_RX_EIP_CKSUM_BAD |
+			 PKT_RX_L4_CKSUM_BAD) >> 1,
+			(PKT_RX_EIP_CKSUM_BAD | PKT_RX_IP_CKSUM_BAD) >> 1,
+			(PKT_RX_IP_CKSUM_GOOD | PKT_RX_EIP_CKSUM_BAD) >> 1,
+			(PKT_RX_L4_CKSUM_BAD | PKT_RX_IP_CKSUM_BAD) >> 1,
+			(PKT_RX_IP_CKSUM_GOOD | PKT_RX_L4_CKSUM_BAD) >> 1,
+			PKT_RX_IP_CKSUM_BAD >> 1,
+			(PKT_RX_IP_CKSUM_GOOD | PKT_RX_L4_CKSUM_GOOD) >> 1);
 
 	vlan0 = _mm_unpackhi_epi32(descs[0], descs[1]);
 	vlan1 = _mm_unpackhi_epi32(descs[2], descs[3]);
@@ -181,6 +198,10 @@ desc_to_olflags_v(__m128i descs[4], struct rte_mbuf **rx_pkts)
 
 	l3_l4e = _mm_srli_epi32(vlan1, 22);
 	l3_l4e = _mm_shuffle_epi8(l3_l4e_flags, l3_l4e);
+	/* then we shift left 1 bit */
+	l3_l4e = _mm_slli_epi32(l3_l4e, 1);
+	/* we need to mask out the reduntant bits */
+	l3_l4e = _mm_and_si128(l3_l4e, cksum_mask);
 
 	vlan0 = _mm_or_si128(vlan0, rss);
 	vlan0 = _mm_or_si128(vlan0, l3_l4e);
@@ -299,20 +320,26 @@ _recv_raw_pkts_vec(struct i40e_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 		__m128i descs[RTE_I40E_DESCS_PER_LOOP];
 		__m128i pkt_mb1, pkt_mb2, pkt_mb3, pkt_mb4;
 		__m128i zero, staterr, sterr_tmp1, sterr_tmp2;
-		__m128i mbp1, mbp2; /* two mbuf pointer in one XMM reg. */
+		/* 2 64 bit or 4 32 bit mbuf pointers in one XMM reg. */
+		__m128i mbp1;
+#if defined(RTE_ARCH_X86_64)
+		__m128i mbp2;
+#endif
 
-		/* B.1 load 1 mbuf point */
+		/* B.1 load 2 (64 bit) or 4 (32 bit) mbuf points */
 		mbp1 = _mm_loadu_si128((__m128i *)&sw_ring[pos]);
 		/* Read desc statuses backwards to avoid race condition */
 		/* A.1 load 4 pkts desc */
 		descs[3] = _mm_loadu_si128((__m128i *)(rxdp + 3));
 		rte_compiler_barrier();
 
-		/* B.2 copy 2 mbuf point into rx_pkts  */
+		/* B.2 copy 2 64 bit or 4 32 bit mbuf point into rx_pkts */
 		_mm_storeu_si128((__m128i *)&rx_pkts[pos], mbp1);
 
-		/* B.1 load 1 mbuf point */
+#if defined(RTE_ARCH_X86_64)
+		/* B.1 load 2 64 bit mbuf points */
 		mbp2 = _mm_loadu_si128((__m128i *)&sw_ring[pos+2]);
+#endif
 
 		descs[2] = _mm_loadu_si128((__m128i *)(rxdp + 2));
 		rte_compiler_barrier();
@@ -321,8 +348,10 @@ _recv_raw_pkts_vec(struct i40e_rx_queue *rxq, struct rte_mbuf **rx_pkts,
 		rte_compiler_barrier();
 		descs[0] = _mm_loadu_si128((__m128i *)(rxdp));
 
+#if defined(RTE_ARCH_X86_64)
 		/* B.2 copy 2 mbuf point into rx_pkts  */
 		_mm_storeu_si128((__m128i *)&rx_pkts[pos+2], mbp2);
+#endif
 
 		if (split_packet) {
 			rte_mbuf_prefetch_part2(rx_pkts[pos]);

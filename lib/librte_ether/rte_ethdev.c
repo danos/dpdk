@@ -189,6 +189,20 @@ rte_eth_dev_find_free_port(void)
 	return RTE_MAX_ETHPORTS;
 }
 
+static struct rte_eth_dev *
+eth_dev_get(uint8_t port_id)
+{
+	struct rte_eth_dev *eth_dev = &rte_eth_devices[port_id];
+
+	eth_dev->data = &rte_eth_dev_data[port_id];
+	eth_dev->attached = DEV_ATTACHED;
+
+	eth_dev_last_created_port = port_id;
+	nb_ports++;
+
+	return eth_dev;
+}
+
 struct rte_eth_dev *
 rte_eth_dev_allocate(const char *name)
 {
@@ -210,13 +224,41 @@ rte_eth_dev_allocate(const char *name)
 		return NULL;
 	}
 
-	eth_dev = &rte_eth_devices[port_id];
-	eth_dev->data = &rte_eth_dev_data[port_id];
+	eth_dev = eth_dev_get(port_id);
 	snprintf(eth_dev->data->name, sizeof(eth_dev->data->name), "%s", name);
 	eth_dev->data->port_id = port_id;
-	eth_dev->attached = DEV_ATTACHED;
-	eth_dev_last_created_port = port_id;
-	nb_ports++;
+
+	return eth_dev;
+}
+
+/*
+ * Attach to a port already registered by the primary process, which
+ * makes sure that the same device would have the same port id both
+ * in the primary and secondary process.
+ */
+static struct rte_eth_dev *
+eth_dev_attach_secondary(const char *name)
+{
+	uint8_t i;
+	struct rte_eth_dev *eth_dev;
+
+	if (rte_eth_dev_data == NULL)
+		rte_eth_dev_data_alloc();
+
+	for (i = 0; i < RTE_MAX_ETHPORTS; i++) {
+		if (strcmp(rte_eth_dev_data[i].name, name) == 0)
+			break;
+	}
+	if (i == RTE_MAX_ETHPORTS) {
+		RTE_PMD_DEBUG_TRACE(
+			"device %s is not driven by the primary process\n",
+			name);
+		return NULL;
+	}
+
+	eth_dev = eth_dev_get(i);
+	RTE_ASSERT(eth_dev->data->port_id == i);
+
 	return eth_dev;
 }
 
@@ -246,16 +288,28 @@ rte_eth_dev_pci_probe(struct rte_pci_driver *pci_drv,
 	rte_eal_pci_device_name(&pci_dev->addr, ethdev_name,
 			sizeof(ethdev_name));
 
-	eth_dev = rte_eth_dev_allocate(ethdev_name);
-	if (eth_dev == NULL)
-		return -ENOMEM;
-
 	if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
+		eth_dev = rte_eth_dev_allocate(ethdev_name);
+		if (eth_dev == NULL)
+			return -ENOMEM;
+
 		eth_dev->data->dev_private = rte_zmalloc("ethdev private structure",
 				  eth_drv->dev_private_size,
 				  RTE_CACHE_LINE_SIZE);
 		if (eth_dev->data->dev_private == NULL)
 			rte_panic("Cannot allocate memzone for private port data\n");
+	} else {
+		eth_dev = eth_dev_attach_secondary(ethdev_name);
+		if (eth_dev == NULL) {
+			/*
+			 * if we failed to attach a device, it means the
+			 * device is skipped in primary process, due to
+			 * some errors. If so, we return a positive value,
+			 * to let EAL skip it for the secondary process
+			 * as well.
+			 */
+			return 1;
+		}
 	}
 	eth_dev->pci_dev = pci_dev;
 	eth_dev->driver = eth_drv;
@@ -375,6 +429,9 @@ rte_eth_dev_get_port_by_name(const char *name, uint8_t *port_id)
 		RTE_PMD_DEBUG_TRACE("Null pointer is specified\n");
 		return -EINVAL;
 	}
+
+	if (!nb_ports)
+		return -ENODEV;
 
 	*port_id = RTE_MAX_ETHPORTS;
 
@@ -994,8 +1051,10 @@ rte_eth_dev_close(uint8_t port_id)
 	dev->data->dev_started = 0;
 	(*dev->dev_ops->dev_close)(dev);
 
+	dev->data->nb_rx_queues = 0;
 	rte_free(dev->data->rx_queues);
 	dev->data->rx_queues = NULL;
+	dev->data->nb_tx_queues = 0;
 	rte_free(dev->data->tx_queues);
 	dev->data->tx_queues = NULL;
 }
@@ -1343,8 +1402,10 @@ get_xstats_count(uint8_t port_id)
 	} else
 		count = 0;
 	count += RTE_NB_STATS;
-	count += dev->data->nb_rx_queues * RTE_NB_RXQ_STATS;
-	count += dev->data->nb_tx_queues * RTE_NB_TXQ_STATS;
+	count += RTE_MIN(dev->data->nb_rx_queues, RTE_ETHDEV_QUEUE_STAT_CNTRS) *
+		 RTE_NB_RXQ_STATS;
+	count += RTE_MIN(dev->data->nb_tx_queues, RTE_ETHDEV_QUEUE_STAT_CNTRS) *
+		 RTE_NB_TXQ_STATS;
 	return count;
 }
 
@@ -1358,6 +1419,7 @@ rte_eth_xstats_get_names(uint8_t port_id,
 	int cnt_expected_entries;
 	int cnt_driver_entries;
 	uint32_t idx, id_queue;
+	uint16_t num_q;
 
 	cnt_expected_entries = get_xstats_count(port_id);
 	if (xstats_names == NULL || cnt_expected_entries < 0 ||
@@ -1374,7 +1436,8 @@ rte_eth_xstats_get_names(uint8_t port_id,
 			"%s", rte_stats_strings[idx].name);
 		cnt_used_entries++;
 	}
-	for (id_queue = 0; id_queue < dev->data->nb_rx_queues; id_queue++) {
+	num_q = RTE_MIN(dev->data->nb_rx_queues, RTE_ETHDEV_QUEUE_STAT_CNTRS);
+	for (id_queue = 0; id_queue < num_q; id_queue++) {
 		for (idx = 0; idx < RTE_NB_RXQ_STATS; idx++) {
 			snprintf(xstats_names[cnt_used_entries].name,
 				sizeof(xstats_names[0].name),
@@ -1384,7 +1447,8 @@ rte_eth_xstats_get_names(uint8_t port_id,
 		}
 
 	}
-	for (id_queue = 0; id_queue < dev->data->nb_tx_queues; id_queue++) {
+	num_q = RTE_MIN(dev->data->nb_tx_queues, RTE_ETHDEV_QUEUE_STAT_CNTRS);
+	for (id_queue = 0; id_queue < num_q; id_queue++) {
 		for (idx = 0; idx < RTE_NB_TXQ_STATS; idx++) {
 			snprintf(xstats_names[cnt_used_entries].name,
 				sizeof(xstats_names[0].name),
@@ -1420,14 +1484,18 @@ rte_eth_xstats_get(uint8_t port_id, struct rte_eth_xstat *xstats,
 	unsigned count = 0, i, q;
 	signed xcount = 0;
 	uint64_t val, *stats_ptr;
+	uint16_t nb_rxqs, nb_txqs;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -EINVAL);
 
 	dev = &rte_eth_devices[port_id];
 
+	nb_rxqs = RTE_MIN(dev->data->nb_rx_queues, RTE_ETHDEV_QUEUE_STAT_CNTRS);
+	nb_txqs = RTE_MIN(dev->data->nb_tx_queues, RTE_ETHDEV_QUEUE_STAT_CNTRS);
+
 	/* Return generic statistics */
-	count = RTE_NB_STATS + (dev->data->nb_rx_queues * RTE_NB_RXQ_STATS) +
-		(dev->data->nb_tx_queues * RTE_NB_TXQ_STATS);
+	count = RTE_NB_STATS + (nb_rxqs * RTE_NB_RXQ_STATS) +
+		(nb_txqs * RTE_NB_TXQ_STATS);
 
 	/* implemented by the driver */
 	if (dev->dev_ops->xstats_get != NULL) {
@@ -1458,7 +1526,7 @@ rte_eth_xstats_get(uint8_t port_id, struct rte_eth_xstat *xstats,
 	}
 
 	/* per-rxq stats */
-	for (q = 0; q < dev->data->nb_rx_queues; q++) {
+	for (q = 0; q < nb_rxqs; q++) {
 		for (i = 0; i < RTE_NB_RXQ_STATS; i++) {
 			stats_ptr = RTE_PTR_ADD(&eth_stats,
 					rte_rxq_stats_strings[i].offset +
@@ -1469,7 +1537,7 @@ rte_eth_xstats_get(uint8_t port_id, struct rte_eth_xstat *xstats,
 	}
 
 	/* per-txq stats */
-	for (q = 0; q < dev->data->nb_tx_queues; q++) {
+	for (q = 0; q < nb_txqs; q++) {
 		for (i = 0; i < RTE_NB_TXQ_STATS; i++) {
 			stats_ptr = RTE_PTR_ADD(&eth_stats,
 					rte_txq_stats_strings[i].offset +
@@ -1479,8 +1547,11 @@ rte_eth_xstats_get(uint8_t port_id, struct rte_eth_xstat *xstats,
 		}
 	}
 
-	for (i = 0; i < count + xcount; i++)
+	for (i = 0; i < count; i++)
 		xstats[i].id = i;
+	/* add an offset to driver-specific stats */
+	for ( ; i < count + xcount; i++)
+		xstats[i].id += count;
 
 	return count + xcount;
 }

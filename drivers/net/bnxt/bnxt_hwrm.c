@@ -177,8 +177,7 @@ int bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 		mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
 	if (vnic->flags & BNXT_VNIC_INFO_ALLMULTI)
 		mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
-	req.mask = rte_cpu_to_le_32(HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_BCAST |
-				    mask);
+	req.mask = rte_cpu_to_le_32(mask);
 
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req));
 
@@ -193,6 +192,9 @@ int bnxt_hwrm_clear_filter(struct bnxt *bp,
 	int rc = 0;
 	struct hwrm_cfa_l2_filter_free_input req = {.req_type = 0 };
 	struct hwrm_cfa_l2_filter_free_output *resp = bp->hwrm_cmd_resp_addr;
+
+	if (filter->fw_l2_filter_id == UINT64_MAX)
+		return 0;
 
 	HWRM_PREP(req, CFA_L2_FILTER_FREE, -1, resp);
 
@@ -215,6 +217,9 @@ int bnxt_hwrm_set_filter(struct bnxt *bp,
 	struct hwrm_cfa_l2_filter_alloc_input req = {.req_type = 0 };
 	struct hwrm_cfa_l2_filter_alloc_output *resp = bp->hwrm_cmd_resp_addr;
 	uint32_t enables = 0;
+
+	if (filter->fw_l2_filter_id != UINT64_MAX)
+		bnxt_hwrm_clear_filter(bp, filter);
 
 	HWRM_PREP(req, CFA_L2_FILTER_ALLOC, -1, resp);
 
@@ -480,22 +485,34 @@ static int bnxt_hwrm_port_phy_cfg(struct bnxt *bp, struct bnxt_link_info *conf)
 	HWRM_PREP(req, PORT_PHY_CFG, -1, resp);
 
 	if (conf->link_up) {
+		/* Setting Fixed Speed. But AutoNeg is ON, So disable it */
+		if (bp->link_info.auto_mode && conf->link_speed) {
+			req.auto_mode = HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_NONE;
+			RTE_LOG(DEBUG, PMD, "Disabling AutoNeg\n");
+		}
+
 		req.flags = rte_cpu_to_le_32(conf->phy_flags);
 		req.force_link_speed = rte_cpu_to_le_16(conf->link_speed);
+		enables |= HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_MODE;
 		/*
 		 * Note, ChiMP FW 20.2.1 and 20.2.2 return an error when we set
 		 * any auto mode, even "none".
 		 */
 		if (!conf->link_speed) {
-			req.auto_mode |= conf->auto_mode;
-			enables = HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_MODE;
-			req.auto_link_speed_mask = conf->auto_link_speed_mask;
-			enables |=
-			   HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_LINK_SPEED_MASK;
-			req.auto_link_speed = bp->link_info.auto_link_speed;
-			enables |=
-				HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_LINK_SPEED;
+			/* No speeds specified. Enable AutoNeg - all speeds */
+			req.auto_mode =
+				HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_ALL_SPEEDS;
 		}
+		/* AutoNeg - Advertise speeds specified. */
+		if (conf->auto_link_speed_mask) {
+			req.auto_mode =
+				HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_SPEED_MASK;
+			req.auto_link_speed_mask =
+				conf->auto_link_speed_mask;
+			enables |=
+			HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_LINK_SPEED_MASK;
+		}
+
 		req.auto_duplex = conf->duplex;
 		enables |= HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_DUPLEX;
 		req.auto_pause = conf->auto_pause;
@@ -534,18 +551,17 @@ static int bnxt_hwrm_port_phy_qcfg(struct bnxt *bp,
 	HWRM_CHECK_RESULT;
 
 	link_info->phy_link_status = resp->link;
-	if (link_info->phy_link_status != HWRM_PORT_PHY_QCFG_OUTPUT_LINK_NO_LINK) {
-		link_info->link_up = 1;
-		link_info->link_speed = rte_le_to_cpu_16(resp->link_speed);
-	} else {
-		link_info->link_up = 0;
-		link_info->link_speed = 0;
-	}
+	link_info->link_up =
+		(link_info->phy_link_status ==
+		 HWRM_PORT_PHY_QCFG_OUTPUT_LINK_LINK) ? 1 : 0;
+	link_info->link_speed = rte_le_to_cpu_16(resp->link_speed);
 	link_info->duplex = resp->duplex;
 	link_info->pause = resp->pause;
 	link_info->auto_pause = resp->auto_pause;
 	link_info->force_pause = resp->force_pause;
 	link_info->auto_mode = resp->auto_mode;
+	link_info->phy_type = resp->phy_type;
+	link_info->media_type = resp->media_type;
 
 	link_info->support_speeds = rte_le_to_cpu_16(resp->support_speeds);
 	link_info->auto_link_speed = rte_le_to_cpu_16(resp->auto_link_speed);
@@ -829,11 +845,14 @@ int bnxt_hwrm_vnic_alloc(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 
 	HWRM_PREP(req, VNIC_ALLOC, -1, resp);
 
+	if (vnic->func_default)
+		req.flags = HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT;
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req));
 
 	HWRM_CHECK_RESULT;
 
 	vnic->fw_vnic_id = rte_le_to_cpu_16(resp->vnic_id);
+	RTE_LOG(DEBUG, PMD, "VNIC ID %x\n", vnic->fw_vnic_id);
 	return rc;
 }
 
@@ -842,6 +861,11 @@ int bnxt_hwrm_vnic_cfg(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	int rc = 0;
 	struct hwrm_vnic_cfg_input req = {.req_type = 0 };
 	struct hwrm_vnic_cfg_output *resp = bp->hwrm_cmd_resp_addr;
+
+	if (vnic->fw_vnic_id == INVALID_HW_RING_ID) {
+		RTE_LOG(DEBUG, PMD, "VNIC ID %x\n", vnic->fw_vnic_id);
+		return rc;
+	}
 
 	HWRM_PREP(req, VNIC_CFG, -1, resp);
 
@@ -885,6 +909,7 @@ int bnxt_hwrm_vnic_ctx_alloc(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	HWRM_CHECK_RESULT;
 
 	vnic->fw_rss_cos_lb_ctx = rte_le_to_cpu_16(resp->rss_cos_lb_ctx_id);
+	RTE_LOG(DEBUG, PMD, "VNIC RSS Rule %x\n", vnic->fw_rss_cos_lb_ctx);
 
 	return rc;
 }
@@ -895,6 +920,12 @@ int bnxt_hwrm_vnic_ctx_free(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	struct hwrm_vnic_rss_cos_lb_ctx_free_input req = {.req_type = 0 };
 	struct hwrm_vnic_rss_cos_lb_ctx_free_output *resp =
 						bp->hwrm_cmd_resp_addr;
+
+	if (vnic->fw_rss_cos_lb_ctx == 0xffff) {
+		RTE_LOG(DEBUG, PMD,
+			"VNIC RSS Rule %x\n", vnic->fw_rss_cos_lb_ctx);
+		return rc;
+	}
 
 	HWRM_PREP(req, VNIC_RSS_COS_LB_CTX_FREE, -1, resp);
 
@@ -915,8 +946,10 @@ int bnxt_hwrm_vnic_free(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	struct hwrm_vnic_free_input req = {.req_type = 0 };
 	struct hwrm_vnic_free_output *resp = bp->hwrm_cmd_resp_addr;
 
-	if (vnic->fw_vnic_id == INVALID_HW_RING_ID)
+	if (vnic->fw_vnic_id == INVALID_HW_RING_ID) {
+		RTE_LOG(DEBUG, PMD, "VNIC FREE ID %x\n", vnic->fw_vnic_id);
 		return rc;
+	}
 
 	HWRM_PREP(req, VNIC_FREE, -1, resp);
 
@@ -1247,6 +1280,11 @@ static uint16_t bnxt_parse_eth_link_duplex(uint32_t conf_link_speed)
 	return hw_link_duplex;
 }
 
+static uint16_t bnxt_check_eth_link_autoneg(uint32_t conf_link)
+{
+	return (conf_link & ETH_LINK_SPEED_FIXED) ? 0 : 1;
+}
+
 static uint16_t bnxt_parse_eth_link_speed(uint32_t conf_link_speed)
 {
 	uint16_t eth_link_speed = 0;
@@ -1335,12 +1373,16 @@ static int bnxt_valid_link_speed(uint32_t link_speed, uint8_t port_id)
 	return 0;
 }
 
-static uint16_t bnxt_parse_eth_link_speed_mask(uint32_t link_speed)
+static uint16_t
+bnxt_parse_eth_link_speed_mask(struct bnxt *bp, uint32_t link_speed)
 {
 	uint16_t ret = 0;
 
-	if (link_speed == ETH_LINK_SPEED_AUTONEG)
+	if (link_speed == ETH_LINK_SPEED_AUTONEG) {
+		if (bp->link_info.support_speeds)
+			return bp->link_info.support_speeds;
 		link_speed = BNXT_SUPPORTED_SPEEDS;
+	}
 
 	if (link_speed & ETH_LINK_SPEED_100M)
 		ret |= HWRM_PORT_PHY_CFG_INPUT_AUTO_LINK_SPEED_MASK_100MB;
@@ -1432,16 +1474,16 @@ int bnxt_get_hwrm_link_config(struct bnxt *bp, struct rte_eth_link *link)
 			"Get link config failed with rc %d\n", rc);
 		goto exit;
 	}
-	if (link_info->link_up)
+	if (link_info->link_speed)
 		link->link_speed =
 			bnxt_parse_hw_link_speed(link_info->link_speed);
 	else
-		link->link_speed = ETH_LINK_SPEED_10M;
+		link->link_speed = ETH_SPEED_NUM_NONE;
 	link->link_duplex = bnxt_parse_hw_link_duplex(link_info->duplex);
 	link->link_status = link_info->link_up;
 	link->link_autoneg = link_info->auto_mode ==
 		HWRM_PORT_PHY_QCFG_OUTPUT_AUTO_MODE_NONE ?
-		ETH_LINK_SPEED_FIXED : ETH_LINK_SPEED_AUTONEG;
+		ETH_LINK_FIXED : ETH_LINK_AUTONEG;
 exit:
 	return rc;
 }
@@ -1451,7 +1493,7 @@ int bnxt_set_hwrm_link_config(struct bnxt *bp, bool link_up)
 	int rc = 0;
 	struct rte_eth_conf *dev_conf = &bp->eth_dev->data->dev_conf;
 	struct bnxt_link_info link_req;
-	uint16_t speed;
+	uint16_t speed, autoneg;
 
 	if (BNXT_NPAR_PF(bp) || BNXT_VF(bp))
 		return 0;
@@ -1466,19 +1508,28 @@ int bnxt_set_hwrm_link_config(struct bnxt *bp, bool link_up)
 	if (!link_up)
 		goto port_phy_cfg;
 
+	autoneg = bnxt_check_eth_link_autoneg(dev_conf->link_speeds);
 	speed = bnxt_parse_eth_link_speed(dev_conf->link_speeds);
 	link_req.phy_flags = HWRM_PORT_PHY_CFG_INPUT_FLAGS_RESET_PHY;
-	if (speed == 0) {
+	if (autoneg == 1) {
 		link_req.phy_flags |=
 				HWRM_PORT_PHY_CFG_INPUT_FLAGS_RESTART_AUTONEG;
-		link_req.auto_mode =
-				HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_SPEED_MASK;
 		link_req.auto_link_speed_mask =
-			bnxt_parse_eth_link_speed_mask(dev_conf->link_speeds);
+			bnxt_parse_eth_link_speed_mask(bp,
+						       dev_conf->link_speeds);
 	} else {
+		if (bp->link_info.phy_type ==
+		    HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASET ||
+		    bp->link_info.phy_type ==
+		    HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASETE ||
+		    bp->link_info.media_type ==
+		    HWRM_PORT_PHY_QCFG_OUTPUT_MEDIA_TYPE_TP) {
+			RTE_LOG(ERR, PMD, "10GBase-T devices must autoneg\n");
+			return -EINVAL;
+		}
+
 		link_req.phy_flags |= HWRM_PORT_PHY_CFG_INPUT_FLAGS_FORCE;
 		link_req.link_speed = speed;
-		RTE_LOG(INFO, PMD, "Set Link Speed %x\n", speed);
 	}
 	link_req.duplex = bnxt_parse_eth_link_duplex(dev_conf->link_speeds);
 	link_req.auto_pause = bp->link_info.auto_pause;
@@ -1491,7 +1542,6 @@ port_phy_cfg:
 			"Set link config failed with rc %d\n", rc);
 	}
 
-	rte_delay_ms(BNXT_LINK_WAIT_INTERVAL);
 error:
 	return rc;
 }

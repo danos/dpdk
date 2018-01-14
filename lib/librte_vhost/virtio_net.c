@@ -50,10 +50,19 @@
 #define MAX_PKT_BURST 32
 #define VHOST_LOG_PAGE	4096
 
+/*
+ * Atomically set a bit in memory.
+ */
+static inline void __attribute__((always_inline))
+vhost_set_bit(unsigned int nr, volatile uint8_t *addr)
+{
+	__sync_fetch_and_or_8(addr, (1U << nr));
+}
+
 static inline void __attribute__((always_inline))
 vhost_log_page(uint8_t *log_base, uint64_t page)
 {
-	log_base[page / 8] |= 1 << (page % 8);
+	vhost_set_bit(page % 8, &log_base[page / 8]);
 }
 
 static inline void __attribute__((always_inline))
@@ -144,11 +153,16 @@ update_shadow_used_ring(struct vhost_virtqueue *vq,
 static void
 virtio_enqueue_offload(struct rte_mbuf *m_buf, struct virtio_net_hdr *net_hdr)
 {
-	if (m_buf->ol_flags & PKT_TX_L4_MASK) {
+	uint64_t csum_l4 = m_buf->ol_flags & PKT_TX_L4_MASK;
+
+	if (m_buf->ol_flags & PKT_TX_TCP_SEG)
+		csum_l4 |= PKT_TX_TCP_CKSUM;
+
+	if (csum_l4) {
 		net_hdr->flags = VIRTIO_NET_HDR_F_NEEDS_CSUM;
 		net_hdr->csum_start = m_buf->l2_len + m_buf->l3_len;
 
-		switch (m_buf->ol_flags & PKT_TX_L4_MASK) {
+		switch (csum_l4) {
 		case PKT_TX_TCP_CKSUM:
 			net_hdr->csum_offset = (offsetof(struct tcp_hdr,
 						cksum));
@@ -162,6 +176,15 @@ virtio_enqueue_offload(struct rte_mbuf *m_buf, struct virtio_net_hdr *net_hdr)
 						cksum));
 			break;
 		}
+	}
+
+	/* IP cksum verification cannot be bypassed, then calculate here */
+	if (m_buf->ol_flags & PKT_TX_IP_CKSUM) {
+		struct ipv4_hdr *ipv4_hdr;
+
+		ipv4_hdr = rte_pktmbuf_mtod_offset(m_buf, struct ipv4_hdr *,
+						   m_buf->l2_len);
+		ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
 	}
 
 	if (m_buf->ol_flags & PKT_TX_TCP_SEG) {
@@ -195,6 +218,8 @@ copy_mbuf_to_desc(struct virtio_net *dev, struct vring_desc *descs,
 	struct vring_desc *desc;
 	uint64_t desc_addr;
 	struct virtio_net_hdr_mrg_rxbuf virtio_hdr = {{0, 0, 0, 0, 0, 0}, 0};
+	/* A counter to avoid desc dead loop chain */
+	uint16_t nr_desc = 1;
 
 	desc = &descs[desc_idx];
 	desc_addr = gpa_to_vva(dev, desc->addr);
@@ -233,7 +258,7 @@ copy_mbuf_to_desc(struct virtio_net *dev, struct vring_desc *descs,
 				/* Room in vring buffer is not enough */
 				return -1;
 			}
-			if (unlikely(desc->next >= size))
+			if (unlikely(desc->next >= size || ++nr_desc > size))
 				return -1;
 
 			desc = &descs[desc->next];
@@ -628,9 +653,11 @@ static inline bool
 virtio_net_with_host_offload(struct virtio_net *dev)
 {
 	if (dev->features &
-			(VIRTIO_NET_F_CSUM | VIRTIO_NET_F_HOST_ECN |
-			 VIRTIO_NET_F_HOST_TSO4 | VIRTIO_NET_F_HOST_TSO6 |
-			 VIRTIO_NET_F_HOST_UFO))
+			((1ULL << VIRTIO_NET_F_CSUM) |
+			 (1ULL << VIRTIO_NET_F_HOST_ECN) |
+			 (1ULL << VIRTIO_NET_F_HOST_TSO4) |
+			 (1ULL << VIRTIO_NET_F_HOST_TSO6) |
+			 (1ULL << VIRTIO_NET_F_HOST_UFO)))
 		return true;
 
 	return false;
@@ -677,6 +704,7 @@ parse_ethernet(struct rte_mbuf *m, uint16_t *l4_proto, void **l4_hdr)
 	default:
 		m->l3_len = 0;
 		*l4_proto = 0;
+		*l4_hdr = NULL;
 		break;
 	}
 }
@@ -713,7 +741,7 @@ vhost_dequeue_offload(struct virtio_net_hdr *hdr, struct rte_mbuf *m)
 		}
 	}
 
-	if (hdr->gso_type != VIRTIO_NET_HDR_GSO_NONE) {
+	if (l4_hdr && hdr->gso_type != VIRTIO_NET_HDR_GSO_NONE) {
 		switch (hdr->gso_type & ~VIRTIO_NET_HDR_GSO_ECN) {
 		case VIRTIO_NET_HDR_GSO_TCPV4:
 		case VIRTIO_NET_HDR_GSO_TCPV6:
@@ -902,6 +930,8 @@ copy_desc_to_mbuf(struct virtio_net *dev, struct vring_desc *descs,
 					"allocate memory for mbuf.\n");
 				return -1;
 			}
+			if (unlikely(dev->dequeue_zero_copy))
+				rte_mbuf_refcnt_update(cur, 1);
 
 			prev->next = cur;
 			prev->data_len = mbuf_offset;
@@ -1053,9 +1083,21 @@ rte_vhost_dequeue_burst(int vid, uint16_t queue_id,
 	 * array, to looks like that guest actually send such packet.
 	 *
 	 * Check user_send_rarp() for more information.
+	 *
+	 * broadcast_rarp shares a cacheline in the virtio_net structure
+	 * with some fields that are accessed during enqueue and
+	 * rte_atomic16_cmpset() causes a write if using cmpxchg. This could
+	 * result in false sharing between enqueue and dequeue.
+	 *
+	 * Prevent unnecessary false sharing by reading broadcast_rarp first
+	 * and only performing cmpset if the read indicates it is likely to
+	 * be set.
 	 */
-	if (unlikely(rte_atomic16_cmpset((volatile uint16_t *)
-					 &dev->broadcast_rarp.cnt, 1, 0))) {
+
+	if (unlikely(rte_atomic16_read(&dev->broadcast_rarp) &&
+			rte_atomic16_cmpset((volatile uint16_t *)
+				&dev->broadcast_rarp.cnt, 1, 0))) {
+
 		rarp_mbuf = rte_pktmbuf_alloc(mbuf_pool);
 		if (rarp_mbuf == NULL) {
 			RTE_LOG(ERR, VHOST_DATA,

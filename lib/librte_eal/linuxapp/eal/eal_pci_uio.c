@@ -38,6 +38,7 @@
 #include <inttypes.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/sysmacros.h>
 #include <linux/pci_regs.h>
 
 #if defined(RTE_ARCH_X86)
@@ -133,7 +134,7 @@ pci_mknod_uio_dev(const char *sysfs_uio_path, unsigned uio_num)
 	snprintf(filename, sizeof(filename), "/dev/uio%u", uio_num);
 	dev = makedev(major, minor);
 	ret = mknod(filename, S_IFCHR | S_IRUSR | S_IWUSR, dev);
-	if (f == NULL) {
+	if (ret != 0) {
 		RTE_LOG(ERR, EAL, "%s(): mknod() failed %s\n",
 			__func__, strerror(errno));
 		return -1;
@@ -153,7 +154,7 @@ pci_get_uio_dev(struct rte_pci_device *dev, char *dstbuf,
 			   unsigned int buflen, int create)
 {
 	struct rte_pci_addr *loc = &dev->addr;
-	unsigned int uio_num;
+	int uio_num = -1;
 	struct dirent *e;
 	DIR *dir;
 	char dirname[PATH_MAX];

@@ -76,9 +76,9 @@ static const struct rte_cryptodev_capabilities qat_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA1_HMAC,
 				.block_size = 64,
 				.key_size = {
-					.min = 64,
+					.min = 1,
 					.max = 64,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 20,
@@ -97,9 +97,9 @@ static const struct rte_cryptodev_capabilities qat_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA224_HMAC,
 				.block_size = 64,
 					.key_size = {
-					.min = 64,
+					.min = 1,
 					.max = 64,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 28,
@@ -118,9 +118,9 @@ static const struct rte_cryptodev_capabilities qat_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA256_HMAC,
 				.block_size = 64,
 				.key_size = {
-					.min = 64,
+					.min = 1,
 					.max = 64,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 32,
@@ -137,11 +137,11 @@ static const struct rte_cryptodev_capabilities qat_pmd_capabilities[] = {
 			.xform_type = RTE_CRYPTO_SYM_XFORM_AUTH,
 			{.auth = {
 				.algo = RTE_CRYPTO_AUTH_SHA384_HMAC,
-				.block_size = 64,
+				.block_size = 128,
 				.key_size = {
-					.min = 128,
+					.min = 1,
 					.max = 128,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 48,
@@ -160,9 +160,9 @@ static const struct rte_cryptodev_capabilities qat_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA512_HMAC,
 				.block_size = 128,
 				.key_size = {
-					.min = 128,
+					.min = 1,
 					.max = 128,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 64,
@@ -181,9 +181,9 @@ static const struct rte_cryptodev_capabilities qat_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_MD5_HMAC,
 				.block_size = 64,
 				.key_size = {
-					.min = 8,
+					.min = 1,
 					.max = 64,
-					.increment = 8
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 16,
@@ -303,8 +303,8 @@ static const struct rte_cryptodev_capabilities qat_pmd_capabilities[] = {
 					.increment = 8
 				},
 				.iv_size = {
-					.min = 16,
-					.max = 16,
+					.min = 12,
+					.max = 12,
 					.increment = 0
 				}
 			}, }
@@ -956,7 +956,7 @@ qat_write_hw_desc_entry(struct rte_crypto_op *op, uint8_t *out_msg)
 	uint32_t auth_len = 0, auth_ofs = 0;
 	uint32_t min_ofs = 0;
 	uint32_t digest_appended = 1;
-	uint64_t buf_start = 0;
+	uint64_t src_buf_start = 0, dst_buf_start = 0;
 
 
 #ifdef RTE_LIBRTE_PMD_QAT_DEBUG_TX
@@ -1021,17 +1021,24 @@ qat_write_hw_desc_entry(struct rte_crypto_op *op, uint8_t *out_msg)
 		}
 
 		/* copy IV into request if it fits */
-		if (op->sym->cipher.iv.length && (op->sym->cipher.iv.length <=
-				sizeof(cipher_param->u.cipher_IV_array))) {
-			rte_memcpy(cipher_param->u.cipher_IV_array,
-					op->sym->cipher.iv.data,
-					op->sym->cipher.iv.length);
-		} else {
-			ICP_QAT_FW_LA_CIPH_IV_FLD_FLAG_SET(
-					qat_req->comn_hdr.serv_specif_flags,
-					ICP_QAT_FW_CIPH_IV_64BIT_PTR);
-			cipher_param->u.s.cipher_IV_ptr =
-					op->sym->cipher.iv.phys_addr;
+		/*
+		 * If IV length is zero do not copy anything but still
+		 * use request descriptor embedded IV
+		 *
+		 */
+		if (op->sym->cipher.iv.length) {
+			if (op->sym->cipher.iv.length <=
+					sizeof(cipher_param->u.cipher_IV_array)) {
+				rte_memcpy(cipher_param->u.cipher_IV_array,
+						op->sym->cipher.iv.data,
+						op->sym->cipher.iv.length);
+			} else {
+				ICP_QAT_FW_LA_CIPH_IV_FLD_FLAG_SET(
+						qat_req->comn_hdr.serv_specif_flags,
+						ICP_QAT_FW_CIPH_IV_64BIT_PTR);
+				cipher_param->u.s.cipher_IV_ptr =
+						op->sym->cipher.iv.phys_addr;
+			}
 		}
 		min_ofs = cipher_ofs;
 	}
@@ -1062,6 +1069,12 @@ qat_write_hw_desc_entry(struct rte_crypto_op *op, uint8_t *out_msg)
 				}
 			}
 
+		} else if (ctx->qat_hash_alg ==
+					ICP_QAT_HW_AUTH_ALGO_GALOIS_128 ||
+				ctx->qat_hash_alg ==
+					ICP_QAT_HW_AUTH_ALGO_GALOIS_64) {
+			auth_ofs = op->sym->cipher.data.offset;
+			auth_len = op->sym->cipher.data.length;
 		} else {
 			auth_ofs = op->sym->auth.data.offset;
 			auth_len = op->sym->auth.data.length;
@@ -1085,27 +1098,40 @@ qat_write_hw_desc_entry(struct rte_crypto_op *op, uint8_t *out_msg)
 	if (do_cipher && do_auth)
 		min_ofs = cipher_ofs < auth_ofs ? cipher_ofs : auth_ofs;
 
-
-	/* Start DMA at nearest aligned address below min_ofs */
-	#define QAT_64_BTYE_ALIGN_MASK (~0x3f)
-	buf_start = rte_pktmbuf_mtophys_offset(op->sym->m_src, min_ofs) &
-							QAT_64_BTYE_ALIGN_MASK;
-
-	if (unlikely((rte_pktmbuf_mtophys(op->sym->m_src)
-			- rte_pktmbuf_headroom(op->sym->m_src)) > buf_start)) {
-		/* alignment has pushed addr ahead of start of mbuf
-		 * so revert and take the performance hit
+	if (unlikely(op->sym->m_dst != NULL)) {
+		/* Out-of-place operation (OOP)
+		 * Don't align DMA start. DMA the minimum data-set
+		 * so as not to overwrite data in dest buffer
 		 */
-		buf_start = rte_pktmbuf_mtophys(op->sym->m_src);
-	}
+		src_buf_start =
+			rte_pktmbuf_mtophys_offset(op->sym->m_src, min_ofs);
+		dst_buf_start =
+			rte_pktmbuf_mtophys_offset(op->sym->m_dst, min_ofs);
+	} else {
+		/* In-place operation
+		 * Start DMA at nearest aligned address below min_ofs
+		 */
+		src_buf_start =
+			rte_pktmbuf_mtophys_offset(op->sym->m_src, min_ofs)
+						& QAT_64_BTYE_ALIGN_MASK;
 
-	qat_req->comn_mid.dest_data_addr =
-		qat_req->comn_mid.src_data_addr = buf_start;
+		if (unlikely((rte_pktmbuf_mtophys(op->sym->m_src) -
+					rte_pktmbuf_headroom(op->sym->m_src))
+							> src_buf_start)) {
+			/* alignment has pushed addr ahead of start of mbuf
+			 * so revert and take the performance hit
+			 */
+			src_buf_start =
+				rte_pktmbuf_mtophys_offset(op->sym->m_src,
+								min_ofs);
+		}
+		dst_buf_start = src_buf_start;
+	}
 
 	if (do_cipher) {
 		cipher_param->cipher_offset =
-					(uint32_t)rte_pktmbuf_mtophys_offset(
-					op->sym->m_src, cipher_ofs) - buf_start;
+				(uint32_t)rte_pktmbuf_mtophys_offset(
+				op->sym->m_src, cipher_ofs) - src_buf_start;
 		cipher_param->cipher_length = cipher_len;
 	} else {
 		cipher_param->cipher_offset = 0;
@@ -1113,7 +1139,7 @@ qat_write_hw_desc_entry(struct rte_crypto_op *op, uint8_t *out_msg)
 	}
 	if (do_auth) {
 		auth_param->auth_off = (uint32_t)rte_pktmbuf_mtophys_offset(
-					op->sym->m_src, auth_ofs) - buf_start;
+				op->sym->m_src, auth_ofs) - src_buf_start;
 		auth_param->auth_len = auth_len;
 	} else {
 		auth_param->auth_off = 0;
@@ -1134,21 +1160,8 @@ qat_write_hw_desc_entry(struct rte_crypto_op *op, uint8_t *out_msg)
 			qat_req->comn_mid.src_length
 				+= op->sym->auth.digest.length;
 	}
-
-	/* out-of-place operation (OOP) */
-	if (unlikely(op->sym->m_dst != NULL)) {
-
-		if (do_auth)
-			qat_req->comn_mid.dest_data_addr =
-				rte_pktmbuf_mtophys_offset(op->sym->m_dst,
-						auth_ofs)
-						- auth_param->auth_off;
-		else
-			qat_req->comn_mid.dest_data_addr =
-				rte_pktmbuf_mtophys_offset(op->sym->m_dst,
-						cipher_ofs)
-						- cipher_param->cipher_offset;
-	}
+	qat_req->comn_mid.src_data_addr = src_buf_start;
+	qat_req->comn_mid.dest_data_addr = dst_buf_start;
 
 	if (ctx->qat_hash_alg == ICP_QAT_HW_AUTH_ALGO_GALOIS_128 ||
 			ctx->qat_hash_alg == ICP_QAT_HW_AUTH_ALGO_GALOIS_64) {
@@ -1283,9 +1296,9 @@ void qat_crypto_sym_stats_get(struct rte_cryptodev *dev,
 		}
 
 		stats->enqueued_count += qp[i]->stats.enqueued_count;
-		stats->dequeued_count += qp[i]->stats.enqueued_count;
+		stats->dequeued_count += qp[i]->stats.dequeued_count;
 		stats->enqueue_err_count += qp[i]->stats.enqueue_err_count;
-		stats->dequeue_err_count += qp[i]->stats.enqueue_err_count;
+		stats->dequeue_err_count += qp[i]->stats.dequeue_err_count;
 	}
 }
 

@@ -71,6 +71,7 @@ reassemble_packets(struct i40e_rx_queue *rxq, struct rte_mbuf **rx_bufs,
 					/* free up last mbuf */
 					struct rte_mbuf *secondlast = start;
 
+					start->nb_segs--;
 					while (secondlast->next != end)
 						secondlast = secondlast->next;
 					secondlast->data_len -= (rxq->crc_len -
@@ -240,6 +241,10 @@ i40e_rx_vec_dev_conf_condition_check_default(struct rte_eth_dev *dev)
 	 * - no header split support
 	 */
 	if (rxmode->header_split == 1)
+		return -1;
+
+	/* no QinQ support */
+	if (rxmode->hw_vlan_extend == 1)
 		return -1;
 
 	return 0;

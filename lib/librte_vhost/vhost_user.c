@@ -110,6 +110,10 @@ vhost_backend_cleanup(struct virtio_net *dev)
 		rte_free(dev->mem);
 		dev->mem = NULL;
 	}
+
+	free(dev->guest_pages);
+	dev->guest_pages = NULL;
+
 	if (dev->log_addr) {
 		munmap((void *)(uintptr_t)dev->log_addr, dev->log_size);
 		dev->log_addr = 0;
@@ -447,14 +451,14 @@ add_guest_pages(struct virtio_net *dev, struct virtio_memory_region *reg,
 	reg_size -= size;
 
 	while (reg_size > 0) {
+		size = RTE_MIN(reg_size, page_size);
 		host_phys_addr = rte_mem_virt2phy((void *)(uintptr_t)
 						  host_user_addr);
-		add_one_guest_page(dev, guest_phys_addr, host_phys_addr,
-				   page_size);
+		add_one_guest_page(dev, guest_phys_addr, host_phys_addr, size);
 
-		host_user_addr  += page_size;
-		guest_phys_addr += page_size;
-		reg_size -= page_size;
+		host_user_addr  += size;
+		guest_phys_addr += size;
+		reg_size -= size;
 	}
 }
 
@@ -567,7 +571,8 @@ vhost_user_set_mem_table(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 		reg->host_user_addr = (uint64_t)(uintptr_t)mmap_addr +
 				      mmap_offset;
 
-		add_guest_pages(dev, reg, alignment);
+		if (dev->dequeue_zero_copy)
+			add_guest_pages(dev, reg, alignment);
 
 		RTE_LOG(INFO, VHOST_CONFIG,
 			"guest memory region %u, size: 0x%" PRIx64 "\n"

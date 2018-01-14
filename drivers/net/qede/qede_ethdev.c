@@ -203,9 +203,10 @@ static void qede_print_adapter_info(struct qede_dev *qdev)
 
 	DP_INFO(edev, "*********************************\n");
 	DP_INFO(edev, " DPDK version:%s\n", rte_version());
-	DP_INFO(edev, " Chip details : %s%d\n",
+	DP_INFO(edev, " Chip details : %s %c%d\n",
 		  ECORE_IS_BB(edev) ? "BB" : "AH",
-		  CHIP_REV_IS_A0(edev) ? 0 : 1);
+		  'A' + edev->chip_rev,
+		  (int)edev->chip_metal);
 	snprintf(ver_str, QEDE_PMD_DRV_VER_STR_SIZE, "%d.%d.%d.%d",
 		 info->fw_major, info->fw_minor, info->fw_rev, info->fw_eng);
 	snprintf(drv_ver, QEDE_PMD_DRV_VER_STR_SIZE, "%s_%s",
@@ -223,47 +224,181 @@ static void qede_print_adapter_info(struct qede_dev *qdev)
 	DP_INFO(edev, "*********************************\n");
 }
 
-static int
-qede_set_ucast_rx_mac(struct qede_dev *qdev,
-		      enum qed_filter_xcast_params_type opcode,
-		      uint8_t mac[ETHER_ADDR_LEN])
+static void qede_set_ucast_cmn_params(struct ecore_filter_ucast *ucast)
 {
-	struct ecore_dev *edev = &qdev->edev;
-	struct qed_filter_params filter_cmd;
+	memset(ucast, 0, sizeof(struct ecore_filter_ucast));
+	ucast->is_rx_filter = true;
+	ucast->is_tx_filter = true;
+	/* ucast->assert_on_error = true; - For debug */
+}
 
-	memset(&filter_cmd, 0, sizeof(filter_cmd));
-	filter_cmd.type = QED_FILTER_TYPE_UCAST;
-	filter_cmd.filter.ucast.type = opcode;
-	filter_cmd.filter.ucast.mac_valid = 1;
-	rte_memcpy(&filter_cmd.filter.ucast.mac[0], &mac[0], ETHER_ADDR_LEN);
-	return qdev->ops->filter_config(edev, &filter_cmd);
+static int
+qede_ucast_filter(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
+		  bool add)
+{
+	struct qede_dev *qdev = QEDE_INIT_QDEV(eth_dev);
+	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
+	struct qede_ucast_entry *tmp = NULL;
+	struct qede_ucast_entry *u;
+	struct ether_addr *mac_addr;
+
+	mac_addr  = (struct ether_addr *)ucast->mac;
+	if (add) {
+		SLIST_FOREACH(tmp, &qdev->uc_list_head, list) {
+			if ((memcmp(mac_addr, &tmp->mac,
+				    ETHER_ADDR_LEN) == 0) &&
+			     ucast->vlan == tmp->vlan) {
+				DP_ERR(edev, "Unicast MAC is already added"
+				       " with vlan = %u, vni = %u\n",
+				       ucast->vlan,  ucast->vni);
+					return -EEXIST;
+			}
+		}
+		u = rte_malloc(NULL, sizeof(struct qede_ucast_entry),
+			       RTE_CACHE_LINE_SIZE);
+		if (!u) {
+			DP_ERR(edev, "Did not allocate memory for ucast\n");
+			return -ENOMEM;
+		}
+		ether_addr_copy(mac_addr, &u->mac);
+		u->vlan = ucast->vlan;
+		SLIST_INSERT_HEAD(&qdev->uc_list_head, u, list);
+		qdev->num_uc_addr++;
+	} else {
+		SLIST_FOREACH(tmp, &qdev->uc_list_head, list) {
+			if ((memcmp(mac_addr, &tmp->mac,
+				    ETHER_ADDR_LEN) == 0) &&
+			    ucast->vlan == tmp->vlan)
+			break;
+		}
+		if (tmp == NULL) {
+			DP_INFO(edev, "Unicast MAC is not found\n");
+			return -EINVAL;
+		}
+		SLIST_REMOVE(&qdev->uc_list_head, tmp, qede_ucast_entry, list);
+		qdev->num_uc_addr--;
+	}
+
+	return 0;
+}
+
+static int
+qede_mcast_filter(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *mcast,
+		  bool add)
+{
+	struct qede_dev *qdev = QEDE_INIT_QDEV(eth_dev);
+	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
+	struct ether_addr *mac_addr;
+	struct qede_mcast_entry *tmp = NULL;
+	struct qede_mcast_entry *m;
+
+	mac_addr  = (struct ether_addr *)mcast->mac;
+	if (add) {
+		SLIST_FOREACH(tmp, &qdev->mc_list_head, list) {
+			if (memcmp(mac_addr, &tmp->mac, ETHER_ADDR_LEN) == 0) {
+				DP_ERR(edev,
+					"Multicast MAC is already added\n");
+				return -EEXIST;
+			}
+		}
+		m = rte_malloc(NULL, sizeof(struct qede_mcast_entry),
+			RTE_CACHE_LINE_SIZE);
+		if (!m) {
+			DP_ERR(edev,
+				"Did not allocate memory for mcast\n");
+			return -ENOMEM;
+		}
+		ether_addr_copy(mac_addr, &m->mac);
+		SLIST_INSERT_HEAD(&qdev->mc_list_head, m, list);
+		qdev->num_mc_addr++;
+	} else {
+		SLIST_FOREACH(tmp, &qdev->mc_list_head, list) {
+			if (memcmp(mac_addr, &tmp->mac, ETHER_ADDR_LEN) == 0)
+				break;
+		}
+		if (tmp == NULL) {
+			DP_INFO(edev, "Multicast mac is not found\n");
+			return -EINVAL;
+		}
+		SLIST_REMOVE(&qdev->mc_list_head, tmp,
+			     qede_mcast_entry, list);
+		qdev->num_mc_addr--;
+	}
+
+	return 0;
+}
+
+static enum _ecore_status_t
+qede_mac_int_ops(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
+		 bool add)
+{
+	struct qede_dev *qdev = QEDE_INIT_QDEV(eth_dev);
+	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
+	enum _ecore_status_t rc;
+	struct ecore_filter_mcast mcast;
+	struct qede_mcast_entry *tmp;
+	uint16_t j = 0;
+
+	/* Multicast */
+	if (is_multicast_ether_addr((struct ether_addr *)ucast->mac)) {
+		if (add) {
+			if (qdev->num_mc_addr >= ECORE_MAX_MC_ADDRS) {
+				DP_ERR(edev,
+				       "Mcast filter table limit exceeded, "
+				       "Please enable mcast promisc mode\n");
+				return -ECORE_INVAL;
+			}
+		}
+		rc = qede_mcast_filter(eth_dev, ucast, add);
+		if (rc == 0) {
+			DP_INFO(edev, "num_mc_addrs = %u\n", qdev->num_mc_addr);
+			memset(&mcast, 0, sizeof(mcast));
+			mcast.num_mc_addrs = qdev->num_mc_addr;
+			mcast.opcode = ECORE_FILTER_ADD;
+			SLIST_FOREACH(tmp, &qdev->mc_list_head, list) {
+				ether_addr_copy(&tmp->mac,
+					(struct ether_addr *)&mcast.mac[j]);
+				j++;
+			}
+			rc = ecore_filter_mcast_cmd(edev, &mcast,
+						    ECORE_SPQ_MODE_CB, NULL);
+		}
+		if (rc != ECORE_SUCCESS) {
+			DP_ERR(edev, "Failed to add multicast filter"
+			       " rc = %d, op = %d\n", rc, add);
+		}
+	} else { /* Unicast */
+		if (add) {
+			if (qdev->num_uc_addr >= qdev->dev_info.num_mac_addrs) {
+				DP_ERR(edev,
+				       "Ucast filter table limit exceeded,"
+				       " Please enable promisc mode\n");
+				return -ECORE_INVAL;
+			}
+		}
+		rc = qede_ucast_filter(eth_dev, ucast, add);
+		if (rc == 0)
+			rc = ecore_filter_ucast_cmd(edev, ucast,
+						    ECORE_SPQ_MODE_CB, NULL);
+		if (rc != ECORE_SUCCESS) {
+			DP_ERR(edev, "MAC filter failed, rc = %d, op = %d\n",
+			       rc, add);
+		}
+	}
+
+	return rc;
 }
 
 static void
 qede_mac_addr_add(struct rte_eth_dev *eth_dev, struct ether_addr *mac_addr,
 		  uint32_t index, __rte_unused uint32_t pool)
 {
-	struct qede_dev *qdev = eth_dev->data->dev_private;
-	struct ecore_dev *edev = &qdev->edev;
-	int rc;
+	struct ecore_filter_ucast ucast;
 
-	PMD_INIT_FUNC_TRACE(edev);
-
-	if (index >= qdev->dev_info.num_mac_addrs) {
-		DP_ERR(edev, "Index %u is above MAC filter limit %u\n",
-		       index, qdev->dev_info.num_mac_addrs);
-		return;
-	}
-
-	/* Adding macaddr even though promiscuous mode is set */
-	if (rte_eth_promiscuous_get(eth_dev->data->port_id) == 1)
-		DP_INFO(edev, "Port is in promisc mode, yet adding it\n");
-
-	/* Add MAC filters according to the unicast secondary macs */
-	rc = qede_set_ucast_rx_mac(qdev, QED_FILTER_XCAST_TYPE_ADD,
-				   mac_addr->addr_bytes);
-	if (rc)
-		DP_ERR(edev, "Unable to add macaddr rc=%d\n", rc);
+	qede_set_ucast_cmn_params(&ucast);
+	ucast.type = ECORE_FILTER_MAC;
+	ether_addr_copy(mac_addr, (struct ether_addr *)&ucast.mac);
+	(void)qede_mac_int_ops(eth_dev, &ucast, 1);
 }
 
 static void
@@ -272,6 +407,7 @@ qede_mac_addr_remove(struct rte_eth_dev *eth_dev, uint32_t index)
 	struct qede_dev *qdev = eth_dev->data->dev_private;
 	struct ecore_dev *edev = &qdev->edev;
 	struct ether_addr mac_addr;
+	struct ecore_filter_ucast ucast;
 	int rc;
 
 	PMD_INIT_FUNC_TRACE(edev);
@@ -282,12 +418,15 @@ qede_mac_addr_remove(struct rte_eth_dev *eth_dev, uint32_t index)
 		return;
 	}
 
+	qede_set_ucast_cmn_params(&ucast);
+	ucast.opcode = ECORE_FILTER_REMOVE;
+	ucast.type = ECORE_FILTER_MAC;
+
 	/* Use the index maintained by rte */
-	ether_addr_copy(&eth_dev->data->mac_addrs[index], &mac_addr);
-	rc = qede_set_ucast_rx_mac(qdev, QED_FILTER_XCAST_TYPE_DEL,
-				   mac_addr.addr_bytes);
-	if (rc)
-		DP_ERR(edev, "Unable to remove macaddr rc=%d\n", rc);
+	ether_addr_copy(&eth_dev->data->mac_addrs[index],
+			(struct ether_addr *)&ucast.mac);
+
+	ecore_filter_ucast_cmd(edev, &ucast, ECORE_SPQ_MODE_CB, NULL);
 }
 
 static void
@@ -295,7 +434,6 @@ qede_mac_addr_set(struct rte_eth_dev *eth_dev, struct ether_addr *mac_addr)
 {
 	struct qede_dev *qdev = QEDE_INIT_QDEV(eth_dev);
 	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
-	int rc;
 
 	if (IS_VF(edev) && !ecore_vf_check_mac(ECORE_LEADING_HWFN(edev),
 					       mac_addr->addr_bytes)) {
@@ -305,30 +443,8 @@ qede_mac_addr_set(struct rte_eth_dev *eth_dev, struct ether_addr *mac_addr)
 		return;
 	}
 
-	/* First remove the primary mac */
-	rc = qede_set_ucast_rx_mac(qdev, QED_FILTER_XCAST_TYPE_DEL,
-				   qdev->primary_mac.addr_bytes);
-
-	if (rc) {
-		DP_ERR(edev, "Unable to remove current macaddr"
-			     " Reverting to previous default mac\n");
-		ether_addr_copy(&qdev->primary_mac,
-				&eth_dev->data->mac_addrs[0]);
-		return;
-	}
-
-	/* Add new MAC */
-	rc = qede_set_ucast_rx_mac(qdev, QED_FILTER_XCAST_TYPE_ADD,
-				   mac_addr->addr_bytes);
-
-	if (rc)
-		DP_ERR(edev, "Unable to add new default mac\n");
-	else
-		ether_addr_copy(mac_addr, &qdev->primary_mac);
+	qede_mac_addr_add(eth_dev, mac_addr, 0, 0);
 }
-
-
-
 
 static void qede_config_accept_any_vlan(struct qede_dev *qdev, bool action)
 {
@@ -415,22 +531,6 @@ static void qede_vlan_offload_set(struct rte_eth_dev *eth_dev, int mask)
 		mask, rxmode->hw_vlan_strip, rxmode->hw_vlan_filter);
 }
 
-static int qede_set_ucast_rx_vlan(struct qede_dev *qdev,
-				  enum qed_filter_xcast_params_type opcode,
-				  uint16_t vid)
-{
-	struct qed_filter_params filter_cmd;
-	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
-
-	memset(&filter_cmd, 0, sizeof(filter_cmd));
-	filter_cmd.type = QED_FILTER_TYPE_UCAST;
-	filter_cmd.filter.ucast.type = opcode;
-	filter_cmd.filter.ucast.vlan_valid = 1;
-	filter_cmd.filter.ucast.vlan = vid;
-
-	return qdev->ops->filter_config(edev, &filter_cmd);
-}
-
 static int qede_vlan_filter_set(struct rte_eth_dev *eth_dev,
 				uint16_t vlan_id, int on)
 {
@@ -439,6 +539,7 @@ static int qede_vlan_filter_set(struct rte_eth_dev *eth_dev,
 	struct qed_dev_eth_info *dev_info = &qdev->dev_info;
 	struct qede_vlan_entry *tmp = NULL;
 	struct qede_vlan_entry *vlan;
+	struct ecore_filter_ucast ucast;
 	int rc;
 
 	if (on) {
@@ -465,9 +566,13 @@ static int qede_vlan_filter_set(struct rte_eth_dev *eth_dev,
 			return -ENOMEM;
 		}
 
-		rc = qede_set_ucast_rx_vlan(qdev, QED_FILTER_XCAST_TYPE_ADD,
-					    vlan_id);
-		if (rc) {
+		qede_set_ucast_cmn_params(&ucast);
+		ucast.opcode = ECORE_FILTER_ADD;
+		ucast.type = ECORE_FILTER_VLAN;
+		ucast.vlan = vlan_id;
+		rc = ecore_filter_ucast_cmd(edev, &ucast, ECORE_SPQ_MODE_CB,
+					    NULL);
+		if (rc != 0) {
 			DP_ERR(edev, "Failed to add VLAN %u rc %d\n", vlan_id,
 			       rc);
 			rte_free(vlan);
@@ -497,9 +602,13 @@ static int qede_vlan_filter_set(struct rte_eth_dev *eth_dev,
 
 		SLIST_REMOVE(&qdev->vlan_list_head, tmp, qede_vlan_entry, list);
 
-		rc = qede_set_ucast_rx_vlan(qdev, QED_FILTER_XCAST_TYPE_DEL,
-					    vlan_id);
-		if (rc) {
+		qede_set_ucast_cmn_params(&ucast);
+		ucast.opcode = ECORE_FILTER_REMOVE;
+		ucast.type = ECORE_FILTER_VLAN;
+		ucast.vlan = vlan_id;
+		rc = ecore_filter_ucast_cmd(edev, &ucast, ECORE_SPQ_MODE_CB,
+					    NULL);
+		if (rc != 0) {
 			DP_ERR(edev, "Failed to delete VLAN %u rc %d\n",
 			       vlan_id, rc);
 		} else {
@@ -608,10 +717,6 @@ static int qede_dev_configure(struct rte_eth_dev *eth_dev)
 		return rc;
 
 	SLIST_INIT(&qdev->vlan_list_head);
-
-	/* Add primary mac for PF */
-	if (IS_PF(edev))
-		qede_mac_addr_set(eth_dev, &qdev->primary_mac);
 
 	/* Enable VLAN offloads by default */
 	qede_vlan_offload_set(eth_dev, ETH_VLAN_STRIP_MASK  |
@@ -742,22 +847,6 @@ qede_link_update(struct rte_eth_dev *eth_dev, __rte_unused int wait_to_complete)
 	return ((curr->link_status == link.link_up) ? -1 : 0);
 }
 
-static void
-qede_rx_mode_setting(struct rte_eth_dev *eth_dev,
-		     enum qed_filter_rx_mode_type accept_flags)
-{
-	struct qede_dev *qdev = eth_dev->data->dev_private;
-	struct ecore_dev *edev = &qdev->edev;
-	struct qed_filter_params rx_mode;
-
-	DP_INFO(edev, "%s mode %u\n", __func__, accept_flags);
-
-	memset(&rx_mode, 0, sizeof(struct qed_filter_params));
-	rx_mode.type = QED_FILTER_TYPE_RX_MODE;
-	rx_mode.filter.accept_flags = accept_flags;
-	qdev->ops->filter_config(edev, &rx_mode);
-}
-
 static void qede_promiscuous_enable(struct rte_eth_dev *eth_dev)
 {
 	struct qede_dev *qdev = eth_dev->data->dev_private;
@@ -770,7 +859,7 @@ static void qede_promiscuous_enable(struct rte_eth_dev *eth_dev)
 	if (rte_eth_allmulticast_get(eth_dev->data->port_id) == 1)
 		type |= QED_FILTER_RX_MODE_TYPE_MULTI_PROMISC;
 
-	qede_rx_mode_setting(eth_dev, type);
+	qed_configure_filter_rx_mode(eth_dev, type);
 }
 
 static void qede_promiscuous_disable(struct rte_eth_dev *eth_dev)
@@ -781,10 +870,11 @@ static void qede_promiscuous_disable(struct rte_eth_dev *eth_dev)
 	PMD_INIT_FUNC_TRACE(edev);
 
 	if (rte_eth_allmulticast_get(eth_dev->data->port_id) == 1)
-		qede_rx_mode_setting(eth_dev,
-				     QED_FILTER_RX_MODE_TYPE_MULTI_PROMISC);
+		qed_configure_filter_rx_mode(eth_dev,
+				QED_FILTER_RX_MODE_TYPE_MULTI_PROMISC);
 	else
-		qede_rx_mode_setting(eth_dev, QED_FILTER_RX_MODE_TYPE_REGULAR);
+		qed_configure_filter_rx_mode(eth_dev,
+				QED_FILTER_RX_MODE_TYPE_REGULAR);
 }
 
 static void qede_poll_sp_sb_cb(void *param)
@@ -853,6 +943,7 @@ qede_get_stats(struct rte_eth_dev *eth_dev, struct rte_eth_stats *eth_stats)
 	struct ecore_dev *edev = &qdev->edev;
 	struct ecore_eth_stats stats;
 	unsigned int i = 0, j = 0, qid;
+	unsigned int rxq_stat_cntrs, txq_stat_cntrs;
 	struct qede_tx_queue *txq;
 
 	qdev->ops->get_vport_stats(edev, &stats);
@@ -886,6 +977,17 @@ qede_get_stats(struct rte_eth_dev *eth_dev, struct rte_eth_stats *eth_stats)
 	eth_stats->oerrors = stats.tx_err_drop_pkts;
 
 	/* Queue stats */
+	rxq_stat_cntrs = RTE_MIN(QEDE_RSS_COUNT(qdev),
+			       RTE_ETHDEV_QUEUE_STAT_CNTRS);
+	txq_stat_cntrs = RTE_MIN(QEDE_TSS_COUNT(qdev),
+			       RTE_ETHDEV_QUEUE_STAT_CNTRS);
+	if ((rxq_stat_cntrs != QEDE_RSS_COUNT(qdev)) ||
+	    (txq_stat_cntrs != QEDE_TSS_COUNT(qdev)))
+		DP_VERBOSE(edev, ECORE_MSG_DEBUG,
+		       "Not all the queue stats will be displayed. Set"
+		       " RTE_ETHDEV_QUEUE_STAT_CNTRS config param"
+		       " appropriately and retry.\n");
+
 	for (qid = 0; qid < QEDE_QUEUE_CNT(qdev); qid++) {
 		if (qdev->fp_array[qid].type & QEDE_FASTPATH_RX) {
 			eth_stats->q_ipackets[i] =
@@ -904,7 +1006,11 @@ qede_get_stats(struct rte_eth_dev *eth_dev, struct rte_eth_stats *eth_stats)
 					rx_alloc_errors));
 			i++;
 		}
+		if (i == rxq_stat_cntrs)
+			break;
+	}
 
+	for (qid = 0; qid < QEDE_QUEUE_CNT(qdev); qid++) {
 		if (qdev->fp_array[qid].type & QEDE_FASTPATH_TX) {
 			txq = qdev->fp_array[(qid)].txqs[0];
 			eth_stats->q_opackets[j] =
@@ -914,13 +1020,17 @@ qede_get_stats(struct rte_eth_dev *eth_dev, struct rte_eth_stats *eth_stats)
 						  xmit_pkts)));
 			j++;
 		}
+		if (j == txq_stat_cntrs)
+			break;
 	}
 }
 
 static unsigned
 qede_get_xstats_count(struct qede_dev *qdev) {
 	return RTE_DIM(qede_xstats_strings) +
-		(RTE_DIM(qede_rxq_xstats_strings) * QEDE_RSS_COUNT(qdev));
+		(RTE_DIM(qede_rxq_xstats_strings) *
+		 RTE_MIN(QEDE_RSS_COUNT(qdev),
+			 RTE_ETHDEV_QUEUE_STAT_CNTRS));
 }
 
 static int
@@ -930,6 +1040,7 @@ qede_get_xstats_names(__rte_unused struct rte_eth_dev *dev,
 	struct qede_dev *qdev = dev->data->dev_private;
 	const unsigned int stat_cnt = qede_get_xstats_count(qdev);
 	unsigned int i, qid, stat_idx = 0;
+	unsigned int rxq_stat_cntrs;
 
 	if (xstats_names != NULL) {
 		for (i = 0; i < RTE_DIM(qede_xstats_strings); i++) {
@@ -940,7 +1051,9 @@ qede_get_xstats_names(__rte_unused struct rte_eth_dev *dev,
 			stat_idx++;
 		}
 
-		for (qid = 0; qid < QEDE_RSS_COUNT(qdev); qid++) {
+		rxq_stat_cntrs = RTE_MIN(QEDE_RSS_COUNT(qdev),
+					 RTE_ETHDEV_QUEUE_STAT_CNTRS);
+		for (qid = 0; qid < rxq_stat_cntrs; qid++) {
 			for (i = 0; i < RTE_DIM(qede_rxq_xstats_strings); i++) {
 				snprintf(xstats_names[stat_idx].name,
 					sizeof(xstats_names[stat_idx].name),
@@ -964,6 +1077,7 @@ qede_get_xstats(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 	struct ecore_eth_stats stats;
 	const unsigned int num = qede_get_xstats_count(qdev);
 	unsigned int i, qid, stat_idx = 0;
+	unsigned int rxq_stat_cntrs;
 
 	if (n < num)
 		return num;
@@ -973,15 +1087,19 @@ qede_get_xstats(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 	for (i = 0; i < RTE_DIM(qede_xstats_strings); i++) {
 		xstats[stat_idx].value = *(uint64_t *)(((char *)&stats) +
 					     qede_xstats_strings[i].offset);
+		xstats[stat_idx].id = stat_idx;
 		stat_idx++;
 	}
 
-	for (qid = 0; qid < QEDE_QUEUE_CNT(qdev); qid++) {
+	rxq_stat_cntrs = RTE_MIN(QEDE_RSS_COUNT(qdev),
+				 RTE_ETHDEV_QUEUE_STAT_CNTRS);
+	for (qid = 0; qid < rxq_stat_cntrs; qid++) {
 		if (qdev->fp_array[qid].type & QEDE_FASTPATH_RX) {
 			for (i = 0; i < RTE_DIM(qede_rxq_xstats_strings); i++) {
 				xstats[stat_idx].value = *(uint64_t *)(
 					((char *)(qdev->fp_array[(qid)].rxq)) +
 					 qede_rxq_xstats_strings[i].offset);
+				xstats[stat_idx].id = stat_idx;
 				stat_idx++;
 			}
 		}
@@ -1042,15 +1160,17 @@ static void qede_allmulticast_enable(struct rte_eth_dev *eth_dev)
 	if (rte_eth_promiscuous_get(eth_dev->data->port_id) == 1)
 		type |= QED_FILTER_RX_MODE_TYPE_PROMISC;
 
-	qede_rx_mode_setting(eth_dev, type);
+	qed_configure_filter_rx_mode(eth_dev, type);
 }
 
 static void qede_allmulticast_disable(struct rte_eth_dev *eth_dev)
 {
 	if (rte_eth_promiscuous_get(eth_dev->data->port_id) == 1)
-		qede_rx_mode_setting(eth_dev, QED_FILTER_RX_MODE_TYPE_PROMISC);
+		qed_configure_filter_rx_mode(eth_dev,
+				QED_FILTER_RX_MODE_TYPE_PROMISC);
 	else
-		qede_rx_mode_setting(eth_dev, QED_FILTER_RX_MODE_TYPE_REGULAR);
+		qed_configure_filter_rx_mode(eth_dev,
+				QED_FILTER_RX_MODE_TYPE_REGULAR);
 }
 
 static int qede_flow_ctrl_set(struct rte_eth_dev *eth_dev,
@@ -1139,6 +1259,8 @@ void qede_init_rss_caps(uint8_t *rss_caps, uint64_t hf)
 	*rss_caps |= (hf & ETH_RSS_NONFRAG_IPV4_TCP)  ? ECORE_RSS_IPV4_TCP : 0;
 	*rss_caps |= (hf & ETH_RSS_NONFRAG_IPV6_TCP)  ? ECORE_RSS_IPV6_TCP : 0;
 	*rss_caps |= (hf & ETH_RSS_IPV6_TCP_EX)       ? ECORE_RSS_IPV6_TCP : 0;
+	*rss_caps |= (hf & ETH_RSS_NONFRAG_IPV4_UDP)  ? ECORE_RSS_IPV4_UDP : 0;
+	*rss_caps |= (hf & ETH_RSS_NONFRAG_IPV6_UDP)  ? ECORE_RSS_IPV6_UDP : 0;
 }
 
 static int qede_rss_hash_update(struct rte_eth_dev *eth_dev,
@@ -1423,6 +1545,10 @@ static int qede_common_dev_init(struct rte_eth_dev *eth_dev, bool is_vf)
 	pci_dev = eth_dev->pci_dev;
 
 	rte_eth_copy_pci_info(eth_dev, pci_dev);
+
+	/* @DPDK */
+	edev->vendor_id = pci_dev->id.vendor_id;
+	edev->device_id = pci_dev->id.device_id;
 
 	qed_ops = qed_get_eth_ops();
 	if (!qed_ops) {

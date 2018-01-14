@@ -226,13 +226,14 @@ static int parse_elf(struct elf_info *info, const char *filename)
 	}
 	if (!info->symtab_start)
 		fprintf(stderr, "%s has no symtab?\n", filename);
-
-	/* Fix endianness in symbols */
-	for (sym = info->symtab_start; sym < info->symtab_stop; sym++) {
-		sym->st_shndx = TO_NATIVE(endian, 16, sym->st_shndx);
-		sym->st_name  = TO_NATIVE(endian, 32, sym->st_name);
-		sym->st_value = TO_NATIVE(endian, ADDR_SIZE, sym->st_value);
-		sym->st_size  = TO_NATIVE(endian, ADDR_SIZE, sym->st_size);
+	else {
+		/* Fix endianness in symbols */
+		for (sym = info->symtab_start; sym < info->symtab_stop; sym++) {
+			sym->st_shndx = TO_NATIVE(endian, 16, sym->st_shndx);
+			sym->st_name  = TO_NATIVE(endian, 32, sym->st_name);
+			sym->st_value = TO_NATIVE(endian, ADDR_SIZE, sym->st_value);
+			sym->st_size  = TO_NATIVE(endian, ADDR_SIZE, sym->st_size);
+		}
 	}
 
 	if (symtab_shndx_idx != ~0U) {
@@ -325,6 +326,10 @@ static int locate_pmd_entries(struct elf_info *info)
 
 	do {
 		new = calloc(sizeof(struct pmd_driver), 1);
+		if (new == NULL) {
+			fprintf(stderr, "Failed to calloc memory\n");
+			return -1;
+		}
 		new->name_sym = find_sym_in_symtab(info, "this_pmd_name", last);
 		last = new->name_sym;
 		if (!new->name_sym)
@@ -406,7 +411,8 @@ int main(int argc, char **argv)
 	}
 	parse_elf(&info, argv[1]);
 
-	locate_pmd_entries(&info);
+	if (locate_pmd_entries(&info) < 0)
+		exit(1);
 
 	if (info.drivers) {
 		output_pmd_info_string(&info, argv[2]);

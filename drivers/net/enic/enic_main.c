@@ -137,6 +137,7 @@ static void enic_clear_soft_stats(struct enic *enic)
 	struct enic_soft_stats *soft_stats = &enic->soft_stats;
 	rte_atomic64_clear(&soft_stats->rx_nombuf);
 	rte_atomic64_clear(&soft_stats->rx_packet_errors);
+	rte_atomic64_clear(&soft_stats->tx_oversized);
 }
 
 static void enic_init_soft_stats(struct enic *enic)
@@ -144,6 +145,7 @@ static void enic_init_soft_stats(struct enic *enic)
 	struct enic_soft_stats *soft_stats = &enic->soft_stats;
 	rte_atomic64_init(&soft_stats->rx_nombuf);
 	rte_atomic64_init(&soft_stats->rx_packet_errors);
+	rte_atomic64_init(&soft_stats->tx_oversized);
 	enic_clear_soft_stats(enic);
 }
 
@@ -183,7 +185,8 @@ void enic_dev_stats_get(struct enic *enic, struct rte_eth_stats *r_stats)
 	r_stats->obytes = stats->tx.tx_bytes_ok;
 
 	r_stats->ierrors = stats->rx.rx_errors + stats->rx.rx_drop;
-	r_stats->oerrors = stats->tx.tx_errors;
+	r_stats->oerrors = stats->tx.tx_errors
+			   + rte_atomic64_read(&soft_stats->tx_oversized);
 
 	r_stats->imissed = stats->rx.rx_no_bufs + rx_truncated;
 
@@ -228,7 +231,7 @@ enic_free_rq_buf(struct rte_mbuf **mbuf)
 		return;
 
 	rte_pktmbuf_free(*mbuf);
-	mbuf = NULL;
+	*mbuf = NULL;
 }
 
 void enic_init_vnic_resources(struct enic *enic)
@@ -372,6 +375,7 @@ enic_alloc_consistent(void *priv, size_t size,
 		pr_err("%s : Failed to allocate memory for memzone list\n",
 		       __func__);
 		rte_memzone_free(rz);
+		return NULL;
 	}
 
 	mze->rz = rz;
@@ -1121,11 +1125,12 @@ static int
 enic_reinit_rq(struct enic *enic, unsigned int rq_idx)
 {
 	struct vnic_rq *sop_rq, *data_rq;
-	unsigned int cq_idx = enic_cq_rq(enic, rq_idx);
+	unsigned int cq_idx;
 	int rc = 0;
 
 	sop_rq = &enic->rq[enic_rte_rq_idx_to_sop_idx(rq_idx)];
 	data_rq = &enic->rq[enic_rte_rq_idx_to_data_idx(rq_idx)];
+	cq_idx = rq_idx;
 
 	vnic_cq_clean(&enic->cq[cq_idx]);
 	vnic_cq_init(&enic->cq[cq_idx],

@@ -56,7 +56,7 @@
 				(1ULL << VIRTIO_NET_F_CTRL_VQ) | \
 				(1ULL << VIRTIO_NET_F_CTRL_RX) | \
 				(1ULL << VIRTIO_NET_F_GUEST_ANNOUNCE) | \
-				(VHOST_SUPPORTS_MQ)            | \
+				(1ULL << VIRTIO_NET_F_MQ)      | \
 				(1ULL << VIRTIO_F_VERSION_1)   | \
 				(1ULL << VHOST_F_LOG_ALL)      | \
 				(1ULL << VHOST_USER_F_PROTOCOL_FEATURES) | \
@@ -250,6 +250,7 @@ vhost_new_device(void)
 	if (i == MAX_VHOST_DEVICE) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"Failed to find a free slot for new device.\n");
+		rte_free(dev);
 		return -1;
 	}
 

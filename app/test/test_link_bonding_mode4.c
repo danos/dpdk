@@ -73,11 +73,11 @@
 #define MAX_PKT_BURST           (32)
 #define DEF_PKT_BURST           (16)
 
-#define BONDED_DEV_NAME         ("unit_test_mode4_bond_dev")
+#define BONDED_DEV_NAME         ("ut_mode4_bond_dev")
 
-#define SLAVE_DEV_NAME_FMT      ("unit_test_mode4_slave_%d")
-#define SLAVE_RX_QUEUE_FMT      ("unit_test_mode4_slave_%d_rx")
-#define SLAVE_TX_QUEUE_FMT      ("unit_test_mode4_slave_%d_tx")
+#define SLAVE_DEV_NAME_FMT      ("ut_mode4_slave_%d")
+#define SLAVE_RX_QUEUE_FMT      ("ut_mode4_slave_%d_rx")
+#define SLAVE_TX_QUEUE_FMT      ("ut_mode4_slave_%d_tx")
 
 #define INVALID_SOCKET_ID       (-1)
 #define INVALID_PORT_ID         (0xFF)
@@ -143,7 +143,7 @@ static struct rte_eth_conf default_pmd_conf = {
 		.hw_ip_checksum = 0, /**< IP checksum offload enabled */
 		.hw_vlan_filter = 0, /**< VLAN filtering disabled */
 		.jumbo_frame    = 0, /**< Jumbo Frame Support disabled */
-		.hw_strip_crc   = 0, /**< CRC stripped by hardware */
+		.hw_strip_crc   = 1, /**< CRC stripped by hardware */
 	},
 	.txmode = {
 		.mq_mode = ETH_MQ_TX_NONE,
@@ -659,7 +659,7 @@ bond_handshake(void)
 	TEST_ASSERT_EQUAL(all_slaves_done, 1, "Bond handshake failed\n");
 
 	/* If flags doesn't match - report failure */
-	return all_slaves_done = 1 ? TEST_SUCCESS : TEST_FAILED;
+	return all_slaves_done == 1 ? TEST_SUCCESS : TEST_FAILED;
 }
 
 #define TEST_LACP_SLAVE_COUT RTE_DIM(test_params.slave_ports)

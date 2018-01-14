@@ -1402,17 +1402,19 @@ ixgbe_rx_scan_hw_ring(struct ixgbe_rx_queue *rxq)
 	for (i = 0; i < RTE_PMD_IXGBE_RX_MAX_BURST;
 	     i += LOOK_AHEAD, rxdp += LOOK_AHEAD, rxep += LOOK_AHEAD) {
 		/* Read desc statuses backwards to avoid race condition */
-		for (j = LOOK_AHEAD-1; j >= 0; --j)
+		for (j = 0; j < LOOK_AHEAD; j++)
 			s[j] = rte_le_to_cpu_32(rxdp[j].wb.upper.status_error);
 
-		for (j = LOOK_AHEAD - 1; j >= 0; --j)
-			pkt_info[j] = rte_le_to_cpu_32(rxdp[j].wb.lower.
-						       lo_dword.data);
+		rte_smp_rmb();
 
 		/* Compute how many status bits were set */
-		nb_dd = 0;
-		for (j = 0; j < LOOK_AHEAD; ++j)
-			nb_dd += s[j] & IXGBE_RXDADV_STAT_DD;
+		for (nb_dd = 0; nb_dd < LOOK_AHEAD &&
+				(s[nb_dd] & IXGBE_RXDADV_STAT_DD); nb_dd++)
+			;
+
+		for (j = 0; j < nb_dd; j++)
+			pkt_info[j] = rte_le_to_cpu_32(rxdp[j].wb.lower.
+						       lo_dword.data);
 
 		nb_rx += nb_dd;
 
@@ -3321,7 +3323,6 @@ ixgbe_dcb_tx_hw_config(struct rte_eth_dev *dev,
 		       struct ixgbe_dcb_config *dcb_config)
 {
 	uint32_t reg;
-	uint32_t q;
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 
 	PMD_INIT_FUNC_TRACE();
@@ -3340,18 +3341,6 @@ ixgbe_dcb_tx_hw_config(struct rte_eth_dev *dev,
 		if (dcb_config->vt_mode)
 			reg |= IXGBE_MTQC_VT_ENA;
 		IXGBE_WRITE_REG(hw, IXGBE_MTQC, reg);
-
-		if (RTE_ETH_DEV_SRIOV(dev).active == 0) {
-			/* Disable drop for all queues in VMDQ mode*/
-			for (q = 0; q < 128; q++)
-				IXGBE_WRITE_REG(hw, IXGBE_QDE,
-						(IXGBE_QDE_WRITE | (q << IXGBE_QDE_IDX_SHIFT)));
-		} else {
-			/* Enable drop for all queues in SRIOV mode */
-			for (q = 0; q < 128; q++)
-				IXGBE_WRITE_REG(hw, IXGBE_QDE,
-						(IXGBE_QDE_WRITE | (q << IXGBE_QDE_IDX_SHIFT) | IXGBE_QDE_ENABLE));
-		}
 
 		/* Enable the Tx desc arbiter */
 		reg = IXGBE_READ_REG(hw, IXGBE_RTTDCS);
@@ -3406,12 +3395,19 @@ ixgbe_vmdq_dcb_rx_config(struct rte_eth_dev *dev,
 		dcb_config->num_tcs.pg_tcs = ETH_4_TCS;
 		dcb_config->num_tcs.pfc_tcs = ETH_4_TCS;
 	}
+
+	/* Initialize User Priority to Traffic Class mapping */
+	for (j = 0; j < IXGBE_DCB_MAX_TRAFFIC_CLASS; j++) {
+		tc = &dcb_config->tc_config[j];
+		tc->path[IXGBE_DCB_RX_CONFIG].up_to_tc_bitmap = 0;
+	}
+
 	/* User Priority to Traffic Class mapping */
 	for (i = 0; i < ETH_DCB_NUM_USER_PRIORITIES; i++) {
 		j = vmdq_rx_conf->dcb_tc[i];
 		tc = &dcb_config->tc_config[j];
-		tc->path[IXGBE_DCB_RX_CONFIG].up_to_tc_bitmap =
-						(uint8_t)(1 << j);
+		tc->path[IXGBE_DCB_RX_CONFIG].up_to_tc_bitmap |=
+						(uint8_t)(1 << i);
 	}
 }
 
@@ -3433,12 +3429,18 @@ ixgbe_dcb_vt_tx_config(struct rte_eth_dev *dev,
 		dcb_config->num_tcs.pfc_tcs = ETH_4_TCS;
 	}
 
+	/* Initialize User Priority to Traffic Class mapping */
+	for (j = 0; j < IXGBE_DCB_MAX_TRAFFIC_CLASS; j++) {
+		tc = &dcb_config->tc_config[j];
+		tc->path[IXGBE_DCB_TX_CONFIG].up_to_tc_bitmap = 0;
+	}
+
 	/* User Priority to Traffic Class mapping */
 	for (i = 0; i < ETH_DCB_NUM_USER_PRIORITIES; i++) {
 		j = vmdq_tx_conf->dcb_tc[i];
 		tc = &dcb_config->tc_config[j];
-		tc->path[IXGBE_DCB_TX_CONFIG].up_to_tc_bitmap =
-						(uint8_t)(1 << j);
+		tc->path[IXGBE_DCB_TX_CONFIG].up_to_tc_bitmap |=
+						(uint8_t)(1 << i);
 	}
 }
 
@@ -3454,12 +3456,18 @@ ixgbe_dcb_rx_config(struct rte_eth_dev *dev,
 	dcb_config->num_tcs.pg_tcs = (uint8_t)rx_conf->nb_tcs;
 	dcb_config->num_tcs.pfc_tcs = (uint8_t)rx_conf->nb_tcs;
 
+	/* Initialize User Priority to Traffic Class mapping */
+	for (j = 0; j < IXGBE_DCB_MAX_TRAFFIC_CLASS; j++) {
+		tc = &dcb_config->tc_config[j];
+		tc->path[IXGBE_DCB_RX_CONFIG].up_to_tc_bitmap = 0;
+	}
+
 	/* User Priority to Traffic Class mapping */
 	for (i = 0; i < ETH_DCB_NUM_USER_PRIORITIES; i++) {
 		j = rx_conf->dcb_tc[i];
 		tc = &dcb_config->tc_config[j];
-		tc->path[IXGBE_DCB_RX_CONFIG].up_to_tc_bitmap =
-						(uint8_t)(1 << j);
+		tc->path[IXGBE_DCB_RX_CONFIG].up_to_tc_bitmap |=
+						(uint8_t)(1 << i);
 	}
 }
 
@@ -3475,27 +3483,35 @@ ixgbe_dcb_tx_config(struct rte_eth_dev *dev,
 	dcb_config->num_tcs.pg_tcs = (uint8_t)tx_conf->nb_tcs;
 	dcb_config->num_tcs.pfc_tcs = (uint8_t)tx_conf->nb_tcs;
 
+	/* Initialize User Priority to Traffic Class mapping */
+	for (j = 0; j < IXGBE_DCB_MAX_TRAFFIC_CLASS; j++) {
+		tc = &dcb_config->tc_config[j];
+		tc->path[IXGBE_DCB_TX_CONFIG].up_to_tc_bitmap = 0;
+	}
+
 	/* User Priority to Traffic Class mapping */
 	for (i = 0; i < ETH_DCB_NUM_USER_PRIORITIES; i++) {
 		j = tx_conf->dcb_tc[i];
 		tc = &dcb_config->tc_config[j];
-		tc->path[IXGBE_DCB_TX_CONFIG].up_to_tc_bitmap =
-						(uint8_t)(1 << j);
+		tc->path[IXGBE_DCB_TX_CONFIG].up_to_tc_bitmap |=
+						(uint8_t)(1 << i);
 	}
 }
 
 /**
  * ixgbe_dcb_rx_hw_config - Configure general DCB RX HW parameters
- * @hw: pointer to hardware structure
+ * @dev: pointer to eth_dev structure
  * @dcb_config: pointer to ixgbe_dcb_config structure
  */
 static void
-ixgbe_dcb_rx_hw_config(struct ixgbe_hw *hw,
-	       struct ixgbe_dcb_config *dcb_config)
+ixgbe_dcb_rx_hw_config(struct rte_eth_dev *dev,
+		       struct ixgbe_dcb_config *dcb_config)
 {
 	uint32_t reg;
 	uint32_t vlanctrl;
 	uint8_t i;
+	uint32_t q;
+	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 
 	PMD_INIT_FUNC_TRACE();
 	/*
@@ -3533,6 +3549,21 @@ ixgbe_dcb_rx_hw_config(struct ixgbe_hw *hw,
 		}
 
 		IXGBE_WRITE_REG(hw, IXGBE_MRQC, reg);
+
+		if (RTE_ETH_DEV_SRIOV(dev).active == 0) {
+			/* Disable drop for all queues in VMDQ mode*/
+			for (q = 0; q < IXGBE_MAX_RX_QUEUE_NUM; q++)
+				IXGBE_WRITE_REG(hw, IXGBE_QDE,
+						(IXGBE_QDE_WRITE |
+						 (q << IXGBE_QDE_IDX_SHIFT)));
+		} else {
+			/* Enable drop for all queues in SRIOV mode */
+			for (q = 0; q < IXGBE_MAX_RX_QUEUE_NUM; q++)
+				IXGBE_WRITE_REG(hw, IXGBE_QDE,
+						(IXGBE_QDE_WRITE |
+						 (q << IXGBE_QDE_IDX_SHIFT) |
+						 IXGBE_QDE_ENABLE));
+		}
 	}
 
 	/* VLNCTRL: enable vlan filtering and allow all vlan tags through */
@@ -3645,7 +3676,7 @@ ixgbe_dcb_hw_configure(struct rte_eth_dev *dev,
 		/* Get dcb TX configuration parameters from rte_eth_conf */
 		ixgbe_dcb_rx_config(dev, dcb_config);
 		/*Configure general DCB RX parameters*/
-		ixgbe_dcb_rx_hw_config(hw, dcb_config);
+		ixgbe_dcb_rx_hw_config(dev, dcb_config);
 		break;
 	default:
 		PMD_INIT_LOG(ERR, "Incorrect DCB RX mode configuration");
@@ -3703,6 +3734,15 @@ ixgbe_dcb_hw_configure(struct rte_eth_dev *dev,
 			tc = &dcb_config->tc_config[i];
 			tc->path[IXGBE_DCB_TX_CONFIG].bwg_percent = 0;
 			tc->path[IXGBE_DCB_RX_CONFIG].bwg_percent = 0;
+		}
+	} else {
+		/* Re-configure 8 TCs BW */
+		for (i = 0; i < nb_tcs; i++) {
+			tc = &dcb_config->tc_config[i];
+			tc->path[IXGBE_DCB_TX_CONFIG].bwg_percent =
+				(uint8_t)(100 / nb_tcs + (i & 1));
+			tc->path[IXGBE_DCB_RX_CONFIG].bwg_percent =
+				(uint8_t)(100 / nb_tcs + (i & 1));
 		}
 	}
 
@@ -4081,9 +4121,8 @@ ixgbe_dev_mq_rx_configure(struct rte_eth_dev *dev)
 			break;
 		}
 	} else {
-		/*
-		 * SRIOV active scheme
-		 * Support RSS together with VMDq & SRIOV
+		/* SRIOV active scheme
+		 * Support RSS together with SRIOV.
 		 */
 		switch (dev->data->dev_conf.rxmode.mq_mode) {
 		case ETH_MQ_RX_RSS:
@@ -4091,10 +4130,13 @@ ixgbe_dev_mq_rx_configure(struct rte_eth_dev *dev)
 			ixgbe_config_vf_rss(dev);
 			break;
 		case ETH_MQ_RX_VMDQ_DCB:
+		case ETH_MQ_RX_DCB:
+		/* In SRIOV, the configuration is the same as VMDq case */
 			ixgbe_vmdq_dcb_configure(dev);
 			break;
-		/* FIXME if support DCB/RSS together with VMDq & SRIOV */
+		/* DCB/RSS together with SRIOV is not supported */
 		case ETH_MQ_RX_VMDQ_DCB_RSS:
+		case ETH_MQ_RX_DCB_RSS:
 			PMD_INIT_LOG(ERR,
 				"Could not support DCB/RSS with VMDq & SRIOV");
 			return -1;

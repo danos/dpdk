@@ -115,7 +115,7 @@ txq_free_elts(struct txq_ctrl *txq_ctrl)
 		struct rte_mbuf *elt = (*elts)[elts_tail];
 
 		assert(elt != NULL);
-		rte_pktmbuf_free(elt);
+		rte_pktmbuf_free_seg(elt);
 #ifndef NDEBUG
 		/* Poisoning. */
 		memset(&(*elts)[elts_tail],
@@ -205,14 +205,18 @@ txq_setup(struct txq_ctrl *tmpl, struct txq_ctrl *txq_ctrl)
 {
 	struct mlx5_qp *qp = to_mqp(tmpl->qp);
 	struct ibv_cq *ibcq = tmpl->cq;
-	struct mlx5_cq *cq = to_mxxx(cq, cq);
+	struct ibv_mlx5_cq_info cq_info;
 
-	if (cq->cqe_sz != RTE_CACHE_LINE_SIZE) {
+	if (ibv_mlx5_exp_get_cq_info(ibcq, &cq_info)) {
+		ERROR("Unable to query CQ info. check your OFED.");
+		return ENOTSUP;
+	}
+	if (cq_info.cqe_size != RTE_CACHE_LINE_SIZE) {
 		ERROR("Wrong MLX5_CQE_SIZE environment variable value: "
 		      "it should be set to %u", RTE_CACHE_LINE_SIZE);
 		return EINVAL;
 	}
-	tmpl->txq.cqe_n = log2above(ibcq->cqe);
+	tmpl->txq.cqe_n = log2above(cq_info.cqe_cnt);
 	tmpl->txq.qp_num_8s = qp->ctrl_seg.qp_num << 8;
 	tmpl->txq.wqes =
 		(volatile struct mlx5_wqe64 (*)[])
@@ -220,12 +224,10 @@ txq_setup(struct txq_ctrl *tmpl, struct txq_ctrl *txq_ctrl)
 	tmpl->txq.wqe_n = log2above(qp->sq.wqe_cnt);
 	tmpl->txq.qp_db = &qp->gen_data.db[MLX5_SND_DBR];
 	tmpl->txq.bf_reg = qp->gen_data.bf->reg;
-	tmpl->txq.bf_offset = qp->gen_data.bf->offset;
-	tmpl->txq.bf_buf_size = log2above(qp->gen_data.bf->buf_size);
-	tmpl->txq.cq_db = cq->dbrec;
+	tmpl->txq.cq_db = cq_info.dbrec;
 	tmpl->txq.cqes =
 		(volatile struct mlx5_cqe (*)[])
-		(uintptr_t)cq->active_buf->buf;
+		(uintptr_t)cq_info.buf;
 	tmpl->txq.elts =
 		(struct rte_mbuf *(*)[1 << tmpl->txq.elts_n])
 		((uintptr_t)txq_ctrl + sizeof(*txq_ctrl));
@@ -498,6 +500,19 @@ mlx5_tx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 		}
 		(*priv->txqs)[idx] = NULL;
 		txq_cleanup(txq_ctrl);
+		/* Resize if txq size is changed. */
+		if (txq_ctrl->txq.elts_n != log2above(desc)) {
+			txq_ctrl = rte_realloc(txq_ctrl,
+					       sizeof(*txq_ctrl) +
+					       desc * sizeof(struct rte_mbuf *),
+					       RTE_CACHE_LINE_SIZE);
+			if (!txq_ctrl) {
+				ERROR("%p: unable to reallocate queue index %u",
+					(void *)dev, idx);
+				priv_unlock(priv);
+				return -ENOMEM;
+			}
+		}
 	} else {
 		txq_ctrl =
 			rte_calloc_socket("TXQ", 1,

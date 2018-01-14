@@ -2902,6 +2902,7 @@ ixgbe_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 	for (i = 0; i < IXGBE_NB_HW_STATS; i++) {
 		xstats[count].value = *(uint64_t *)(((char *)hw_stats) +
 				rte_ixgbe_stats_strings[i].offset);
+		xstats[count].id = count;
 		count++;
 	}
 
@@ -2911,6 +2912,7 @@ ixgbe_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 			xstats[count].value = *(uint64_t *)(((char *)hw_stats) +
 					rte_ixgbe_rxq_strings[stat].offset +
 					(sizeof(uint64_t) * i));
+			xstats[count].id = count;
 			count++;
 		}
 	}
@@ -2921,6 +2923,7 @@ ixgbe_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 			xstats[count].value = *(uint64_t *)(((char *)hw_stats) +
 					rte_ixgbe_txq_strings[stat].offset +
 					(sizeof(uint64_t) * i));
+			xstats[count].id = count;
 			count++;
 		}
 	}
@@ -2988,6 +2991,7 @@ ixgbevf_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 
 	/* Extended stats */
 	for (i = 0; i < IXGBEVF_NB_XSTATS; i++) {
+		xstats[i].id = i;
 		xstats[i].value = *(uint64_t *)(((char *)hw_stats) +
 			rte_ixgbevf_stats_strings[i].offset);
 	}
@@ -3168,7 +3172,7 @@ ixgbevf_dev_info_get(struct rte_eth_dev *dev,
 	dev_info->max_rx_queues = (uint16_t)hw->mac.max_rx_queues;
 	dev_info->max_tx_queues = (uint16_t)hw->mac.max_tx_queues;
 	dev_info->min_rx_bufsize = 1024; /* cf BSIZEPACKET in SRRCTL reg */
-	dev_info->max_rx_pktlen = 15872; /* includes CRC, cf MAXFRS reg */
+	dev_info->max_rx_pktlen = 9728; /* includes CRC, cf MAXFRS reg */
 	dev_info->max_mac_addrs = hw->mac.num_rar_entries;
 	dev_info->max_hash_mac_addrs = IXGBE_VMDQ_NUM_UC_MAC;
 	dev_info->max_vfs = dev->pci_dev->max_vfs;
@@ -3226,6 +3230,7 @@ ixgbe_dev_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 	link.link_status = ETH_LINK_DOWN;
 	link.link_speed = 0;
 	link.link_duplex = ETH_LINK_HALF_DUPLEX;
+	link.link_autoneg = ETH_LINK_AUTONEG;
 	memset(&old, 0, sizeof(old));
 	rte_ixgbe_dev_atomic_read_link_status(dev, &old);
 
@@ -3471,7 +3476,6 @@ ixgbe_dev_interrupt_action(struct rte_eth_dev *dev)
 		IXGBE_DEV_PRIVATE_TO_INTR(dev->data->dev_private);
 	int64_t timeout;
 	struct rte_eth_link link;
-	int intr_enable_delay = false;
 	struct ixgbe_hw *hw =
 		IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 
@@ -3504,20 +3508,19 @@ ixgbe_dev_interrupt_action(struct rte_eth_dev *dev)
 			timeout = IXGBE_LINK_DOWN_CHECK_TIMEOUT;
 
 		ixgbe_dev_link_status_print(dev);
-
-		intr_enable_delay = true;
-	}
-
-	if (intr_enable_delay) {
+		intr->mask_original = intr->mask;
+		/* only disable lsc interrupt */
+		intr->mask &= ~IXGBE_EIMS_LSC;
 		if (rte_eal_alarm_set(timeout * 1000,
 				      ixgbe_dev_interrupt_delayed_handler, (void *)dev) < 0)
 			PMD_DRV_LOG(ERR, "Error setting alarm");
-	} else {
-		PMD_DRV_LOG(DEBUG, "enable intr immediately");
-		ixgbe_enable_intr(dev);
-		rte_intr_enable(&(dev->pci_dev->intr_handle));
+		else
+			intr->mask = intr->mask_original;
 	}
 
+	PMD_DRV_LOG(DEBUG, "enable intr immediately");
+	ixgbe_enable_intr(dev);
+	rte_intr_enable(&dev->pci_dev->intr_handle);
 
 	return 0;
 }
@@ -4088,6 +4091,7 @@ ixgbe_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
 	struct ixgbe_hw *hw;
 	struct rte_eth_dev_info dev_info;
 	uint32_t frame_size = mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
+	struct rte_eth_rxmode *rx_conf = &dev->data->dev_conf.rxmode;
 
 	ixgbe_dev_info_get(dev, &dev_info);
 
@@ -4098,7 +4102,7 @@ ixgbe_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
 	/* refuse mtu that requires the support of scattered packets when this
 	 * feature has not been enabled before.
 	 */
-	if (!dev->data->scattered_rx &&
+	if (!rx_conf->enable_scatter &&
 	    (frame_size + 2 * IXGBE_VLAN_TAG_SIZE >
 	     dev->data->min_rx_buf_size - RTE_PKTMBUF_HEADROOM))
 		return -EINVAL;
@@ -4246,6 +4250,15 @@ ixgbevf_dev_start(struct rte_eth_dev *dev)
 		}
 	}
 	ixgbevf_configure_msix(dev);
+
+	/* When a VF port is bound to VFIO-PCI, only miscellaneous interrupt
+	 * is mapped to VFIO vector 0 in eth_ixgbevf_dev_init( ).
+	 * If previous VFIO interrupt mapping setting in eth_ixgbevf_dev_init( )
+	 * is not cleared, it will fail when following rte_intr_enable( ) tries
+	 * to map Rx queue interrupt to other VFIO vectors.
+	 * So clear uio/vfio intr/evevnfd first to avoid failure.
+	 */
+	rte_intr_disable(intr_handle);
 
 	rte_intr_enable(intr_handle);
 
@@ -5010,13 +5023,13 @@ ixgbe_mirror_rule_set(struct rte_eth_dev *dev,
 	IXGBE_WRITE_REG(hw, IXGBE_MRCTL(rule_id), mr_ctl);
 
 	/* write pool mirrror control  register */
-	if (mirror_conf->rule_type == ETH_MIRROR_VIRTUAL_POOL_UP) {
+	if (mirror_conf->rule_type & ETH_MIRROR_VIRTUAL_POOL_UP) {
 		IXGBE_WRITE_REG(hw, IXGBE_VMRVM(rule_id), mp_lsb);
 		IXGBE_WRITE_REG(hw, IXGBE_VMRVM(rule_id + rule_mr_offset),
 				mp_msb);
 	}
 	/* write VLAN mirrror control  register */
-	if (mirror_conf->rule_type == ETH_MIRROR_VLAN) {
+	if (mirror_conf->rule_type & ETH_MIRROR_VLAN) {
 		IXGBE_WRITE_REG(hw, IXGBE_VMRVLAN(rule_id), mv_lsb);
 		IXGBE_WRITE_REG(hw, IXGBE_VMRVLAN(rule_id + rule_mr_offset),
 				mv_msb);
@@ -5040,6 +5053,9 @@ ixgbe_mirror_rule_reset(struct rte_eth_dev *dev, uint8_t rule_id)
 
 	if (ixgbe_vmdq_mode_check(hw) < 0)
 		return -ENOTSUP;
+
+	if (rule_id >= IXGBE_MAX_MIRROR_RULES)
+		return -EINVAL;
 
 	memset(&mr_info->mr_conf[rule_id], 0,
 		sizeof(struct rte_eth_mirror_conf));
@@ -5194,7 +5210,8 @@ ixgbe_set_ivar_map(struct ixgbe_hw *hw, int8_t direction,
 		tmp |= (msix_vector << (8 * (queue & 0x3)));
 		IXGBE_WRITE_REG(hw, IXGBE_IVAR(idx), tmp);
 	} else if ((hw->mac.type == ixgbe_mac_82599EB) ||
-			(hw->mac.type == ixgbe_mac_X540)) {
+			(hw->mac.type == ixgbe_mac_X540) ||
+			(hw->mac.type == ixgbe_mac_X550)) {
 		if (direction == -1) {
 			/* other causes */
 			idx = ((queue & 1) * 8);
@@ -5300,6 +5317,7 @@ ixgbe_configure_msix(struct rte_eth_dev *dev)
 		break;
 	case ixgbe_mac_82599EB:
 	case ixgbe_mac_X540:
+	case ixgbe_mac_X550:
 		ixgbe_set_ivar_map(hw, -1, 1, IXGBE_MISC_VEC_ID);
 		break;
 	default:
@@ -5721,6 +5739,7 @@ ixgbevf_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 {
 	struct ixgbe_hw *hw;
 	uint32_t max_frame = mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
+	struct rte_eth_rxmode *rx_conf = &dev->data->dev_conf.rxmode;
 
 	hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 
@@ -5730,7 +5749,7 @@ ixgbevf_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	/* refuse mtu that requires the support of scattered packets when this
 	 * feature has not been enabled before.
 	 */
-	if (!dev->data->scattered_rx &&
+	if (!rx_conf->enable_scatter &&
 	    (max_frame + 2 * IXGBE_VLAN_TAG_SIZE >
 	     dev->data->min_rx_buf_size - RTE_PKTMBUF_HEADROOM))
 		return -EINVAL;
@@ -6769,6 +6788,8 @@ ixgbe_dev_get_dcb_info(struct rte_eth_dev *dev,
 	struct ixgbe_dcb_config *dcb_config =
 			IXGBE_DEV_PRIVATE_TO_DCB_CFG(dev->data->dev_private);
 	struct ixgbe_dcb_tc_config *tc;
+	struct rte_eth_dcb_tc_queue_mapping *tc_queue;
+	uint8_t nb_tcs;
 	uint8_t i, j;
 
 	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_DCB_FLAG)
@@ -6776,19 +6797,31 @@ ixgbe_dev_get_dcb_info(struct rte_eth_dev *dev,
 	else
 		dcb_info->nb_tcs = 1;
 
+	tc_queue = &dcb_info->tc_queue;
+	nb_tcs = dcb_info->nb_tcs;
+
 	if (dcb_config->vt_mode) { /* vt is enabled*/
 		struct rte_eth_vmdq_dcb_conf *vmdq_rx_conf =
 				&dev->data->dev_conf.rx_adv_conf.vmdq_dcb_conf;
 		for (i = 0; i < ETH_DCB_NUM_USER_PRIORITIES; i++)
 			dcb_info->prio_tc[i] = vmdq_rx_conf->dcb_tc[i];
-		for (i = 0; i < vmdq_rx_conf->nb_queue_pools; i++) {
-			for (j = 0; j < dcb_info->nb_tcs; j++) {
-				dcb_info->tc_queue.tc_rxq[i][j].base =
-						i * dcb_info->nb_tcs + j;
-				dcb_info->tc_queue.tc_rxq[i][j].nb_queue = 1;
-				dcb_info->tc_queue.tc_txq[i][j].base =
-						i * dcb_info->nb_tcs + j;
-				dcb_info->tc_queue.tc_txq[i][j].nb_queue = 1;
+		if (RTE_ETH_DEV_SRIOV(dev).active > 0) {
+			for (j = 0; j < nb_tcs; j++) {
+				tc_queue->tc_rxq[0][j].base = j;
+				tc_queue->tc_rxq[0][j].nb_queue = 1;
+				tc_queue->tc_txq[0][j].base = j;
+				tc_queue->tc_txq[0][j].nb_queue = 1;
+			}
+		} else {
+			for (i = 0; i < vmdq_rx_conf->nb_queue_pools; i++) {
+				for (j = 0; j < nb_tcs; j++) {
+					tc_queue->tc_rxq[i][j].base =
+						i * nb_tcs + j;
+					tc_queue->tc_rxq[i][j].nb_queue = 1;
+					tc_queue->tc_txq[i][j].base =
+						i * nb_tcs + j;
+					tc_queue->tc_txq[i][j].nb_queue = 1;
+				}
 			}
 		}
 	} else { /* vt is disabled*/
@@ -7528,7 +7561,7 @@ ixgbevf_dev_allmulticast_disable(struct rte_eth_dev *dev)
 {
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 
-	hw->mac.ops.update_xcast_mode(hw, IXGBEVF_XCAST_MODE_NONE);
+	hw->mac.ops.update_xcast_mode(hw, IXGBEVF_XCAST_MODE_MULTI);
 }
 
 static void ixgbevf_mbx_process(struct rte_eth_dev *dev)

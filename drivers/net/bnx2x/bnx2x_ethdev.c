@@ -256,6 +256,8 @@ bnx2x_promisc_enable(struct rte_eth_dev *dev)
 
 	PMD_INIT_FUNC_TRACE();
 	sc->rx_mode = BNX2X_RX_MODE_PROMISC;
+	if (rte_eth_allmulticast_get(dev->data->port_id) == 1)
+		sc->rx_mode = BNX2X_RX_MODE_ALLMULTI_PROMISC;
 	bnx2x_set_rx_mode(sc);
 }
 
@@ -266,6 +268,8 @@ bnx2x_promisc_disable(struct rte_eth_dev *dev)
 
 	PMD_INIT_FUNC_TRACE();
 	sc->rx_mode = BNX2X_RX_MODE_NORMAL;
+	if (rte_eth_allmulticast_get(dev->data->port_id) == 1)
+		sc->rx_mode = BNX2X_RX_MODE_ALLMULTI;
 	bnx2x_set_rx_mode(sc);
 }
 
@@ -276,6 +280,8 @@ bnx2x_dev_allmulticast_enable(struct rte_eth_dev *dev)
 
 	PMD_INIT_FUNC_TRACE();
 	sc->rx_mode = BNX2X_RX_MODE_ALLMULTI;
+	if (rte_eth_promiscuous_get(dev->data->port_id) == 1)
+		sc->rx_mode = BNX2X_RX_MODE_ALLMULTI_PROMISC;
 	bnx2x_set_rx_mode(sc);
 }
 
@@ -286,6 +292,8 @@ bnx2x_dev_allmulticast_disable(struct rte_eth_dev *dev)
 
 	PMD_INIT_FUNC_TRACE();
 	sc->rx_mode = BNX2X_RX_MODE_NORMAL;
+	if (rte_eth_promiscuous_get(dev->data->port_id) == 1)
+		sc->rx_mode = BNX2X_RX_MODE_PROMISC;
 	bnx2x_set_rx_mode(sc);
 }
 
@@ -422,6 +430,7 @@ bnx2x_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 			xstats[num].value =
 					  *(uint64_t *)((char *)&sc->eth_stats +
 					  bnx2x_xstats_strings[num].offset_lo);
+		xstats[num].id = num;
 	}
 
 	return num;

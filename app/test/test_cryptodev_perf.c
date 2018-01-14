@@ -2216,6 +2216,7 @@ test_perf_snow3G_optimise_cyclecount(struct perf_test_params *pparams)
 		rte_pktmbuf_free(c_ops[i]->sym->m_src);
 		rte_crypto_op_free(c_ops[i]);
 	}
+	rte_cryptodev_sym_session_free(ts_params->dev_id, sess);
 
 	return TEST_SUCCESS;
 }
@@ -2418,6 +2419,7 @@ test_perf_openssl_optimise_cyclecount(struct perf_test_params *pparams)
 		rte_pktmbuf_free(c_ops[i]->sym->m_src);
 		rte_crypto_op_free(c_ops[i]);
 	}
+	rte_cryptodev_sym_session_free(ts_params->dev_id, sess);
 
 	return TEST_SUCCESS;
 }
@@ -2469,6 +2471,11 @@ static uint32_t get_auth_digest_length(enum rte_crypto_auth_algorithm algo)
 static uint8_t aes_key[] = {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+static uint8_t aes_gcm_aad[] = {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
@@ -2685,7 +2692,7 @@ test_perf_create_openssl_session(uint8_t dev_id, enum chain_mode chain,
 
 #define AES_BLOCK_SIZE 16
 #define AES_CIPHER_IV_LENGTH 16
-
+#define AES_GCM_AAD_LENGTH 16
 #define TRIPLE_DES_BLOCK_SIZE 8
 #define TRIPLE_DES_CIPHER_IV_LENGTH 8
 
@@ -2720,8 +2727,6 @@ test_perf_set_crypto_op_aes(struct rte_crypto_op *op, struct rte_mbuf *m,
 	op->sym->auth.digest.phys_addr = rte_pktmbuf_mtophys_offset(m,
 			AES_CIPHER_IV_LENGTH + data_len);
 	op->sym->auth.digest.length = digest_len;
-	op->sym->auth.aad.data = aes_iv;
-	op->sym->auth.aad.length = AES_CIPHER_IV_LENGTH;
 
 	/* Cipher Parameters */
 	op->sym->cipher.iv.data = rte_pktmbuf_mtod(m, uint8_t *);
@@ -2758,8 +2763,8 @@ test_perf_set_crypto_op_aes_gcm(struct rte_crypto_op *op, struct rte_mbuf *m,
 	op->sym->auth.digest.phys_addr =
 				rte_pktmbuf_mtophys_offset(m, data_len);
 	op->sym->auth.digest.length = digest_len;
-	op->sym->auth.aad.data = aes_iv;
-	op->sym->auth.aad.length = AES_CIPHER_IV_LENGTH;
+	op->sym->auth.aad.data = aes_gcm_aad;
+	op->sym->auth.aad.length = AES_GCM_AAD_LENGTH;
 
 	/* Cipher Parameters */
 	op->sym->cipher.iv.data = aes_iv;
@@ -2891,8 +2896,6 @@ test_perf_set_crypto_op_3des(struct rte_crypto_op *op, struct rte_mbuf *m,
 	op->sym->auth.digest.phys_addr =
 				rte_pktmbuf_mtophys_offset(m, data_len);
 	op->sym->auth.digest.length = digest_len;
-	op->sym->auth.aad.data = triple_des_iv;
-	op->sym->auth.aad.length = TRIPLE_DES_CIPHER_IV_LENGTH;
 
 	/* Cipher Parameters */
 	op->sym->cipher.iv.data = triple_des_iv;
@@ -3039,6 +3042,7 @@ test_perf_aes_sha(uint8_t dev_id, uint16_t queue_id,
 
 	for (i = 0; i < pparams->burst_size * NUM_MBUF_SETS; i++)
 		rte_pktmbuf_free(mbufs[i]);
+	rte_cryptodev_sym_session_free(dev_id, sess);
 
 	printf("\n");
 	return TEST_SUCCESS;
@@ -3202,6 +3206,7 @@ test_perf_snow3g(uint8_t dev_id, uint16_t queue_id,
 
 	for (i = 0; i < pparams->burst_size * NUM_MBUF_SETS; i++)
 		rte_pktmbuf_free(mbufs[i]);
+	rte_cryptodev_sym_session_free(dev_id, sess);
 
 	printf("\n");
 	return TEST_SUCCESS;
@@ -3351,6 +3356,7 @@ test_perf_openssl(uint8_t dev_id, uint16_t queue_id,
 
 	for (i = 0; i < pparams->burst_size * NUM_MBUF_SETS; i++)
 		rte_pktmbuf_free(mbufs[i]);
+	rte_cryptodev_sym_session_free(dev_id, sess);
 
 	printf("\n");
 	return TEST_SUCCESS;
@@ -3956,6 +3962,7 @@ perf_AES_GCM(uint8_t dev_id, uint16_t queue_id,
 
 	for (i = 0; i < burst; i++)
 		rte_pktmbuf_free(mbufs[i]);
+	rte_cryptodev_sym_session_free(dev_id, sess);
 
 	return 0;
 }

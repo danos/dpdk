@@ -48,9 +48,9 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_MD5_HMAC,
 				.block_size = 64,
 				.key_size = {
-					.min = 64,
+					.min = 1,
 					.max = 64,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 16,
@@ -90,9 +90,9 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA1_HMAC,
 				.block_size = 64,
 				.key_size = {
-					.min = 64,
+					.min = 1,
 					.max = 64,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 20,
@@ -132,9 +132,9 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA224_HMAC,
 				.block_size = 64,
 				.key_size = {
-					.min = 64,
+					.min = 1,
 					.max = 64,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 28,
@@ -174,9 +174,9 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA256_HMAC,
 				.block_size = 64,
 				.key_size = {
-					.min = 64,
+					.min = 1,
 					.max = 64,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 32,
@@ -216,9 +216,9 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA384_HMAC,
 				.block_size = 128,
 				.key_size = {
-					.min = 128,
+					.min = 1,
 					.max = 128,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 48,
@@ -258,9 +258,9 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 				.algo = RTE_CRYPTO_AUTH_SHA512_HMAC,
 				.block_size = 128,
 				.key_size = {
-					.min = 128,
+					.min = 1,
 					.max = 128,
-					.increment = 0
+					.increment = 1
 				},
 				.digest_size = {
 					.min = 64,
@@ -350,9 +350,9 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 					.increment = 0
 				},
 				.aad_size = {
-					.min = 8,
-					.max = 12,
-					.increment = 4
+					.min = 0,
+					.max = 65535,
+					.increment = 1
 				}
 			}, }
 		}, }
@@ -366,8 +366,8 @@ static const struct rte_cryptodev_capabilities openssl_pmd_capabilities[] = {
 				.block_size = 16,
 				.key_size = {
 					.min = 16,
-					.max = 16,
-					.increment = 0
+					.max = 32,
+					.increment = 8
 				},
 				.iv_size = {
 					.min = 12,
@@ -543,7 +543,7 @@ openssl_pmd_qp_set_unique_name(struct rte_cryptodev *dev,
 			"openssl_pmd_%u_qp_%u",
 			dev->data->dev_id, qp->id);
 
-	if (n > sizeof(qp->name))
+	if (n >= sizeof(qp->name))
 		return -1;
 
 	return 0;

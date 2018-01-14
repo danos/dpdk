@@ -225,13 +225,14 @@ rte_cryptodev_create_vdev(const char *name, const char *args)
 }
 
 int
-rte_cryptodev_get_dev_id(const char *name) {
+rte_cryptodev_get_dev_id(const char *name)
+{
 	unsigned i;
 
 	if (name == NULL)
 		return -1;
 
-	for (i = 0; i < rte_cryptodev_globals->max_devs; i++)
+	for (i = 0; i < rte_cryptodev_globals->nb_devs; i++)
 		if ((strcmp(rte_cryptodev_globals->devs[i].data->name, name)
 				== 0) &&
 				(rte_cryptodev_globals->devs[i].attached ==
@@ -736,8 +737,8 @@ rte_cryptodev_stop(uint8_t dev_id)
 		return;
 	}
 
-	dev->data->dev_started = 0;
 	(*dev->dev_ops->dev_stop)(dev);
+	dev->data->dev_started = 0;
 }
 
 int

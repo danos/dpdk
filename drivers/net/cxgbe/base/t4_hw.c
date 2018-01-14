@@ -359,6 +359,9 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
 	struct mbox_entry entry;
 	u32 pcie_fw = 0;
 
+	if (!temp)
+		return -ENOMEM;
+
 	if ((size & 15) || size > MBOX_LEN) {
 		free(temp);
 		return -EINVAL;
@@ -400,6 +403,7 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
 			t4_os_atomic_list_del(&entry, &adap->mbox_list,
 					      &adap->mbox_lock);
 			t4_report_fw_error(adap);
+			free(temp);
 			return (pcie_fw & F_PCIE_FW_ERR) ? -ENXIO : -EBUSY;
 		}
 
@@ -443,6 +447,7 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
 							 &adap->mbox_list,
 							 &adap->mbox_lock));
 		t4_report_fw_error(adap);
+		free(temp);
 		return (v == X_MBOWNER_FW ? -EBUSY : -ETIMEDOUT);
 	}
 
@@ -543,6 +548,7 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
 			T4_OS_MBOX_LOCKING(
 				t4_os_atomic_list_del(&entry, &adap->mbox_list,
 						      &adap->mbox_lock));
+			free(temp);
 			return -G_FW_CMD_RETVAL((int)res);
 		}
 	}
@@ -1532,7 +1538,7 @@ int t4_seeprom_write(struct adapter *adapter, u32 addr, u32 data)
 {
 	unsigned int base = adapter->params.pci.vpd_cap_addr;
 	int ret;
-	u32 stats_reg;
+	u32 stats_reg = 0;
 	int max_poll;
 
 	/* VPD Accesses must alway be 4-byte aligned!
@@ -2133,6 +2139,7 @@ unsigned int t4_get_mps_bg_map(struct adapter *adap, int idx)
 void t4_get_port_stats(struct adapter *adap, int idx, struct port_stats *p)
 {
 	u32 bgmap = t4_get_mps_bg_map(adap, idx);
+	u32 stat_ctl = t4_read_reg(adap, A_MPS_STAT_CTL);
 
 #define GET_STAT(name) \
 	t4_read_reg64(adap, \
@@ -2165,6 +2172,15 @@ void t4_get_port_stats(struct adapter *adap, int idx, struct port_stats *p)
 	p->tx_ppp6             = GET_STAT(TX_PORT_PPP6);
 	p->tx_ppp7             = GET_STAT(TX_PORT_PPP7);
 
+	if (CHELSIO_CHIP_VERSION(adap->params.chip) >= CHELSIO_T5) {
+		if (stat_ctl & F_COUNTPAUSESTATTX) {
+			p->tx_frames -= p->tx_pause;
+			p->tx_octets -= p->tx_pause * 64;
+		}
+		if (stat_ctl & F_COUNTPAUSEMCTX)
+			p->tx_mcast_frames -= p->tx_pause;
+	}
+
 	p->rx_octets           = GET_STAT(RX_PORT_BYTES);
 	p->rx_frames           = GET_STAT(RX_PORT_FRAMES);
 	p->rx_bcast_frames     = GET_STAT(RX_PORT_BCAST);
@@ -2192,6 +2208,16 @@ void t4_get_port_stats(struct adapter *adap, int idx, struct port_stats *p)
 	p->rx_ppp5             = GET_STAT(RX_PORT_PPP5);
 	p->rx_ppp6             = GET_STAT(RX_PORT_PPP6);
 	p->rx_ppp7             = GET_STAT(RX_PORT_PPP7);
+
+	if (CHELSIO_CHIP_VERSION(adap->params.chip) >= CHELSIO_T5) {
+		if (stat_ctl & F_COUNTPAUSESTATRX) {
+			p->rx_frames -= p->rx_pause;
+			p->rx_octets -= p->rx_pause * 64;
+		}
+		if (stat_ctl & F_COUNTPAUSEMCRX)
+			p->rx_mcast_frames -= p->rx_pause;
+	}
+
 	p->rx_ovflow0 = (bgmap & 1) ? GET_STAT_COM(RX_BG_0_MAC_DROP_FRAME) : 0;
 	p->rx_ovflow1 = (bgmap & 2) ? GET_STAT_COM(RX_BG_1_MAC_DROP_FRAME) : 0;
 	p->rx_ovflow2 = (bgmap & 4) ? GET_STAT_COM(RX_BG_2_MAC_DROP_FRAME) : 0;

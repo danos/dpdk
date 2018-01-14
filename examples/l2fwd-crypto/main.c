@@ -200,7 +200,7 @@ struct lcore_queue_conf {
 	unsigned nb_crypto_devs;
 	unsigned cryptodev_list[MAX_RX_QUEUE_PER_LCORE];
 
-	struct op_buffer op_buf[RTE_MAX_ETHPORTS];
+	struct op_buffer op_buf[RTE_CRYPTO_MAX_DEVS];
 	struct pkt_buffer pkt_buf[RTE_MAX_ETHPORTS];
 } __rte_cache_aligned;
 
@@ -215,7 +215,7 @@ static const struct rte_eth_conf port_conf = {
 		.hw_ip_checksum = 0, /**< IP checksum offload disabled */
 		.hw_vlan_filter = 0, /**< VLAN filtering disabled */
 		.jumbo_frame    = 0, /**< Jumbo Frame Support disabled */
-		.hw_strip_crc   = 0, /**< CRC stripped by hardware */
+		.hw_strip_crc   = 1, /**< CRC stripped by hardware */
 	},
 	.txmode = {
 		.mq_mode = ETH_MQ_TX_NONE,
@@ -299,7 +299,7 @@ print_stats(void)
 
 	for (cdevid = 0; cdevid < RTE_CRYPTO_MAX_DEVS; cdevid++) {
 		/* skip disabled ports */
-		if ((l2fwd_enabled_crypto_mask & (1lu << cdevid)) == 0)
+		if ((l2fwd_enabled_crypto_mask & (((uint64_t)1) << cdevid)) == 0)
 			continue;
 		printf("\nStatistics for cryptodev %"PRIu64
 				" -------------------------"
@@ -432,7 +432,8 @@ l2fwd_simple_crypto_enqueue(struct rte_mbuf *m,
 	struct ether_hdr *eth_hdr;
 	struct ipv4_hdr *ip_hdr;
 
-	unsigned ipdata_offset, pad_len, data_len;
+	uint32_t ipdata_offset, data_len;
+	uint32_t pad_len = 0;
 	char *padding;
 
 	eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
@@ -455,16 +456,32 @@ l2fwd_simple_crypto_enqueue(struct rte_mbuf *m,
 	if (cparams->do_hash && cparams->hash_verify)
 		data_len -= cparams->digest_length;
 
-	pad_len = data_len % cparams->block_size ? cparams->block_size -
-			(data_len % cparams->block_size) : 0;
+	if (cparams->do_cipher) {
+		/*
+		 * Following algorithms are block cipher algorithms,
+		 * and might need padding
+		 */
+		switch (cparams->cipher_algo) {
+		case RTE_CRYPTO_CIPHER_AES_CBC:
+		case RTE_CRYPTO_CIPHER_AES_ECB:
+		case RTE_CRYPTO_CIPHER_3DES_CBC:
+		case RTE_CRYPTO_CIPHER_3DES_ECB:
+			if (data_len % cparams->block_size)
+				pad_len = cparams->block_size -
+					(data_len % cparams->block_size);
+			break;
+		default:
+			pad_len = 0;
+		}
 
-	if (pad_len) {
-		padding = rte_pktmbuf_append(m, pad_len);
-		if (unlikely(!padding))
-			return -1;
+		if (pad_len) {
+			padding = rte_pktmbuf_append(m, pad_len);
+			if (unlikely(!padding))
+				return -1;
 
-		data_len += pad_len;
-		memset(padding, 0, pad_len);
+			data_len += pad_len;
+			memset(padding, 0, pad_len);
+		}
 	}
 
 	/* Set crypto operation data parameters */
@@ -499,6 +516,10 @@ l2fwd_simple_crypto_enqueue(struct rte_mbuf *m,
 			op->sym->auth.aad.data = cparams->aad.data;
 			op->sym->auth.aad.phys_addr = cparams->aad.phys_addr;
 			op->sym->auth.aad.length = cparams->aad.length;
+		} else {
+			op->sym->auth.aad.data = NULL;
+			op->sym->auth.aad.phys_addr = 0;
+			op->sym->auth.aad.length = 0;
 		}
 	}
 
@@ -699,7 +720,8 @@ l2fwd_main_loop(struct l2fwd_crypto_options *options)
 					generate_random_key(port_cparams[i].aad.data,
 						port_cparams[i].aad.length);
 
-			}
+			} else
+				port_cparams[i].aad.length = 0;
 
 			if (options->auth_xform.auth.op == RTE_CRYPTO_AUTH_OP_VERIFY)
 				port_cparams[i].hash_verify = 1;
@@ -810,7 +832,7 @@ l2fwd_main_loop(struct l2fwd_crypto_options *options)
 						ops_burst, nb_rx) !=
 								nb_rx) {
 					for (j = 0; j < nb_rx; j++)
-						rte_pktmbuf_free(pkts_burst[i]);
+						rte_pktmbuf_free(pkts_burst[j]);
 
 					nb_rx = 0;
 				}
@@ -864,7 +886,8 @@ l2fwd_crypto_usage(const char *prgname)
 		" (0 to disable, 10 default, 86400 maximum)\n"
 
 		"  --cdev_type HW / SW / ANY\n"
-		"  --chain HASH_CIPHER / CIPHER_HASH\n"
+		"  --chain HASH_CIPHER / CIPHER_HASH / CIPHER_ONLY /"
+		" HASH_ONLY\n"
 
 		"  --cipher_algo ALGO\n"
 		"  --cipher_op ENCRYPT / DECRYPT\n"
@@ -964,6 +987,7 @@ parse_key(uint8_t *data, char *input_arg)
 	unsigned byte_count;
 	char *token;
 
+	errno = 0;
 	for (byte_count = 0, token = strtok(input_arg, ":");
 			(byte_count < MAX_KEY_SIZE) && (token != NULL);
 			token = strtok(NULL, ":")) {
@@ -1374,7 +1398,7 @@ l2fwd_crypto_parse_args(struct l2fwd_crypto_options *options,
 
 	l2fwd_crypto_default_options(options);
 
-	while ((opt = getopt_long(argc, argvopt, "p:q:st:", lgopts,
+	while ((opt = getopt_long(argc, argvopt, "p:q:sT:", lgopts,
 			&option_index)) != EOF) {
 		switch (opt) {
 		/* long options */
@@ -1693,7 +1717,6 @@ initialize_cryptodevs(struct l2fwd_crypto_options *options, unsigned nb_ports,
 				continue;
 			}
 
-			options->block_size = cap->sym.auth.block_size;
 			/*
 			 * Check if length of provided AAD is supported
 			 * by the algorithm chosen.
@@ -1808,7 +1831,7 @@ initialize_cryptodevs(struct l2fwd_crypto_options *options, unsigned nb_ports,
 			return -1;
 		}
 
-		l2fwd_enabled_crypto_mask |= (1 << cdev_id);
+		l2fwd_enabled_crypto_mask |= (((uint64_t)1) << cdev_id);
 
 		enabled_cdevs[cdev_id] = 1;
 		enabled_cdev_count++;

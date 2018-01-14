@@ -71,8 +71,14 @@ struct rte_mbuf;
 /**
  * Return the physical address (or virtual address in case of
  * virtio-user) of mbuf data buffer.
+ *
+ * The address is firstly casted to the word size (sizeof(uintptr_t))
+ * before casting it to uint64_t. This is to make it work with different
+ * combination of word size (64 bit and 32 bit) and virtio device
+ * (virtio-pci and virtio-user).
  */
-#define VIRTIO_MBUF_ADDR(mb, vq) (*(uint64_t *)((uintptr_t)(mb) + (vq)->offset))
+#define VIRTIO_MBUF_ADDR(mb, vq) \
+	((uint64_t)(*(uintptr_t *)((uintptr_t)(mb) + (vq)->offset)))
 #else
 #define VIRTIO_MBUF_ADDR(mb, vq) ((mb)->buf_physaddr)
 #endif
@@ -284,6 +290,9 @@ void virtqueue_dump(struct virtqueue *vq);
  */
 struct rte_mbuf *virtqueue_detatch_unused(struct virtqueue *vq);
 
+/* Flush the elements in the used ring. */
+void virtqueue_flush(struct virtqueue *vq);
+
 static inline int
 virtqueue_full(const struct virtqueue *vq)
 {
@@ -291,6 +300,8 @@ virtqueue_full(const struct virtqueue *vq)
 }
 
 #define VIRTQUEUE_NUSED(vq) ((uint16_t)((vq)->vq_ring.used->idx - (vq)->vq_used_cons_idx))
+
+void vq_ring_free_chain(struct virtqueue *vq, uint16_t desc_idx);
 
 static inline void
 vq_update_avail_idx(struct virtqueue *vq)
@@ -330,7 +341,7 @@ virtqueue_notify(struct virtqueue *vq)
 	 * For virtio on IA, the notificaiton is through io port operation
 	 * which is a serialization instruction itself.
 	 */
-	vq->hw->vtpci_ops->notify_queue(vq->hw, vq);
+	VTPCI_OPS(vq->hw)->notify_queue(vq->hw, vq);
 }
 
 #ifdef RTE_LIBRTE_VIRTIO_DEBUG_DUMP

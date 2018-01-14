@@ -153,7 +153,7 @@ static struct rte_eth_conf vmdq_conf_default = {
 		 */
 		.hw_vlan_strip  = 1, /**< VLAN strip enabled. */
 		.jumbo_frame    = 0, /**< Jumbo Frame Support disabled */
-		.hw_strip_crc   = 0, /**< CRC stripped by hardware */
+		.hw_strip_crc   = 1, /**< CRC stripped by hardware */
 	},
 
 	.txmode = {
@@ -1393,7 +1393,7 @@ create_mbuf_pool(uint16_t nr_port, uint32_t nr_switch_core, uint32_t mbuf_size,
 		mtu = 64 * 1024;
 
 	nr_mbufs_per_core  = (mtu + mbuf_size) * MAX_PKT_BURST /
-			(mbuf_size - RTE_PKTMBUF_HEADROOM) * MAX_PKT_BURST;
+			(mbuf_size - RTE_PKTMBUF_HEADROOM);
 	nr_mbufs_per_core += nr_rx_desc;
 	nr_mbufs_per_core  = RTE_MAX(nr_mbufs_per_core, nr_mbuf_cache);
 
@@ -1436,11 +1436,12 @@ main(int argc, char *argv[])
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Invalid argument\n");
 
-	for (lcore_id = 0; lcore_id < RTE_MAX_LCORE; lcore_id ++)
+	for (lcore_id = 0; lcore_id < RTE_MAX_LCORE; lcore_id++) {
 		TAILQ_INIT(&lcore_info[lcore_id].vdev_list);
 
 		if (rte_lcore_is_enabled(lcore_id))
-			lcore_ids[core_id ++] = lcore_id;
+			lcore_ids[core_id++] = lcore_id;
+	}
 
 	if (rte_lcore_count() > RTE_MAX_LCORE)
 		rte_exit(EXIT_FAILURE,"Not enough cores\n");

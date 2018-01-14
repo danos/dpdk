@@ -609,11 +609,9 @@ priv_allow_flow_type(struct priv *priv, enum hash_rxq_flow_type type)
 int
 priv_rehash_flows(struct priv *priv)
 {
-	enum hash_rxq_flow_type i;
+	size_t i;
 
-	for (i = HASH_RXQ_FLOW_TYPE_PROMISC;
-			i != RTE_DIM((*priv->hash_rxqs)[0].special_flow);
-			++i)
+	for (i = 0; i != RTE_DIM((*priv->hash_rxqs)[0].special_flow); ++i)
 		if (!priv_allow_flow_type(priv, i)) {
 			priv_special_flow_disable(priv, i);
 		} else {
@@ -868,12 +866,16 @@ static inline int
 rxq_setup(struct rxq_ctrl *tmpl)
 {
 	struct ibv_cq *ibcq = tmpl->cq;
-	struct mlx5_cq *cq = to_mxxx(cq, cq);
+	struct ibv_mlx5_cq_info cq_info;
 	struct mlx5_rwq *rwq = container_of(tmpl->wq, struct mlx5_rwq, wq);
 	struct rte_mbuf *(*elts)[1 << tmpl->rxq.elts_n] =
 		rte_calloc_socket("RXQ", 1, sizeof(*elts), 0, tmpl->socket);
 
-	if (cq->cqe_sz != RTE_CACHE_LINE_SIZE) {
+	if (ibv_mlx5_exp_get_cq_info(ibcq, &cq_info)) {
+		ERROR("Unable to query CQ info. check your OFED.");
+		return ENOTSUP;
+	}
+	if (cq_info.cqe_size != RTE_CACHE_LINE_SIZE) {
 		ERROR("Wrong MLX5_CQE_SIZE environment variable value: "
 		      "it should be set to %u", RTE_CACHE_LINE_SIZE);
 		return EINVAL;
@@ -881,16 +883,16 @@ rxq_setup(struct rxq_ctrl *tmpl)
 	if (elts == NULL)
 		return ENOMEM;
 	tmpl->rxq.rq_db = rwq->rq.db;
-	tmpl->rxq.cqe_n = log2above(ibcq->cqe);
+	tmpl->rxq.cqe_n = log2above(cq_info.cqe_cnt);
 	tmpl->rxq.cq_ci = 0;
 	tmpl->rxq.rq_ci = 0;
-	tmpl->rxq.cq_db = cq->dbrec;
+	tmpl->rxq.cq_db = cq_info.dbrec;
 	tmpl->rxq.wqes =
 		(volatile struct mlx5_wqe_data_seg (*)[])
 		(uintptr_t)rwq->rq.buff;
 	tmpl->rxq.cqes =
 		(volatile struct mlx5_cqe (*)[])
-		(uintptr_t)cq->active_buf->buf;
+		(uintptr_t)cq_info.buf;
 	tmpl->rxq.elts = elts;
 	return 0;
 }
@@ -1247,6 +1249,19 @@ mlx5_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 		}
 		(*priv->rxqs)[idx] = NULL;
 		rxq_cleanup(rxq_ctrl);
+		/* Resize if rxq size is changed. */
+		if (rxq_ctrl->rxq.elts_n != log2above(desc)) {
+			rxq_ctrl = rte_realloc(rxq_ctrl,
+					       sizeof(*rxq_ctrl) +
+					       desc * sizeof(struct rte_mbuf *),
+					       RTE_CACHE_LINE_SIZE);
+			if (!rxq_ctrl) {
+				ERROR("%p: unable to reallocate queue index %u",
+					(void *)dev, idx);
+				priv_unlock(priv);
+				return -ENOMEM;
+			}
+		}
 	} else {
 		rxq_ctrl = rte_calloc_socket("RXQ", 1, sizeof(*rxq_ctrl) +
 					     desc * sizeof(struct rte_mbuf *),

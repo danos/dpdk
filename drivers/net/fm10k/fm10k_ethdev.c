@@ -83,6 +83,7 @@ static void fm10k_rx_queue_release(void *queue);
 static void fm10k_set_rx_function(struct rte_eth_dev *dev);
 static void fm10k_set_tx_function(struct rte_eth_dev *dev);
 static int fm10k_check_ftag(struct rte_devargs *devargs);
+static int fm10k_link_update(struct rte_eth_dev *dev, int wait_to_complete);
 
 struct fm10k_xstats_name_off {
 	char name[RTE_ETH_XSTATS_NAME_SIZE];
@@ -1164,6 +1165,8 @@ fm10k_dev_start(struct rte_eth_dev *dev)
 	if (!(dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_VMDQ_FLAG))
 		fm10k_vlan_filter_set(dev, hw->mac.default_vid, true);
 
+	fm10k_link_update(dev, 0);
+
 	return 0;
 }
 
@@ -1315,6 +1318,7 @@ fm10k_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 	for (i = 0; i < FM10K_NB_HW_XSTATS; i++) {
 		xstats[count].value = *(uint64_t *)(((char *)hw_stats) +
 			fm10k_hw_stats_strings[count].offset);
+		xstats[count].id = count;
 		count++;
 	}
 
@@ -1324,12 +1328,14 @@ fm10k_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
 			xstats[count].value =
 				*(uint64_t *)(((char *)&hw_stats->q[q]) +
 				fm10k_hw_stats_rx_q_strings[i].offset);
+			xstats[count].id = count;
 			count++;
 		}
 		for (i = 0; i < FM10K_NB_TX_Q_XSTATS; i++) {
 			xstats[count].value =
 				*(uint64_t *)(((char *)&hw_stats->q[q]) +
 				fm10k_hw_stats_tx_q_strings[i].offset);
+			xstats[count].id = count;
 			count++;
 		}
 	}
@@ -1794,7 +1800,8 @@ fm10k_rx_queue_setup(struct rte_eth_dev *dev, uint16_t queue_id,
 	const struct rte_eth_rxconf *conf, struct rte_mempool *mp)
 {
 	struct fm10k_hw *hw = FM10K_DEV_PRIVATE_TO_HW(dev->data->dev_private);
-	struct fm10k_dev_info *dev_info = FM10K_DEV_PRIVATE_TO_INFO(dev);
+	struct fm10k_dev_info *dev_info =
+		FM10K_DEV_PRIVATE_TO_INFO(dev->data->dev_private);
 	struct fm10k_rx_queue *q;
 	const struct rte_memzone *mz;
 
@@ -2764,7 +2771,8 @@ fm10k_set_tx_function(struct rte_eth_dev *dev)
 static void __attribute__((cold))
 fm10k_set_rx_function(struct rte_eth_dev *dev)
 {
-	struct fm10k_dev_info *dev_info = FM10K_DEV_PRIVATE_TO_INFO(dev);
+	struct fm10k_dev_info *dev_info =
+		FM10K_DEV_PRIVATE_TO_INFO(dev->data->dev_private);
 	uint16_t i, rx_using_sse;
 	uint16_t rx_ftag_en = 0;
 
@@ -2806,7 +2814,8 @@ static void
 fm10k_params_init(struct rte_eth_dev *dev)
 {
 	struct fm10k_hw *hw = FM10K_DEV_PRIVATE_TO_HW(dev->data->dev_private);
-	struct fm10k_dev_info *info = FM10K_DEV_PRIVATE_TO_INFO(dev);
+	struct fm10k_dev_info *info =
+		FM10K_DEV_PRIVATE_TO_INFO(dev->data->dev_private);
 
 	/* Inialize bus info. Normally we would call fm10k_get_bus_info(), but
 	 * there is no way to get link status without reading BAR4.  Until this

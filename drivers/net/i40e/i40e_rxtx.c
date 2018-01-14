@@ -138,8 +138,11 @@ i40e_rxd_error_to_pkt_flags(uint64_t qword)
 	uint64_t error_bits = (qword >> I40E_RXD_QW1_ERROR_SHIFT);
 
 #define I40E_RX_ERR_BITS 0x3f
-	if (likely((error_bits & I40E_RX_ERR_BITS) == 0))
+	if (likely((error_bits & I40E_RX_ERR_BITS) == 0)) {
+		flags |= (PKT_RX_IP_CKSUM_GOOD | PKT_RX_L4_CKSUM_GOOD);
 		return flags;
+	}
+
 	if (unlikely(error_bits & (1 << I40E_RX_DESC_ERROR_IPE_SHIFT)))
 		flags |= PKT_RX_IP_CKSUM_BAD;
 	else
@@ -595,6 +598,7 @@ static inline uint16_t
 rx_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 {
 	struct i40e_rx_queue *rxq = (struct i40e_rx_queue *)rx_queue;
+	struct rte_eth_dev *dev;
 	uint16_t nb_rx = 0;
 
 	if (!nb_pkts)
@@ -612,9 +616,10 @@ rx_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 		if (i40e_rx_alloc_bufs(rxq) != 0) {
 			uint16_t i, j;
 
-			PMD_RX_LOG(DEBUG, "Rx mbuf alloc failed for "
-				   "port_id=%u, queue_id=%u",
-				   rxq->port_id, rxq->queue_id);
+			dev = I40E_VSI_TO_ETH_DEV(rxq->vsi);
+			dev->data->rx_mbuf_alloc_failed +=
+				rxq->rx_free_thresh;
+
 			rxq->rx_nb_avail = 0;
 			rxq->rx_tail = (uint16_t)(rxq->rx_tail - nb_rx);
 			for (i = 0, j = rxq->rx_tail; i < nb_rx; i++, j++)
@@ -676,6 +681,7 @@ i40e_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 	union i40e_rx_desc rxd;
 	struct i40e_rx_entry *sw_ring;
 	struct i40e_rx_entry *rxe;
+	struct rte_eth_dev *dev;
 	struct rte_mbuf *rxm;
 	struct rte_mbuf *nmb;
 	uint16_t nb_rx;
@@ -704,10 +710,13 @@ i40e_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 			break;
 
 		nmb = rte_mbuf_raw_alloc(rxq->mp);
-		if (unlikely(!nmb))
+		if (unlikely(!nmb)) {
+			dev = I40E_VSI_TO_ETH_DEV(rxq->vsi);
+			dev->data->rx_mbuf_alloc_failed++;
 			break;
-		rxd = *rxdp;
+		}
 
+		rxd = *rxdp;
 		nb_hold++;
 		rxe = &sw_ring[rx_id];
 		rx_id++;
@@ -799,6 +808,7 @@ i40e_recv_scattered_pkts(void *rx_queue,
 	struct rte_mbuf *nmb, *rxm;
 	uint16_t rx_id = rxq->rx_tail;
 	uint16_t nb_rx = 0, nb_hold = 0, rx_packet_len;
+	struct rte_eth_dev *dev;
 	uint32_t rx_status;
 	uint64_t qword1;
 	uint64_t dma_addr;
@@ -815,8 +825,12 @@ i40e_recv_scattered_pkts(void *rx_queue,
 			break;
 
 		nmb = rte_mbuf_raw_alloc(rxq->mp);
-		if (unlikely(!nmb))
+		if (unlikely(!nmb)) {
+			dev = I40E_VSI_TO_ETH_DEV(rxq->vsi);
+			dev->data->rx_mbuf_alloc_failed++;
 			break;
+		}
+
 		rxd = *rxdp;
 		nb_hold++;
 		rxe = &sw_ring[rx_id];
@@ -1632,36 +1646,42 @@ i40e_dev_rx_queue_setup(struct rte_eth_dev *dev,
 			const struct rte_eth_rxconf *rx_conf,
 			struct rte_mempool *mp)
 {
-	struct i40e_vsi *vsi;
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
-	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 	struct i40e_adapter *ad =
 		I40E_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
+	struct i40e_vsi *vsi;
+	struct i40e_pf *pf = NULL;
+	struct i40e_vf *vf = NULL;
 	struct i40e_rx_queue *rxq;
 	const struct rte_memzone *rz;
 	uint32_t ring_size;
 	uint16_t len, i;
-	uint16_t base, bsf, tc_mapping;
-	int use_def_burst_func = 1;
+	uint16_t reg_idx, base, bsf, tc_mapping;
+	int q_offset, use_def_burst_func = 1;
 
 	if (hw->mac.type == I40E_MAC_VF || hw->mac.type == I40E_MAC_X722_VF) {
-		struct i40e_vf *vf =
-			I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
+		vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
 		vsi = &vf->vsi;
-	} else
+		if (!vsi)
+			return -EINVAL;
+		reg_idx = queue_idx;
+	} else {
+		pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 		vsi = i40e_pf_get_vsi_by_qindex(pf, queue_idx);
-
-	if (vsi == NULL) {
-		PMD_DRV_LOG(ERR, "VSI not available or queue "
-			    "index exceeds the maximum");
-		return I40E_ERR_PARAM;
+		if (!vsi)
+			return -EINVAL;
+		q_offset = i40e_get_queue_offset_by_qindex(pf, queue_idx);
+		if (q_offset < 0)
+			return -EINVAL;
+		reg_idx = vsi->base_queue + q_offset;
 	}
+
 	if (nb_desc % I40E_ALIGN_RING_DESC != 0 ||
-			(nb_desc > I40E_MAX_RING_DESC) ||
-			(nb_desc < I40E_MIN_RING_DESC)) {
+	    (nb_desc > I40E_MAX_RING_DESC) ||
+	    (nb_desc < I40E_MIN_RING_DESC)) {
 		PMD_DRV_LOG(ERR, "Number (%u) of receive descriptors is "
 			    "invalid", nb_desc);
-		return I40E_ERR_PARAM;
+		return -EINVAL;
 	}
 
 	/* Free memory if needed */
@@ -1684,12 +1704,7 @@ i40e_dev_rx_queue_setup(struct rte_eth_dev *dev,
 	rxq->nb_rx_desc = nb_desc;
 	rxq->rx_free_thresh = rx_conf->rx_free_thresh;
 	rxq->queue_id = queue_idx;
-	if (hw->mac.type == I40E_MAC_VF || hw->mac.type == I40E_MAC_X722_VF)
-		rxq->reg_idx = queue_idx;
-	else /* PF device */
-		rxq->reg_idx = vsi->base_queue +
-			i40e_get_queue_offset_by_qindex(pf, queue_idx);
-
+	rxq->reg_idx = reg_idx;
 	rxq->port_id = dev->data->port_id;
 	rxq->crc_len = (uint8_t) ((dev->data->dev_conf.rxmode.hw_strip_crc) ?
 							0 : ETHER_CRC_LEN);
@@ -1714,11 +1729,7 @@ i40e_dev_rx_queue_setup(struct rte_eth_dev *dev,
 	rxq->rx_ring_phys_addr = rte_mem_phy2mch(rz->memseg_id, rz->phys_addr);
 	rxq->rx_ring = (union i40e_rx_desc *)rz->addr;
 
-#ifdef RTE_LIBRTE_I40E_RX_ALLOW_BULK_ALLOC
 	len = (uint16_t)(nb_desc + RTE_PMD_I40E_RX_MAX_BURST);
-#else
-	len = nb_desc;
-#endif
 
 	/* Allocate the software ring. */
 	rxq->sw_ring =
@@ -1852,34 +1863,40 @@ i40e_dev_tx_queue_setup(struct rte_eth_dev *dev,
 			unsigned int socket_id,
 			const struct rte_eth_txconf *tx_conf)
 {
-	struct i40e_vsi *vsi;
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
-	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
+	struct i40e_vsi *vsi;
+	struct i40e_pf *pf = NULL;
+	struct i40e_vf *vf = NULL;
 	struct i40e_tx_queue *txq;
 	const struct rte_memzone *tz;
 	uint32_t ring_size;
 	uint16_t tx_rs_thresh, tx_free_thresh;
-	uint16_t i, base, bsf, tc_mapping;
+	uint16_t reg_idx, i, base, bsf, tc_mapping;
+	int q_offset;
 
 	if (hw->mac.type == I40E_MAC_VF || hw->mac.type == I40E_MAC_X722_VF) {
-		struct i40e_vf *vf =
-			I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
+		vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
 		vsi = &vf->vsi;
-	} else
+		if (!vsi)
+			return -EINVAL;
+		reg_idx = queue_idx;
+	} else {
+		pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 		vsi = i40e_pf_get_vsi_by_qindex(pf, queue_idx);
-
-	if (vsi == NULL) {
-		PMD_DRV_LOG(ERR, "VSI is NULL, or queue index (%u) "
-			    "exceeds the maximum", queue_idx);
-		return I40E_ERR_PARAM;
+		if (!vsi)
+			return -EINVAL;
+		q_offset = i40e_get_queue_offset_by_qindex(pf, queue_idx);
+		if (q_offset < 0)
+			return -EINVAL;
+		reg_idx = vsi->base_queue + q_offset;
 	}
 
 	if (nb_desc % I40E_ALIGN_RING_DESC != 0 ||
-			(nb_desc > I40E_MAX_RING_DESC) ||
-			(nb_desc < I40E_MIN_RING_DESC)) {
+	    (nb_desc > I40E_MAX_RING_DESC) ||
+	    (nb_desc < I40E_MIN_RING_DESC)) {
 		PMD_DRV_LOG(ERR, "Number (%u) of transmit descriptors is "
 			    "invalid", nb_desc);
-		return I40E_ERR_PARAM;
+		return -EINVAL;
 	}
 
 	/**
@@ -1916,8 +1933,7 @@ i40e_dev_tx_queue_setup(struct rte_eth_dev *dev,
 		return I40E_ERR_PARAM;
 	}
 	if (tx_free_thresh >= (nb_desc - 3)) {
-		PMD_INIT_LOG(ERR, "tx_rs_thresh must be less than the "
-			     "tx_free_thresh must be less than the "
+		PMD_INIT_LOG(ERR, "tx_free_thresh must be less than the "
 			     "number of TX descriptors minus 3. "
 			     "(tx_free_thresh=%u port=%d queue=%d)",
 			     (unsigned int)tx_free_thresh,
@@ -1989,12 +2005,7 @@ i40e_dev_tx_queue_setup(struct rte_eth_dev *dev,
 	txq->hthresh = tx_conf->tx_thresh.hthresh;
 	txq->wthresh = tx_conf->tx_thresh.wthresh;
 	txq->queue_id = queue_idx;
-	if (hw->mac.type == I40E_MAC_VF || hw->mac.type == I40E_MAC_X722_VF)
-		txq->reg_idx = queue_idx;
-	else /* PF device */
-		txq->reg_idx = vsi->base_queue +
-			i40e_get_queue_offset_by_qindex(pf, queue_idx);
-
+	txq->reg_idx = reg_idx;
 	txq->port_id = dev->data->port_id;
 	txq->txq_flags = tx_conf->txq_flags;
 	txq->vsi = vsi;
@@ -2127,11 +2138,11 @@ i40e_reset_rx_queue(struct i40e_rx_queue *rxq)
 	for (i = 0; i < len * sizeof(union i40e_rx_desc); i++)
 		((volatile char *)rxq->rx_ring)[i] = 0;
 
-#ifdef RTE_LIBRTE_I40E_RX_ALLOW_BULK_ALLOC
 	memset(&rxq->fake_mbuf, 0x0, sizeof(rxq->fake_mbuf));
 	for (i = 0; i < RTE_PMD_I40E_RX_MAX_BURST; ++i)
 		rxq->sw_ring[rxq->nb_rx_desc + i].mbuf = &rxq->fake_mbuf;
 
+#ifdef RTE_LIBRTE_I40E_RX_ALLOW_BULK_ALLOC
 	rxq->rx_nb_avail = 0;
 	rxq->rx_next_avail = 0;
 	rxq->rx_free_trigger = (uint16_t)(rxq->rx_free_thresh - 1);
@@ -2148,17 +2159,39 @@ i40e_reset_rx_queue(struct i40e_rx_queue *rxq)
 void
 i40e_tx_queue_release_mbufs(struct i40e_tx_queue *txq)
 {
+	struct rte_eth_dev *dev;
 	uint16_t i;
+
+	dev = &rte_eth_devices[txq->port_id];
 
 	if (!txq || !txq->sw_ring) {
 		PMD_DRV_LOG(DEBUG, "Pointer to rxq or sw_ring is NULL");
 		return;
 	}
 
-	for (i = 0; i < txq->nb_tx_desc; i++) {
-		if (txq->sw_ring[i].mbuf) {
+	/**
+	 *  vPMD tx will not set sw_ring's mbuf to NULL after free,
+	 *  so need to free remains more carefully.
+	 */
+	if (dev->tx_pkt_burst == i40e_xmit_pkts_vec) {
+		i = txq->tx_next_dd - txq->tx_rs_thresh + 1;
+		if (txq->tx_tail < i) {
+			for (; i < txq->nb_tx_desc; i++) {
+				rte_pktmbuf_free_seg(txq->sw_ring[i].mbuf);
+				txq->sw_ring[i].mbuf = NULL;
+			}
+			i = 0;
+		}
+		for (; i < txq->tx_tail; i++) {
 			rte_pktmbuf_free_seg(txq->sw_ring[i].mbuf);
 			txq->sw_ring[i].mbuf = NULL;
+		}
+	} else {
+		for (i = 0; i < txq->nb_tx_desc; i++) {
+			if (txq->sw_ring[i].mbuf) {
+				rte_pktmbuf_free_seg(txq->sw_ring[i].mbuf);
+				txq->sw_ring[i].mbuf = NULL;
+			}
 		}
 	}
 }
@@ -2315,7 +2348,7 @@ i40e_rx_queue_config(struct i40e_rx_queue *rxq)
 	case I40E_FLAG_HEADER_SPLIT_DISABLED:
 	default:
 		rxq->rx_hdr_len = 0;
-		rxq->rx_buf_len = RTE_ALIGN(buf_size,
+		rxq->rx_buf_len = RTE_ALIGN_FLOOR(buf_size,
 			(1 << I40E_RXQ_CTX_DBUFF_SHIFT));
 		rxq->hs_mode = i40e_header_split_none;
 		break;

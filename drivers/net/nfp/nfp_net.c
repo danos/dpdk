@@ -857,6 +857,8 @@ nfp_net_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 
 	/* RTE_ETHDEV_QUEUE_STAT_CNTRS default value is 16 */
 
+	memset(&nfp_dev_stats, 0, sizeof(nfp_dev_stats));
+
 	/* reading per RX ring stats */
 	for (i = 0; i < dev->data->nb_rx_queues; i++) {
 		if (i == RTE_ETHDEV_QUEUE_STAT_CNTRS)
@@ -1027,8 +1029,8 @@ nfp_net_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 
 	if (hw->cap & NFP_NET_CFG_CTRL_TXCSUM)
 		dev_info->tx_offload_capa |= DEV_TX_OFFLOAD_IPV4_CKSUM |
-					     DEV_RX_OFFLOAD_UDP_CKSUM |
-					     DEV_RX_OFFLOAD_TCP_CKSUM;
+					     DEV_TX_OFFLOAD_UDP_CKSUM |
+					     DEV_TX_OFFLOAD_TCP_CKSUM;
 
 	dev_info->default_rxconf = (struct rte_eth_rxconf) {
 		.rx_thresh = {
@@ -1916,7 +1918,7 @@ nfp_net_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 	struct nfp_net_tx_desc *txds;
 	struct rte_mbuf *pkt;
 	uint64_t dma_addr;
-	int pkt_size, dma_size;
+	int pkt_size, pkt_len, dma_size;
 	uint16_t free_descs, issued_descs;
 	struct rte_mbuf **lmbuf;
 	int i;
@@ -1964,6 +1966,8 @@ nfp_net_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		 * Checksum and VLAN flags just in the first descriptor for a
 		 * multisegment packet
 		 */
+
+		txds->data_len = pkt->pkt_len;
 		nfp_net_tx_cksum(txq, txds, pkt);
 
 		if ((pkt->ol_flags & PKT_TX_VLAN_PKT) &&
@@ -1981,6 +1985,7 @@ nfp_net_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		 * then data_len = pkt_len
 		 */
 		pkt_size = pkt->pkt_len;
+		pkt_len = pkt->pkt_len;
 
 		/* Releasing mbuf which was prefetched above */
 		if (*lmbuf)
@@ -1999,7 +2004,7 @@ nfp_net_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 
 			/* Filling descriptors fields */
 			txds->dma_len = dma_size;
-			txds->data_len = pkt->pkt_len;
+			txds->data_len = pkt_len;
 			txds->dma_addr_hi = (dma_addr >> 32) & 0xff;
 			txds->dma_addr_lo = (dma_addr & 0xffffffff);
 			ASSERT(free_descs > 0);
@@ -2043,9 +2048,9 @@ nfp_net_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 	new_ctrl = 0;
 
 	if ((mask & ETH_VLAN_FILTER_OFFLOAD) ||
-	    (mask & ETH_VLAN_FILTER_OFFLOAD))
-		RTE_LOG(INFO, PMD, "Not support for ETH_VLAN_FILTER_OFFLOAD or"
-			" ETH_VLAN_FILTER_EXTEND");
+	    (mask & ETH_VLAN_EXTEND_OFFLOAD))
+		RTE_LOG(INFO, PMD, "No support for ETH_VLAN_FILTER_OFFLOAD or"
+			" ETH_VLAN_EXTEND_OFFLOAD");
 
 	/* Enable vlan strip if it is not configured yet */
 	if ((mask & ETH_VLAN_STRIP_OFFLOAD) &&
@@ -2117,7 +2122,8 @@ nfp_net_reta_update(struct rte_eth_dev *dev,
 				reta &= ~(0xFF << (8 * j));
 			reta |= reta_conf[idx].reta[shift + j] << (8 * j);
 		}
-		nn_cfg_writel(hw, NFP_NET_CFG_RSS_ITBL + shift, reta);
+		nn_cfg_writel(hw, NFP_NET_CFG_RSS_ITBL + (idx * 64) + shift,
+			      reta);
 	}
 
 	update = NFP_NET_CFG_UPDATE_RSS;
@@ -2164,7 +2170,8 @@ nfp_net_reta_query(struct rte_eth_dev *dev,
 		if (!mask)
 			continue;
 
-		reta = nn_cfg_readl(hw, NFP_NET_CFG_RSS_ITBL + shift);
+		reta = nn_cfg_readl(hw, NFP_NET_CFG_RSS_ITBL + (idx * 64) +
+				    shift);
 		for (j = 0; j < 4; j++) {
 			if (!(mask & (0x1 << j)))
 				continue;
@@ -2213,6 +2220,9 @@ nfp_net_rss_hash_update(struct rte_eth_dev *dev,
 		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV6 |
 				NFP_NET_CFG_RSS_IPV6_TCP |
 				NFP_NET_CFG_RSS_IPV6_UDP;
+
+	cfg_rss_ctrl |= NFP_NET_CFG_RSS_MASK;
+	cfg_rss_ctrl |= NFP_NET_CFG_RSS_TOEPLITZ;
 
 	/* configuring where to apply the RSS hash */
 	nn_cfg_writel(hw, NFP_NET_CFG_RSS_CTRL, cfg_rss_ctrl);

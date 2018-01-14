@@ -137,6 +137,7 @@ static int qed_load_firmware_data(struct ecore_dev *edev)
 
 	if (fstat(fd, &st) < 0) {
 		DP_NOTICE(edev, false, "Can't stat firmware file\n");
+		close(fd);
 		return -1;
 	}
 
@@ -158,9 +159,11 @@ static int qed_load_firmware_data(struct ecore_dev *edev)
 	if (edev->fw_len < 104) {
 		DP_NOTICE(edev, false, "Invalid fw size: %" PRIu64 "\n",
 			  edev->fw_len);
+		close(fd);
 		return -EINVAL;
 	}
 
+	close(fd);
 	return 0;
 }
 #endif
@@ -342,11 +345,12 @@ qed_fill_dev_info(struct ecore_dev *edev, struct qed_dev_info *dev_info)
 	rte_memcpy(&dev_info->hw_mac, &edev->hwfns[0].hw_info.hw_mac_addr,
 	       ETHER_ADDR_LEN);
 
+	dev_info->fw_major = FW_MAJOR_VERSION;
+	dev_info->fw_minor = FW_MINOR_VERSION;
+	dev_info->fw_rev = FW_REVISION_VERSION;
+	dev_info->fw_eng = FW_ENGINEERING_VERSION;
+
 	if (IS_PF(edev)) {
-		dev_info->fw_major = FW_MAJOR_VERSION;
-		dev_info->fw_minor = FW_MINOR_VERSION;
-		dev_info->fw_rev = FW_REVISION_VERSION;
-		dev_info->fw_eng = FW_ENGINEERING_VERSION;
 		dev_info->mf_mode = edev->mf_mode;
 		dev_info->tx_switching = false;
 	} else {

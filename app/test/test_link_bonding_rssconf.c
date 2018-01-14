@@ -61,7 +61,7 @@
 #define RXTX_RING_SIZE			1024
 #define RXTX_QUEUE_COUNT		4
 
-#define BONDED_DEV_NAME         ("rssconf_bond_dev")
+#define BONDED_DEV_NAME         ("net_bonding_rss")
 
 #define SLAVE_DEV_NAME_FMT      ("rssconf_slave%d")
 #define SLAVE_RXTX_QUEUE_FMT      ("rssconf_slave%d_q%d")
@@ -116,7 +116,7 @@ static struct rte_eth_conf default_pmd_conf = {
 		.hw_ip_checksum = 0, /**< IP checksum offload enabled */
 		.hw_vlan_filter = 0, /**< VLAN filtering disabled */
 		.jumbo_frame    = 0, /**< Jumbo Frame Support disabled */
-		.hw_strip_crc   = 0, /**< CRC stripped by hardware */
+		.hw_strip_crc   = 1, /**< CRC stripped by hardware */
 	},
 	.txmode = {
 		.mq_mode = ETH_MQ_TX_NONE,
@@ -133,7 +133,7 @@ static struct rte_eth_conf rss_pmd_conf = {
 		.hw_ip_checksum = 0, /**< IP checksum offload enabled */
 		.hw_vlan_filter = 0, /**< VLAN filtering disabled */
 		.jumbo_frame    = 0, /**< Jumbo Frame Support disabled */
-		.hw_strip_crc   = 0, /**< CRC stripped by hardware */
+		.hw_strip_crc   = 1, /**< CRC stripped by hardware */
 	},
 	.txmode = {
 		.mq_mode = ETH_MQ_TX_NONE,

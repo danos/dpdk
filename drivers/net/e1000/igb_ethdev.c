@@ -129,7 +129,7 @@ static int  eth_igb_flow_ctrl_get(struct rte_eth_dev *dev,
 				struct rte_eth_fc_conf *fc_conf);
 static int  eth_igb_flow_ctrl_set(struct rte_eth_dev *dev,
 				struct rte_eth_fc_conf *fc_conf);
-static int eth_igb_lsc_interrupt_setup(struct rte_eth_dev *dev);
+static int eth_igb_lsc_interrupt_setup(struct rte_eth_dev *dev, uint8_t on);
 static int eth_igb_rxq_interrupt_setup(struct rte_eth_dev *dev);
 static int eth_igb_interrupt_get_status(struct rte_eth_dev *dev);
 static int eth_igb_interrupt_action(struct rte_eth_dev *dev);
@@ -1012,12 +1012,6 @@ eth_igbvf_dev_init(struct rte_eth_dev *eth_dev)
 	/* Generate a random MAC address, if none was assigned by PF. */
 	if (is_zero_ether_addr(perm_addr)) {
 		eth_random_addr(perm_addr->addr_bytes);
-		diag = e1000_rar_set(hw, perm_addr->addr_bytes, 0);
-		if (diag) {
-			rte_free(eth_dev->data->mac_addrs);
-			eth_dev->data->mac_addrs = NULL;
-			return diag;
-		}
 		PMD_INIT_LOG(INFO, "\tVF MAC address not assigned by Host PF");
 		PMD_INIT_LOG(INFO, "\tAssign randomly generated MAC address "
 			     "%02x:%02x:%02x:%02x:%02x:%02x",
@@ -1029,6 +1023,12 @@ eth_igbvf_dev_init(struct rte_eth_dev *eth_dev)
 			     perm_addr->addr_bytes[5]);
 	}
 
+	diag = e1000_rar_set(hw, perm_addr->addr_bytes, 0);
+	if (diag) {
+		rte_free(eth_dev->data->mac_addrs);
+		eth_dev->data->mac_addrs = NULL;
+		return diag;
+	}
 	/* Copy the permanent MAC address */
 	ether_addr_copy((struct ether_addr *) hw->mac.perm_addr,
 			&eth_dev->data->mac_addrs[0]);
@@ -1381,7 +1381,9 @@ eth_igb_start(struct rte_eth_dev *dev)
 	if (rte_intr_allow_others(intr_handle)) {
 		/* check if lsc interrupt is enabled */
 		if (dev->data->dev_conf.intr_conf.lsc != 0)
-			eth_igb_lsc_interrupt_setup(dev);
+			eth_igb_lsc_interrupt_setup(dev, TRUE);
+		else
+			eth_igb_lsc_interrupt_setup(dev, FALSE);
 	} else {
 		rte_intr_callback_unregister(intr_handle,
 					     eth_igb_interrupt_handler,
@@ -2543,18 +2545,23 @@ eth_igb_vlan_offload_set(struct rte_eth_dev *dev, int mask)
  *
  * @param dev
  *  Pointer to struct rte_eth_dev.
+ * @param on
+ *  Enable or Disable
  *
  * @return
  *  - On success, zero.
  *  - On failure, a negative value.
  */
 static int
-eth_igb_lsc_interrupt_setup(struct rte_eth_dev *dev)
+eth_igb_lsc_interrupt_setup(struct rte_eth_dev *dev, uint8_t on)
 {
 	struct e1000_interrupt *intr =
 		E1000_DEV_PRIVATE_TO_INTR(dev->data->dev_private);
 
-	intr->mask |= E1000_ICR_LSC;
+	if (on)
+		intr->mask |= E1000_ICR_LSC;
+	else
+		intr->mask &= ~E1000_ICR_LSC;
 
 	return 0;
 }
@@ -3736,10 +3743,6 @@ eth_igb_add_del_flex_filter(struct rte_eth_dev *dev,
 	}
 
 	wufc = E1000_READ_REG(hw, E1000_WUFC);
-	if (flex_filter->index < E1000_MAX_FHFT)
-		reg_off = E1000_FHFT(flex_filter->index);
-	else
-		reg_off = E1000_FHFT_EXT(flex_filter->index - E1000_MAX_FHFT);
 
 	if (add) {
 		if (eth_igb_flex_filter_lookup(&filter_info->flex_list,
@@ -3769,6 +3772,11 @@ eth_igb_add_del_flex_filter(struct rte_eth_dev *dev,
 			return -ENOSYS;
 		}
 
+		if (flex_filter->index < E1000_MAX_FHFT)
+			reg_off = E1000_FHFT(flex_filter->index);
+		else
+			reg_off = E1000_FHFT_EXT(flex_filter->index - E1000_MAX_FHFT);
+
 		E1000_WRITE_REG(hw, E1000_WUFC, wufc | E1000_WUFC_FLEX_HQ |
 				(E1000_WUFC_FLX0 << flex_filter->index));
 		queueing = filter->len |
@@ -3796,6 +3804,11 @@ eth_igb_add_del_flex_filter(struct rte_eth_dev *dev,
 			rte_free(flex_filter);
 			return -ENOENT;
 		}
+
+		if (it->index < E1000_MAX_FHFT)
+			reg_off = E1000_FHFT(it->index);
+		else
+			reg_off = E1000_FHFT_EXT(it->index - E1000_MAX_FHFT);
 
 		for (i = 0; i < E1000_FHFT_SIZE_IN_DWD; i++)
 			E1000_WRITE_REG(hw, reg_off + i * sizeof(uint32_t), 0);
@@ -3826,7 +3839,7 @@ eth_igb_get_flex_filter(struct rte_eth_dev *dev,
 	flex_filter.filter_info.priority = filter->priority;
 	memcpy(flex_filter.filter_info.dwords, filter->bytes, filter->len);
 	memcpy(flex_filter.filter_info.mask, filter->mask,
-			RTE_ALIGN(filter->len, sizeof(char)) / sizeof(char));
+			RTE_ALIGN(filter->len, CHAR_BIT) / CHAR_BIT);
 
 	it = eth_igb_flex_filter_lookup(&filter_info->flex_list,
 				&flex_filter.filter_info);
@@ -5082,7 +5095,13 @@ eth_igb_rx_queue_intr_disable(struct rte_eth_dev *dev, uint16_t queue_id)
 {
 	struct e1000_hw *hw =
 		E1000_DEV_PRIVATE_TO_HW(dev->data->dev_private);
-	uint32_t mask = 1 << queue_id;
+	struct rte_intr_handle *intr_handle = &dev->pci_dev->intr_handle;
+	uint32_t vec = E1000_MISC_VEC_ID;
+
+	if (rte_intr_allow_others(intr_handle))
+		vec = E1000_RX_VEC_START;
+
+	uint32_t mask = 1 << (queue_id + vec);
 
 	E1000_WRITE_REG(hw, E1000_EIMC, mask);
 	E1000_WRITE_FLUSH(hw);
@@ -5095,7 +5114,13 @@ eth_igb_rx_queue_intr_enable(struct rte_eth_dev *dev, uint16_t queue_id)
 {
 	struct e1000_hw *hw =
 		E1000_DEV_PRIVATE_TO_HW(dev->data->dev_private);
-	uint32_t mask = 1 << queue_id;
+	struct rte_intr_handle *intr_handle = &dev->pci_dev->intr_handle;
+	uint32_t vec = E1000_MISC_VEC_ID;
+
+	if (rte_intr_allow_others(intr_handle))
+		vec = E1000_RX_VEC_START;
+
+	uint32_t mask = 1 << (queue_id + vec);
 	uint32_t regval;
 
 	regval = E1000_READ_REG(hw, E1000_EIMS);

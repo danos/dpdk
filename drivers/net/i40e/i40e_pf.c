@@ -138,7 +138,7 @@ i40e_pf_host_vf_reset(struct i40e_pf_vf *vf, bool do_hw_reset)
 	abs_vf_id = vf_id + hw->func_caps.vf_base_id;
 
 	/* Notify VF that we are in VFR progress */
-	I40E_WRITE_REG(hw, I40E_VFGEN_RSTAT1(vf_id), I40E_PF_VFR_INPROGRESS);
+	I40E_WRITE_REG(hw, I40E_VFGEN_RSTAT1(vf_id), I40E_VFR_INPROGRESS);
 
 	/*
 	 * If require a SW VF reset, a VFLR interrupt will be generated,
@@ -219,7 +219,7 @@ i40e_pf_host_vf_reset(struct i40e_pf_vf *vf, bool do_hw_reset)
 	}
 
 	/* Reset done, Set COMPLETE flag and clear reset bit */
-	I40E_WRITE_REG(hw, I40E_VFGEN_RSTAT1(vf_id), I40E_PF_VFR_COMPLETED);
+	I40E_WRITE_REG(hw, I40E_VFGEN_RSTAT1(vf_id), I40E_VFR_COMPLETED);
 	val = I40E_READ_REG(hw, I40E_VPGEN_VFRTRIG(vf_id));
 	val &= ~I40E_VPGEN_VFRTRIG_VFSWR_MASK;
 	I40E_WRITE_REG(hw, I40E_VPGEN_VFRTRIG(vf_id), val);
@@ -246,6 +246,8 @@ i40e_pf_host_vf_reset(struct i40e_pf_vf *vf, bool do_hw_reset)
 		i40e_vsi_release(vf->vsi);
 		return -EFAULT;
 	}
+
+	I40E_WRITE_REG(hw, I40E_VFGEN_RSTAT1(vf_id), I40E_VFR_VFACTIVE);
 
 	return ret;
 }
@@ -900,15 +902,50 @@ send_msg:
 static void
 i40e_notify_vf_link_status(struct rte_eth_dev *dev, struct i40e_pf_vf *vf)
 {
+	struct i40e_hw *hw = I40E_PF_TO_HW(vf->pf);
 	struct i40e_virtchnl_pf_event event;
+	uint16_t vf_id = vf->vf_idx;
+	uint32_t tval, rval;
 
 	event.event = I40E_VIRTCHNL_EVENT_LINK_CHANGE;
 	event.event_data.link_event.link_status =
 		dev->data->dev_link.link_status;
-	event.event_data.link_event.link_speed =
-		(enum i40e_aq_link_speed)dev->data->dev_link.link_speed;
-	i40e_pf_host_send_msg_to_vf(vf, I40E_VIRTCHNL_OP_EVENT,
-		I40E_SUCCESS, (uint8_t *)&event, sizeof(event));
+
+	/* need to convert the ETH_SPEED_xxx into I40E_LINK_SPEED_xxx */
+	switch (dev->data->dev_link.link_speed) {
+	case ETH_SPEED_NUM_100M:
+		event.event_data.link_event.link_speed = I40E_LINK_SPEED_100MB;
+		break;
+	case ETH_SPEED_NUM_1G:
+		event.event_data.link_event.link_speed = I40E_LINK_SPEED_1GB;
+		break;
+	case ETH_SPEED_NUM_10G:
+		event.event_data.link_event.link_speed = I40E_LINK_SPEED_10GB;
+		break;
+	case ETH_SPEED_NUM_20G:
+		event.event_data.link_event.link_speed = I40E_LINK_SPEED_20GB;
+		break;
+	case ETH_SPEED_NUM_25G:
+		event.event_data.link_event.link_speed = I40E_LINK_SPEED_25GB;
+		break;
+	case ETH_SPEED_NUM_40G:
+		event.event_data.link_event.link_speed = I40E_LINK_SPEED_40GB;
+		break;
+	default:
+		event.event_data.link_event.link_speed =
+			I40E_LINK_SPEED_UNKNOWN;
+		break;
+	}
+
+	tval = I40E_READ_REG(hw, I40E_VF_ATQLEN(vf_id));
+	rval = I40E_READ_REG(hw, I40E_VF_ARQLEN(vf_id));
+
+	if (tval & I40E_VF_ATQLEN_ATQLEN_MASK ||
+	    tval & I40E_VF_ATQLEN_ATQENABLE_MASK ||
+	    rval & I40E_VF_ARQLEN_ARQLEN_MASK ||
+	    rval & I40E_VF_ARQLEN_ARQENABLE_MASK)
+		i40e_pf_host_send_msg_to_vf(vf, I40E_VIRTCHNL_OP_EVENT,
+			I40E_SUCCESS, (uint8_t *)&event, sizeof(event));
 }
 
 void

@@ -81,7 +81,7 @@ struct mlx5_txq_stats {
 	uint64_t opackets; /**< Total of successfully sent packets. */
 	uint64_t obytes; /**< Total of successfully sent bytes. */
 #endif
-	uint64_t odropped; /**< Total of packets not sent when TX ring full. */
+	uint64_t oerrors; /**< Total number of failed transmitted packets. */
 };
 
 /* Flow director queue structure. */
@@ -251,8 +251,6 @@ struct txq {
 	uint16_t elts_n:4; /* (*elts)[] length (in log2). */
 	uint16_t cqe_n:4; /* Number of CQ elements (in log2). */
 	uint16_t wqe_n:4; /* Number of of WQ elements (in log2). */
-	uint16_t bf_buf_size:4; /* Log2 Blueflame size. */
-	uint16_t bf_offset; /* Blueflame offset. */
 	uint16_t max_inline; /* Multiple of RTE_CACHE_LINE_SIZE to inline. */
 	uint32_t qp_num_8s; /* QP number shifted by 8. */
 	volatile struct mlx5_cqe (*cqes)[]; /* Completion queue. */

@@ -441,10 +441,10 @@ vmxnet3_write_mac(struct vmxnet3_hw *hw, const uint8_t *addr)
 		     addr[0], addr[1], addr[2],
 		     addr[3], addr[4], addr[5]);
 
-	val = *(const uint32_t *)addr;
+	memcpy(&val, addr, 4);
 	VMXNET3_WRITE_BAR1_REG(hw, VMXNET3_REG_MACL, val);
 
-	val = (addr[5] << 8) | addr[4];
+	memcpy(&val, addr + 4, 2);
 	VMXNET3_WRITE_BAR1_REG(hw, VMXNET3_REG_MACH, val);
 }
 
@@ -762,6 +762,8 @@ vmxnet3_mac_addr_set(struct rte_eth_dev *dev, struct ether_addr *mac_addr)
 {
 	struct vmxnet3_hw *hw = dev->data->dev_private;
 
+	ether_addr_copy(mac_addr, (struct ether_addr *)(hw->perm_addr));
+	ether_addr_copy(mac_addr, &dev->data->mac_addrs[0]);
 	vmxnet3_write_mac(hw, mac_addr->addr_bytes);
 }
 
@@ -771,7 +773,7 @@ vmxnet3_dev_link_update(struct rte_eth_dev *dev,
 			__rte_unused int wait_to_complete)
 {
 	struct vmxnet3_hw *hw = dev->data->dev_private;
-	struct rte_eth_link old, link;
+	struct rte_eth_link old = { 0 }, link;
 	uint32_t ret;
 
 	/* Link status doesn't change for stopped dev */
@@ -831,7 +833,10 @@ vmxnet3_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	struct vmxnet3_hw *hw = dev->data->dev_private;
 	uint32_t *vf_table = hw->shared->devRead.rxFilterConf.vfTable;
 
-	memcpy(vf_table, hw->shadow_vfta, VMXNET3_VFT_TABLE_SIZE);
+	if (dev->data->dev_conf.rxmode.hw_vlan_filter)
+		memcpy(vf_table, hw->shadow_vfta, VMXNET3_VFT_TABLE_SIZE);
+	else
+		memset(vf_table, 0xff, VMXNET3_VFT_TABLE_SIZE);
 	vmxnet3_dev_set_rxmode(hw, VMXNET3_RXM_PROMISC, 0);
 	VMXNET3_WRITE_BAR1_REG(hw, VMXNET3_REG_CMD,
 			       VMXNET3_CMD_UPDATE_VLAN_FILTERS);

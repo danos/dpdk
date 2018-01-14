@@ -330,8 +330,10 @@ mlx5_args(struct priv *priv, struct rte_devargs *devargs)
 		if (rte_kvargs_count(kvlist, params[i])) {
 			ret = rte_kvargs_process(kvlist, params[i],
 						 mlx5_args_check, priv);
-			if (ret != 0)
+			if (ret != 0) {
+				rte_kvargs_free(kvlist);
 				return ret;
+			}
 		}
 	}
 	rte_kvargs_free(kvlist);
@@ -382,10 +384,8 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 	list = ibv_get_device_list(&i);
 	if (list == NULL) {
 		assert(errno);
-		if (errno == ENOSYS) {
-			WARN("cannot list devices, is ib_uverbs loaded?");
-			return 0;
-		}
+		if (errno == ENOSYS)
+			ERROR("cannot list devices, is ib_uverbs loaded?");
 		return -errno;
 	}
 	assert(i >= 0);
@@ -425,11 +425,11 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		ibv_free_device_list(list);
 		switch (err) {
 		case 0:
-			WARN("cannot access device, is mlx5_ib loaded?");
-			return 0;
+			ERROR("cannot access device, is mlx5_ib loaded?");
+			return -ENODEV;
 		case EINVAL:
-			WARN("cannot use device, are drivers up to date?");
-			return 0;
+			ERROR("cannot use device, are drivers up to date?");
+			return -EINVAL;
 		}
 		assert(err > 0);
 		return -err;
@@ -463,8 +463,10 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		DEBUG("using port %u (%08" PRIx32 ")", port, test);
 
 		ctx = ibv_open_device(ibv_dev);
-		if (ctx == NULL)
+		if (ctx == NULL) {
+			err = ENODEV;
 			goto port_error;
+		}
 
 		/* Check port status. */
 		err = ibv_query_port(ctx, port, &port_attr);
@@ -476,6 +478,7 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		if (port_attr.link_layer != IBV_LINK_LAYER_ETHERNET) {
 			ERROR("port %d is not configured in Ethernet mode",
 			      port);
+			err = EINVAL;
 			goto port_error;
 		}
 
@@ -519,6 +522,7 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		}
 		if (ibv_exp_query_device(ctx, &exp_device_attr)) {
 			ERROR("ibv_exp_query_device() failed");
+			err = ENODEV;
 			goto port_error;
 		}
 
@@ -581,6 +585,7 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		if (priv_get_mac(priv, &mac.addr_bytes)) {
 			ERROR("cannot get MAC address, is mlx5_en loaded?"
 			      " (errno: %s)", strerror(errno));
+			err = ENODEV;
 			goto port_error;
 		}
 		INFO("port %u MAC address is %02x:%02x:%02x:%02x:%02x:%02x",

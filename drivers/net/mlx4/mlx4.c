@@ -2961,19 +2961,25 @@ rxq_cq_to_pkt_type(uint32_t flags)
 	if (flags & IBV_EXP_CQ_RX_TUNNEL_PACKET)
 		pkt_type =
 			TRANSPOSE(flags,
-			          IBV_EXP_CQ_RX_OUTER_IPV4_PACKET, RTE_PTYPE_L3_IPV4) |
+				  IBV_EXP_CQ_RX_OUTER_IPV4_PACKET,
+				  RTE_PTYPE_L3_IPV4_EXT_UNKNOWN) |
 			TRANSPOSE(flags,
-			          IBV_EXP_CQ_RX_OUTER_IPV6_PACKET, RTE_PTYPE_L3_IPV6) |
+				  IBV_EXP_CQ_RX_OUTER_IPV6_PACKET,
+				  RTE_PTYPE_L3_IPV6_EXT_UNKNOWN) |
 			TRANSPOSE(flags,
-			          IBV_EXP_CQ_RX_IPV4_PACKET, RTE_PTYPE_INNER_L3_IPV4) |
+				  IBV_EXP_CQ_RX_IPV4_PACKET,
+				  RTE_PTYPE_INNER_L3_IPV4_EXT_UNKNOWN) |
 			TRANSPOSE(flags,
-			          IBV_EXP_CQ_RX_IPV6_PACKET, RTE_PTYPE_INNER_L3_IPV6);
+				  IBV_EXP_CQ_RX_IPV6_PACKET,
+				  RTE_PTYPE_INNER_L3_IPV6_EXT_UNKNOWN);
 	else
 		pkt_type =
 			TRANSPOSE(flags,
-			          IBV_EXP_CQ_RX_IPV4_PACKET, RTE_PTYPE_L3_IPV4) |
+				  IBV_EXP_CQ_RX_IPV4_PACKET,
+				  RTE_PTYPE_L3_IPV4_EXT_UNKNOWN) |
 			TRANSPOSE(flags,
-			          IBV_EXP_CQ_RX_IPV6_PACKET, RTE_PTYPE_L3_IPV6);
+				  IBV_EXP_CQ_RX_IPV6_PACKET,
+				  RTE_PTYPE_L3_IPV6_EXT_UNKNOWN);
 	return pkt_type;
 }
 
@@ -3151,6 +3157,13 @@ mlx4_rx_burst_sp(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 			NB_SEGS(rep) = 0x2a;
 			PORT(rep) = 0x2a;
 			rep->ol_flags = -1;
+			/*
+			 * Clear special flags in mbuf to avoid
+			 * crashing while freeing.
+			 */
+			rep->ol_flags &=
+				~(uint64_t)(IND_ATTACHED_MBUF |
+					    CTRL_MBUF_FLAG);
 #endif
 			assert(rep->buf_len == seg->buf_len);
 			/* Reconfigure sge to use rep instead of seg. */
@@ -3334,6 +3347,8 @@ mlx4_rx_burst(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 			/* Increase out of memory counters. */
 			++rxq->stats.rx_nombuf;
 			++rxq->priv->dev->data->rx_mbuf_alloc_failed;
+			/* Add SGE to array for repost. */
+			sges[i] = elt->sge;
 			goto repost;
 		}
 
@@ -5565,10 +5580,8 @@ mlx4_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 	list = ibv_get_device_list(&i);
 	if (list == NULL) {
 		assert(errno);
-		if (errno == ENOSYS) {
-			WARN("cannot list devices, is ib_uverbs loaded?");
-			return 0;
-		}
+		if (errno == ENOSYS)
+			ERROR("cannot list devices, is ib_uverbs loaded?");
 		return -errno;
 	}
 	assert(i >= 0);
@@ -5600,11 +5613,11 @@ mlx4_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		ibv_free_device_list(list);
 		switch (err) {
 		case 0:
-			WARN("cannot access device, is mlx4_ib loaded?");
-			return 0;
+			ERROR("cannot access device, is mlx4_ib loaded?");
+			return -ENODEV;
 		case EINVAL:
-			WARN("cannot use device, are drivers up to date?");
-			return 0;
+			ERROR("cannot use device, are drivers up to date?");
+			return -EINVAL;
 		}
 		assert(err > 0);
 		return -err;
@@ -5612,8 +5625,10 @@ mlx4_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 	ibv_dev = list[i];
 
 	DEBUG("device opened");
-	if (ibv_query_device(attr_ctx, &device_attr))
+	if (ibv_query_device(attr_ctx, &device_attr)) {
+		err = EINVAL;
 		goto error;
+	}
 	INFO("%u port(s) detected", device_attr.phys_port_cnt);
 
 	for (i = 0; i < device_attr.phys_port_cnt; i++) {
@@ -5639,19 +5654,23 @@ mlx4_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		DEBUG("using port %u (%08" PRIx32 ")", port, test);
 
 		ctx = ibv_open_device(ibv_dev);
-		if (ctx == NULL)
+		if (ctx == NULL) {
+			err = ENODEV;
 			goto port_error;
+		}
 
 		/* Check port status. */
 		err = ibv_query_port(ctx, port, &port_attr);
 		if (err) {
 			ERROR("port query failed: %s", strerror(err));
+			err = ENODEV;
 			goto port_error;
 		}
 
 		if (port_attr.link_layer != IBV_LINK_LAYER_ETHERNET) {
 			ERROR("port %d is not configured in Ethernet mode",
 			      port);
+			err = EINVAL;
 			goto port_error;
 		}
 
@@ -5688,6 +5707,7 @@ mlx4_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 #ifdef HAVE_EXP_QUERY_DEVICE
 		if (ibv_exp_query_device(ctx, &exp_device_attr)) {
 			ERROR("ibv_exp_query_device() failed");
+			err = ENODEV;
 			goto port_error;
 		}
 #ifdef RSS_SUPPORT
@@ -5763,6 +5783,7 @@ mlx4_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		if (priv_get_mac(priv, &mac.addr_bytes)) {
 			ERROR("cannot get MAC address, is mlx4_en loaded?"
 			      " (errno: %s)", strerror(errno));
+			err = ENODEV;
 			goto port_error;
 		}
 		INFO("port %u MAC address is %02x:%02x:%02x:%02x:%02x:%02x",
@@ -5851,6 +5872,9 @@ mlx4_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		/* Bring Ethernet device up. */
 		DEBUG("forcing Ethernet interface up");
 		priv_set_flags(priv, ~IFF_UP, IFF_UP);
+		/* Update link status once if waiting for LSC. */
+		if (eth_dev->data->dev_flags & RTE_ETH_DEV_INTR_LSC)
+			mlx4_link_update(eth_dev, 0);
 		continue;
 
 port_error:
