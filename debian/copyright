@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: dpdk
-Source: http://dpdk.org
+Source: https://dpdk.org
 
 Files: *
 Copyright: 2008-2014 Cisco Systems, Inc.
