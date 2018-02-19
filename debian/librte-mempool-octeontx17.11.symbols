@@ -1,5 +1,0 @@
-librte_mempool_octeontx.so.17.11 librte-mempool-octeontx17.11 #MINVER#
- DPDK_17.11@DPDK_17.11 17.11
- octeontx_ssovf_bar@DPDK_17.11 17.11
- octeontx_ssovf_info@DPDK_17.11 17.11
- octeontx_ssovf_mbox_send@DPDK_17.11 17.11
