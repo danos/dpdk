@@ -1,34 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2016 Intel Corporation
  */
 
 #include <stdint.h>
@@ -128,6 +99,9 @@ virtio_user_start_device(struct virtio_user_dev *dev)
 	uint64_t features;
 	int ret;
 
+	/* Do not check return as already done in init, or reset in stop */
+	dev->ops->send_request(dev, VHOST_USER_SET_OWNER, NULL);
+
 	/* Step 0: tell vhost to create queues */
 	if (virtio_user_queue_setup(dev, virtio_user_create_queue) < 0)
 		goto error;
@@ -170,6 +144,11 @@ int virtio_user_stop_device(struct virtio_user_dev *dev)
 
 	for (i = 0; i < dev->max_queue_pairs; ++i)
 		dev->ops->enable_qp(dev, i, 0);
+
+	if (dev->ops->send_request(dev, VHOST_USER_RESET_OWNER, NULL) < 0) {
+		PMD_DRV_LOG(INFO, "Failed to reset the device\n");
+		return -1;
+	}
 
 	return 0;
 }
@@ -272,6 +251,7 @@ virtio_user_fill_intr_handle(struct virtio_user_dev *dev)
 	eth_dev->intr_handle->type = RTE_INTR_HANDLE_VDEV;
 	/* For virtio vdev, no need to read counter for clean */
 	eth_dev->intr_handle->efd_counter_size = 0;
+	eth_dev->intr_handle->fd = -1;
 	if (dev->vhostfd >= 0)
 		eth_dev->intr_handle->fd = dev->vhostfd;
 
@@ -356,6 +336,7 @@ virtio_user_dev_init(struct virtio_user_dev *dev, char *path, int queues,
 		PMD_INIT_LOG(ERR, "backend set up fails");
 		return -1;
 	}
+
 	if (dev->ops->send_request(dev, VHOST_USER_SET_OWNER, NULL) < 0) {
 		PMD_INIT_LOG(ERR, "set_owner fails: %s", strerror(errno));
 		return -1;

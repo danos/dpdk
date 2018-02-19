@@ -1,34 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2014 Intel Corporation
  */
 
 #include <stdint.h>
@@ -44,7 +15,7 @@
 #include <rte_malloc.h>
 #include <rte_mbuf.h>
 #include <rte_ether.h>
-#include <rte_ethdev.h>
+#include <rte_ethdev_driver.h>
 #include <rte_prefetch.h>
 #include <rte_string_fns.h>
 #include <rte_errno.h>
@@ -59,6 +30,7 @@
 #include "virtio_pci.h"
 #include "virtqueue.h"
 #include "virtio_rxtx.h"
+#include "virtio_rxtx_simple.h"
 
 #ifdef RTE_LIBRTE_VIRTIO_DEBUG_DUMP
 #define VIRTIO_DUMP_PACKET(m, len) rte_pktmbuf_dump(stdout, m, len)
@@ -407,6 +379,7 @@ virtio_dev_cq_start(struct rte_eth_dev *dev)
 	struct virtio_hw *hw = dev->data->dev_private;
 
 	if (hw->cvq && hw->cvq->vq) {
+		rte_spinlock_init(&hw->cvq->lock);
 		VIRTQUEUE_DUMP((struct virtqueue *)hw->cvq->vq);
 	}
 }
@@ -465,6 +438,8 @@ virtio_dev_rx_queue_setup_finish(struct rte_eth_dev *dev, uint16_t queue_idx)
 			vq->vq_ring.desc[desc_idx].flags =
 				VRING_DESC_F_WRITE;
 		}
+
+		virtio_rxq_vec_setup(rxvq);
 	}
 
 	memset(&rxvq->fake_mbuf, 0, sizeof(rxvq->fake_mbuf));
@@ -474,29 +449,30 @@ virtio_dev_rx_queue_setup_finish(struct rte_eth_dev *dev, uint16_t queue_idx)
 			&rxvq->fake_mbuf;
 	}
 
-	while (!virtqueue_full(vq)) {
-		m = rte_mbuf_raw_alloc(rxvq->mpool);
-		if (m == NULL)
-			break;
-
-		/* Enqueue allocated buffers */
-		if (hw->use_simple_rx)
-			error = virtqueue_enqueue_recv_refill_simple(vq, m);
-		else
-			error = virtqueue_enqueue_recv_refill(vq, m);
-
-		if (error) {
-			rte_pktmbuf_free(m);
-			break;
+	if (hw->use_simple_rx) {
+		while (vq->vq_free_cnt >= RTE_VIRTIO_VPMD_RX_REARM_THRESH) {
+			virtio_rxq_rearm_vec(rxvq);
+			nbufs += RTE_VIRTIO_VPMD_RX_REARM_THRESH;
 		}
-		nbufs++;
+	} else {
+		while (!virtqueue_full(vq)) {
+			m = rte_mbuf_raw_alloc(rxvq->mpool);
+			if (m == NULL)
+				break;
+
+			/* Enqueue allocated buffers */
+			error = virtqueue_enqueue_recv_refill(vq, m);
+			if (error) {
+				rte_pktmbuf_free(m);
+				break;
+			}
+			nbufs++;
+		}
+
+		vq_update_avail_idx(vq);
 	}
 
-	vq_update_avail_idx(vq);
-
 	PMD_INIT_LOG(DEBUG, "Allocated %d bufs", nbufs);
-
-	virtio_rxq_vec_setup(rxvq);
 
 	VIRTQUEUE_DUMP(vq);
 
@@ -1016,7 +992,7 @@ virtio_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 	uint16_t nb_used, nb_tx = 0;
 	int error;
 
-	if (unlikely(hw->started == 0))
+	if (unlikely(hw->started == 0 && tx_pkts != hw->inject_pkts))
 		return nb_tx;
 
 	if (unlikely(nb_pkts < 1))

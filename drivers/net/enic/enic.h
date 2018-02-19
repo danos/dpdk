@@ -1,35 +1,6 @@
-/*
- * Copyright 2008-2014 Cisco Systems, Inc.  All rights reserved.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2008-2017 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
- *
- * Copyright (c) 2014, Cisco Systems, Inc.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in
- * the documentation and/or other materials provided with the
- * distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
  */
 
 #ifndef _ENIC_H_
@@ -53,13 +24,6 @@
 #define DRV_DESCRIPTION		"Cisco VIC Ethernet NIC Poll-mode Driver"
 #define DRV_COPYRIGHT		"Copyright 2008-2015 Cisco Systems, Inc"
 
-#define ENIC_WQ_MAX		8
-/* With Rx scatter support, we use two RQs on VIC per RQ used by app. Both
- * RQs use the same CQ.
- */
-#define ENIC_RQ_MAX		16
-#define ENIC_CQ_MAX		(ENIC_WQ_MAX + (ENIC_RQ_MAX / 2))
-#define ENIC_INTR_MAX		(ENIC_CQ_MAX + 2)
 #define ENIC_MAX_MAC_ADDR	64
 
 #define VLAN_ETH_HLEN           18
@@ -150,17 +114,17 @@ struct enic {
 	unsigned int flags;
 	unsigned int priv_flags;
 
-	/* work queue */
-	struct vnic_wq wq[ENIC_WQ_MAX];
-	unsigned int wq_count;
+	/* work queue (len = conf_wq_count) */
+	struct vnic_wq *wq;
+	unsigned int wq_count; /* equals eth_dev nb_tx_queues */
 
-	/* receive queue */
-	struct vnic_rq rq[ENIC_RQ_MAX];
-	unsigned int rq_count;
+	/* receive queue (len = conf_rq_count) */
+	struct vnic_rq *rq;
+	unsigned int rq_count; /* equals eth_dev nb_rx_queues */
 
-	/* completion queue */
-	struct vnic_cq cq[ENIC_CQ_MAX];
-	unsigned int cq_count;
+	/* completion queue (len = conf_cq_count) */
+	struct vnic_cq *cq;
+	unsigned int cq_count; /* equals rq_count + wq_count */
 
 	/* interrupt resource */
 	struct vnic_intr intr;
@@ -277,7 +241,6 @@ extern int enic_alloc_rq(struct enic *enic, uint16_t queue_idx,
 	uint16_t nb_desc, uint16_t free_thresh);
 extern int enic_set_rss_nic_cfg(struct enic *enic);
 extern int enic_set_vnic_res(struct enic *enic);
-extern void enic_set_hdr_split_size(struct enic *enic, u16 split_hdr_size);
 extern int enic_enable(struct enic *enic);
 extern int enic_disable(struct enic *enic);
 extern void enic_remove(struct enic *enic);
@@ -305,6 +268,8 @@ uint16_t enic_dummy_recv_pkts(void *rx_queue,
 			      uint16_t nb_pkts);
 uint16_t enic_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 			       uint16_t nb_pkts);
+uint16_t enic_prep_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
+			uint16_t nb_pkts);
 int enic_set_mtu(struct enic *enic, uint16_t new_mtu);
 int enic_link_update(struct enic *enic);
 void enic_fdir_info(struct enic *enic);

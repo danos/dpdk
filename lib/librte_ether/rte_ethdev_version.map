@@ -156,7 +156,6 @@ DPDK_17.08 {
 	rte_flow_copy;
 	rte_flow_isolate;
 	rte_tm_capabilities_get;
-	rte_tm_get_leaf_nodes;
 	rte_tm_hierarchy_commit;
 	rte_tm_level_capabilities_get;
 	rte_tm_mark_ip_dscp;
@@ -198,9 +197,25 @@ DPDK_17.11 {
 
 } DPDK_17.08;
 
+DPDK_18.02 {
+	global:
+
+	rte_eth_dev_filter_ctrl;
+
+} DPDK_17.11;
+
 EXPERIMENTAL {
 	global:
 
+	rte_eth_dev_is_removed;
+	rte_eth_dev_owner_delete;
+	rte_eth_dev_owner_get;
+	rte_eth_dev_owner_new;
+	rte_eth_dev_owner_set;
+	rte_eth_dev_owner_unset;
+	rte_eth_dev_rx_offload_name;
+	rte_eth_dev_tx_offload_name;
+	rte_eth_find_next_owned_by;
 	rte_mtr_capabilities_get;
 	rte_mtr_create;
 	rte_mtr_destroy;

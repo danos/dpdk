@@ -1,32 +1,5 @@
-..  BSD LICENSE
-    Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions
-    are met:
-
-    * Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright
-    notice, this list of conditions and the following disclaimer in
-    the documentation and/or other materials provided with the
-    distribution.
-    * Neither the name of Intel Corporation nor the names of its
-    contributors may be used to endorse or promote products derived
-    from this software without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-    A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-    OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-    LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+..  SPDX-License-Identifier: BSD-3-Clause
+    Copyright(c) 2010-2014 Intel Corporation.
 
 Running the Application
 =======================
@@ -61,6 +34,10 @@ See the DPDK Getting Started Guides for more information on these options.
     The ``-`` character is used as a range separator and ``,`` is used as a single number separator.
     The grouping ``()`` can be omitted for single element group.
     The ``@`` can be omitted if cpus and lcores have the same value.
+
+.. Note::
+    At a given instance only one core option ``--lcores``, ``-l`` or ``-c`` can be used.
+
 
 *   ``--master-lcore ID``
 
@@ -315,21 +292,21 @@ The commandline options are:
 
     Enable scatter (multi-segment) RX.
 
-*   ``--disable-hw-vlan``
+*   ``--enable-hw-vlan``
 
-    Disable hardware VLAN.
+    Enable hardware VLAN.
 
-*   ``--disable-hw-vlan-filter``
+*   ``--enable-hw-vlan-filter``
 
-    Disable hardware VLAN filter.
+    Enable hardware VLAN filter.
 
-*   ``--disable-hw-vlan-strip``
+*   ``--enable-hw-vlan-strip``
 
-    Disable hardware VLAN strip.
+    Enable hardware VLAN strip.
 
-*   ``--disable-hw-vlan-extend``
+*   ``--enable-hw-vlan-extend``
 
-    Disable hardware VLAN extend.
+    Enable hardware VLAN extend.
 
 *   ``--enable-drop-en``
 
@@ -447,18 +424,6 @@ The commandline options are:
     Set the transmit RS bit threshold of TX rings to N, where 0 <= N <= value of ``--txd``.
     The default value is 0.
 
-*   ``--txqflags=0xXXXXXXXX``
-
-    Set the hexadecimal bitmask of TX queue flags, where 0 <= N <= 0x7FFFFFFF.
-    The default value is 0.
-
-    .. note::
-
-       When using hardware offload functions such as vlan or checksum
-       add ``txqflags=0`` to force the full-featured TX code path.
-       In some PMDs this may already be the default.
-
-
 *   ``--rx-queue-stats-mapping=(port,queue,mapping)[,(port,queue,mapping)]``
 
     Set the RX queues statistics counters mapping 0 <= mapping <= 15.
@@ -492,12 +457,12 @@ The commandline options are:
 
     Set the logical core N to perform bitrate calculation.
 
-*   ``--print-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|all>``
+*   ``--print-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|dev_probed|dev_released|all>``
 
     Enable printing the occurrence of the designated event. Using all will
     enable all of them.
 
-*   ``--mask-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|all>``
+*   ``--mask-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|dev_probed|dev_released|all>``
 
     Disable printing the occurrence of the designated event. Using all will
     disable all of them.
@@ -509,3 +474,8 @@ The commandline options are:
     configured flow rules only (see flow command).
 
     Ports that do not support this mode are automatically discarded.
+
+*   ``--tx-offloads=0xXXXXXXXX``
+
+    Set the hexadecimal bitmask of TX queue offloads.
+    The default value is 0.

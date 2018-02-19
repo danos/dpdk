@@ -50,6 +50,7 @@ struct bnxt_rx_queue {
 	uint16_t		reg_idx; /* RX queue register index */
 	uint16_t		port_id; /* Device port identifier */
 	uint8_t			crc_len; /* 0 if CRC stripped, 4 otherwise */
+	uint8_t			rx_deferred_start; /* not in global dev start */
 
 	struct bnxt		*bp;
 	int			index;
@@ -59,8 +60,6 @@ struct bnxt_rx_queue {
 	uint32_t			rx_buf_use_size;  /* useable size */
 	struct bnxt_rx_ring_info	*rx_ring;
 	struct bnxt_cp_ring_info	*cp_ring;
-
-	struct bnxt_tpa_info		*rx_tpa;
 };
 
 void bnxt_free_rxq_stats(struct bnxt_rx_queue *rxq);
@@ -77,5 +76,8 @@ int bnxt_rx_queue_intr_enable_op(struct rte_eth_dev *eth_dev,
 				 uint16_t queue_id);
 int bnxt_rx_queue_intr_disable_op(struct rte_eth_dev *eth_dev,
 				  uint16_t queue_id);
-
+int bnxt_rx_queue_start(struct rte_eth_dev *dev,
+			uint16_t rx_queue_id);
+int bnxt_rx_queue_stop(struct rte_eth_dev *dev,
+		       uint16_t rx_queue_id);
 #endif

@@ -1,35 +1,6 @@
 #! /usr/bin/env python
-#
-#   BSD LICENSE
-#
-#   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
-#   All rights reserved.
-#
-#   Redistribution and use in source and binary forms, with or without
-#   modification, are permitted provided that the following conditions
-#   are met:
-#
-#     * Redistributions of source code must retain the above copyright
-#       notice, this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in
-#       the documentation and/or other materials provided with the
-#       distribution.
-#     * Neither the name of Intel Corporation nor the names of its
-#       contributors may be used to endorse or promote products derived
-#       from this software without specific prior written permission.
-#
-#   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-#   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-#   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-#   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-#   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-#   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-#   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-#   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-#   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-#   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-#   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright(c) 2010-2014 Intel Corporation
 #
 
 import sys
@@ -149,39 +120,6 @@ def check_output(args, stderr=None):
                             stderr=stderr).communicate()[0]
 
 
-def find_module(mod):
-    '''find the .ko file for kernel module named mod.
-    Searches the $RTE_SDK/$RTE_TARGET directory, the kernel
-    modules directory and finally under the parent directory of
-    the script '''
-    # check $RTE_SDK/$RTE_TARGET directory
-    if 'RTE_SDK' in os.environ and 'RTE_TARGET' in os.environ:
-        path = "%s/%s/kmod/%s.ko" % (os.environ['RTE_SDK'],
-                                     os.environ['RTE_TARGET'], mod)
-        if exists(path):
-            return path
-
-    # check using depmod
-    try:
-        with open(os.devnull, "w") as fnull:
-            path = check_output(["modinfo", "-n", mod], stderr=fnull).strip()
-
-        if path and exists(path):
-            return path
-    except:  # if modinfo can't find module, it fails, so continue
-        pass
-
-    # check for a copy based off current path
-    tools_dir = dirname(abspath(sys.argv[0]))
-    if tools_dir.endswith("tools"):
-        base_dir = dirname(tools_dir)
-        find_out = check_output(["find", base_dir, "-name", mod + ".ko"])
-        if len(find_out) > 0:  # something matched
-            path = find_out.splitlines()[0]
-            if exists(path):
-                return path
-
-
 def check_modules():
     '''Checks that igb_uio is loaded'''
     global dpdk_drivers
@@ -278,6 +216,8 @@ def get_device_details(devices_type):
                 # of dictionary key names
                 if "Driver" in dev.keys():
                     dev["Driver_str"] = dev.pop("Driver")
+                if "Module" in dev.keys():
+                    dev["Module_str"] = dev.pop("Module")
                 # use dict to make copy of dev
                 devices[dev["Slot"]] = dict(dev)
             # Clear previous device's data

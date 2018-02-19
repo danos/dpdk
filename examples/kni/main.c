@@ -1,34 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2014 Intel Corporation
  */
 
 #include <stdio.h>
@@ -90,10 +61,10 @@
 #define MEMPOOL_CACHE_SZ        PKT_BURST_SZ
 
 /* Number of RX ring descriptors */
-#define NB_RXD                  128
+#define NB_RXD                  1024
 
 /* Number of TX ring descriptors */
-#define NB_TXD                  512
+#define NB_TXD                  1024
 
 /* Total octets in ethernet header */
 #define KNI_ENET_HEADER_SIZE    14
@@ -124,11 +95,8 @@ static struct kni_port_params *kni_port_params_array[RTE_MAX_ETHPORTS];
 /* Options for configuring ethernet port */
 static struct rte_eth_conf port_conf = {
 	.rxmode = {
-		.header_split = 0,      /* Header Split disabled */
-		.hw_ip_checksum = 0,    /* IP checksum offload disabled */
-		.hw_vlan_filter = 0,    /* VLAN filtering disabled */
-		.jumbo_frame = 0,       /* Jumbo Frame Support disabled */
-		.hw_strip_crc = 1,      /* CRC stripped by hardware */
+		.ignore_offload_bitfield = 1,
+		.offloads = DEV_RX_OFFLOAD_CRC_STRIP,
 	},
 	.txmode = {
 		.mq_mode = ETH_MQ_TX_NONE,
@@ -163,6 +131,7 @@ static struct kni_interface_stats kni_stats[RTE_MAX_ETHPORTS];
 
 static int kni_change_mtu(uint16_t port_id, unsigned int new_mtu);
 static int kni_config_network_interface(uint16_t port_id, uint8_t if_up);
+static int kni_config_mac_address(uint16_t port_id, uint8_t mac_addr[]);
 
 static rte_atomic32_t kni_stop = RTE_ATOMIC32_INIT(0);
 
@@ -607,11 +576,19 @@ init_port(uint16_t port)
 	int ret;
 	uint16_t nb_rxd = NB_RXD;
 	uint16_t nb_txd = NB_TXD;
+	struct rte_eth_dev_info dev_info;
+	struct rte_eth_rxconf rxq_conf;
+	struct rte_eth_txconf txq_conf;
+	struct rte_eth_conf local_port_conf = port_conf;
 
 	/* Initialise device and RX/TX queues */
 	RTE_LOG(INFO, APP, "Initialising port %u ...\n", (unsigned)port);
 	fflush(stdout);
-	ret = rte_eth_dev_configure(port, 1, 1, &port_conf);
+	rte_eth_dev_info_get(port, &dev_info);
+	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
+		local_port_conf.txmode.offloads |=
+			DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+	ret = rte_eth_dev_configure(port, 1, 1, &local_port_conf);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Could not configure port%u (%d)\n",
 		            (unsigned)port, ret);
@@ -621,14 +598,19 @@ init_port(uint16_t port)
 		rte_exit(EXIT_FAILURE, "Could not adjust number of descriptors "
 				"for port%u (%d)\n", (unsigned)port, ret);
 
+	rxq_conf = dev_info.default_rxconf;
+	rxq_conf.offloads = local_port_conf.rxmode.offloads;
 	ret = rte_eth_rx_queue_setup(port, 0, nb_rxd,
-		rte_eth_dev_socket_id(port), NULL, pktmbuf_pool);
+		rte_eth_dev_socket_id(port), &rxq_conf, pktmbuf_pool);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Could not setup up RX queue for "
 				"port%u (%d)\n", (unsigned)port, ret);
 
+	txq_conf = dev_info.default_txconf;
+	txq_conf.txq_flags = ETH_TXQ_FLAGS_IGNORE;
+	txq_conf.offloads = local_port_conf.txmode.offloads;
 	ret = rte_eth_tx_queue_setup(port, 0, nb_txd,
-		rte_eth_dev_socket_id(port), NULL);
+		rte_eth_dev_socket_id(port), &txq_conf);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Could not setup up TX queue for "
 				"port%u (%d)\n", (unsigned)port, ret);
@@ -702,7 +684,10 @@ static int
 kni_change_mtu(uint16_t port_id, unsigned int new_mtu)
 {
 	int ret;
+	uint16_t nb_rxd = NB_RXD;
 	struct rte_eth_conf conf;
+	struct rte_eth_dev_info dev_info;
+	struct rte_eth_rxconf rxq_conf;
 
 	if (port_id >= rte_eth_dev_count()) {
 		RTE_LOG(ERR, APP, "Invalid port id %d\n", port_id);
@@ -717,9 +702,9 @@ kni_change_mtu(uint16_t port_id, unsigned int new_mtu)
 	memcpy(&conf, &port_conf, sizeof(conf));
 	/* Set new MTU */
 	if (new_mtu > ETHER_MAX_LEN)
-		conf.rxmode.jumbo_frame = 1;
+		conf.rxmode.offloads |= DEV_RX_OFFLOAD_JUMBO_FRAME;
 	else
-		conf.rxmode.jumbo_frame = 0;
+		conf.rxmode.offloads &= ~DEV_RX_OFFLOAD_JUMBO_FRAME;
 
 	/* mtu + length of header + length of FCS = max pkt length */
 	conf.rxmode.max_rx_pkt_len = new_mtu + KNI_ENET_HEADER_SIZE +
@@ -727,6 +712,23 @@ kni_change_mtu(uint16_t port_id, unsigned int new_mtu)
 	ret = rte_eth_dev_configure(port_id, 1, 1, &conf);
 	if (ret < 0) {
 		RTE_LOG(ERR, APP, "Fail to reconfigure port %d\n", port_id);
+		return ret;
+	}
+
+	ret = rte_eth_dev_adjust_nb_rx_tx_desc(port_id, &nb_rxd, NULL);
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "Could not adjust number of descriptors "
+				"for port%u (%d)\n", (unsigned int)port_id,
+				ret);
+
+	rte_eth_dev_info_get(port_id, &dev_info);
+	rxq_conf = dev_info.default_rxconf;
+	rxq_conf.offloads = conf.rxmode.offloads;
+	ret = rte_eth_rx_queue_setup(port_id, 0, nb_rxd,
+		rte_eth_dev_socket_id(port_id), &rxq_conf, pktmbuf_pool);
+	if (ret < 0) {
+		RTE_LOG(ERR, APP, "Fail to setup Rx queue of port %d\n",
+				port_id);
 		return ret;
 	}
 
@@ -762,6 +764,37 @@ kni_config_network_interface(uint16_t port_id, uint8_t if_up)
 
 	if (ret < 0)
 		RTE_LOG(ERR, APP, "Failed to start port %d\n", port_id);
+
+	return ret;
+}
+
+static void
+print_ethaddr(const char *name, struct ether_addr *mac_addr)
+{
+	char buf[ETHER_ADDR_FMT_SIZE];
+	ether_format_addr(buf, ETHER_ADDR_FMT_SIZE, mac_addr);
+	RTE_LOG(INFO, APP, "\t%s%s\n", name, buf);
+}
+
+/* Callback for request of configuring mac address */
+static int
+kni_config_mac_address(uint16_t port_id, uint8_t mac_addr[])
+{
+	int ret = 0;
+
+	if (port_id >= rte_eth_dev_count() || port_id >= RTE_MAX_ETHPORTS) {
+		RTE_LOG(ERR, APP, "Invalid port id %d\n", port_id);
+		return -EINVAL;
+	}
+
+	RTE_LOG(INFO, APP, "Configure mac address of %d\n", port_id);
+	print_ethaddr("Address:", (struct ether_addr *)mac_addr);
+
+	ret = rte_eth_dev_default_mac_addr_set(port_id,
+					       (struct ether_addr *)mac_addr);
+	if (ret < 0)
+		RTE_LOG(ERR, APP, "Failed to config mac_addr for port %d\n",
+			port_id);
 
 	return ret;
 }
@@ -809,11 +842,17 @@ kni_alloc(uint16_t port_id)
 				conf.addr = dev_info.pci_dev->addr;
 				conf.id = dev_info.pci_dev->id;
 			}
+			/* Get the interface default mac address */
+			rte_eth_macaddr_get(port_id,
+					(struct ether_addr *)&conf.mac_addr);
+
+			rte_eth_dev_get_mtu(port_id, &conf.mtu);
 
 			memset(&ops, 0, sizeof(ops));
 			ops.port_id = port_id;
 			ops.change_mtu = kni_change_mtu;
 			ops.config_network_if = kni_config_network_interface;
+			ops.config_mac_address = kni_config_mac_address;
 
 			kni = rte_kni_alloc(pktmbuf_pool, &conf, &ops);
 		} else

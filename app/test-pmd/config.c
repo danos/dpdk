@@ -1,35 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
- *   Copyright 2013-2014 6WIND S.A.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2016 Intel Corporation.
+ * Copyright 2013-2014 6WIND S.A.
  */
 
 #include <stdarg.h>
@@ -78,6 +49,7 @@
 #include <rte_pmd_bnxt.h>
 #endif
 #include <rte_gro.h>
+#include <cmdline_parse_etheraddr.h>
 
 #include "testpmd.h"
 
@@ -417,7 +389,6 @@ tx_queue_infos_display(portid_t port_id, uint16_t queue_id)
 	printf("\nTX writeback threshold: %hhu", qinfo.conf.tx_thresh.wthresh);
 	printf("\nTX RS threshold: %hu", qinfo.conf.tx_rs_thresh);
 	printf("\nTX free threshold: %hu", qinfo.conf.tx_free_thresh);
-	printf("\nTX flags: %#x", qinfo.conf.txq_flags);
 	printf("\nTX deferred start: %s",
 		(qinfo.conf.tx_deferred_start != 0) ? "on" : "off");
 	printf("\nNumber of TXDs: %hu", qinfo.nb_desc);
@@ -522,6 +493,16 @@ port_infos_display(portid_t port_id)
 		}
 	}
 
+	printf("Minimum size of RX buffer: %u\n", dev_info.min_rx_bufsize);
+	printf("Maximum configurable length of RX packet: %u\n",
+		dev_info.max_rx_pktlen);
+	if (dev_info.max_vfs)
+		printf("Maximum number of VFs: %u\n", dev_info.max_vfs);
+	if (dev_info.max_vmdq_pools)
+		printf("Maximum number of VMDq pools: %u\n",
+			dev_info.max_vmdq_pools);
+
+	printf("Current number of RX queues: %u\n", dev_info.nb_rx_queues);
 	printf("Max possible RX queues: %u\n", dev_info.max_rx_queues);
 	printf("Max possible number of RXDs per queue: %hu\n",
 		dev_info.rx_desc_lim.nb_max);
@@ -529,6 +510,7 @@ port_infos_display(portid_t port_id)
 		dev_info.rx_desc_lim.nb_min);
 	printf("RXDs number alignment: %hu\n", dev_info.rx_desc_lim.nb_align);
 
+	printf("Current number of TX queues: %u\n", dev_info.nb_tx_queues);
 	printf("Max possible TX queues: %u\n", dev_info.max_tx_queues);
 	printf("Max possible number of TXDs per queue: %hu\n",
 		dev_info.tx_desc_lim.nb_max);
@@ -540,14 +522,12 @@ port_infos_display(portid_t port_id)
 void
 port_offload_cap_display(portid_t port_id)
 {
-	struct rte_eth_dev *dev;
 	struct rte_eth_dev_info dev_info;
 	static const char *info_border = "************";
 
 	if (port_id_is_invalid(port_id, ENABLED_WARN))
 		return;
 
-	dev = &rte_eth_devices[port_id];
 	rte_eth_dev_info_get(port_id, &dev_info);
 
 	printf("\n%s Port %d supported offload features: %s\n",
@@ -555,7 +535,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_VLAN_STRIP) {
 		printf("VLAN stripped:                 ");
-		if (dev->data->dev_conf.rxmode.hw_vlan_strip)
+		if (ports[port_id].dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_VLAN_STRIP)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -563,7 +544,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_QINQ_STRIP) {
 		printf("Double VLANs stripped:         ");
-		if (dev->data->dev_conf.rxmode.hw_vlan_extend)
+		if (ports[port_id].dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_VLAN_EXTEND)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -571,7 +553,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
 		printf("RX IPv4 checksum:              ");
-		if (dev->data->dev_conf.rxmode.hw_ip_checksum)
+		if (ports[port_id].dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_IPV4_CKSUM)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -579,7 +562,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_UDP_CKSUM) {
 		printf("RX UDP checksum:               ");
-		if (dev->data->dev_conf.rxmode.hw_ip_checksum)
+		if (ports[port_id].dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_UDP_CKSUM)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -587,18 +571,26 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
 		printf("RX TCP checksum:               ");
-		if (dev->data->dev_conf.rxmode.hw_ip_checksum)
+		if (ports[port_id].dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_TCP_CKSUM)
 			printf("on\n");
 		else
 			printf("off\n");
 	}
 
-	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM)
-		printf("RX Outer IPv4 checksum:        on");
+	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM) {
+		printf("RX Outer IPv4 checksum:               ");
+		if (ports[port_id].dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM)
+			printf("on\n");
+		else
+			printf("off\n");
+	}
 
 	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_LRO) {
 		printf("Large receive offload:         ");
-		if (dev->data->dev_conf.rxmode.enable_lro)
+		if (ports[port_id].dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_TCP_LRO)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -606,8 +598,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_VLAN_INSERT) {
 		printf("VLAN insert:                   ");
-		if (ports[port_id].tx_ol_flags &
-		    TESTPMD_TX_OFFLOAD_INSERT_VLAN)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_VLAN_INSERT)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -615,7 +607,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TIMESTAMP) {
 		printf("HW timestamp:                  ");
-		if (dev->data->dev_conf.rxmode.hw_timestamp)
+		if (ports[port_id].dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_TIMESTAMP)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -623,8 +616,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_QINQ_INSERT) {
 		printf("Double VLANs insert:           ");
-		if (ports[port_id].tx_ol_flags &
-		    TESTPMD_TX_OFFLOAD_INSERT_QINQ)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_QINQ_INSERT)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -632,7 +625,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
 		printf("TX IPv4 checksum:              ");
-		if (ports[port_id].tx_ol_flags & TESTPMD_TX_OFFLOAD_IP_CKSUM)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_IPV4_CKSUM)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -640,7 +634,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM) {
 		printf("TX UDP checksum:               ");
-		if (ports[port_id].tx_ol_flags & TESTPMD_TX_OFFLOAD_UDP_CKSUM)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_UDP_CKSUM)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -648,7 +643,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
 		printf("TX TCP checksum:               ");
-		if (ports[port_id].tx_ol_flags & TESTPMD_TX_OFFLOAD_TCP_CKSUM)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_TCP_CKSUM)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -656,7 +652,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_SCTP_CKSUM) {
 		printf("TX SCTP checksum:              ");
-		if (ports[port_id].tx_ol_flags & TESTPMD_TX_OFFLOAD_SCTP_CKSUM)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_SCTP_CKSUM)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -664,8 +661,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM) {
 		printf("TX Outer IPv4 checksum:        ");
-		if (ports[port_id].tx_ol_flags &
-		    TESTPMD_TX_OFFLOAD_OUTER_IP_CKSUM)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -673,7 +670,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_TSO) {
 		printf("TX TCP segmentation:           ");
-		if (ports[port_id].tso_segsz != 0)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_TCP_TSO)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -681,7 +679,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_TSO) {
 		printf("TX UDP segmentation:           ");
-		if (ports[port_id].tso_segsz != 0)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_UDP_TSO)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -689,7 +688,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_VXLAN_TNL_TSO) {
 		printf("TSO for VXLAN tunnel packet:   ");
-		if (ports[port_id].tunnel_tso_segsz)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_VXLAN_TNL_TSO)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -697,7 +697,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_GRE_TNL_TSO) {
 		printf("TSO for GRE tunnel packet:     ");
-		if (ports[port_id].tunnel_tso_segsz)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_GRE_TNL_TSO)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -705,7 +706,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_IPIP_TNL_TSO) {
 		printf("TSO for IPIP tunnel packet:    ");
-		if (ports[port_id].tunnel_tso_segsz)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_IPIP_TNL_TSO)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -713,7 +715,8 @@ port_offload_cap_display(portid_t port_id)
 
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_GENEVE_TNL_TSO) {
 		printf("TSO for GENEVE tunnel packet:  ");
-		if (ports[port_id].tunnel_tso_segsz)
+		if (ports[port_id].dev_conf.txmode.offloads &
+		    DEV_TX_OFFLOAD_GENEVE_TNL_TSO)
 			printf("on\n");
 		else
 			printf("off\n");
@@ -724,11 +727,14 @@ port_offload_cap_display(portid_t port_id)
 int
 port_id_is_invalid(portid_t port_id, enum print_warning warning)
 {
+	uint16_t pid;
+
 	if (port_id == (portid_t)RTE_PORT_ALL)
 		return 0;
 
-	if (rte_eth_dev_is_valid_port(port_id))
-		return 0;
+	RTE_ETH_FOREACH_DEV(pid)
+		if (port_id == pid)
+			return 0;
 
 	if (warning == ENABLED_WARN)
 		printf("Invalid port %d\n", port_id);
@@ -973,6 +979,7 @@ static const struct {
 	MK_FLOW_ITEM(GTP, sizeof(struct rte_flow_item_gtp)),
 	MK_FLOW_ITEM(GTPC, sizeof(struct rte_flow_item_gtp)),
 	MK_FLOW_ITEM(GTPU, sizeof(struct rte_flow_item_gtp)),
+	MK_FLOW_ITEM(GENEVE, sizeof(struct rte_flow_item_geneve)),
 };
 
 /** Compute storage space needed by item specification. */
@@ -1026,6 +1033,7 @@ static const struct {
 	MK_FLOW_ACTION(RSS, sizeof(struct rte_flow_action_rss)), /* +queue[] */
 	MK_FLOW_ACTION(PF, 0),
 	MK_FLOW_ACTION(VF, sizeof(struct rte_flow_action_vf)),
+	MK_FLOW_ACTION(METER, sizeof(struct rte_flow_action_meter)),
 };
 
 /** Compute storage space needed by action configuration. */
@@ -1655,33 +1663,46 @@ fwd_lcores_config_display(void)
 void
 rxtx_config_display(void)
 {
-	printf("  %s packet forwarding%s - CRC stripping %s - "
-	       "packets/burst=%d\n", cur_fwd_eng->fwd_mode_name,
+	portid_t pid;
+
+	printf("  %s packet forwarding%s packets/burst=%d\n",
+	       cur_fwd_eng->fwd_mode_name,
 	       retry_enabled == 0 ? "" : " with retry",
-	       rx_mode.hw_strip_crc ? "enabled" : "disabled",
 	       nb_pkt_per_burst);
 
 	if (cur_fwd_eng == &tx_only_engine || cur_fwd_eng == &flow_gen_engine)
 		printf("  packet len=%u - nb packet segments=%d\n",
 				(unsigned)tx_pkt_length, (int) tx_pkt_nb_segs);
 
-	struct rte_eth_rxconf *rx_conf = &ports[0].rx_conf;
-	struct rte_eth_txconf *tx_conf = &ports[0].tx_conf;
-
 	printf("  nb forwarding cores=%d - nb forwarding ports=%d\n",
 	       nb_fwd_lcores, nb_fwd_ports);
-	printf("  RX queues=%d - RX desc=%d - RX free threshold=%d\n",
-	       nb_rxq, nb_rxd, rx_conf->rx_free_thresh);
-	printf("  RX threshold registers: pthresh=%d hthresh=%d wthresh=%d\n",
-	       rx_conf->rx_thresh.pthresh, rx_conf->rx_thresh.hthresh,
-	       rx_conf->rx_thresh.wthresh);
-	printf("  TX queues=%d - TX desc=%d - TX free threshold=%d\n",
-	       nb_txq, nb_txd, tx_conf->tx_free_thresh);
-	printf("  TX threshold registers: pthresh=%d hthresh=%d wthresh=%d\n",
-	       tx_conf->tx_thresh.pthresh, tx_conf->tx_thresh.hthresh,
-	       tx_conf->tx_thresh.wthresh);
-	printf("  TX RS bit threshold=%d - TXQ flags=0x%"PRIx32"\n",
-	       tx_conf->tx_rs_thresh, tx_conf->txq_flags);
+
+	RTE_ETH_FOREACH_DEV(pid) {
+		struct rte_eth_rxconf *rx_conf = &ports[pid].rx_conf;
+		struct rte_eth_txconf *tx_conf = &ports[pid].tx_conf;
+
+		printf("  port %d:\n", (unsigned int)pid);
+		printf("  CRC stripping %s\n",
+				(ports[pid].dev_conf.rxmode.offloads &
+				 DEV_RX_OFFLOAD_CRC_STRIP) ?
+				"enabled" : "disabled");
+		printf("  RX queues=%d - RX desc=%d - RX free threshold=%d\n",
+				nb_rxq, nb_rxd, rx_conf->rx_free_thresh);
+		printf("  RX threshold registers: pthresh=%d hthresh=%d "
+		       " wthresh=%d\n",
+				rx_conf->rx_thresh.pthresh,
+				rx_conf->rx_thresh.hthresh,
+				rx_conf->rx_thresh.wthresh);
+		printf("  TX queues=%d - TX desc=%d - TX free threshold=%d\n",
+				nb_txq, nb_txd, tx_conf->tx_free_thresh);
+		printf("  TX threshold registers: pthresh=%d hthresh=%d "
+		       " wthresh=%d\n",
+				tx_conf->tx_thresh.pthresh,
+				tx_conf->tx_thresh.hthresh,
+				tx_conf->tx_thresh.wthresh);
+		printf("  TX RS bit threshold=%d - TXQ offloads=0x%"PRIx64"\n",
+				tx_conf->tx_rs_thresh, tx_conf->offloads);
+	}
 }
 
 void
@@ -1861,23 +1882,40 @@ setup_fwd_config_of_each_lcore(struct fwd_config *cfg)
 	}
 }
 
+static portid_t
+fwd_topology_tx_port_get(portid_t rxp)
+{
+	static int warning_once = 1;
+
+	RTE_ASSERT(rxp < cur_fwd_config.nb_fwd_ports);
+
+	switch (port_topology) {
+	default:
+	case PORT_TOPOLOGY_PAIRED:
+		if ((rxp & 0x1) == 0) {
+			if (rxp + 1 < cur_fwd_config.nb_fwd_ports)
+				return rxp + 1;
+			if (warning_once) {
+				printf("\nWarning! port-topology=paired"
+				       " and odd forward ports number,"
+				       " the last port will pair with"
+				       " itself.\n\n");
+				warning_once = 0;
+			}
+			return rxp;
+		}
+		return rxp - 1;
+	case PORT_TOPOLOGY_CHAINED:
+		return (rxp + 1) % cur_fwd_config.nb_fwd_ports;
+	case PORT_TOPOLOGY_LOOP:
+		return rxp;
+	}
+}
+
 static void
 simple_fwd_config_setup(void)
 {
 	portid_t i;
-	portid_t j;
-	portid_t inc = 2;
-
-	if (port_topology == PORT_TOPOLOGY_CHAINED ||
-	    port_topology == PORT_TOPOLOGY_LOOP) {
-		inc = 1;
-	} else if (nb_fwd_ports % 2) {
-		printf("\nWarning! Cannot handle an odd number of ports "
-		       "with the current port topology. Configuration "
-		       "must be changed to have an even number of ports, "
-		       "or relaunch application with "
-		       "--port-topology=chained\n\n");
-	}
 
 	cur_fwd_config.nb_fwd_ports = (portid_t) nb_fwd_ports;
 	cur_fwd_config.nb_fwd_streams =
@@ -1896,26 +1934,14 @@ simple_fwd_config_setup(void)
 			(lcoreid_t) cur_fwd_config.nb_fwd_ports;
 	setup_fwd_config_of_each_lcore(&cur_fwd_config);
 
-	for (i = 0; i < cur_fwd_config.nb_fwd_ports; i = (portid_t) (i + inc)) {
-		if (port_topology != PORT_TOPOLOGY_LOOP)
-			j = (portid_t) ((i + 1) % cur_fwd_config.nb_fwd_ports);
-		else
-			j = i;
+	for (i = 0; i < cur_fwd_config.nb_fwd_ports; i++) {
 		fwd_streams[i]->rx_port   = fwd_ports_ids[i];
 		fwd_streams[i]->rx_queue  = 0;
-		fwd_streams[i]->tx_port   = fwd_ports_ids[j];
+		fwd_streams[i]->tx_port   =
+				fwd_ports_ids[fwd_topology_tx_port_get(i)];
 		fwd_streams[i]->tx_queue  = 0;
 		fwd_streams[i]->peer_addr = fwd_streams[i]->tx_port;
 		fwd_streams[i]->retry_enabled = retry_enabled;
-
-		if (port_topology == PORT_TOPOLOGY_PAIRED) {
-			fwd_streams[j]->rx_port   = fwd_ports_ids[j];
-			fwd_streams[j]->rx_queue  = 0;
-			fwd_streams[j]->tx_port   = fwd_ports_ids[i];
-			fwd_streams[j]->tx_queue  = 0;
-			fwd_streams[j]->peer_addr = fwd_streams[j]->tx_port;
-			fwd_streams[j]->retry_enabled = retry_enabled;
-		}
 	}
 }
 
@@ -1923,11 +1949,6 @@ simple_fwd_config_setup(void)
  * For the RSS forwarding test all streams distributed over lcores. Each stream
  * being composed of a RX queue to poll on a RX port for input messages,
  * associated with a TX queue of a TX port where to send forwarded packets.
- * All packets received on the RX queue of index "RxQj" of the RX port "RxPi"
- * are sent on the TX queue "TxQl" of the TX port "TxPk" according to the two
- * following rules:
- *    - TxPk = (RxPi + 1) if RxPi is even, (RxPi - 1) if RxPi is odd
- *    - TxQl = RxQj
  */
 static void
 rss_fwd_config_setup(void)
@@ -1959,18 +1980,7 @@ rss_fwd_config_setup(void)
 		struct fwd_stream *fs;
 
 		fs = fwd_streams[sm_id];
-
-		if ((rxp & 0x1) == 0)
-			txp = (portid_t) (rxp + 1);
-		else
-			txp = (portid_t) (rxp - 1);
-		/*
-		 * if we are in loopback, simply send stuff out through the
-		 * ingress port
-		 */
-		if (port_topology == PORT_TOPOLOGY_LOOP)
-			txp = rxp;
-
+		txp = fwd_topology_tx_port_get(rxp);
 		fs->rx_port = fwd_ports_ids[rxp];
 		fs->rx_queue = rxq;
 		fs->tx_port = fwd_ports_ids[txp];
@@ -1985,11 +1995,7 @@ rss_fwd_config_setup(void)
 		 * Restart from RX queue 0 on next RX port
 		 */
 		rxq = 0;
-		if (numa_support && (nb_fwd_ports <= (nb_ports >> 1)))
-			rxp = (portid_t)
-				(rxp + ((nb_ports >> 1) / nb_fwd_ports));
-		else
-			rxp = (portid_t) (rxp + 1);
+		rxp++;
 	}
 }
 
@@ -2192,6 +2198,24 @@ pkt_fwd_config_display(struct fwd_config *cfg)
 		printf("\n");
 	}
 	printf("\n");
+}
+
+void
+set_fwd_eth_peer(portid_t port_id, char *peer_addr)
+{
+	uint8_t c, new_peer_addr[6];
+	if (!rte_eth_dev_is_valid_port(port_id)) {
+		printf("Error: Invalid port number %i\n", port_id);
+		return;
+	}
+	if (cmdline_parse_etheraddr(NULL, peer_addr, &new_peer_addr,
+					sizeof(new_peer_addr)) < 0) {
+		printf("Error: Invalid ethernet address: %s\n", peer_addr);
+		return;
+	}
+	for (c = 0; c < 6; c++)
+		peer_eth_addrs[port_id].addr_bytes[c] =
+			new_peer_addr[c];
 }
 
 int
@@ -2631,21 +2655,26 @@ vlan_extend_set(portid_t port_id, int on)
 {
 	int diag;
 	int vlan_offload;
+	uint64_t port_rx_offloads = ports[port_id].dev_conf.rxmode.offloads;
 
 	if (port_id_is_invalid(port_id, ENABLED_WARN))
 		return;
 
 	vlan_offload = rte_eth_dev_get_vlan_offload(port_id);
 
-	if (on)
+	if (on) {
 		vlan_offload |= ETH_VLAN_EXTEND_OFFLOAD;
-	else
+		port_rx_offloads |= DEV_RX_OFFLOAD_VLAN_EXTEND;
+	} else {
 		vlan_offload &= ~ETH_VLAN_EXTEND_OFFLOAD;
+		port_rx_offloads &= ~DEV_RX_OFFLOAD_VLAN_EXTEND;
+	}
 
 	diag = rte_eth_dev_set_vlan_offload(port_id, vlan_offload);
 	if (diag < 0)
 		printf("rx_vlan_extend_set(port_pi=%d, on=%d) failed "
 	       "diag=%d\n", port_id, on, diag);
+	ports[port_id].dev_conf.rxmode.offloads = port_rx_offloads;
 }
 
 void
@@ -2653,21 +2682,26 @@ rx_vlan_strip_set(portid_t port_id, int on)
 {
 	int diag;
 	int vlan_offload;
+	uint64_t port_rx_offloads = ports[port_id].dev_conf.rxmode.offloads;
 
 	if (port_id_is_invalid(port_id, ENABLED_WARN))
 		return;
 
 	vlan_offload = rte_eth_dev_get_vlan_offload(port_id);
 
-	if (on)
+	if (on) {
 		vlan_offload |= ETH_VLAN_STRIP_OFFLOAD;
-	else
+		port_rx_offloads |= DEV_RX_OFFLOAD_VLAN_STRIP;
+	} else {
 		vlan_offload &= ~ETH_VLAN_STRIP_OFFLOAD;
+		port_rx_offloads &= ~DEV_RX_OFFLOAD_VLAN_STRIP;
+	}
 
 	diag = rte_eth_dev_set_vlan_offload(port_id, vlan_offload);
 	if (diag < 0)
 		printf("rx_vlan_strip_set(port_pi=%d, on=%d) failed "
 	       "diag=%d\n", port_id, on, diag);
+	ports[port_id].dev_conf.rxmode.offloads = port_rx_offloads;
 }
 
 void
@@ -2689,21 +2723,26 @@ rx_vlan_filter_set(portid_t port_id, int on)
 {
 	int diag;
 	int vlan_offload;
+	uint64_t port_rx_offloads = ports[port_id].dev_conf.rxmode.offloads;
 
 	if (port_id_is_invalid(port_id, ENABLED_WARN))
 		return;
 
 	vlan_offload = rte_eth_dev_get_vlan_offload(port_id);
 
-	if (on)
+	if (on) {
 		vlan_offload |= ETH_VLAN_FILTER_OFFLOAD;
-	else
+		port_rx_offloads |= DEV_RX_OFFLOAD_VLAN_FILTER;
+	} else {
 		vlan_offload &= ~ETH_VLAN_FILTER_OFFLOAD;
+		port_rx_offloads &= ~DEV_RX_OFFLOAD_VLAN_FILTER;
+	}
 
 	diag = rte_eth_dev_set_vlan_offload(port_id, vlan_offload);
 	if (diag < 0)
 		printf("rx_vlan_filter_set(port_pi=%d, on=%d) failed "
 	       "diag=%d\n", port_id, on, diag);
+	ports[port_id].dev_conf.rxmode.offloads = port_rx_offloads;
 }
 
 int
@@ -2758,6 +2797,8 @@ void
 tx_vlan_set(portid_t port_id, uint16_t vlan_id)
 {
 	int vlan_offload;
+	struct rte_eth_dev_info dev_info;
+
 	if (port_id_is_invalid(port_id, ENABLED_WARN))
 		return;
 	if (vlan_id_is_invalid(vlan_id))
@@ -2768,9 +2809,15 @@ tx_vlan_set(portid_t port_id, uint16_t vlan_id)
 		printf("Error, as QinQ has been enabled.\n");
 		return;
 	}
+	rte_eth_dev_info_get(port_id, &dev_info);
+	if ((dev_info.tx_offload_capa & DEV_TX_OFFLOAD_VLAN_INSERT) == 0) {
+		printf("Error: vlan insert is not supported by port %d\n",
+			port_id);
+		return;
+	}
 
 	tx_vlan_reset(port_id);
-	ports[port_id].tx_ol_flags |= TESTPMD_TX_OFFLOAD_INSERT_VLAN;
+	ports[port_id].dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_VLAN_INSERT;
 	ports[port_id].tx_vlan_id = vlan_id;
 }
 
@@ -2778,6 +2825,8 @@ void
 tx_qinq_set(portid_t port_id, uint16_t vlan_id, uint16_t vlan_id_outer)
 {
 	int vlan_offload;
+	struct rte_eth_dev_info dev_info;
+
 	if (port_id_is_invalid(port_id, ENABLED_WARN))
 		return;
 	if (vlan_id_is_invalid(vlan_id))
@@ -2790,9 +2839,15 @@ tx_qinq_set(portid_t port_id, uint16_t vlan_id, uint16_t vlan_id_outer)
 		printf("Error, as QinQ hasn't been enabled.\n");
 		return;
 	}
+	rte_eth_dev_info_get(port_id, &dev_info);
+	if ((dev_info.tx_offload_capa & DEV_TX_OFFLOAD_QINQ_INSERT) == 0) {
+		printf("Error: qinq insert not supported by port %d\n",
+			port_id);
+		return;
+	}
 
 	tx_vlan_reset(port_id);
-	ports[port_id].tx_ol_flags |= TESTPMD_TX_OFFLOAD_INSERT_QINQ;
+	ports[port_id].dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_QINQ_INSERT;
 	ports[port_id].tx_vlan_id = vlan_id;
 	ports[port_id].tx_vlan_id_outer = vlan_id_outer;
 }
@@ -2802,8 +2857,9 @@ tx_vlan_reset(portid_t port_id)
 {
 	if (port_id_is_invalid(port_id, ENABLED_WARN))
 		return;
-	ports[port_id].tx_ol_flags &= ~(TESTPMD_TX_OFFLOAD_INSERT_VLAN |
-				TESTPMD_TX_OFFLOAD_INSERT_QINQ);
+	ports[port_id].dev_conf.txmode.offloads &=
+				~(DEV_TX_OFFLOAD_VLAN_INSERT |
+				  DEV_TX_OFFLOAD_QINQ_INSERT);
 	ports[port_id].tx_vlan_id = 0;
 	ports[port_id].tx_vlan_id_outer = 0;
 }
@@ -3401,7 +3457,7 @@ port_dcb_info_display(portid_t port_id)
 }
 
 uint8_t *
-open_ddp_package_file(const char *file_path, uint32_t *size)
+open_file(const char *file_path, uint32_t *size)
 {
 	int fd = open(file_path, O_RDONLY);
 	off_t pkg_size;
@@ -3441,7 +3497,7 @@ open_ddp_package_file(const char *file_path, uint32_t *size)
 	if (ret < 0) {
 		close(fd);
 		printf("%s: File read operation failed\n", __func__);
-		close_ddp_package_file(buf);
+		close_file(buf);
 		return NULL;
 	}
 
@@ -3454,7 +3510,7 @@ open_ddp_package_file(const char *file_path, uint32_t *size)
 }
 
 int
-save_ddp_package_file(const char *file_path, uint8_t *buf, uint32_t size)
+save_file(const char *file_path, uint8_t *buf, uint32_t size)
 {
 	FILE *fh = fopen(file_path, "wb");
 
@@ -3475,7 +3531,7 @@ save_ddp_package_file(const char *file_path, uint8_t *buf, uint32_t size)
 }
 
 int
-close_ddp_package_file(uint8_t *buf)
+close_file(uint8_t *buf)
 {
 	if (buf) {
 		free((void *)buf);

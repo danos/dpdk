@@ -35,7 +35,7 @@
 #include <stdbool.h>
 
 #include <rte_mbuf.h>
-#include <rte_ethdev.h>
+#include <rte_ethdev_driver.h>
 #include <rte_ethdev_vdev.h>
 #include <rte_malloc.h>
 #include <rte_memcpy.h>
@@ -607,10 +607,9 @@ new_device(int vid)
 	rte_atomic32_set(&internal->dev_attached, 1);
 	update_queuing_status(eth_dev);
 
-	RTE_LOG(INFO, PMD, "New connection established\n");
+	RTE_LOG(INFO, PMD, "Vhost device %d created\n", vid);
 
-	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_INTR_LSC,
-				      NULL, NULL);
+	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 
 	return 0;
 }
@@ -662,10 +661,9 @@ destroy_device(int vid)
 	state->max_vring = 0;
 	rte_spinlock_unlock(&state->lock);
 
-	RTE_LOG(INFO, PMD, "Connection closed\n");
+	RTE_LOG(INFO, PMD, "Vhost device %d destroyed\n", vid);
 
-	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_INTR_LSC,
-				      NULL, NULL);
+	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 }
 
 static int
@@ -694,8 +692,7 @@ vring_state_changed(int vid, uint16_t vring, int enable)
 	RTE_LOG(INFO, PMD, "vring%u is %s\n",
 			vring, enable ? "enabled" : "disabled");
 
-	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_QUEUE_STATE,
-				      NULL, NULL);
+	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_QUEUE_STATE, NULL);
 
 	return 0;
 }

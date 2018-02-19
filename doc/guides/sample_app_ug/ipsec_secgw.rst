@@ -1,32 +1,5 @@
-..  BSD LICENSE
-    Copyright(c) 2016-2017 Intel Corporation. All rights reserved.
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions
-    are met:
-
-    * Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright
-    notice, this list of conditions and the following disclaimer in
-    the documentation and/or other materials provided with the
-    distribution.
-    * Neither the name of Intel Corporation nor the names of its
-    contributors may be used to endorse or promote products derived
-    from this software without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-    A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-    OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-    LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+..  SPDX-License-Identifier: BSD-3-Clause
+    Copyright(c) 2016-2017 Intel Corporation.
 
 IPsec Security Gateway Sample Application
 =========================================
@@ -60,6 +33,12 @@ These modes can be selected during the SA creation configuration.
 In case of complete protocol offload, the processing of headers(ESP and outer
 IP header) is done by the hardware and the application does not need to
 add/remove them during outbound/inbound processing.
+
+For inline offloaded outbound traffic, the application will not do the LPM
+lookup for routing, as the port on which the packet has to be forwarded will be
+part of the SA. Security parameters will be configured on that port only, and
+sending the packet on other ports could result in unencrypted packets being
+sent out.
 
 The Path for IPsec Inbound traffic is:
 
@@ -416,6 +395,7 @@ where each options means:
 
    * *null*: NULL algorithm
    * *aes-128-cbc*: AES-CBC 128-bit algorithm
+   * *aes-256-cbc*: AES-CBC 256-bit algorithm
    * *aes-128-ctr*: AES-CTR 128-bit algorithm
 
  * Syntax: *cipher_algo <your algorithm>*
@@ -543,7 +523,9 @@ where each options means:
  ``<port_id>``
 
  * Port/device ID of the ethernet/crypto accelerator for which the SA is
-   configured. This option is used when *type* is NOT *no-offload*
+   configured. For *inline-crypto-offload* and *inline-protocol-offload*, this
+   port will be used for routing. The routing table will not be referred in
+   this case.
 
  * Optional: No, if *type* is not *no-offload*
 

@@ -1,25 +1,6 @@
-/*-
- * GPL LICENSE SUMMARY
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *
- *   This program is free software; you can redistribute it and/or modify
- *   it under the terms of version 2 of the GNU General Public License as
- *   published by the Free Software Foundation.
- *
- *   This program is distributed in the hope that it will be useful, but
- *   WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- *   General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program; if not, write to the Free Software
- *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
- *   The full GNU General Public License is included in this distribution
- *   in the file called LICENSE.GPL.
- *
- *   Contact Information:
- *   Intel Corporation
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright(c) 2010-2014 Intel Corporation.
  */
 
 /*
@@ -603,6 +584,22 @@ kni_net_change_mtu(struct net_device *dev, int new_mtu)
 	return (ret == 0) ? req.result : ret;
 }
 
+static void
+kni_net_set_promiscusity(struct net_device *netdev, int flags)
+{
+	struct rte_kni_request req;
+	struct kni_dev *kni = netdev_priv(netdev);
+
+	memset(&req, 0, sizeof(req));
+	req.req_id = RTE_KNI_REQ_CHANGE_PROMISC;
+
+	if (netdev->flags & IFF_PROMISC)
+		req.promiscusity = 1;
+	else
+		req.promiscusity = 0;
+	kni_net_process_request(kni, &req);
+}
+
 /*
  * Checks if the user space application provided the resp message
  */
@@ -668,12 +665,24 @@ kni_net_rebuild_header(struct sk_buff *skb)
 static int
 kni_net_set_mac(struct net_device *netdev, void *p)
 {
+	int ret;
+	struct rte_kni_request req;
+	struct kni_dev *kni;
 	struct sockaddr *addr = p;
+
+	memset(&req, 0, sizeof(req));
+	req.req_id = RTE_KNI_REQ_CHANGE_MAC_ADDR;
 
 	if (!is_valid_ether_addr((unsigned char *)(addr->sa_data)))
 		return -EADDRNOTAVAIL;
+
+	memcpy(req.mac_addr, addr->sa_data, netdev->addr_len);
 	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
-	return 0;
+
+	kni = netdev_priv(netdev);
+	ret = kni_net_process_request(kni, &req);
+
+	return (ret == 0 ? req.result : ret);
 }
 
 #ifdef HAVE_CHANGE_CARRIER_CB
@@ -700,6 +709,7 @@ static const struct net_device_ops kni_net_netdev_ops = {
 	.ndo_open = kni_net_open,
 	.ndo_stop = kni_net_release,
 	.ndo_set_config = kni_net_config,
+	.ndo_change_rx_flags = kni_net_set_promiscusity,
 	.ndo_start_xmit = kni_net_tx,
 	.ndo_change_mtu = kni_net_change_mtu,
 	.ndo_do_ioctl = kni_net_ioctl,

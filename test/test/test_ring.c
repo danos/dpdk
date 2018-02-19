@@ -1,34 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2014 Intel Corporation
  */
 
 #include <string.h>
@@ -86,8 +57,6 @@
 
 static rte_atomic32_t synchro;
 
-static struct rte_ring *r;
-
 #define	TEST_RING_VERIFY(exp)						\
 	if (!(exp)) {							\
 		printf("error at %s:%d\tcondition " #exp " failed\n",	\
@@ -102,7 +71,7 @@ static struct rte_ring *r;
  * helper routine for test_ring_basic
  */
 static int
-test_ring_basic_full_empty(void * const src[], void *dst[])
+test_ring_basic_full_empty(struct rte_ring *r, void * const src[], void *dst[])
 {
 	unsigned i, rand;
 	const unsigned rsz = RING_SIZE - 1;
@@ -143,7 +112,7 @@ test_ring_basic_full_empty(void * const src[], void *dst[])
 }
 
 static int
-test_ring_basic(void)
+test_ring_basic(struct rte_ring *r)
 {
 	void **src = NULL, **cur_src = NULL, **dst = NULL, **cur_dst = NULL;
 	int ret;
@@ -279,7 +248,7 @@ test_ring_basic(void)
 		goto fail;
 	}
 
-	if (test_ring_basic_full_empty(src, dst) != 0)
+	if (test_ring_basic_full_empty(r, src, dst) != 0)
 		goto fail;
 
 	cur_src = src;
@@ -346,7 +315,7 @@ test_ring_basic(void)
 }
 
 static int
-test_ring_burst_basic(void)
+test_ring_burst_basic(struct rte_ring *r)
 {
 	void **src = NULL, **cur_src = NULL, **dst = NULL, **cur_dst = NULL;
 	int ret;
@@ -700,7 +669,7 @@ test_ring_basic_ex(void)
 {
 	int ret = -1;
 	unsigned i;
-	struct rte_ring * rp;
+	struct rte_ring *rp = NULL;
 	void **obj = NULL;
 
 	obj = rte_calloc("test_ring_basic_ex_malloc", RING_SIZE, sizeof(void *), 0);
@@ -760,6 +729,7 @@ test_ring_basic_ex(void)
 
 	ret = 0;
 fail_test:
+	rte_ring_free(rp);
 	if (obj != NULL)
 		rte_free(obj);
 
@@ -840,61 +810,67 @@ end:
 static int
 test_ring(void)
 {
+	struct rte_ring *r = NULL;
+
 	/* some more basic operations */
 	if (test_ring_basic_ex() < 0)
-		return -1;
+		goto test_fail;
 
 	rte_atomic32_init(&synchro);
 
+	r = rte_ring_create("test", RING_SIZE, SOCKET_ID_ANY, 0);
 	if (r == NULL)
-		r = rte_ring_create("test", RING_SIZE, SOCKET_ID_ANY, 0);
-	if (r == NULL)
-		return -1;
+		goto test_fail;
 
 	/* retrieve the ring from its name */
 	if (rte_ring_lookup("test") != r) {
 		printf("Cannot lookup ring from its name\n");
-		return -1;
+		goto test_fail;
 	}
 
 	/* burst operations */
-	if (test_ring_burst_basic() < 0)
-		return -1;
+	if (test_ring_burst_basic(r) < 0)
+		goto test_fail;
 
 	/* basic operations */
-	if (test_ring_basic() < 0)
-		return -1;
+	if (test_ring_basic(r) < 0)
+		goto test_fail;
 
 	/* basic operations */
 	if ( test_create_count_odd() < 0){
-			printf ("Test failed to detect odd count\n");
-			return -1;
-		}
-		else
-			printf ( "Test detected odd count\n");
+		printf("Test failed to detect odd count\n");
+		goto test_fail;
+	} else
+		printf("Test detected odd count\n");
 
 	if ( test_lookup_null() < 0){
-				printf ("Test failed to detect NULL ring lookup\n");
-				return -1;
-			}
-			else
-				printf ( "Test detected NULL ring lookup \n");
+		printf("Test failed to detect NULL ring lookup\n");
+		goto test_fail;
+	} else
+		printf("Test detected NULL ring lookup\n");
 
 	/* test of creating ring with wrong size */
 	if (test_ring_creation_with_wrong_size() < 0)
-		return -1;
+		goto test_fail;
 
 	/* test of creation ring with an used name */
 	if (test_ring_creation_with_an_used_name() < 0)
-		return -1;
+		goto test_fail;
 
 	if (test_ring_with_exact_size() < 0)
-		return -1;
+		goto test_fail;
 
 	/* dump the ring status */
 	rte_ring_list_dump(stdout);
 
+	rte_ring_free(r);
+
 	return 0;
+
+test_fail:
+	rte_ring_free(r);
+
+	return -1;
 }
 
 REGISTER_TEST_COMMAND(ring_autotest, test_ring);

@@ -1,34 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2014 Intel Corporation
  */
 
 #ifndef _VHOST_NET_CDEV_H_
@@ -53,6 +24,8 @@
 #define VIRTIO_DEV_RUNNING 1
 /* Used to indicate that the device is ready to operate */
 #define VIRTIO_DEV_READY 2
+/* Used to indicate that the built-in vhost net device backend is enabled */
+#define VIRTIO_DEV_BUILTIN_VIRTIO_NET 4
 
 /* Backend value set by guest. */
 #define VIRTIO_DEV_STOPPED -1
@@ -103,17 +76,21 @@ struct vhost_virtqueue {
 
 	uint16_t		last_avail_idx;
 	uint16_t		last_used_idx;
+	/* Last used index we notify to front end. */
+	uint16_t		signalled_used;
 #define VIRTIO_INVALID_EVENTFD		(-1)
 #define VIRTIO_UNINITIALIZED_EVENTFD	(-2)
 
 	/* Backend value to determine if device should started/stopped */
 	int			backend;
+	int			enabled;
+	int			access_ok;
+	rte_spinlock_t		access_lock;
+
 	/* Used to notify the guest (trigger interrupt) */
 	int			callfd;
 	/* Currently unused as polling mode is enabled */
 	int			kickfd;
-	int			enabled;
-	int			access_ok;
 
 	/* Physical address of used ring, for logging */
 	uint64_t		log_guest_addr;
@@ -153,6 +130,10 @@ struct vhost_virtqueue {
 
 #ifndef VIRTIO_NET_F_MTU
  #define VIRTIO_NET_F_MTU 3
+#endif
+
+#ifndef VIRTIO_F_ANY_LAYOUT
+ #define VIRTIO_F_ANY_LAYOUT		27
 #endif
 
 /* Declare IOMMU related bits for older kernels */
@@ -197,6 +178,7 @@ struct vhost_msg {
 
 /* Features supported by this builtin vhost-user net driver. */
 #define VIRTIO_NET_SUPPORTED_FEATURES ((1ULL << VIRTIO_NET_F_MRG_RXBUF) | \
+				(1ULL << VIRTIO_F_ANY_LAYOUT) | \
 				(1ULL << VIRTIO_NET_F_CTRL_VQ) | \
 				(1ULL << VIRTIO_NET_F_CTRL_RX) | \
 				(1ULL << VIRTIO_NET_F_GUEST_ANNOUNCE) | \
@@ -204,13 +186,19 @@ struct vhost_msg {
 				(1ULL << VIRTIO_F_VERSION_1)   | \
 				(1ULL << VHOST_F_LOG_ALL)      | \
 				(1ULL << VHOST_USER_F_PROTOCOL_FEATURES) | \
+				(1ULL << VIRTIO_NET_F_GSO) | \
 				(1ULL << VIRTIO_NET_F_HOST_TSO4) | \
 				(1ULL << VIRTIO_NET_F_HOST_TSO6) | \
+				(1ULL << VIRTIO_NET_F_HOST_UFO) | \
+				(1ULL << VIRTIO_NET_F_HOST_ECN) | \
 				(1ULL << VIRTIO_NET_F_CSUM)    | \
 				(1ULL << VIRTIO_NET_F_GUEST_CSUM) | \
 				(1ULL << VIRTIO_NET_F_GUEST_TSO4) | \
 				(1ULL << VIRTIO_NET_F_GUEST_TSO6) | \
+				(1ULL << VIRTIO_NET_F_GUEST_UFO) | \
+				(1ULL << VIRTIO_NET_F_GUEST_ECN) | \
 				(1ULL << VIRTIO_RING_F_INDIRECT_DESC) | \
+				(1ULL << VIRTIO_RING_F_EVENT_IDX) | \
 				(1ULL << VIRTIO_NET_F_MTU) | \
 				(1ULL << VIRTIO_F_IOMMU_PLATFORM))
 
@@ -364,10 +352,14 @@ void cleanup_device(struct virtio_net *dev, int destroy);
 void reset_device(struct virtio_net *dev);
 void vhost_destroy_device(int);
 
+void cleanup_vq(struct vhost_virtqueue *vq, int destroy);
+void free_vq(struct vhost_virtqueue *vq);
+
 int alloc_vring_queue(struct virtio_net *dev, uint32_t vring_idx);
 
 void vhost_set_ifname(int, const char *if_name, unsigned int if_len);
 void vhost_enable_dequeue_zero_copy(int vid);
+void vhost_set_builtin_virtio_net(int vid, bool enable);
 
 struct vhost_device_ops const *vhost_driver_callback_get(const char *path);
 
@@ -391,6 +383,49 @@ vhost_iova_to_vva(struct virtio_net *dev, struct vhost_virtqueue *vq,
 		return rte_vhost_gpa_to_vva(dev->mem, iova);
 
 	return __vhost_iova_to_vva(dev, vq, iova, size, perm);
+}
+
+#define vhost_used_event(vr) \
+	(*(volatile uint16_t*)&(vr)->avail->ring[(vr)->size])
+
+/*
+ * The following is used with VIRTIO_RING_F_EVENT_IDX.
+ * Assuming a given event_idx value from the other size, if we have
+ * just incremented index from old to new_idx, should we trigger an
+ * event?
+ */
+static __rte_always_inline int
+vhost_need_event(uint16_t event_idx, uint16_t new_idx, uint16_t old)
+{
+	return (uint16_t)(new_idx - event_idx - 1) < (uint16_t)(new_idx - old);
+}
+
+static __rte_always_inline void
+vhost_vring_call(struct virtio_net *dev, struct vhost_virtqueue *vq)
+{
+	/* Flush used->idx update before we read avail->flags. */
+	rte_mb();
+
+	/* Don't kick guest if we don't reach index specified by guest. */
+	if (dev->features & (1ULL << VIRTIO_RING_F_EVENT_IDX)) {
+		uint16_t old = vq->signalled_used;
+		uint16_t new = vq->last_used_idx;
+
+		LOG_DEBUG(VHOST_DATA, "%s: used_event_idx=%d, old=%d, new=%d\n",
+			__func__,
+			vhost_used_event(vq),
+			old, new);
+		if (vhost_need_event(vhost_used_event(vq), new, old)
+			&& (vq->callfd >= 0)) {
+			vq->signalled_used = vq->last_used_idx;
+			eventfd_write(vq->callfd, (eventfd_t) 1);
+		}
+	} else {
+		/* Kick the guest if necessary. */
+		if (!(vq->avail->flags & VRING_AVAIL_F_NO_INTERRUPT)
+				&& (vq->callfd >= 0))
+			eventfd_write(vq->callfd, (eventfd_t)1);
+	}
 }
 
 #endif /* _VHOST_NET_CDEV_H_ */
