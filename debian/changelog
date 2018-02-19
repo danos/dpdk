@@ -6,6 +6,9 @@ dpdk (18.02-1~git1) UNRELEASED; urgency=medium
   * Drop testpmd-link-virtio.patch, not needed.
   * Refresh fix-vhost-user-socket-permission.patch to remove fuzz from
     18.02.
+  * Add packages for new libraries/PMDs: librte-bbdev18.02,
+    librte-rawdev18.02, librte-pmd-avf18.02,
+    librte-pmd-opdl-event18.02.
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 19 Feb 2018 11:31:42 +0000
 
