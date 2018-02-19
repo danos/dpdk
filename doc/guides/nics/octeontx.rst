@@ -1,32 +1,5 @@
-..  BSD LICENSE
-    Copyright (C) Cavium, Inc. 2017.
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions
-    are met:
-
-    * Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright
-    notice, this list of conditions and the following disclaimer in
-    the documentation and/or other materials provided with the
-    distribution.
-    * Neither the name of Cavium, Inc nor the names of its
-    contributors may be used to endorse or promote products derived
-    from this software without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-    A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-    OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-    LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+..  SPDX-License-Identifier: BSD-3-Clause
+    Copyright(c) 2017 Cavium, Inc
 
 OCTEONTX Poll Mode driver
 =========================
@@ -86,27 +59,6 @@ Please note that enabling debugging options may affect system performance.
 
   Toggle compilation of the ``librte_pmd_octeontx`` driver.
 
-- ``CONFIG_RTE_LIBRTE_OCTEONTX_DEBUG_DRIVER`` (default ``n``)
-
-  Toggle display of generic debugging messages
-
-- ``CONFIG_RTE_LIBRTE_OCTEONTX_DEBUG_INIT`` (default ``n``)
-
-  Toggle display of initialization related messages.
-
-- ``CONFIG_RTE_LIBRTE_OCTEONTX_DEBUG_RX`` (default ``n``)
-
-  Toggle display of receive path message
-
-- ``CONFIG_RTE_LIBRTE_OCTEONTX_DEBUG_TX`` (default ``n``)
-
-  Toggle display of transmit path message
-
-- ``CONFIG_RTE_LIBRTE_OCTEONTX_DEBUG_MBOX`` (default ``n``)
-
-  Toggle display of mbox related message
-
-
 Driver compilation and testing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -136,8 +88,8 @@ following ``make`` command:
                 --mbuf-pool-ops-name="octeontx_fpavf" \
                 --vdev='event_octeontx' \
                 --vdev='eth_octeontx,nr_port=2' \
-                -- --rxq=1 --txq=1 --nb-core=2 --total-num-mbufs=16384 \
-                --disable-hw-vlan-filter -i
+                -- --rxq=1 --txq=1 --nb-core=2 \
+                --total-num-mbufs=16384 -i
       .....
       EAL: Detected 24 lcore(s)
       EAL: Probing VFIO support...

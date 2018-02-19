@@ -1,39 +1,11 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2017 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2017 Intel Corporation
  */
 
 #include <stdint.h>
 
 #include <rte_errno.h>
+#include "rte_compat.h"
 #include "rte_ethdev.h"
 #include "rte_mtr_driver.h"
 #include "rte_mtr.h"
@@ -86,7 +58,7 @@ rte_mtr_ops_get(uint16_t port_id, struct rte_mtr_error *error)
 })
 
 /* MTR capabilities get */
-int
+int __rte_experimental
 rte_mtr_capabilities_get(uint16_t port_id,
 	struct rte_mtr_capabilities *cap,
 	struct rte_mtr_error *error)
@@ -97,7 +69,7 @@ rte_mtr_capabilities_get(uint16_t port_id,
 }
 
 /* MTR meter profile add */
-int
+int __rte_experimental
 rte_mtr_meter_profile_add(uint16_t port_id,
 	uint32_t meter_profile_id,
 	struct rte_mtr_meter_profile *profile,
@@ -109,7 +81,7 @@ rte_mtr_meter_profile_add(uint16_t port_id,
 }
 
 /** MTR meter profile delete */
-int
+int __rte_experimental
 rte_mtr_meter_profile_delete(uint16_t port_id,
 	uint32_t meter_profile_id,
 	struct rte_mtr_error *error)
@@ -120,7 +92,7 @@ rte_mtr_meter_profile_delete(uint16_t port_id,
 }
 
 /** MTR object create */
-int
+int __rte_experimental
 rte_mtr_create(uint16_t port_id,
 	uint32_t mtr_id,
 	struct rte_mtr_params *params,
@@ -133,7 +105,7 @@ rte_mtr_create(uint16_t port_id,
 }
 
 /** MTR object destroy */
-int
+int __rte_experimental
 rte_mtr_destroy(uint16_t port_id,
 	uint32_t mtr_id,
 	struct rte_mtr_error *error)
@@ -144,7 +116,7 @@ rte_mtr_destroy(uint16_t port_id,
 }
 
 /** MTR object meter enable */
-int
+int __rte_experimental
 rte_mtr_meter_enable(uint16_t port_id,
 	uint32_t mtr_id,
 	struct rte_mtr_error *error)
@@ -155,7 +127,7 @@ rte_mtr_meter_enable(uint16_t port_id,
 }
 
 /** MTR object meter disable */
-int
+int __rte_experimental
 rte_mtr_meter_disable(uint16_t port_id,
 	uint32_t mtr_id,
 	struct rte_mtr_error *error)
@@ -166,7 +138,7 @@ rte_mtr_meter_disable(uint16_t port_id,
 }
 
 /** MTR object meter profile update */
-int
+int __rte_experimental
 rte_mtr_meter_profile_update(uint16_t port_id,
 	uint32_t mtr_id,
 	uint32_t meter_profile_id,
@@ -178,7 +150,7 @@ rte_mtr_meter_profile_update(uint16_t port_id,
 }
 
 /** MTR object meter DSCP table update */
-int
+int __rte_experimental
 rte_mtr_meter_dscp_table_update(uint16_t port_id,
 	uint32_t mtr_id,
 	enum rte_mtr_color *dscp_table,
@@ -190,7 +162,7 @@ rte_mtr_meter_dscp_table_update(uint16_t port_id,
 }
 
 /** MTR object policer action update */
-int
+int __rte_experimental
 rte_mtr_policer_actions_update(uint16_t port_id,
 	uint32_t mtr_id,
 	uint32_t action_mask,
@@ -203,7 +175,7 @@ rte_mtr_policer_actions_update(uint16_t port_id,
 }
 
 /** MTR object enabled stats update */
-int
+int __rte_experimental
 rte_mtr_stats_update(uint16_t port_id,
 	uint32_t mtr_id,
 	uint64_t stats_mask,
@@ -215,7 +187,7 @@ rte_mtr_stats_update(uint16_t port_id,
 }
 
 /** MTR object stats read */
-int
+int __rte_experimental
 rte_mtr_stats_read(uint16_t port_id,
 	uint32_t mtr_id,
 	struct rte_mtr_stats *stats,

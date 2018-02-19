@@ -93,9 +93,11 @@ _LDLIBS-$(CONFIG_RTE_LIBRTE_KVARGS)         += -lrte_kvargs
 _LDLIBS-$(CONFIG_RTE_LIBRTE_MBUF)           += -lrte_mbuf
 _LDLIBS-$(CONFIG_RTE_LIBRTE_NET)            += -lrte_net
 _LDLIBS-$(CONFIG_RTE_LIBRTE_ETHER)          += -lrte_ethdev
+_LDLIBS-$(CONFIG_RTE_LIBRTE_BBDEV)          += -lrte_bbdev
 _LDLIBS-$(CONFIG_RTE_LIBRTE_CRYPTODEV)      += -lrte_cryptodev
 _LDLIBS-$(CONFIG_RTE_LIBRTE_SECURITY)       += -lrte_security
 _LDLIBS-$(CONFIG_RTE_LIBRTE_EVENTDEV)       += -lrte_eventdev
+_LDLIBS-$(CONFIG_RTE_LIBRTE_RAWDEV)         += -lrte_rawdev
 _LDLIBS-$(CONFIG_RTE_LIBRTE_MEMPOOL)        += -lrte_mempool
 _LDLIBS-$(CONFIG_RTE_DRIVER_MEMPOOL_RING)   += -lrte_mempool_ring
 _LDLIBS-$(CONFIG_RTE_LIBRTE_RING)           += -lrte_ring
@@ -119,6 +121,7 @@ _LDLIBS-$(CONFIG_RTE_DRIVER_MEMPOOL_STACK)  += -lrte_mempool_stack
 
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_AF_PACKET)  += -lrte_pmd_af_packet
 _LDLIBS-$(CONFIG_RTE_LIBRTE_ARK_PMD)        += -lrte_pmd_ark
+_LDLIBS-$(CONFIG_RTE_LIBRTE_AVF_PMD)        += -lrte_pmd_avf
 _LDLIBS-$(CONFIG_RTE_LIBRTE_AVP_PMD)        += -lrte_pmd_avp
 _LDLIBS-$(CONFIG_RTE_LIBRTE_BNX2X_PMD)      += -lrte_pmd_bnx2x -lz
 _LDLIBS-$(CONFIG_RTE_LIBRTE_BNXT_PMD)       += -lrte_pmd_bnxt
@@ -141,8 +144,16 @@ ifeq ($(CONFIG_RTE_LIBRTE_KNI),y)
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_KNI)        += -lrte_pmd_kni
 endif
 _LDLIBS-$(CONFIG_RTE_LIBRTE_LIO_PMD)        += -lrte_pmd_lio
+ifeq ($(CONFIG_RTE_LIBRTE_MLX4_DLOPEN_DEPS),y)
+_LDLIBS-$(CONFIG_RTE_LIBRTE_MLX4_PMD)       += -lrte_pmd_mlx4 -ldl
+else
 _LDLIBS-$(CONFIG_RTE_LIBRTE_MLX4_PMD)       += -lrte_pmd_mlx4 -libverbs -lmlx4
+endif
+ifeq ($(CONFIG_RTE_LIBRTE_MLX5_DLOPEN_DEPS),y)
+_LDLIBS-$(CONFIG_RTE_LIBRTE_MLX5_PMD)       += -lrte_pmd_mlx5 -ldl
+else
 _LDLIBS-$(CONFIG_RTE_LIBRTE_MLX5_PMD)       += -lrte_pmd_mlx5 -libverbs -lmlx5
+endif
 _LDLIBS-$(CONFIG_RTE_LIBRTE_MRVL_PMD)       += -lrte_pmd_mrvl -L$(LIBMUSDK_PATH)/lib -lmusdk
 _LDLIBS-$(CONFIG_RTE_LIBRTE_NFP_PMD)        += -lrte_pmd_nfp
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_NULL)       += -lrte_pmd_null
@@ -156,11 +167,24 @@ _LDLIBS-$(CONFIG_RTE_LIBRTE_SFC_EFX_PMD)    += -lrte_pmd_sfc_efx
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_SZEDATA2)   += -lrte_pmd_szedata2 -lsze2
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_TAP)        += -lrte_pmd_tap
 _LDLIBS-$(CONFIG_RTE_LIBRTE_THUNDERX_NICVF_PMD) += -lrte_pmd_thunderx_nicvf
+_LDLIBS-$(CONFIG_RTE_LIBRTE_VDEV_NETVSC_PMD) += -lrte_pmd_vdev_netvsc
 _LDLIBS-$(CONFIG_RTE_LIBRTE_VIRTIO_PMD)     += -lrte_pmd_virtio
 ifeq ($(CONFIG_RTE_LIBRTE_VHOST),y)
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_VHOST)      += -lrte_pmd_vhost
 endif # $(CONFIG_RTE_LIBRTE_VHOST)
 _LDLIBS-$(CONFIG_RTE_LIBRTE_VMXNET3_PMD)    += -lrte_pmd_vmxnet3_uio
+
+ifeq ($(CONFIG_RTE_LIBRTE_BBDEV),y)
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_BBDEV_NULL)     += -lrte_pmd_bbdev_null
+
+# TURBO SOFTWARE PMD is dependent on the FLEXRAN library
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_BBDEV_TURBO_SW) += -lrte_pmd_bbdev_turbo_sw
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_BBDEV_TURBO_SW) += -L$(FLEXRAN_SDK)/lib_crc -lcrc
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_BBDEV_TURBO_SW) += -L$(FLEXRAN_SDK)/lib_turbo -lturbo
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_BBDEV_TURBO_SW) += -L$(FLEXRAN_SDK)/lib_rate_matching -lrate_matching
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_BBDEV_TURBO_SW) += -L$(FLEXRAN_SDK)/lib_common -lcommon
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_BBDEV_TURBO_SW) += -lirc -limf -lstdc++ -lipps
+endif # CONFIG_RTE_LIBRTE_BBDEV
 
 ifeq ($(CONFIG_RTE_LIBRTE_CRYPTODEV),y)
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_AESNI_MB)    += -lrte_pmd_aesni_mb
@@ -197,10 +221,16 @@ ifeq ($(CONFIG_RTE_LIBRTE_EVENTDEV),y)
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_SKELETON_EVENTDEV) += -lrte_pmd_skeleton_event
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_SW_EVENTDEV) += -lrte_pmd_sw_event
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_OCTEONTX_SSOVF) += -lrte_pmd_octeontx_ssovf
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_DPAA_EVENTDEV) += -lrte_pmd_dpaa_event
 _LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_DPAA2_EVENTDEV) += -lrte_pmd_dpaa2_event
 _LDLIBS-$(CONFIG_RTE_LIBRTE_OCTEONTX_MEMPOOL) += -lrte_mempool_octeontx
 _LDLIBS-$(CONFIG_RTE_LIBRTE_OCTEONTX_PMD) += -lrte_pmd_octeontx
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_OPDL_EVENTDEV) += -lrte_pmd_opdl_event
 endif # CONFIG_RTE_LIBRTE_EVENTDEV
+
+ifeq ($(CONFIG_RTE_LIBRTE_RAWDEV),y)
+_LDLIBS-$(CONFIG_RTE_LIBRTE_PMD_SKELETON_RAWDEV) += -lrte_pmd_skeleton_rawdev
+endif # CONFIG_RTE_LIBRTE_RAWDEV
 
 ifeq ($(CONFIG_RTE_LIBRTE_DPAA2_PMD),y)
 _LDLIBS-$(CONFIG_RTE_LIBRTE_DPAA2_PMD)      += -lrte_bus_fslmc

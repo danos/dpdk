@@ -105,10 +105,12 @@ Limitations
 -----------
 
 - Inner RSS for VXLAN frames is not supported yet.
-- Port statistics through software counters only. Flow statistics are
-  supported by hardware counters.
 - Hardware checksum RX offloads for VXLAN inner header are not supported yet.
-- Forked secondary process not supported.
+- For secondary process:
+
+  - Forked secondary process not supported.
+  - All mempools must be initialized before rte_eth_dev_start().
+
 - Flow pattern without any specific vlan will match for vlan packets as well:
 
   When VLAN spec is not specified in the pattern, the matching rule will be created with VLAN as a wild card.
@@ -129,10 +131,21 @@ Limitations
 - A multi segment packet must have less than 6 segments in case the Tx burst function
   is set to multi-packet send or Enhanced multi-packet send. Otherwise it must have
   less than 50 segments.
-- Count action for RTE flow is only supported in Mellanox OFED 4.2.
+- Count action for RTE flow is **only supported in Mellanox OFED**.
 - Flows with a VXLAN Network Identifier equal (or ends to be equal)
   to 0 are not supported.
 - VXLAN TSO and checksum offloads are not supported on VM.
+
+Statistics
+----------
+
+MLX5 supports various of methods to report statistics:
+
+Port statistics can be queried using ``rte_eth_stats_get()``. The port statistics are through SW only and counts the number of packets received or sent successfully by the PMD.
+
+Extended statistics can be queried using ``rte_eth_xstats_get()``. The extended statistics expose a wider set of counters counted by the device. The extended port statistics counts the number of packets received or sent successfully by the port. As Mellanox NICs are using the :ref:`Bifurcated Linux Driver <linux_gsg_linux_drivers>` those counters counts also packet received or sent by the Linux kernel. The counters with ``_phy`` suffix counts the total events on the physical port, therefore not valid for VF.
+
+Finally per-flow statistics can by queried using ``rte_flow_query`` when attaching a count action for specific flow. The flow counter counts the number of packets received successfully by the port and match the specific flow.
 
 Configuration
 -------------
@@ -145,6 +158,24 @@ These options can be modified in the ``.config`` file.
 - ``CONFIG_RTE_LIBRTE_MLX5_PMD`` (default **n**)
 
   Toggle compilation of librte_pmd_mlx5 itself.
+
+- ``CONFIG_RTE_LIBRTE_MLX5_DLOPEN_DEPS`` (default **n**)
+
+  Build PMD with additional code to make it loadable without hard
+  dependencies on **libibverbs** nor **libmlx5**, which may not be installed
+  on the target system.
+
+  In this mode, their presence is still required for it to run properly,
+  however their absence won't prevent a DPDK application from starting (with
+  ``CONFIG_RTE_BUILD_SHARED_LIB`` disabled) and they won't show up as
+  missing with ``ldd(1)``.
+
+  It works by moving these dependencies to a purpose-built rdma-core "glue"
+  plug-in, which must either be installed in ``CONFIG_RTE_EAL_PMD_PATH`` if
+  set, or in a standard location for the dynamic linker (e.g. ``/lib``) if
+  left to the default empty string (``""``).
+
+  This option has no performance impact.
 
 - ``CONFIG_RTE_LIBRTE_MLX5_DEBUG`` (default **n**)
 
@@ -162,6 +193,15 @@ These options can be modified in the ``.config`` file.
 
 Environment variables
 ~~~~~~~~~~~~~~~~~~~~~
+
+- ``MLX5_GLUE_PATH``
+
+  A list of directories in which to search for the rdma-core "glue" plug-in,
+  separated by colons or semi-colons.
+
+  Only matters when compiled with ``CONFIG_RTE_LIBRTE_MLX5_DLOPEN_DEPS``
+  enabled and most useful when ``CONFIG_RTE_EAL_PMD_PATH`` is also set,
+  since ``LD_LIBRARY_PATH`` has no effect in this case.
 
 - ``MLX5_PMD_ENABLE_PADDING``
 
@@ -253,8 +293,9 @@ Run-time configuration
   Enhanced MPS supports hybrid mode - mixing inlined packets and pointers
   in the same descriptor.
 
-  This option cannot be used in conjunction with ``tso`` below. When ``tso``
-  is set, ``txq_mpw_en`` is disabled.
+  This option cannot be used with certain offloads such as ``DEV_TX_OFFLOAD_TCP_TSO,
+  DEV_TX_OFFLOAD_VXLAN_TNL_TSO, DEV_TX_OFFLOAD_GRE_TNL_TSO, DEV_TX_OFFLOAD_VLAN_INSERT``.
+  When those offloads are requested the MPS send function will not be used.
 
   It is currently only supported on the ConnectX-4 Lx and ConnectX-5
   families of adapters. Enabled by default.
@@ -275,16 +316,14 @@ Run-time configuration
 
   Effective only when Enhanced MPS is supported. The default value is 256.
 
-- ``tso`` parameter [int]
-
-  A nonzero value enables hardware TSO.
-  When hardware TSO is enabled, packets marked with TCP segmentation
-  offload will be divided into segments by the hardware. Disabled by default.
-
 - ``tx_vec_en`` parameter [int]
 
   A nonzero value enables Tx vector on ConnectX-5 only NIC if the number of
   global Tx queues on the port is lesser than MLX5_VPMD_MIN_TXQS.
+
+  This option cannot be used with certain offloads such as ``DEV_TX_OFFLOAD_TCP_TSO,
+  DEV_TX_OFFLOAD_VXLAN_TNL_TSO, DEV_TX_OFFLOAD_GRE_TNL_TSO, DEV_TX_OFFLOAD_VLAN_INSERT``.
+  When those offloads are requested the MPS send function will not be used.
 
   Enabled by default on ConnectX-5.
 
@@ -367,7 +406,7 @@ RMDA Core with Linux Kernel
 Mellanox OFED
 ^^^^^^^^^^^^^
 
-- Mellanox OFED version: **4.2**.
+- Mellanox OFED version: **4.2, 4.3**.
 - firmware version:
 
   - ConnectX-4: **12.21.1000** and above.

@@ -1,34 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2016 Intel Corporation
  */
 
 #include <linux/vhost.h>
@@ -71,7 +42,9 @@ __vhost_iova_to_vva(struct virtio_net *dev, struct vhost_virtqueue *vq,
 	if (tmp_size == size)
 		return vva;
 
-	if (!vhost_user_iotlb_pending_miss(vq, iova + tmp_size, perm)) {
+	iova += tmp_size;
+
+	if (!vhost_user_iotlb_pending_miss(vq, iova, perm)) {
 		/*
 		 * iotlb_lock is read-locked for a full burst,
 		 * but it only protects the iotlb cache.
@@ -81,8 +54,13 @@ __vhost_iova_to_vva(struct virtio_net *dev, struct vhost_virtqueue *vq,
 		 */
 		vhost_user_iotlb_rd_unlock(vq);
 
-		vhost_user_iotlb_pending_insert(vq, iova + tmp_size, perm);
-		vhost_user_iotlb_miss(dev, iova + tmp_size, perm);
+		vhost_user_iotlb_pending_insert(vq, iova, perm);
+		if (vhost_user_iotlb_miss(dev, iova, perm)) {
+			RTE_LOG(ERR, VHOST_CONFIG,
+				"IOTLB miss req failed for IOVA 0x%" PRIx64 "\n",
+				iova);
+			vhost_user_iotlb_pending_remove(vq, iova, 1, perm);
+		}
 
 		vhost_user_iotlb_rd_lock(vq);
 	}
@@ -103,7 +81,7 @@ get_device(int vid)
 	return dev;
 }
 
-static void
+void
 cleanup_vq(struct vhost_virtqueue *vq, int destroy)
 {
 	if ((vq->callfd >= 0) && (destroy != 0))
@@ -127,6 +105,15 @@ cleanup_device(struct virtio_net *dev, int destroy)
 		cleanup_vq(dev->virtqueue[i], destroy);
 }
 
+void
+free_vq(struct vhost_virtqueue *vq)
+{
+	rte_free(vq->shadow_used_ring);
+	rte_free(vq->batch_copy_elems);
+	rte_mempool_free(vq->iotlb_pool);
+	rte_free(vq);
+}
+
 /*
  * Release virtqueues and device memory.
  */
@@ -134,16 +121,9 @@ static void
 free_device(struct virtio_net *dev)
 {
 	uint32_t i;
-	struct vhost_virtqueue *vq;
 
-	for (i = 0; i < dev->nr_vring; i++) {
-		vq = dev->virtqueue[i];
-
-		rte_free(vq->shadow_used_ring);
-		rte_free(vq->batch_copy_elems);
-		rte_mempool_free(vq->iotlb_pool);
-		rte_free(vq);
-	}
+	for (i = 0; i < dev->nr_vring; i++)
+		free_vq(dev->virtqueue[i]);
 
 	rte_free(dev);
 }
@@ -259,6 +239,7 @@ alloc_vring_queue(struct virtio_net *dev, uint32_t vring_idx)
 
 	dev->virtqueue[vring_idx] = vq;
 	init_vring_queue(dev, vring_idx);
+	rte_spinlock_init(&vq->access_lock);
 
 	dev->nr_vring += 1;
 
@@ -277,7 +258,7 @@ reset_device(struct virtio_net *dev)
 
 	dev->features = 0;
 	dev->protocol_features = 0;
-	dev->flags = 0;
+	dev->flags &= VIRTIO_DEV_BUILTIN_VIRTIO_NET;
 
 	for (i = 0; i < dev->nr_vring; i++)
 		reset_vring_queue(dev, i);
@@ -313,6 +294,7 @@ vhost_new_device(void)
 
 	vhost_devices[i] = dev;
 	dev->vid = i;
+	dev->flags = VIRTIO_DEV_BUILTIN_VIRTIO_NET;
 	dev->slave_req_fd = -1;
 
 	return i;
@@ -367,6 +349,20 @@ vhost_enable_dequeue_zero_copy(int vid)
 		return;
 
 	dev->dequeue_zero_copy = 1;
+}
+
+void
+vhost_set_builtin_virtio_net(int vid, bool enable)
+{
+	struct virtio_net *dev = get_device(vid);
+
+	if (dev == NULL)
+		return;
+
+	if (enable)
+		dev->flags |= VIRTIO_DEV_BUILTIN_VIRTIO_NET;
+	else
+		dev->flags &= ~VIRTIO_DEV_BUILTIN_VIRTIO_NET;
 }
 
 int
@@ -516,6 +512,27 @@ rte_vhost_get_vhost_vring(int vid, uint16_t vring_idx,
 	vring->kickfd  = vq->kickfd;
 	vring->size    = vq->size;
 
+	return 0;
+}
+
+int
+rte_vhost_vring_call(int vid, uint16_t vring_idx)
+{
+	struct virtio_net *dev;
+	struct vhost_virtqueue *vq;
+
+	dev = get_device(vid);
+	if (!dev)
+		return -1;
+
+	if (vring_idx >= VHOST_MAX_VRING)
+		return -1;
+
+	vq = dev->virtqueue[vring_idx];
+	if (!vq)
+		return -1;
+
+	vhost_vring_call(dev, vq);
 	return 0;
 }
 

@@ -64,7 +64,7 @@
 #define QEDE_CEIL_TO_CACHE_LINE_SIZE(n) (((n) + (QEDE_FW_RX_ALIGN_END - 1)) & \
 					~(QEDE_FW_RX_ALIGN_END - 1))
 /* Note: QEDE_LLC_SNAP_HDR_LEN is optional */
-#define QEDE_ETH_OVERHEAD	((ETHER_HDR_LEN) + ((2 * QEDE_VLAN_TAG_SIZE)) \
+#define QEDE_ETH_OVERHEAD	(((2 * QEDE_VLAN_TAG_SIZE)) - (ETHER_CRC_LEN) \
 				+ (QEDE_LLC_SNAP_HDR_LEN))
 
 #define QEDE_RSS_OFFLOAD_ALL    (ETH_RSS_IPV4			|\
@@ -73,7 +73,8 @@
 				 ETH_RSS_IPV6			|\
 				 ETH_RSS_NONFRAG_IPV6_TCP	|\
 				 ETH_RSS_NONFRAG_IPV6_UDP	|\
-				 ETH_RSS_VXLAN)
+				 ETH_RSS_VXLAN			|\
+				 ETH_RSS_GENEVE)
 
 #define QEDE_TXQ_FLAGS		((uint32_t)ETH_TXQ_FLAGS_NOMULTSEGS)
 
@@ -151,6 +152,7 @@
 			      PKT_TX_QINQ_PKT           | \
 			      PKT_TX_VLAN_PKT		| \
 			      PKT_TX_TUNNEL_VXLAN	| \
+			      PKT_TX_TUNNEL_GENEVE	| \
 			      PKT_TX_TUNNEL_MPLSINUDP)
 
 #define QEDE_TX_OFFLOAD_NOTSUP_MASK \

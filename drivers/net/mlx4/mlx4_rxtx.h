@@ -1,34 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2017 6WIND S.A.
- *   Copyright 2017 Mellanox
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of 6WIND S.A. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2017 6WIND S.A.
+ * Copyright 2017 Mellanox
  */
 
 #ifndef MLX4_RXTX_H_
@@ -47,7 +19,7 @@
 #pragma GCC diagnostic error "-Wpedantic"
 #endif
 
-#include <rte_ethdev.h>
+#include <rte_ethdev_driver.h>
 #include <rte_mbuf.h>
 #include <rte_mempool.h>
 
@@ -105,6 +77,10 @@ struct mlx4_rss {
 /** Tx element. */
 struct txq_elt {
 	struct rte_mbuf *buf; /**< Buffer. */
+	union {
+		volatile struct mlx4_wqe_ctrl_seg *wqe; /**< SQ WQE. */
+		volatile uint32_t *eocb; /**< End of completion burst. */
+	};
 };
 
 /** Rx queue counters. */
@@ -121,7 +97,6 @@ struct txq {
 	struct mlx4_cq mcq; /**< Info for directly manipulating the CQ. */
 	unsigned int elts_head; /**< Current index in (*elts)[]. */
 	unsigned int elts_tail; /**< First element awaiting completion. */
-	unsigned int elts_comp; /**< Number of packets awaiting completion. */
 	int elts_comp_cd; /**< Countdown for next completion. */
 	unsigned int elts_comp_cd_init; /**< Initial value for countdown. */
 	unsigned int elts_n; /**< (*elts)[] length. */
@@ -158,6 +133,8 @@ int mlx4_rss_attach(struct mlx4_rss *rss);
 void mlx4_rss_detach(struct mlx4_rss *rss);
 int mlx4_rxq_attach(struct rxq *rxq);
 void mlx4_rxq_detach(struct rxq *rxq);
+uint64_t mlx4_get_rx_port_offloads(struct priv *priv);
+uint64_t mlx4_get_rx_queue_offloads(struct priv *priv);
 int mlx4_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx,
 			uint16_t desc, unsigned int socket,
 			const struct rte_eth_rxconf *conf,
@@ -177,6 +154,7 @@ uint16_t mlx4_rx_burst_removed(void *dpdk_rxq, struct rte_mbuf **pkts,
 
 /* mlx4_txq.c */
 
+uint64_t mlx4_get_tx_port_offloads(struct priv *priv);
 int mlx4_tx_queue_setup(struct rte_eth_dev *dev, uint16_t idx,
 			uint16_t desc, unsigned int socket,
 			const struct rte_eth_txconf *conf);

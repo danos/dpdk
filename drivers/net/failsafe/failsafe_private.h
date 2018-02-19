@@ -1,53 +1,29 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2017 6WIND S.A.
- *   Copyright 2017 Mellanox.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of 6WIND S.A. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2017 6WIND S.A.
+ * Copyright 2017 Mellanox.
  */
 
 #ifndef _RTE_ETH_FAILSAFE_PRIVATE_H_
 #define _RTE_ETH_FAILSAFE_PRIVATE_H_
 
 #include <sys/queue.h>
+#include <pthread.h>
 
 #include <rte_atomic.h>
 #include <rte_dev.h>
-#include <rte_ethdev.h>
+#include <rte_ethdev_driver.h>
 #include <rte_devargs.h>
+#include <rte_interrupts.h>
 
 #define FAILSAFE_DRIVER_NAME "Fail-safe PMD"
+#define FAILSAFE_OWNER_NAME "Fail-safe"
 
 #define PMD_FAILSAFE_MAC_KVARG "mac"
 #define PMD_FAILSAFE_HOTPLUG_POLL_KVARG "hotplug_poll"
 #define PMD_FAILSAFE_PARAM_STRING	\
 	"dev(<ifc>),"			\
 	"exec(<shell command>),"	\
+	"fd(<fd number>),"		\
 	"mac=mac_addr,"			\
 	"hotplug_poll=u64"		\
 	""
@@ -57,14 +33,37 @@
 #define FAILSAFE_MAX_ETHPORTS 2
 #define FAILSAFE_MAX_ETHADDR 128
 
+#define DEVARGS_MAXLEN 4096
+
+enum rxp_service_state {
+	SS_NO_SERVICE = 0,
+	SS_REGISTERED,
+	SS_READY,
+	SS_RUNNING,
+};
+
 /* TYPES */
+
+struct rx_proxy {
+	/* epoll file descriptor */
+	int efd;
+	/* event vector to be used by epoll */
+	struct rte_epoll_event *evec;
+	/* rte service id */
+	uint32_t sid;
+	/* service core id */
+	uint32_t scid;
+	enum rxp_service_state sstate;
+};
 
 struct rxq {
 	struct fs_priv *priv;
 	uint16_t qid;
-	/* id of last sub_device polled */
-	uint8_t last_polled;
+	/* next sub_device to poll */
+	struct sub_device *sdev;
 	unsigned int socket_id;
+	int event_fd;
+	unsigned int enable_events:1;
 	struct rte_eth_rxq_info info;
 	rte_atomic64_t refcnt[];
 };
@@ -100,6 +99,7 @@ struct fs_stats {
 
 struct sub_device {
 	/* Exhaustive DPDK device description */
+	struct sub_device *next;
 	struct rte_devargs devargs;
 	struct rte_bus *bus;
 	struct rte_device *dev;
@@ -111,6 +111,8 @@ struct sub_device {
 	struct fs_stats stats_snapshot;
 	/* Some device are defined as a command line */
 	char *cmdline;
+	/* Others are retrieved through a file descriptor */
+	char *fd_str;
 	/* fail-safe device backreference */
 	struct rte_eth_dev *fs_dev;
 	/* flag calling for recollection */
@@ -139,6 +141,8 @@ struct fs_priv {
 	uint32_t mac_addr_pool[FAILSAFE_MAX_ETHADDR];
 	/* current capabilities */
 	struct rte_eth_dev_info infos;
+	struct rte_eth_dev_owner my_owner; /* Unique owner. */
+	struct rte_intr_handle intr_handle; /* Port interrupt handle. */
 	/*
 	 * Fail-safe state machine.
 	 * This level will be tracking state of the EAL and eth
@@ -148,10 +152,30 @@ struct fs_priv {
 	 */
 	enum dev_state state;
 	struct rte_eth_stats stats_accumulator;
+	/*
+	 * Rx interrupts/events proxy.
+	 * The PMD issues Rx events to the EAL on behalf of its subdevices,
+	 * it does that by registering an event-fd for each of its queues with
+	 * the EAL. A PMD service thread listens to all the Rx events from the
+	 * subdevices, when an Rx event is issued by a subdevice it will be
+	 * caught by this service with will trigger an Rx event in the
+	 * appropriate failsafe Rx queue.
+	 */
+	struct rx_proxy rxp;
+	pthread_mutex_t hotplug_mutex;
+	/* Hot-plug mutex is locked by the alarm mechanism. */
+	volatile unsigned int alarm_lock:1;
 	unsigned int pending_alarm:1; /* An alarm is pending */
 	/* flow isolation state */
 	int flow_isolated:1;
 };
+
+/* FAILSAFE_INTR */
+
+int failsafe_rx_intr_install(struct rte_eth_dev *dev);
+void failsafe_rx_intr_uninstall(struct rte_eth_dev *dev);
+int failsafe_rx_intr_install_subdevice(struct sub_device *sdev);
+void failsafe_rx_intr_uninstall_subdevice(struct sub_device *sdev);
 
 /* MISC */
 
@@ -269,13 +293,13 @@ extern int mac_from_arg;
  * a: (rte_atomic64_t)
  */
 #define FS_ATOMIC_P(a) \
-	rte_atomic64_add(&(a), 1)
+	rte_atomic64_set(&(a), 1)
 
 /**
  * a: (rte_atomic64_t)
  */
 #define FS_ATOMIC_V(a) \
-	rte_atomic64_sub(&(a), 1)
+	rte_atomic64_set(&(a), 0)
 
 /**
  * s: (struct sub_device *)
@@ -293,6 +317,14 @@ extern int mac_from_arg;
 	rte_atomic64_read( \
 	 &((struct txq *)((s)->fs_dev->data->tx_queues[i]))->refcnt[(s)->sid] \
 	)
+
+#ifdef RTE_EXEC_ENV_BSDAPP
+#define FS_THREADID_TYPE void*
+#define FS_THREADID_FMT  "p"
+#else
+#define FS_THREADID_TYPE unsigned long
+#define FS_THREADID_FMT  "lu"
+#endif
 
 #define LOG__(level, m, ...) \
 	RTE_LOG(level, PMD, "net_failsafe: " m "%c", __VA_ARGS__)
@@ -324,6 +356,59 @@ fs_find_next(struct rte_eth_dev *dev,
 	if (sid >= tail)
 		return NULL;
 	return &subs[sid];
+}
+
+/*
+ * Lock hot-plug mutex.
+ * is_alarm means that the caller is, for sure, the hot-plug alarm mechanism.
+ */
+static inline int
+fs_lock(struct rte_eth_dev *dev, unsigned int is_alarm)
+{
+	int ret;
+
+	if (is_alarm) {
+		ret = pthread_mutex_trylock(&PRIV(dev)->hotplug_mutex);
+		if (ret) {
+			DEBUG("Hot-plug mutex lock trying failed(%s), will try"
+			      " again later...", strerror(ret));
+			return ret;
+		}
+		PRIV(dev)->alarm_lock = 1;
+	} else {
+		ret = pthread_mutex_lock(&PRIV(dev)->hotplug_mutex);
+		if (ret) {
+			ERROR("Cannot lock mutex(%s)", strerror(ret));
+			return ret;
+		}
+	}
+	DEBUG("Hot-plug mutex was locked by thread %" FS_THREADID_FMT "%s",
+	      (FS_THREADID_TYPE)pthread_self(),
+	      PRIV(dev)->alarm_lock ? " by the hot-plug alarm" : "");
+	return ret;
+}
+
+/*
+ * Unlock hot-plug mutex.
+ * is_alarm means that the caller is, for sure, the hot-plug alarm mechanism.
+ */
+static inline void
+fs_unlock(struct rte_eth_dev *dev, unsigned int is_alarm)
+{
+	int ret;
+	unsigned int prev_alarm_lock = PRIV(dev)->alarm_lock;
+
+	if (is_alarm) {
+		RTE_ASSERT(PRIV(dev)->alarm_lock == 1);
+		PRIV(dev)->alarm_lock = 0;
+	}
+	ret = pthread_mutex_unlock(&PRIV(dev)->hotplug_mutex);
+	if (ret)
+		ERROR("Cannot unlock hot-plug mutex(%s)", strerror(ret));
+	else
+		DEBUG("Hot-plug mutex was unlocked by thread %" FS_THREADID_FMT "%s",
+		      (FS_THREADID_TYPE)pthread_self(),
+		      prev_alarm_lock ? " by the hot-plug alarm" : "");
 }
 
 /*
@@ -375,4 +460,15 @@ fs_switch_dev(struct rte_eth_dev *dev,
 	rte_wmb();
 }
 
+/*
+ * Adjust error value and rte_errno to the fail-safe actual error value.
+ */
+static inline int
+fs_err(struct sub_device *sdev, int err)
+{
+	/* A device removal shouldn't be reported as an error. */
+	if (sdev->remove == 1 || err == -EIO)
+		return rte_errno = 0;
+	return err;
+}
 #endif /* _RTE_ETH_FAILSAFE_PRIVATE_H_ */

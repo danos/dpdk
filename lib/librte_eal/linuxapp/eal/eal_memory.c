@@ -1,35 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *   Copyright(c) 2013 6WIND.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2014 Intel Corporation.
+ * Copyright(c) 2013 6WIND S.A.
  */
 
 #define _FILE_OFFSET_BITS 64
@@ -261,16 +232,21 @@ static void *
 get_virtual_area(size_t *size, size_t hugepage_sz)
 {
 	void *addr;
+	void *addr_hint;
 	int fd;
 	long aligned_addr;
 
 	if (internal_config.base_virtaddr != 0) {
-		addr = (void*) (uintptr_t) (internal_config.base_virtaddr +
-				baseaddr_offset);
+		int page_size = sysconf(_SC_PAGE_SIZE);
+		addr_hint = (void *) (uintptr_t)
+			(internal_config.base_virtaddr + baseaddr_offset);
+		addr_hint = RTE_PTR_ALIGN_FLOOR(addr_hint, page_size);
+	} else {
+		addr_hint = NULL;
 	}
-	else addr = NULL;
 
 	RTE_LOG(DEBUG, EAL, "Ask a virtual area of 0x%zx bytes\n", *size);
+
 
 	fd = open("/dev/zero", O_RDONLY);
 	if (fd < 0){
@@ -278,16 +254,22 @@ get_virtual_area(size_t *size, size_t hugepage_sz)
 		return NULL;
 	}
 	do {
-		addr = mmap(addr,
-				(*size) + hugepage_sz, PROT_READ,
+		addr = mmap(addr_hint, (*size) + hugepage_sz, PROT_READ,
 #ifdef RTE_ARCH_PPC_64
 				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
 #else
 				MAP_PRIVATE,
 #endif
 				fd, 0);
-		if (addr == MAP_FAILED)
+		if (addr == MAP_FAILED) {
 			*size -= hugepage_sz;
+		} else if (addr_hint != NULL && addr != addr_hint) {
+			RTE_LOG(WARNING, EAL, "WARNING! Base virtual address "
+				"hint (%p != %p) not respected!\n",
+				addr_hint, addr);
+			RTE_LOG(WARNING, EAL, "   This may cause issues with "
+				"mapping memory into secondary processes\n");
+		}
 	} while (addr == MAP_FAILED && *size > 0);
 
 	if (addr == MAP_FAILED) {

@@ -1,34 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2014 Intel Corporation
  */
 
 #include <rte_byteorder.h>
@@ -81,6 +52,14 @@ uint64_t pipeline_test_hash(void *key,
 	uint64_t signature = ip_dst;
 
 	return signature;
+}
+
+static void
+app_free_resources(void) {
+	int i;
+	for (i = 0; i < N_PORTS; i++)
+		rte_ring_free(rings_rx[i]);
+	rte_mempool_free(pool);
 }
 
 static void
@@ -142,18 +121,20 @@ app_init_rings(void)
 static int
 test_table(void)
 {
-	int status, failures;
+	int status, ret;
 	unsigned i;
 
-	failures = 0;
+	ret = TEST_SUCCESS;
 
 	app_init_rings();
 	app_init_mbuf_pools();
 
 	printf("\n\n\n\n************Pipeline tests************\n");
 
-	if (test_table_pipeline() < 0)
-		return -1;
+	if (test_table_pipeline() < 0) {
+		ret = TEST_FAILED;
+		goto end;
+	}
 
 	printf("\n\n\n\n************Port tests************\n");
 	for (i = 0; i < n_port_tests; i++) {
@@ -161,8 +142,8 @@ test_table(void)
 		if (status < 0) {
 			printf("\nPort test number %d failed (%d).\n", i,
 				status);
-			failures++;
-			return -1;
+			ret = TEST_FAILED;
+			goto end;
 		}
 	}
 
@@ -172,8 +153,8 @@ test_table(void)
 		if (status < 0) {
 			printf("\nTable test number %d failed (%d).\n", i,
 				status);
-			failures++;
-			return -1;
+			ret = TEST_FAILED;
+			goto end;
 		}
 	}
 
@@ -183,21 +164,23 @@ test_table(void)
 		if (status < 0) {
 			printf("\nCombined table test number %d failed with "
 				"reason number %d.\n", i, status);
-			failures++;
-			return -1;
+			ret = TEST_FAILED;
+			goto end;
 		}
 	}
 
-	if (failures)
-		return -1;
-
 #ifdef RTE_LIBRTE_ACL
 	printf("\n\n\n\n************ACL tests************\n");
-	if (test_table_acl() < 0)
-		return -1;
+	if (test_table_acl() < 0) {
+		ret = TEST_FAILED;
+		goto end;
+	}
 #endif
 
-	return 0;
+end:
+	app_free_resources();
+
+	return ret;
 }
 
 REGISTER_TEST_COMMAND(table_autotest, test_table);
