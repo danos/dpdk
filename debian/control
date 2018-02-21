@@ -14,6 +14,7 @@ Build-Depends: debhelper (>= 9),
                libcap-dev,
                libpcap-dev,
                libnuma-dev,
+               libssl-dev,
                python3,
                python3-sphinx <!nodoc>,
                python3-sphinx-rtd-theme <!nodoc>,
@@ -641,6 +642,19 @@ Description: Data Plane Development Kit (librte-pmd-pcap runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pmd_pcap.
+
+Package: librte-pmd-openssl18.02
+Architecture: amd64 arm64 i386 ppc64el
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/cryptodevs/openssl.html
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-pmd-openssl runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_openssl.
 
 Package: librte-pmd-ring18.02
 Architecture: amd64 arm64 i386 ppc64el
