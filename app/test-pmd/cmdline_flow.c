@@ -1,34 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2016 6WIND S.A.
- *   Copyright 2016 Mellanox.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of 6WIND S.A. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2016 6WIND S.A.
+ * Copyright 2016 Mellanox.
  */
 
 #include <stddef.h>
@@ -175,6 +147,9 @@ enum index {
 	ITEM_GTP_TEID,
 	ITEM_GTPC,
 	ITEM_GTPU,
+	ITEM_GENEVE,
+	ITEM_GENEVE_VNI,
+	ITEM_GENEVE_PROTO,
 
 	/* Validate/create actions. */
 	ACTIONS,
@@ -460,6 +435,7 @@ static const enum index next_item[] = {
 	ITEM_GTP,
 	ITEM_GTPC,
 	ITEM_GTPU,
+	ITEM_GENEVE,
 	ZERO,
 };
 
@@ -599,6 +575,13 @@ static const enum index item_gre[] = {
 
 static const enum index item_gtp[] = {
 	ITEM_GTP_TEID,
+	ITEM_NEXT,
+	ZERO,
+};
+
+static const enum index item_geneve[] = {
+	ITEM_GENEVE_VNI,
+	ITEM_GENEVE_PROTO,
 	ITEM_NEXT,
 	ZERO,
 };
@@ -1469,6 +1452,26 @@ static const struct token token_list[] = {
 		.priv = PRIV_ITEM(GTPU, sizeof(struct rte_flow_item_gtp)),
 		.next = NEXT(item_gtp),
 		.call = parse_vc,
+	},
+	[ITEM_GENEVE] = {
+		.name = "geneve",
+		.help = "match GENEVE header",
+		.priv = PRIV_ITEM(GENEVE, sizeof(struct rte_flow_item_geneve)),
+		.next = NEXT(item_geneve),
+		.call = parse_vc,
+	},
+	[ITEM_GENEVE_VNI] = {
+		.name = "vni",
+		.help = "virtual network identifier",
+		.next = NEXT(item_geneve, NEXT_ENTRY(UNSIGNED), item_param),
+		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_geneve, vni)),
+	},
+	[ITEM_GENEVE_PROTO] = {
+		.name = "protocol",
+		.help = "GENEVE protocol type",
+		.next = NEXT(item_geneve, NEXT_ENTRY(UNSIGNED), item_param),
+		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_geneve,
+					     protocol)),
 	},
 
 	/* Validate/create actions. */

@@ -1,3 +1,19 @@
+dpdk (18.02-1) UNRELEASED; urgency=medium
+
+  * New upstream release 18.02; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_02.html
+  * Bump ABI version of packages from 17.11 to 18.02.
+  * Drop testpmd-link-virtio.patch, not needed.
+  * Refresh fix-vhost-user-socket-permission.patch to remove fuzz from
+    18.02.
+  * Add packages for new libraries/PMDs: librte-bbdev18.02,
+    librte-rawdev18.02, librte-pmd-avf18.02,
+    librte-pmd-opdl-event18.02.
+  * Add package and build-dependency for OpenSSL PMD:
+    librte-pmd-openssl18.02. (Closes: #886150)
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 19 Feb 2018 11:31:42 +0000
+
 dpdk (17.11-5) unstable; urgency=medium
 
   * Bump Standards-Version to 4.1.1, no changes.

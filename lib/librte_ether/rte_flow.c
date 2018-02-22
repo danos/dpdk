@@ -1,34 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2016 6WIND S.A.
- *   Copyright 2016 Mellanox.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of 6WIND S.A. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2016 6WIND S.A.
+ * Copyright 2016 Mellanox.
  */
 
 #include <errno.h>
@@ -81,6 +53,7 @@ static const struct rte_flow_desc_data rte_flow_desc_item[] = {
 	MK_FLOW_ITEM(GRE, sizeof(struct rte_flow_item_gre)),
 	MK_FLOW_ITEM(E_TAG, sizeof(struct rte_flow_item_e_tag)),
 	MK_FLOW_ITEM(NVGRE, sizeof(struct rte_flow_item_nvgre)),
+	MK_FLOW_ITEM(GENEVE, sizeof(struct rte_flow_item_geneve)),
 };
 
 /** Generate flow_action[] entry. */
@@ -105,6 +78,18 @@ static const struct rte_flow_desc_data rte_flow_desc_action[] = {
 	MK_FLOW_ACTION(PF, 0),
 	MK_FLOW_ACTION(VF, sizeof(struct rte_flow_action_vf)),
 };
+
+static int
+flow_err(uint16_t port_id, int ret, struct rte_flow_error *error)
+{
+	if (ret == 0)
+		return 0;
+	if (rte_eth_dev_is_removed(port_id))
+		return rte_flow_error_set(error, EIO,
+					  RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
+					  NULL, rte_strerror(EIO));
+	return ret;
+}
 
 /* Get generic flow operations structure from a port. */
 const struct rte_flow_ops *
@@ -144,7 +129,8 @@ rte_flow_validate(uint16_t port_id,
 	if (unlikely(!ops))
 		return -rte_errno;
 	if (likely(!!ops->validate))
-		return ops->validate(dev, attr, pattern, actions, error);
+		return flow_err(port_id, ops->validate(dev, attr, pattern,
+						       actions, error), error);
 	return rte_flow_error_set(error, ENOSYS,
 				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
 				  NULL, rte_strerror(ENOSYS));
@@ -159,12 +145,17 @@ rte_flow_create(uint16_t port_id,
 		struct rte_flow_error *error)
 {
 	struct rte_eth_dev *dev = &rte_eth_devices[port_id];
+	struct rte_flow *flow;
 	const struct rte_flow_ops *ops = rte_flow_ops_get(port_id, error);
 
 	if (unlikely(!ops))
 		return NULL;
-	if (likely(!!ops->create))
-		return ops->create(dev, attr, pattern, actions, error);
+	if (likely(!!ops->create)) {
+		flow = ops->create(dev, attr, pattern, actions, error);
+		if (flow == NULL)
+			flow_err(port_id, -rte_errno, error);
+		return flow;
+	}
 	rte_flow_error_set(error, ENOSYS, RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
 			   NULL, rte_strerror(ENOSYS));
 	return NULL;
@@ -182,7 +173,8 @@ rte_flow_destroy(uint16_t port_id,
 	if (unlikely(!ops))
 		return -rte_errno;
 	if (likely(!!ops->destroy))
-		return ops->destroy(dev, flow, error);
+		return flow_err(port_id, ops->destroy(dev, flow, error),
+				error);
 	return rte_flow_error_set(error, ENOSYS,
 				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
 				  NULL, rte_strerror(ENOSYS));
@@ -199,7 +191,7 @@ rte_flow_flush(uint16_t port_id,
 	if (unlikely(!ops))
 		return -rte_errno;
 	if (likely(!!ops->flush))
-		return ops->flush(dev, error);
+		return flow_err(port_id, ops->flush(dev, error), error);
 	return rte_flow_error_set(error, ENOSYS,
 				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
 				  NULL, rte_strerror(ENOSYS));
@@ -219,7 +211,8 @@ rte_flow_query(uint16_t port_id,
 	if (!ops)
 		return -rte_errno;
 	if (likely(!!ops->query))
-		return ops->query(dev, flow, action, data, error);
+		return flow_err(port_id, ops->query(dev, flow, action, data,
+						    error), error);
 	return rte_flow_error_set(error, ENOSYS,
 				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
 				  NULL, rte_strerror(ENOSYS));
@@ -237,7 +230,7 @@ rte_flow_isolate(uint16_t port_id,
 	if (!ops)
 		return -rte_errno;
 	if (likely(!!ops->isolate))
-		return ops->isolate(dev, set, error);
+		return flow_err(port_id, ops->isolate(dev, set, error), error);
 	return rte_flow_error_set(error, ENOSYS,
 				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
 				  NULL, rte_strerror(ENOSYS));

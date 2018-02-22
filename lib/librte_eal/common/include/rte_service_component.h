@@ -1,33 +1,5 @@
-/*
- *   BSD LICENSE
- *
- *   Copyright(c) 2017 Intel Corporation. All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2017 Intel Corporation
  */
 
 #ifndef _RTE_SERVICE_PRIVATE_H_
@@ -37,7 +9,7 @@
  * Include this file if you are writing a component that requires CPU cycles to
  * operate, and you wish to run the component using service cores
  */
-
+#include <rte_compat.h>
 #include <rte_service.h>
 
 /**
@@ -101,8 +73,9 @@ struct rte_service_spec {
  *         -EINVAL Attempted to register an invalid service (eg, no callback
  *         set)
  */
-int32_t rte_service_component_register(const struct rte_service_spec *spec,
-				       uint32_t *service_id);
+int32_t __rte_experimental
+rte_service_component_register(const struct rte_service_spec *spec,
+			       uint32_t *service_id);
 
 /**
  * @warning
@@ -116,7 +89,7 @@ int32_t rte_service_component_register(const struct rte_service_spec *spec,
  * @retval -EBUSY The service is currently running, stop the service before
  *          calling unregister. No action has been taken.
  */
-int32_t rte_service_component_unregister(uint32_t id);
+int32_t __rte_experimental rte_service_component_unregister(uint32_t id);
 
 /**
  * @warning
@@ -134,7 +107,7 @@ int32_t rte_service_component_unregister(uint32_t id);
  * @retval -ENODEV Error in enabling service lcore on a service
  * @retval -ENOEXEC Error when starting services
  */
-int32_t rte_service_start_with_defaults(void);
+int32_t __rte_experimental rte_service_start_with_defaults(void);
 
 /**
  * @warning
@@ -151,7 +124,8 @@ int32_t rte_service_start_with_defaults(void);
  *
  * @retval 0 Success
  */
-int32_t rte_service_component_runstate_set(uint32_t id, uint32_t runstate);
+int32_t __rte_experimental rte_service_component_runstate_set(uint32_t id,
+							  uint32_t runstate);
 
 /**
  * @warning
@@ -166,5 +140,16 @@ int32_t rte_service_component_runstate_set(uint32_t id, uint32_t runstate);
  * @retval -EALREADY Service library is already initialized
  */
 int32_t rte_service_init(void);
+
+/**
+ * @warning
+ * @b EXPERIMENTAL: this API may change without prior notice
+ *
+ * @internal Free up the memory that has been initialized.
+ * This routine is to be invoked prior to process termination.
+ *
+ * @retval None
+ */
+void __rte_experimental rte_service_finalize(void);
 
 #endif /* _RTE_SERVICE_PRIVATE_H_ */

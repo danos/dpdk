@@ -42,10 +42,12 @@ The public API headers are grouped by topics:
   [rte_flow]           (@ref rte_flow.h),
   [rte_tm]             (@ref rte_tm.h),
   [rte_mtr]            (@ref rte_mtr.h),
+  [bbdev]              (@ref rte_bbdev.h),
   [cryptodev]          (@ref rte_cryptodev.h),
   [security]           (@ref rte_security.h),
   [eventdev]           (@ref rte_eventdev.h),
   [event_eth_rx_adapter]   (@ref rte_event_eth_rx_adapter.h),
+  [rawdev]             (@ref rte_rawdev.h),
   [metrics]            (@ref rte_metrics.h),
   [bitrate]            (@ref rte_bitrate.h),
   [latency]            (@ref rte_latencystats.h),
@@ -60,6 +62,7 @@ The public API headers are grouped by topics:
   [ixgbe]              (@ref rte_pmd_ixgbe.h),
   [i40e]               (@ref rte_pmd_i40e.h),
   [bnxt]               (@ref rte_pmd_bnxt.h),
+  [dpaa]               (@ref rte_pmd_dpaa.h),
   [crypto_scheduler]   (@ref rte_cryptodev_scheduler.h)
 
 - **memory**:
@@ -134,6 +137,7 @@ The public API headers are grouped by topics:
 
 - **containers**:
   [mbuf]               (@ref rte_mbuf.h),
+  [mbuf pool ops]      (@ref rte_mbuf_pool_ops.h),
   [ring]               (@ref rte_ring.h),
   [tailq]              (@ref rte_tailq.h),
   [bitmap]             (@ref rte_bitmap.h)

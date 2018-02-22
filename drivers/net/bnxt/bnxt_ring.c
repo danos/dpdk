@@ -63,13 +63,15 @@ void bnxt_free_ring(struct bnxt_ring *ring)
  * Ring groups
  */
 
-void bnxt_init_ring_grps(struct bnxt *bp)
+int bnxt_init_ring_grps(struct bnxt *bp)
 {
 	unsigned int i;
 
 	for (i = 0; i < bp->max_ring_grps; i++)
 		memset(&bp->grp_info[i], (uint8_t)HWRM_NA_SIGNATURE,
 		       sizeof(struct bnxt_ring_grp_info));
+
+	return 0;
 }
 
 /*
@@ -174,15 +176,15 @@ int bnxt_alloc_rings(struct bnxt *bp, uint16_t qidx,
 	memset(mz->addr, 0, mz->len);
 	mz_phys_addr = mz->iova;
 	if ((unsigned long)mz->addr == mz_phys_addr) {
-		RTE_LOG(WARNING, PMD,
+		PMD_DRV_LOG(WARNING,
 			"Memzone physical address same as virtual.\n");
-		RTE_LOG(WARNING, PMD,
+		PMD_DRV_LOG(WARNING,
 			"Using rte_mem_virt2iova()\n");
 		for (sz = 0; sz < total_alloc_len; sz += getpagesize())
 			rte_mem_lock_page(((char *)mz->addr) + sz);
 		mz_phys_addr = rte_mem_virt2iova(mz->addr);
 		if (mz_phys_addr == 0) {
-			RTE_LOG(ERR, PMD,
+			PMD_DRV_LOG(ERR,
 			"unable to map ring address to physical memory\n");
 			return -ENOMEM;
 		}
@@ -324,7 +326,7 @@ int bnxt_alloc_hwrm_rings(struct bnxt *bp)
 		ring = rxr->ag_ring_struct;
 		/* Agg ring */
 		if (ring == NULL) {
-			RTE_LOG(ERR, PMD, "Alloc AGG Ring is NULL!\n");
+			PMD_DRV_LOG(ERR, "Alloc AGG Ring is NULL!\n");
 			goto err_out;
 		}
 
@@ -334,7 +336,7 @@ int bnxt_alloc_hwrm_rings(struct bnxt *bp)
 				cp_ring->fw_ring_id);
 		if (rc)
 			goto err_out;
-		RTE_LOG(DEBUG, PMD, "Alloc AGG Done!\n");
+		PMD_DRV_LOG(DEBUG, "Alloc AGG Done!\n");
 		rxr->ag_prod = 0;
 		rxr->ag_doorbell =
 		    (char *)pci_dev->mem_resource[2].addr +
@@ -345,7 +347,7 @@ int bnxt_alloc_hwrm_rings(struct bnxt *bp)
 		rxq->rx_buf_use_size = BNXT_MAX_MTU + ETHER_HDR_LEN +
 					ETHER_CRC_LEN + (2 * VLAN_TAG_SIZE);
 		if (bnxt_init_one_rx_ring(rxq)) {
-			RTE_LOG(ERR, PMD, "bnxt_init_one_rx_ring failed!\n");
+			PMD_DRV_LOG(ERR, "bnxt_init_one_rx_ring failed!\n");
 			bnxt_rx_queue_release_op(rxq);
 			return -ENOMEM;
 		}
@@ -361,9 +363,6 @@ int bnxt_alloc_hwrm_rings(struct bnxt *bp)
 		struct bnxt_tx_ring_info *txr = txq->tx_ring;
 		struct bnxt_ring *ring = txr->tx_ring_struct;
 		unsigned int idx = i + 1 + bp->rx_cp_nr_rings;
-
-		/* Account for AGG Rings. AGG ring cnt = Rx Cmpl ring cnt */
-		idx += bp->rx_cp_nr_rings;
 
 		/* Tx cmpl */
 		rc = bnxt_hwrm_ring_alloc(bp, cp_ring,

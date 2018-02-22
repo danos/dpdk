@@ -16,7 +16,7 @@ in the former patches.
 Fixes LP: #1546565
 
 *Update*
- - with the split libs it now nees to be listed in
+ - with the split libs it now needs to be listed in
    lib/librte_eal/linuxapp/eal/rte_eal_version.map to work on link steps
  - please note that upstream gravitates towards not extending but creating a
    new the API in DPDK as long term solution (will take a while)
@@ -44,7 +44,7 @@ Last-Update: 2017-08-23
 
 --- a/doc/guides/testpmd_app_ug/run_app.rst
 +++ b/doc/guides/testpmd_app_ug/run_app.rst
-@@ -156,6 +156,25 @@ See the DPDK Getting Started Guides for
+@@ -133,6 +133,25 @@ See the DPDK Getting Started Guides for
  
      Use malloc instead of hugetlbfs.
  
@@ -72,7 +72,7 @@ Last-Update: 2017-08-23
  ----------------------------
 --- a/lib/librte_eal/common/eal_common_options.c
 +++ b/lib/librte_eal/common/eal_common_options.c
-@@ -98,6 +98,8 @@ eal_long_options[] = {
+@@ -73,6 +73,8 @@ eal_long_options[] = {
  	{OPT_VDEV,              1, NULL, OPT_VDEV_NUM             },
  	{OPT_VFIO_INTR,         1, NULL, OPT_VFIO_INTR_NUM        },
  	{OPT_VMWARE_TSC_MAP,    0, NULL, OPT_VMWARE_TSC_MAP_NUM   },
@@ -83,7 +83,7 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_eal/common/eal_options.h
 +++ b/lib/librte_eal/common/eal_options.h
-@@ -83,6 +83,10 @@ enum {
+@@ -55,6 +55,10 @@ enum {
  	OPT_VFIO_INTR_NUM,
  #define OPT_VMWARE_TSC_MAP    "vmware-tsc-map"
  	OPT_VMWARE_TSC_MAP_NUM,
@@ -96,7 +96,7 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_eal/common/include/rte_eal.h
 +++ b/lib/librte_eal/common/include/rte_eal.h
-@@ -335,6 +335,11 @@ enum rte_iova_mode rte_eal_iova_mode(voi
+@@ -472,6 +472,11 @@ rte_eal_mbuf_user_pool_ops(void);
  const char *
  rte_eal_mbuf_default_mempool_ops(void);
  
@@ -110,7 +110,7 @@ Last-Update: 2017-08-23
  #endif
 --- a/lib/librte_eal/linuxapp/eal/eal.c
 +++ b/lib/librte_eal/linuxapp/eal/eal.c
-@@ -52,6 +52,9 @@
+@@ -23,6 +23,9 @@
  #if defined(RTE_ARCH_X86)
  #include <sys/io.h>
  #endif
@@ -118,9 +118,9 @@ Last-Update: 2017-08-23
 +#include <pwd.h>
 +#include <grp.h>
  
+ #include <rte_compat.h>
  #include <rte_common.h>
- #include <rte_debug.h>
-@@ -117,6 +120,12 @@ struct lcore_config lcore_config[RTE_MAX
+@@ -89,6 +92,12 @@ struct lcore_config lcore_config[RTE_MAX
  /* internal configuration */
  struct internal_config internal_config;
  
@@ -133,7 +133,7 @@ Last-Update: 2017-08-23
  /* used by rte_rdtsc() */
  int rte_cycles_vmware_tsc_map;
  
-@@ -366,6 +375,8 @@ eal_usage(const char *prgname)
+@@ -348,6 +357,8 @@ eal_usage(const char *prgname)
  	       "  --"OPT_BASE_VIRTADDR"     Base virtual address\n"
  	       "  --"OPT_CREATE_UIO_DEV"    Create /dev/uioX (usually done by hotplug)\n"
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
@@ -142,7 +142,7 @@ Last-Update: 2017-08-23
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -525,6 +536,121 @@ eal_log_level_parse(int argc, char **arg
+@@ -507,6 +518,121 @@ eal_log_level_parse(int argc, char **arg
  	optarg = old_optarg;
  }
  
@@ -264,8 +264,8 @@ Last-Update: 2017-08-23
  /* Parse the argument given in the command line of the application */
  static int
  eal_parse_args(int argc, char **argv)
-@@ -612,6 +738,26 @@ eal_parse_args(int argc, char **argv)
- 			internal_config.mbuf_pool_ops_name = optarg;
+@@ -594,6 +720,26 @@ eal_parse_args(int argc, char **argv)
+ 			internal_config.user_mbuf_pool_ops_name = optarg;
  			break;
  
 +		case OPT_VHOST_OWNER_NUM:
@@ -291,7 +291,7 @@ Last-Update: 2017-08-23
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -1041,3 +1187,47 @@ rte_eal_check_module(const char *module_
+@@ -1038,3 +1184,47 @@ rte_eal_check_module(const char *module_
  	/* Module has been found */
  	return 1;
  }
@@ -351,7 +351,7 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_vhost/socket.c
 +++ b/lib/librte_vhost/socket.c
-@@ -99,6 +99,8 @@ struct vhost_user {
+@@ -71,6 +71,8 @@ struct vhost_user {
  	pthread_mutex_t mutex;
  };
  
@@ -360,7 +360,7 @@ Last-Update: 2017-08-23
  #define MAX_VIRTIO_BACKLOG 128
  
  static void vhost_user_server_new_connection(int fd, void *data, int *remove);
-@@ -366,6 +368,7 @@ vhost_user_start_server(struct vhost_use
+@@ -340,6 +342,7 @@ vhost_user_start_server(struct vhost_use
  		goto err;
  	}
  

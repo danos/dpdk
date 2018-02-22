@@ -1,35 +1,6 @@
-/*
- * Copyright 2008-2014 Cisco Systems, Inc.  All rights reserved.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2008-2017 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
- *
- * Copyright (c) 2014, Cisco Systems, Inc.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in
- * the documentation and/or other materials provided with the
- * distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
  */
 
 #include <stdio.h>
@@ -38,7 +9,7 @@
 #include <rte_dev.h>
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
-#include <rte_ethdev.h>
+#include <rte_ethdev_driver.h>
 #include <rte_ethdev_pci.h>
 #include <rte_string_fns.h>
 
@@ -49,12 +20,14 @@
 #include "vnic_enet.h"
 #include "enic.h"
 
-#ifdef RTE_LIBRTE_ENIC_DEBUG
-#define ENICPMD_FUNC_TRACE() \
-	RTE_LOG(DEBUG, PMD, "ENICPMD trace: %s\n", __func__)
-#else
-#define ENICPMD_FUNC_TRACE() (void)0
-#endif
+int enicpmd_logtype_init;
+int enicpmd_logtype_flow;
+
+#define PMD_INIT_LOG(level, fmt, args...) \
+	rte_log(RTE_LOG_ ## level, enicpmd_logtype_init, \
+		"%s" fmt "\n", __func__, ##args)
+
+#define ENICPMD_FUNC_TRACE() PMD_INIT_LOG(DEBUG, " >>")
 
 /*
  * The set of PCI devices this driver supports
@@ -65,6 +38,18 @@ static const struct rte_pci_id pci_id_enic_map[] = {
 	{ RTE_PCI_DEVICE(CISCO_PCI_VENDOR_ID, PCI_DEVICE_ID_CISCO_VIC_ENET_VF) },
 	{.vendor_id = 0, /* sentinel */},
 };
+
+RTE_INIT(enicpmd_init_log);
+static void
+enicpmd_init_log(void)
+{
+	enicpmd_logtype_init = rte_log_register("pmd.net.enic.init");
+	if (enicpmd_logtype_init >= 0)
+		rte_log_set_level(enicpmd_logtype_init, RTE_LOG_NOTICE);
+	enicpmd_logtype_flow = rte_log_register("pmd.net.enic.flow");
+	if (enicpmd_logtype_flow >= 0)
+		rte_log_set_level(enicpmd_logtype_flow, RTE_LOG_NOTICE);
+}
 
 static int
 enicpmd_fdir_ctrl_func(struct rte_eth_dev *eth_dev,
@@ -205,13 +190,7 @@ static int enicpmd_dev_tx_queue_setup(struct rte_eth_dev *eth_dev,
 		return -E_RTE_SECONDARY;
 
 	ENICPMD_FUNC_TRACE();
-	if (queue_idx >= ENIC_WQ_MAX) {
-		dev_err(enic,
-			"Max number of TX queues exceeded.  Max is %d\n",
-			ENIC_WQ_MAX);
-		return -EINVAL;
-	}
-
+	RTE_ASSERT(queue_idx < enic->conf_wq_count);
 	eth_dev->data->tx_queues[queue_idx] = (void *)&enic->wq[queue_idx];
 
 	ret = enic_alloc_wq(enic, queue_idx, socket_id, nb_desc);
@@ -325,17 +304,7 @@ static int enicpmd_dev_rx_queue_setup(struct rte_eth_dev *eth_dev,
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return -E_RTE_SECONDARY;
-
-	/* With Rx scatter support, two RQs are now used on VIC per RQ used
-	 * by the application.
-	 */
-	if (queue_idx * 2 >= ENIC_RQ_MAX) {
-		dev_err(enic,
-			"Max number of RX queues exceeded.  Max is %d. This PMD uses 2 RQs on VIC per RQ used by DPDK.\n",
-			ENIC_RQ_MAX);
-		return -EINVAL;
-	}
-
+	RTE_ASSERT(enic_rte_rq_idx_to_sop_idx(queue_idx) < enic->conf_rq_count);
 	eth_dev->data->rx_queues[queue_idx] =
 		(void *)&enic->rq[enic_rte_rq_idx_to_sop_idx(queue_idx)];
 
@@ -370,7 +339,8 @@ static int enicpmd_vlan_offload_set(struct rte_eth_dev *eth_dev, int mask)
 	ENICPMD_FUNC_TRACE();
 
 	if (mask & ETH_VLAN_STRIP_MASK) {
-		if (eth_dev->data->dev_conf.rxmode.hw_vlan_strip)
+		if (eth_dev->data->dev_conf.rxmode.offloads &
+		    DEV_RX_OFFLOAD_VLAN_STRIP)
 			enic->ig_vlan_strip_en = 1;
 		else
 			enic->ig_vlan_strip_en = 0;
@@ -406,14 +376,8 @@ static int enicpmd_dev_configure(struct rte_eth_dev *eth_dev)
 		return ret;
 	}
 
-	if (eth_dev->data->dev_conf.rxmode.split_hdr_size &&
-		eth_dev->data->dev_conf.rxmode.header_split) {
-		/* Enable header-data-split */
-		enic_set_hdr_split_size(enic,
-			eth_dev->data->dev_conf.rxmode.split_hdr_size);
-	}
-
-	enic->hw_ip_checksum = eth_dev->data->dev_conf.rxmode.hw_ip_checksum;
+	enic->hw_ip_checksum = !!(eth_dev->data->dev_conf.rxmode.offloads &
+				  DEV_RX_OFFLOAD_CHECKSUM);
 	ret = enicpmd_vlan_offload_set(eth_dev, ETH_VLAN_STRIP_MASK);
 
 	return ret;
@@ -677,6 +641,7 @@ static int eth_enicpmd_dev_init(struct rte_eth_dev *eth_dev)
 	eth_dev->dev_ops = &enicpmd_eth_dev_ops;
 	eth_dev->rx_pkt_burst = &enic_recv_pkts;
 	eth_dev->tx_pkt_burst = &enic_xmit_pkts;
+	eth_dev->tx_pkt_prepare = &enic_prep_pkts;
 
 	pdev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	rte_eth_copy_pci_info(eth_dev, pdev);

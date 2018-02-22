@@ -1,41 +1,12 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2017 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2017 Intel Corporation
  */
 
 #include <string.h>
 
 #include <rte_mbuf.h>
 #include <rte_malloc.h>
-#include <rte_ethdev.h>
+#include <rte_ethdev_driver.h>
 #include <rte_tcp.h>
 #include <rte_bus_vdev.h>
 #include <rte_kvargs.h>
@@ -60,6 +31,25 @@ valid_bonded_port_id(uint16_t port_id)
 {
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -1);
 	return check_for_bonded_ethdev(&rte_eth_devices[port_id]);
+}
+
+int
+check_for_master_bonded_ethdev(const struct rte_eth_dev *eth_dev)
+{
+	int i;
+	struct bond_dev_private *internals;
+
+	if (check_for_bonded_ethdev(eth_dev) != 0)
+		return 0;
+
+	internals = eth_dev->data->dev_private;
+
+	/* Check if any of slave devices is a bonded device */
+	for (i = 0; i < internals->slave_count; i++)
+		if (valid_bonded_port_id(internals->slaves[i].port_id) == 0)
+			return 1;
+
+	return 0;
 }
 
 int
@@ -252,9 +242,6 @@ __eth_bond_slave_add_lock_free(uint16_t bonded_port_id, uint16_t slave_port_id)
 		return -1;
 	}
 
-	/* Add slave details to bonded device */
-	slave_eth_dev->data->dev_flags |= RTE_ETH_DEV_BONDED_SLAVE;
-
 	rte_eth_dev_info_get(slave_port_id, &dev_info);
 	if (dev_info.max_rx_pktlen < internals->max_rx_pktlen) {
 		RTE_BOND_LOG(ERR, "Slave (port %u) max_rx_pktlen too small",
@@ -272,8 +259,13 @@ __eth_bond_slave_add_lock_free(uint16_t bonded_port_id, uint16_t slave_port_id)
 	if (internals->slave_count < 1) {
 		/* if MAC is not user defined then use MAC of first slave add to
 		 * bonded device */
-		if (!internals->user_defined_mac)
-			mac_address_set(bonded_eth_dev, slave_eth_dev->data->mac_addrs);
+		if (!internals->user_defined_mac) {
+			if (mac_address_set(bonded_eth_dev,
+					    slave_eth_dev->data->mac_addrs)) {
+				RTE_BOND_LOG(ERR, "Failed to set MAC address");
+				return -1;
+			}
+		}
 
 		/* Inherit eth dev link properties from first slave */
 		link_properties_set(bonded_eth_dev,
@@ -326,17 +318,20 @@ __eth_bond_slave_add_lock_free(uint16_t bonded_port_id, uint16_t slave_port_id)
 
 	internals->slave_count++;
 
-	/* Update all slave devices MACs*/
-	mac_address_slaves_update(bonded_eth_dev);
-
 	if (bonded_eth_dev->data->dev_started) {
 		if (slave_configure(bonded_eth_dev, slave_eth_dev) != 0) {
-			slave_eth_dev->data->dev_flags &= (~RTE_ETH_DEV_BONDED_SLAVE);
+			internals->slave_count--;
 			RTE_BOND_LOG(ERR, "rte_bond_slaves_configure: port=%d",
 					slave_port_id);
 			return -1;
 		}
 	}
+
+	/* Add slave details to bonded device */
+	slave_eth_dev->data->dev_flags |= RTE_ETH_DEV_BONDED_SLAVE;
+
+	/* Update all slave devices MACs*/
+	mac_address_slaves_update(bonded_eth_dev);
 
 	/* Register link status change callback with bonded device pointer as
 	 * argument*/
@@ -434,7 +429,7 @@ __eth_bond_slave_remove_lock_free(uint16_t bonded_port_id,
 			&rte_eth_devices[bonded_port_id].data->port_id);
 
 	/* Restore original MAC address of slave device */
-	mac_address_set(&rte_eth_devices[slave_port_id],
+	rte_eth_dev_default_mac_addr_set(slave_port_id,
 			&(internals->slaves[slave_idx].persisted_mac_addr));
 
 	slave_eth_dev = &rte_eth_devices[slave_port_id];
@@ -496,10 +491,18 @@ rte_eth_bond_slave_remove(uint16_t bonded_port_id, uint16_t slave_port_id)
 int
 rte_eth_bond_mode_set(uint16_t bonded_port_id, uint8_t mode)
 {
+	struct rte_eth_dev *bonded_eth_dev;
+
 	if (valid_bonded_port_id(bonded_port_id) != 0)
 		return -1;
 
-	return bond_ethdev_mode_set(&rte_eth_devices[bonded_port_id], mode);
+	bonded_eth_dev = &rte_eth_devices[bonded_port_id];
+
+	if (check_for_master_bonded_ethdev(bonded_eth_dev) != 0 &&
+			mode == BONDING_MODE_8023AD)
+		return -1;
+
+	return bond_ethdev_mode_set(bonded_eth_dev, mode);
 }
 
 int
@@ -667,15 +670,15 @@ rte_eth_bond_xmit_policy_set(uint16_t bonded_port_id, uint8_t policy)
 	switch (policy) {
 	case BALANCE_XMIT_POLICY_LAYER2:
 		internals->balance_xmit_policy = policy;
-		internals->xmit_hash = xmit_l2_hash;
+		internals->burst_xmit_hash = burst_xmit_l2_hash;
 		break;
 	case BALANCE_XMIT_POLICY_LAYER23:
 		internals->balance_xmit_policy = policy;
-		internals->xmit_hash = xmit_l23_hash;
+		internals->burst_xmit_hash = burst_xmit_l23_hash;
 		break;
 	case BALANCE_XMIT_POLICY_LAYER34:
 		internals->balance_xmit_policy = policy;
-		internals->xmit_hash = xmit_l34_hash;
+		internals->burst_xmit_hash = burst_xmit_l34_hash;
 		break;
 
 	default:

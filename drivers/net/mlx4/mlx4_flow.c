@@ -1,34 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2017 6WIND S.A.
- *   Copyright 2017 Mellanox
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of 6WIND S.A. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2017 6WIND S.A.
+ * Copyright 2017 Mellanox
  */
 
 /**
@@ -57,7 +29,7 @@
 #include <rte_byteorder.h>
 #include <rte_errno.h>
 #include <rte_eth_ctrl.h>
-#include <rte_ethdev.h>
+#include <rte_ethdev_driver.h>
 #include <rte_ether.h>
 #include <rte_flow.h>
 #include <rte_flow_driver.h>
@@ -65,6 +37,7 @@
 
 /* PMD headers. */
 #include "mlx4.h"
+#include "mlx4_glue.h"
 #include "mlx4_flow.h"
 #include "mlx4_rxtx.h"
 #include "mlx4_utils.h"
@@ -105,6 +78,11 @@ struct mlx4_drop {
 /**
  * Convert DPDK RSS hash fields to their Verbs equivalent.
  *
+ * This function returns the supported (default) set when @p rss_hf has
+ * special value (uint64_t)-1.
+ *
+ * @param priv
+ *   Pointer to private structure.
  * @param rss_hf
  *   Hash fields in DPDK format (see struct rte_eth_rss_conf).
  *
@@ -112,8 +90,8 @@ struct mlx4_drop {
  *   A valid Verbs RSS hash fields mask for mlx4 on success, (uint64_t)-1
  *   otherwise and rte_errno is set.
  */
-static uint64_t
-mlx4_conv_rss_hf(uint64_t rss_hf)
+uint64_t
+mlx4_conv_rss_hf(struct priv *priv, uint64_t rss_hf)
 {
 	enum { IPV4, IPV6, TCP, UDP, };
 	const uint64_t in[] = {
@@ -133,11 +111,9 @@ mlx4_conv_rss_hf(uint64_t rss_hf)
 		[TCP] = (ETH_RSS_NONFRAG_IPV4_TCP |
 			 ETH_RSS_NONFRAG_IPV6_TCP |
 			 ETH_RSS_IPV6_TCP_EX),
-		/*
-		 * UDP support is temporarily disabled due to an
-		 * implementation issue in the kernel.
-		 */
-		[UDP] = 0,
+		[UDP] = (ETH_RSS_NONFRAG_IPV4_UDP |
+			 ETH_RSS_NONFRAG_IPV6_UDP |
+			 ETH_RSS_IPV6_UDP_EX),
 	};
 	const uint64_t out[RTE_DIM(in)] = {
 		[IPV4] = IBV_RX_HASH_SRC_IPV4 | IBV_RX_HASH_DST_IPV4,
@@ -154,8 +130,15 @@ mlx4_conv_rss_hf(uint64_t rss_hf)
 			seen |= rss_hf & in[i];
 			conv |= out[i];
 		}
-	if (!(rss_hf & ~seen))
-		return conv;
+	if ((conv & priv->hw_rss_sup) == conv) {
+		if (rss_hf == (uint64_t)-1) {
+			/* Include inner RSS by default if supported. */
+			conv |= priv->hw_rss_sup & IBV_RX_HASH_INNER;
+			return conv;
+		}
+		if (!(rss_hf & ~seen))
+			return conv;
+	}
 	rte_errno = ENOTSUP;
 	return (uint64_t)-1;
 }
@@ -759,10 +742,7 @@ fill:
 				&(struct rte_eth_rss_conf){
 					.rss_key = mlx4_rss_hash_key_default,
 					.rss_key_len = MLX4_RSS_HASH_KEY_SIZE,
-					.rss_hf = (ETH_RSS_IPV4 |
-						   ETH_RSS_NONFRAG_IPV4_TCP |
-						   ETH_RSS_IPV6 |
-						   ETH_RSS_NONFRAG_IPV6_TCP),
+					.rss_hf = -1,
 				};
 			/* Sanity checks. */
 			for (i = 0; i < rss->num; ++i)
@@ -801,7 +781,8 @@ fill:
 				goto exit_action_not_supported;
 			}
 			flow->rss = mlx4_rss_get
-				(priv, mlx4_conv_rss_hf(rss_conf->rss_hf),
+				(priv,
+				 mlx4_conv_rss_hf(priv, rss_conf->rss_hf),
 				 rss_conf->rss_key, rss->num, rss->queue);
 			if (!flow->rss) {
 				msg = "either invalid parameters or not enough"
@@ -914,24 +895,25 @@ mlx4_drop_get(struct priv *priv)
 		.priv = priv,
 		.refcnt = 1,
 	};
-	drop->cq = ibv_create_cq(priv->ctx, 1, NULL, NULL, 0);
+	drop->cq = mlx4_glue->create_cq(priv->ctx, 1, NULL, NULL, 0);
 	if (!drop->cq)
 		goto error;
-	drop->qp = ibv_create_qp(priv->pd,
-				 &(struct ibv_qp_init_attr){
-					.send_cq = drop->cq,
-					.recv_cq = drop->cq,
-					.qp_type = IBV_QPT_RAW_PACKET,
-				 });
+	drop->qp = mlx4_glue->create_qp
+		(priv->pd,
+		 &(struct ibv_qp_init_attr){
+			.send_cq = drop->cq,
+			.recv_cq = drop->cq,
+			.qp_type = IBV_QPT_RAW_PACKET,
+		 });
 	if (!drop->qp)
 		goto error;
 	priv->drop = drop;
 	return drop;
 error:
 	if (drop->qp)
-		claim_zero(ibv_destroy_qp(drop->qp));
+		claim_zero(mlx4_glue->destroy_qp(drop->qp));
 	if (drop->cq)
-		claim_zero(ibv_destroy_cq(drop->cq));
+		claim_zero(mlx4_glue->destroy_cq(drop->cq));
 	if (drop)
 		rte_free(drop);
 	rte_errno = ENOMEM;
@@ -951,8 +933,8 @@ mlx4_drop_put(struct mlx4_drop *drop)
 	if (--drop->refcnt)
 		return;
 	drop->priv->drop = NULL;
-	claim_zero(ibv_destroy_qp(drop->qp));
-	claim_zero(ibv_destroy_cq(drop->cq));
+	claim_zero(mlx4_glue->destroy_qp(drop->qp));
+	claim_zero(mlx4_glue->destroy_cq(drop->cq));
 	rte_free(drop);
 }
 
@@ -984,7 +966,7 @@ mlx4_flow_toggle(struct priv *priv,
 	if (!enable) {
 		if (!flow->ibv_flow)
 			return 0;
-		claim_zero(ibv_destroy_flow(flow->ibv_flow));
+		claim_zero(mlx4_glue->destroy_flow(flow->ibv_flow));
 		flow->ibv_flow = NULL;
 		if (flow->drop)
 			mlx4_drop_put(priv->drop);
@@ -997,7 +979,7 @@ mlx4_flow_toggle(struct priv *priv,
 	    !priv->isolated &&
 	    flow->ibv_attr->priority == MLX4_FLOW_PRIORITY_LAST) {
 		if (flow->ibv_flow) {
-			claim_zero(ibv_destroy_flow(flow->ibv_flow));
+			claim_zero(mlx4_glue->destroy_flow(flow->ibv_flow));
 			flow->ibv_flow = NULL;
 			if (flow->drop)
 				mlx4_drop_put(priv->drop);
@@ -1027,7 +1009,7 @@ mlx4_flow_toggle(struct priv *priv,
 			if (missing ^ !flow->drop)
 				return 0;
 			/* Verbs flow needs updating. */
-			claim_zero(ibv_destroy_flow(flow->ibv_flow));
+			claim_zero(mlx4_glue->destroy_flow(flow->ibv_flow));
 			flow->ibv_flow = NULL;
 			if (flow->drop)
 				mlx4_drop_put(priv->drop);
@@ -1048,6 +1030,8 @@ mlx4_flow_toggle(struct priv *priv,
 		flow->drop = missing;
 	}
 	if (flow->drop) {
+		if (flow->ibv_flow)
+			return 0;
 		mlx4_drop_get(priv);
 		if (!priv->drop) {
 			err = rte_errno;
@@ -1059,7 +1043,7 @@ mlx4_flow_toggle(struct priv *priv,
 	assert(qp);
 	if (flow->ibv_flow)
 		return 0;
-	flow->ibv_flow = ibv_create_flow(qp, flow->ibv_attr);
+	flow->ibv_flow = mlx4_glue->create_flow(qp, flow->ibv_attr);
 	if (flow->ibv_flow)
 		return 0;
 	if (flow->drop)
@@ -1215,16 +1199,19 @@ mlx4_flow_internal_next_vlan(struct priv *priv, uint16_t vlan)
  *
  * Various flow rules are created depending on the mode the device is in:
  *
- * 1. Promiscuous: port MAC + catch-all (VLAN filtering is ignored).
- * 2. All multicast: port MAC/VLAN + catch-all multicast.
- * 3. Otherwise: port MAC/VLAN + broadcast MAC/VLAN.
+ * 1. Promiscuous:
+ *       port MAC + broadcast + catch-all (VLAN filtering is ignored).
+ * 2. All multicast:
+ *       port MAC/VLAN + broadcast + catch-all multicast.
+ * 3. Otherwise:
+ *       port MAC/VLAN + broadcast MAC/VLAN.
  *
  * About MAC flow rules:
  *
  * - MAC flow rules are generated from @p dev->data->mac_addrs
  *   (@p priv->mac array).
  * - An additional flow rule for Ethernet broadcasts is also generated.
- * - All these are per-VLAN if @p dev->data->dev_conf.rxmode.hw_vlan_filter
+ * - All these are per-VLAN if @p DEV_RX_OFFLOAD_VLAN_FILTER
  *   is enabled and VLAN filters are configured.
  *
  * @param priv
@@ -1292,13 +1279,11 @@ mlx4_flow_internal(struct priv *priv, struct rte_flow_error *error)
 	};
 	struct ether_addr *rule_mac = &eth_spec.dst;
 	rte_be16_t *rule_vlan =
-		priv->dev->data->dev_conf.rxmode.hw_vlan_filter &&
+		(priv->dev->data->dev_conf.rxmode.offloads &
+		 DEV_RX_OFFLOAD_VLAN_FILTER) &&
 		!priv->dev->data->promiscuous ?
 		&vlan_spec.tci :
 		NULL;
-	int broadcast =
-		!priv->dev->data->promiscuous &&
-		!priv->dev->data->all_multicast;
 	uint16_t vlan = 0;
 	struct rte_flow *flow;
 	unsigned int i;
@@ -1332,7 +1317,7 @@ next_vlan:
 			rule_vlan = NULL;
 		}
 	}
-	for (i = 0; i != RTE_DIM(priv->mac) + broadcast; ++i) {
+	for (i = 0; i != RTE_DIM(priv->mac) + 1; ++i) {
 		const struct ether_addr *mac;
 
 		/* Broadcasts are handled by an extra iteration. */
@@ -1396,7 +1381,7 @@ next_vlan:
 			goto next_vlan;
 	}
 	/* Take care of promiscuous and all multicast flow rules. */
-	if (!broadcast) {
+	if (priv->dev->data->promiscuous || priv->dev->data->all_multicast) {
 		for (flow = LIST_FIRST(&priv->flows);
 		     flow && flow->internal;
 		     flow = LIST_NEXT(flow, next)) {

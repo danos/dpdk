@@ -1,25 +1,6 @@
-/*-
- * GPL LICENSE SUMMARY
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *
- *   This program is free software; you can redistribute it and/or modify
- *   it under the terms of version 2 of the GNU General Public License as
- *   published by the Free Software Foundation.
- *
- *   This program is distributed in the hope that it will be useful, but
- *   WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- *   General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program; if not, write to the Free Software
- *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
- *   The full GNU General Public License is included in this distribution
- *   in the file called LICENSE.GPL.
- *
- *   Contact Information:
- *   Intel Corporation
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright(c) 2010-2014 Intel Corporation.
  */
 
 #include <linux/version.h>
@@ -458,12 +439,20 @@ kni_ioctl_create(struct net *net, uint32_t ioctl_num,
 
 	if (kni->lad_dev)
 		ether_addr_copy(net_dev->dev_addr, kni->lad_dev->dev_addr);
-	else
-		/*
-		 * Generate random mac address. eth_random_addr() is the newer
-		 * version of generating mac address in linux kernel.
-		 */
-		random_ether_addr(net_dev->dev_addr);
+	else {
+		/* if user has provided a valid mac address */
+		if (is_valid_ether_addr((unsigned char *)(dev_info.mac_addr)))
+			memcpy(net_dev->dev_addr, dev_info.mac_addr, ETH_ALEN);
+		else
+			/*
+			 * Generate random mac address. eth_random_addr() is the
+			 * newer version of generating mac address in kernel.
+			 */
+			random_ether_addr(net_dev->dev_addr);
+	}
+
+	if (dev_info.mtu)
+		net_dev->mtu = dev_info.mtu;
 
 	ret = register_netdev(net_dev);
 	if (ret) {

@@ -1,34 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
- *   All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Intel Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2010-2014 Intel Corporation
  */
 
 #include <string.h>
@@ -110,6 +81,22 @@ test_eal_init_once(__attribute__((unused)) void *arg)
 /*
  * ring create/lookup reentrancy test
  */
+static void
+ring_clean(unsigned int lcore_id)
+{
+	struct rte_ring *rp;
+	char ring_name[MAX_STRING_SIZE];
+	int i;
+
+	for (i = 0; i < MAX_ITER_TIMES; i++) {
+		snprintf(ring_name, sizeof(ring_name),
+				"fr_test_%d_%d", lcore_id, i);
+		rp = rte_ring_lookup(ring_name);
+		if (rp != NULL)
+			rte_ring_free(rp);
+	}
+}
+
 static int
 ring_create_lookup(__attribute__((unused)) void *arg)
 {
@@ -154,6 +141,23 @@ my_obj_init(struct rte_mempool *mp, __attribute__((unused)) void *arg,
 	uint32_t *objnum = obj;
 	memset(obj, 0, mp->elt_size);
 	*objnum = i;
+}
+
+static void
+mempool_clean(unsigned int lcore_id)
+{
+	struct rte_mempool *mp;
+	char mempool_name[MAX_STRING_SIZE];
+	int i;
+
+	/* verify all ring created successful */
+	for (i = 0; i < MAX_ITER_TIMES; i++) {
+		snprintf(mempool_name, sizeof(mempool_name), "fr_test_%d_%d",
+			 lcore_id, i);
+		mp = rte_mempool_lookup(mempool_name);
+		if (mp != NULL)
+			rte_mempool_free(mp);
+	}
 }
 
 static int
@@ -341,7 +345,7 @@ fbk_create_free(__attribute__((unused)) void *arg)
 
 #ifdef RTE_LIBRTE_LPM
 static void
-lpm_clean(unsigned lcore_id)
+lpm_clean(unsigned int lcore_id)
 {
 	char lpm_name[MAX_STRING_SIZE];
 	struct rte_lpm *lpm;
@@ -412,8 +416,9 @@ struct test_case{
 /* All test cases in the test suite */
 struct test_case test_cases[] = {
 	{ test_eal_init_once,     NULL,  NULL,         "eal init once" },
-	{ ring_create_lookup,     NULL,  NULL,         "ring create/lookup" },
-	{ mempool_create_lookup,  NULL,  NULL,         "mempool create/lookup" },
+	{ ring_create_lookup,     NULL,  ring_clean,   "ring create/lookup" },
+	{ mempool_create_lookup,  NULL,  mempool_clean,
+			"mempool create/lookup" },
 #ifdef RTE_LIBRTE_HASH
 	{ hash_create_free,       NULL,  hash_clean,   "hash create/free" },
 	{ fbk_create_free,        NULL,  fbk_clean,    "fbk create/free" },

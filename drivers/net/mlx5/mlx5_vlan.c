@@ -1,34 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2015 6WIND S.A.
- *   Copyright 2015 Mellanox.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of 6WIND S.A. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2015 6WIND S.A.
+ * Copyright 2015 Mellanox.
  */
 
 #include <stddef.h>
@@ -36,12 +8,23 @@
 #include <assert.h>
 #include <stdint.h>
 
-#include <rte_ethdev.h>
+/* Verbs headers do not support -pedantic. */
+#ifdef PEDANTIC
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
+#include <infiniband/mlx5dv.h>
+#include <infiniband/verbs.h>
+#ifdef PEDANTIC
+#pragma GCC diagnostic error "-Wpedantic"
+#endif
+
+#include <rte_ethdev_driver.h>
 #include <rte_common.h>
 
 #include "mlx5_utils.h"
 #include "mlx5.h"
 #include "mlx5_autoconf.h"
+#include "mlx5_glue.h"
 
 /**
  * DPDK callback to configure a VLAN filter.
@@ -127,13 +110,18 @@ priv_vlan_strip_queue_set(struct priv *priv, uint16_t idx, int on)
 
 	DEBUG("set VLAN offloads 0x%x for port %d queue %d",
 	      vlan_offloads, rxq->port_id, idx);
+	if (!rxq_ctrl->ibv) {
+		/* Update related bits in RX queue. */
+		rxq->vlan_strip = !!on;
+		return;
+	}
 	mod = (struct ibv_wq_attr){
 		.attr_mask = IBV_WQ_ATTR_FLAGS,
 		.flags_mask = IBV_WQ_FLAGS_CVLAN_STRIPPING,
 		.flags = vlan_offloads,
 	};
 
-	err = ibv_modify_wq(rxq_ctrl->ibv->wq, &mod);
+	err = mlx5_glue->modify_wq(rxq_ctrl->ibv->wq, &mod);
 	if (err) {
 		ERROR("%p: failed to modified stripping mode: %s",
 		      (void *)priv, strerror(err));
@@ -160,7 +148,7 @@ mlx5_vlan_strip_queue_set(struct rte_eth_dev *dev, uint16_t queue, int on)
 	struct priv *priv = dev->data->dev_private;
 
 	/* Validate hw support */
-	if (!priv->hw_vlan_strip) {
+	if (!priv->config.hw_vlan_strip) {
 		ERROR("VLAN stripping is not supported");
 		return;
 	}
@@ -191,9 +179,10 @@ mlx5_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 	unsigned int i;
 
 	if (mask & ETH_VLAN_STRIP_MASK) {
-		int hw_vlan_strip = !!dev->data->dev_conf.rxmode.hw_vlan_strip;
+		int hw_vlan_strip = !!(dev->data->dev_conf.rxmode.offloads &
+				       DEV_RX_OFFLOAD_VLAN_STRIP);
 
-		if (!priv->hw_vlan_strip) {
+		if (!priv->config.hw_vlan_strip) {
 			ERROR("VLAN stripping is not supported");
 			return 0;
 		}

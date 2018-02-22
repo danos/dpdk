@@ -1,6 +1,0 @@
-librte_bus_vdev.so.17.11 librte-bus-vdev17.11 #MINVER#
- DPDK_17.11@DPDK_17.11 17.11
- rte_vdev_init@DPDK_17.11 17.11
- rte_vdev_register@DPDK_17.11 17.11
- rte_vdev_uninit@DPDK_17.11 17.11
- rte_vdev_unregister@DPDK_17.11 17.11

@@ -1,34 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2017 6WIND S.A.
- *   Copyright 2017 Mellanox.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of 6WIND S.A. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2017 6WIND S.A.
+ * Copyright 2017 Mellanox.
  */
 
 #include <errno.h>
@@ -63,7 +35,7 @@ struct nested_tail {
  *   netlink socket file descriptor on success, -1 otherwise.
  */
 int
-nl_init(uint32_t nl_groups)
+tap_nl_init(uint32_t nl_groups)
 {
 	int fd, sndbuf_size = SNDBUF_SIZE, rcvbuf_size = RCVBUF_SIZE;
 	struct sockaddr_nl local = {
@@ -101,7 +73,7 @@ nl_init(uint32_t nl_groups)
  *   0 on success, -1 otherwise.
  */
 int
-nl_final(int nlsk_fd)
+tap_nl_final(int nlsk_fd)
 {
 	if (close(nlsk_fd)) {
 		RTE_LOG(ERR, PMD, "Failed to close netlink socket: %s (%d)\n",
@@ -123,7 +95,7 @@ nl_final(int nlsk_fd)
  *   the number of sent bytes on success, -1 otherwise.
  */
 int
-nl_send(int nlsk_fd, struct nlmsghdr *nh)
+tap_nl_send(int nlsk_fd, struct nlmsghdr *nh)
 {
 	/* man 7 netlink EXAMPLE */
 	struct sockaddr_nl sa = {
@@ -153,7 +125,8 @@ nl_send(int nlsk_fd, struct nlmsghdr *nh)
 }
 
 /**
- * Check that the kernel sends an appropriate ACK in response to an nl_send().
+ * Check that the kernel sends an appropriate ACK in response
+ * to an tap_nl_send().
  *
  * @param[in] nlsk_fd
  *   The netlink socket file descriptor used for communication.
@@ -162,14 +135,14 @@ nl_send(int nlsk_fd, struct nlmsghdr *nh)
  *   0 on success, -1 otherwise with errno set.
  */
 int
-nl_recv_ack(int nlsk_fd)
+tap_nl_recv_ack(int nlsk_fd)
 {
-	return nl_recv(nlsk_fd, NULL, NULL);
+	return tap_nl_recv(nlsk_fd, NULL, NULL);
 }
 
 /**
  * Receive a message from the kernel on the netlink socket, following an
- * nl_send().
+ * tap_nl_send().
  *
  * @param[in] nlsk_fd
  *   The netlink socket file descriptor used for communication.
@@ -182,7 +155,7 @@ nl_recv_ack(int nlsk_fd)
  *   0 on success, -1 otherwise with errno set.
  */
 int
-nl_recv(int nlsk_fd, int (*cb)(struct nlmsghdr *, void *arg), void *arg)
+tap_nl_recv(int nlsk_fd, int (*cb)(struct nlmsghdr *, void *arg), void *arg)
 {
 	/* man 7 netlink EXAMPLE */
 	struct sockaddr_nl sa;
@@ -247,7 +220,7 @@ nl_recv(int nlsk_fd, int (*cb)(struct nlmsghdr *, void *arg), void *arg)
  *   The data to append.
  */
 void
-nlattr_add(struct nlmsghdr *nh, unsigned short type,
+tap_nlattr_add(struct nlmsghdr *nh, unsigned short type,
 	   unsigned int data_len, const void *data)
 {
 	/* see man 3 rtnetlink */
@@ -271,9 +244,9 @@ nlattr_add(struct nlmsghdr *nh, unsigned short type,
  *   The data to append.
  */
 void
-nlattr_add8(struct nlmsghdr *nh, unsigned short type, uint8_t data)
+tap_nlattr_add8(struct nlmsghdr *nh, unsigned short type, uint8_t data)
 {
-	nlattr_add(nh, type, sizeof(uint8_t), &data);
+	tap_nlattr_add(nh, type, sizeof(uint8_t), &data);
 }
 
 /**
@@ -287,9 +260,9 @@ nlattr_add8(struct nlmsghdr *nh, unsigned short type, uint8_t data)
  *   The data to append.
  */
 void
-nlattr_add16(struct nlmsghdr *nh, unsigned short type, uint16_t data)
+tap_nlattr_add16(struct nlmsghdr *nh, unsigned short type, uint16_t data)
 {
-	nlattr_add(nh, type, sizeof(uint16_t), &data);
+	tap_nlattr_add(nh, type, sizeof(uint16_t), &data);
 }
 
 /**
@@ -303,14 +276,14 @@ nlattr_add16(struct nlmsghdr *nh, unsigned short type, uint16_t data)
  *   The data to append.
  */
 void
-nlattr_add32(struct nlmsghdr *nh, unsigned short type, uint32_t data)
+tap_nlattr_add32(struct nlmsghdr *nh, unsigned short type, uint32_t data)
 {
-	nlattr_add(nh, type, sizeof(uint32_t), &data);
+	tap_nlattr_add(nh, type, sizeof(uint32_t), &data);
 }
 
 /**
  * Start a nested netlink attribute.
- * It must be followed later by a call to nlattr_nested_finish().
+ * It must be followed later by a call to tap_nlattr_nested_finish().
  *
  * @param[in, out] msg
  *   The netlink message where to edit the nested_tails metadata.
@@ -321,7 +294,7 @@ nlattr_add32(struct nlmsghdr *nh, unsigned short type, uint32_t data)
  *   -1 if adding a nested netlink attribute failed, 0 otherwise.
  */
 int
-nlattr_nested_start(struct nlmsg *msg, uint16_t type)
+tap_nlattr_nested_start(struct nlmsg *msg, uint16_t type)
 {
 	struct nested_tail *tail;
 
@@ -335,7 +308,7 @@ nlattr_nested_start(struct nlmsg *msg, uint16_t type)
 
 	tail->tail = (struct rtattr *)NLMSG_TAIL(&msg->nh);
 
-	nlattr_add(&msg->nh, type, 0, NULL);
+	tap_nlattr_add(&msg->nh, type, 0, NULL);
 
 	tail->prev = msg->nested_tails;
 
@@ -346,7 +319,7 @@ nlattr_nested_start(struct nlmsg *msg, uint16_t type)
 
 /**
  * End a nested netlink attribute.
- * It follows a call to nlattr_nested_start().
+ * It follows a call to tap_nlattr_nested_start().
  * In effect, it will modify the nested attribute length to include every bytes
  * from the nested attribute start, up to here.
  *
@@ -354,7 +327,7 @@ nlattr_nested_start(struct nlmsg *msg, uint16_t type)
  *   The netlink message where to edit the nested_tails metadata.
  */
 void
-nlattr_nested_finish(struct nlmsg *msg)
+tap_nlattr_nested_finish(struct nlmsg *msg)
 {
 	struct nested_tail *tail = msg->nested_tails;
 
