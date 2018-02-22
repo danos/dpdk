@@ -1,4 +1,4 @@
-dpdk (18.02-1) UNRELEASED; urgency=medium
+dpdk (18.02-1) experimental; urgency=medium
 
   * New upstream release 18.02; for a full list of changes see:
     https://dpdk.org/doc/guides/rel_notes/release_18_02.html
@@ -12,7 +12,7 @@ dpdk (18.02-1) UNRELEASED; urgency=medium
   * Add package and build-dependency for OpenSSL PMD:
     librte-pmd-openssl18.02. (Closes: #886150)
 
- -- Luca Boccassi <bluca@debian.org>  Mon, 19 Feb 2018 11:31:42 +0000
+ -- Luca Boccassi <bluca@debian.org>  Thu, 22 Feb 2018 14:00:03 +0000
 
 dpdk (17.11-5) unstable; urgency=medium
 
