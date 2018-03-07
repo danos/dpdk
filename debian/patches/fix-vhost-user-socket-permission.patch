@@ -16,7 +16,7 @@ in the former patches.
 Fixes LP: #1546565
 
 *Update*
- - with the split libs it now nees to be listed in
+ - with the split libs it now needs to be listed in
    lib/librte_eal/linuxapp/eal/rte_eal_version.map to work on link steps
  - please note that upstream gravitates towards not extending but creating a
    new the API in DPDK as long term solution (will take a while)
