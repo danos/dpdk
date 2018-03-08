@@ -1,3 +1,10 @@
+dpdk (17.11.1-2) UNRELEASED; urgency=medium
+
+  * autopkgtest: use libdpdk pkg-config to set all the required compiler
+    flags.
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 08 Mar 2018 16:51:56 +0000
+
 dpdk (17.11.1-1) unstable; urgency=medium
 
   * New upstream release 17.11.1; for a full list of changes see:

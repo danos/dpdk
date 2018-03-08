@@ -6,7 +6,7 @@ basedir=$(dirname "$0")
 
 cat > testlinkage.c << EOF
 #include <stdio.h>
-#include "dpdk/rte_common.h"
+#include <rte_common.h>
 
 int main()
 {
@@ -18,7 +18,7 @@ EOF
 # -ldpdk actually refers to a linker script now, not a real .so
 # with broken linkage this will fail with undefined symbols
 printf "\n\nChecking compile with link against DPDK\n"
-gcc -v testlinkage.c -o testlinkage.bin -Wall -Werror -ldpdk
+gcc -v testlinkage.c -o testlinkage.bin -Wall -Werror `pkg-config --libs --cflags libdpdk`
 echo "OK"
 
 printf "\n\nLinkage info\n"
