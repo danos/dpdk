@@ -1,3 +1,9 @@
+dpdk (17.11.1-3) UNRELEASED; urgency=medium
+
+  * autopkgtest: add pkg-config dependency to really fix linkage test.
+
+ -- Luca Boccassi <bluca@debian.org>  Fri, 09 Mar 2018 12:37:12 +0000
+
 dpdk (17.11.1-2) unstable; urgency=medium
 
   * autopkgtest: use libdpdk pkg-config to set all the required compiler
