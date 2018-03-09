@@ -58,6 +58,7 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
   * d/control, d/changelog: use HTTPS for dpdk.org links.
   * autopkgtest: use libdpdk pkg-config to set all the required compiler
     flags.
+  * autopkgtest: add pkg-config dependency to really fix linkate test.
 
   [ Christian Ehrhardt ]
   * d/control: improve dpdk-pmdinfo user experience by making
