@@ -105,6 +105,7 @@ Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libpcap-dev,
+         zlib1g-dev,
          ${librte:Depends},
          ${misc:Depends}
 Description: Data Plane Development Kit (basic development files)
