@@ -69,6 +69,9 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
     3rd party drivers should drop into the versioned directories now to show
     their support for that version and to be autoloaded by librte_eal due
     to that.
+  * d/control: let libdpdk-dev depend on zlib1g-dev as it is used on build and
+    creeps into pkg-config. Even thou at the moment no dpdk .so uses it is
+    required to build correctly with the libs provided by pkg-config.
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
 
