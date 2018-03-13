@@ -1,4 +1,4 @@
-dpdk (17.11.1-5) UNRELEASED; urgency=medium
+dpdk (17.11.1-5) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
   * d/t/control: depend on dpdk-dev to be able to use dpdk-sdk-env.sh
@@ -10,7 +10,7 @@ dpdk (17.11.1-5) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
 
- -- Luca Boccassi <bluca@debian.org>  Tue, 13 Mar 2018 10:40:20 +0000
+ -- Luca Boccassi <bluca@debian.org>  Tue, 13 Mar 2018 10:41:06 +0000
 
 dpdk (17.11.1-4) unstable; urgency=medium
 
