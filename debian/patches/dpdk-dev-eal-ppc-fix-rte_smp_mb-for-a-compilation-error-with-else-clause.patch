@@ -1,0 +1,34 @@
+From: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+
+This patch fixes the compilation problem with rte_smp_mb,
+when there is else clause following it, as in test_barrier.c.
+
+Fixes: 05c3fd7110 ("eal/ppc: atomic operations for IBM Power")
+Cc: stable@dpdk.org
+
+Signed-off-by: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+Acked-by: Luca Boccassi <bluca@debian.org>
+Acked-by: Chao Zhu <chaozhu@linux.vnet.ibm.com>
+
+---
+ lib/librte_eal/common/include/arch/ppc_64/rte_atomic.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Forwarded: yes (http://dpdk.org/dev/patchwork/patch/35493/)
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Original-Author: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
+Origin: upstream, http://dpdk.org/dev/patchwork/patch/35493/
+Last-Update: 2018-03-13
+diff --git a/lib/librte_eal/common/include/arch/ppc_64/rte_atomic.h b/lib/librte_eal/common/include/arch/ppc_64/rte_atomic.h
+index 39fce7b..1821774 100644
+--- a/lib/librte_eal/common/include/arch/ppc_64/rte_atomic.h
++++ b/lib/librte_eal/common/include/arch/ppc_64/rte_atomic.h
+@@ -55,7 +55,7 @@
+  * Guarantees that the LOAD and STORE operations generated before the
+  * barrier occur before the LOAD and STORE operations generated after.
+  */
+-#define	rte_mb()  {asm volatile("sync" : : : "memory"); }
++#define	rte_mb()  asm volatile("sync" : : : "memory")
+ 
+ /**
+  * Write memory barrier.

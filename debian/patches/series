@@ -1,1 +1,2 @@
 fix-vhost-user-socket-permission.patch
+dpdk-dev-eal-ppc-fix-rte_smp_mb-for-a-compilation-error-with-else-clause.patch
