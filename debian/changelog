@@ -59,6 +59,11 @@ dpdk (17.11.1-1~git1) UNRELEASED; urgency=medium
     creeps into pkg-config. Even thou at the moment no dpdk .so uses it is
     required to build correctly with the libs provided by pkg-config.
   * d/t/control: depend on dpdk-dev to be able to use dpdk-sdk-env.sh
+  * d/t/testlinkage: improvements and fixes for current debci issues
+    - Use RTE_SDK to build the binary
+    - verbose execution for better debugging
+    - check for librt instead of libpthread as second level lib
+    - use a valid prototype for main
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
 
