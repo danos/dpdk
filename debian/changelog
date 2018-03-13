@@ -29,6 +29,8 @@ dpdk (18.02-1~git1) UNRELEASED; urgency=medium
   * Add package and build-dependency MLX4 and MLX5 PMDs.
     With rdma-core >16 being in Debian and Ubuntu as well as some stabilization
     work ongoing upstream we can start to enable these PMDs.
+  * d/p/dpdk-dev-eal-ppc-fix-rte_smp_mb-for-a-compilation-error-with-else-
+    clause.patch: fix build on ppc64el
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 19 Feb 2018 11:31:42 +0000
 
