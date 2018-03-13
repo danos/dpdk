@@ -70,6 +70,10 @@ dpdk (17.11.3-1~git1) UNRELEASED; urgency=medium
     - check for librt instead of libpthread as second level lib
     - use a valid prototype for main
   * test-linkage: drop brittle test for secondary library dependencies
+  * d/control: binary package and build-dependency for MLX4 and MLX5 PMDs.
+    - d/librte-pmd-mlx*.symbols: symbol files for mlx PMDs
+    - d/p/app-testpmd-add-ethernet-peer-command.patch: ensure MLX PMDs are
+      well testable
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 18 Jun 2018 13:38:06 +0200
 
