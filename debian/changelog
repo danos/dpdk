@@ -1,5 +1,6 @@
 dpdk (18.02-1~git1) UNRELEASED; urgency=medium
 
+  [ Luca Boccassi ]
   * New upstream release 18.02; for a full list of changes see:
     https://dpdk.org/doc/guides/rel_notes/release_18_02.html
   * Bump ABI version of packages from 17.11 to 18.02.
@@ -11,6 +12,20 @@ dpdk (18.02-1~git1) UNRELEASED; urgency=medium
     librte-pmd-opdl-event18.02.
   * Add package and build-dependency for OpenSSL PMD:
     librte-pmd-openssl18.02. (Closes: #886150)
+  * autopkgtest: use libdpdk pkg-config to set all the required compiler
+    flags.
+  * autopkgtest: add pkg-config dependency to really fix linkate test.
+
+  [ Christian Ehrhardt ]
+  * d/control: let libdpdk-dev depend on zlib1g-dev as it is used on build and
+    creeps into pkg-config. Even thou at the moment no dpdk .so uses it is
+    required to build correctly with the libs provided by pkg-config.
+  * d/t/control: depend on dpdk-dev to be able to use dpdk-sdk-env.sh
+  * d/t/testlinkage: improvements and fixes for current debci issues
+    - Use RTE_SDK to build the binary
+    - verbose execution for better debugging
+    - check for librt instead of libpthread as second level lib
+    - use a valid prototype for main
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 19 Feb 2018 11:31:42 +0000
 
@@ -56,9 +71,6 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
   * dpdk-doc: mark Python dependency with :any.
   * Bump Standards-Version to 4.1.3 - no changes.
   * d/control, d/changelog: use HTTPS for dpdk.org links.
-  * autopkgtest: use libdpdk pkg-config to set all the required compiler
-    flags.
-  * autopkgtest: add pkg-config dependency to really fix linkate test.
 
   [ Christian Ehrhardt ]
   * d/control: improve dpdk-pmdinfo user experience by making
@@ -69,15 +81,6 @@ dpdk (17.11-1~git1) UNRELEASED; urgency=medium
     3rd party drivers should drop into the versioned directories now to show
     their support for that version and to be autoloaded by librte_eal due
     to that.
-  * d/control: let libdpdk-dev depend on zlib1g-dev as it is used on build and
-    creeps into pkg-config. Even thou at the moment no dpdk .so uses it is
-    required to build correctly with the libs provided by pkg-config.
-  * d/t/control: depend on dpdk-dev to be able to use dpdk-sdk-env.sh
-  * d/t/testlinkage: improvements and fixes for current debci issues
-    - Use RTE_SDK to build the binary
-    - verbose execution for better debugging
-    - check for librt instead of libpthread as second level lib
-    - use a valid prototype for main
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
 
