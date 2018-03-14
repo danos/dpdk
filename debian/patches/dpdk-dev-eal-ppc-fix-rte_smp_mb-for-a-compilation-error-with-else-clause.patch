@@ -17,8 +17,8 @@ Acked-by: Chao Zhu <chaozhu@linux.vnet.ibm.com>
 Forwarded: yes (http://dpdk.org/dev/patchwork/patch/35493/)
 Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
 Original-Author: Gowrishankar Muthukrishnan <gowrishankar.m@linux.vnet.ibm.com>
-Origin: upstream, http://dpdk.org/dev/patchwork/patch/35493/
-Last-Update: 2018-03-13
+Origin: upstream, da07658d58461bef714afc196569cf18377073e2
+Last-Update: 2018-03-14
 diff --git a/lib/librte_eal/common/include/arch/ppc_64/rte_atomic.h b/lib/librte_eal/common/include/arch/ppc_64/rte_atomic.h
 index 39fce7b..1821774 100644
 --- a/lib/librte_eal/common/include/arch/ppc_64/rte_atomic.h
