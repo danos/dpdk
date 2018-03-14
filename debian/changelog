@@ -1,3 +1,9 @@
+dpdk (17.11.1-6) UNRELEASED; urgency=medium
+
+  * test-linkage: drop brittle test for secondary library dependencies
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 14 Mar 2018 14:52:40 +0000
+
 dpdk (17.11.1-5) unstable; urgency=medium
 
   [ Christian Ehrhardt ]

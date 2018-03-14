@@ -59,10 +59,6 @@ printf "\n\nChecking for expected internal libraries\n"
 lddtree ${binary} | grep '^    librte_eal.so'
 echo "OK"
 
-printf "\n\nChecking for expected secondary library dependencies\n"
-lddtree ${binary} | grep '^        librt.so'
-echo "OK"
-
 printf "\n\nChecking for expected feature dependent library dependencies\n"
 # features only used by the lib that we enabled
 ldd /usr/lib/*/librte_pmd_pcap.so | grep libpcap
