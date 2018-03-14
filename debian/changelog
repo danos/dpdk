@@ -18,6 +18,9 @@ dpdk (18.02-1~git1) UNRELEASED; urgency=medium
   * Backport dpdk-dev-app-testpmd-fix-DPAA-shared-library-dependency.patch
     and dpdk-dev-mk-fix-dependencies-of-dpaaX-drivers.patch from upstream to
     fix arm64 build.
+  * Add librte-bus-dpaa18.02, librte-bus-fslmc.02, librte-pmd-dpaa18.02 and
+    librte-mempool-dpaa18.02 on arm64, as their config is enabled by default
+    upstream.
 
   [ Christian Ehrhardt ]
   * d/control: let libdpdk-dev depend on zlib1g-dev as it is used on build and
