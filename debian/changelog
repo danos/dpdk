@@ -39,6 +39,7 @@ dpdk (18.02-1~git1) UNRELEASED; urgency=medium
   * d/p/dpdk-dev-eal-ppc-fix-rte_smp_mb-for-a-compilation-error-with-else-
     clause.patch: fix build on ppc64el
   * test-linkage: drop brittle test for secondary library dependencies
+  * debian/control: Fix MLX4/MLX5 enablement to match DPDK 18.02
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 19 Feb 2018 11:31:42 +0000
 
