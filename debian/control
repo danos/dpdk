@@ -1192,7 +1192,7 @@ Description: Data Plane Development Kit (librte_pmd_thunderx_nicvf runtime libra
  .
  This package contains the runtime libraries for librte_pmd_thunderx_nicvf.
 
-Package: librte-pmd-mlx4-17.11
+Package: librte-pmd-mlx4-18.02
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/mlx4.html
@@ -1205,7 +1205,7 @@ Description: Data Plane Development Kit (librte-pmd-mlx4 runtime library)
  .
  This package contains the runtime libraries for librte-pmd-mlx4.
 
-Package: librte-pmd-mlx5-17.11
+Package: librte-pmd-mlx5-18.02
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/mlx5.html
