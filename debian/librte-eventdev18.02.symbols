@@ -2,6 +2,7 @@ librte_eventdev.so.18.02 librte-eventdev18.02 #MINVER#
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_17.08@DPDK_17.08 17.08
  DPDK_17.11@DPDK_17.11 17.11
+ DPDK_18.02@DPDK_18.02 18.02
  rte_event_dequeue_timeout_ticks@DPDK_17.05 17.05
  rte_event_dev_attr_get@DPDK_17.11 17.11
  rte_event_dev_close@DPDK_17.05 17.05
@@ -10,6 +11,7 @@ librte_eventdev.so.18.02 librte-eventdev18.02 #MINVER#
  rte_event_dev_dump@DPDK_17.05 17.05
  rte_event_dev_get_dev_id@DPDK_17.05 17.05
  rte_event_dev_info_get@DPDK_17.05 17.05
+ rte_event_dev_selftest@DPDK_18.02 18.02
  rte_event_dev_service_id_get@DPDK_17.11 17.11
  rte_event_dev_socket_id@DPDK_17.05 17.05
  rte_event_dev_start@DPDK_17.05 17.05

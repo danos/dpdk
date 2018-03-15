@@ -12,6 +12,7 @@ Build-Depends: debhelper (>= 9),
                graphviz <!nodoc>,
                inkscape <!nodoc>,
                libcap-dev,
+               libibverbs-dev,
                libpcap-dev,
                libnuma-dev,
                libssl-dev,
@@ -105,6 +106,7 @@ Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libpcap-dev,
+         zlib1g-dev,
          ${librte:Depends},
          ${misc:Depends}
 Description: Data Plane Development Kit (basic development files)
@@ -153,6 +155,28 @@ Description: Data Plane Development Kit (librte-acl runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_acl.
+
+Package: librte-bus-dpaa18.02
+Architecture: arm64
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Data Plane Development Kit (librte_bus_dpaa runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_bus_dpaa.
+
+Package: librte-bus-fslmc18.02
+Architecture: arm64
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Data Plane Development Kit (librte_bus_fslmc runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_bus_fslmc.
 
 Package: librte-bus-pci18.02
 Architecture: amd64 arm64 i386 ppc64el
@@ -512,6 +536,19 @@ Description: Data Plane Development Kit (librte-pmd-cxgbe runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pmd_cxgbe.
+
+Package: librte-pmd-dpaa18.02
+Architecture: arm64
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/nics/dpaa.html
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_dpaa.
 
 Package: librte-pmd-e1000-18.02
 Architecture: amd64 arm64 i386 ppc64el
@@ -915,6 +952,18 @@ Description: Data Plane Development Kit (librte_latencystats runtime library)
  .
  This package contains the runtime libraries for librte_latencystats.
 
+Package: librte-mempool-dpaa18.02
+Architecture: arm64
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte_mempool_dpaa runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_mempool_dpaa.
+
 Package: librte-mempool-octeontx18.02
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
@@ -1143,3 +1192,28 @@ Description: Data Plane Development Kit (librte_pmd_thunderx_nicvf runtime libra
  .
  This package contains the runtime libraries for librte_pmd_thunderx_nicvf.
 
+Package: librte-pmd-mlx4-18.02
+Architecture: amd64 arm64 i386 ppc64el
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/nics/mlx4.html
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-pmd-mlx4 runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte-pmd-mlx4.
+
+Package: librte-pmd-mlx5-18.02
+Architecture: amd64 arm64 i386 ppc64el
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/nics/mlx5.html
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-pmd-mlx5 runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte-pmd-mlx5.

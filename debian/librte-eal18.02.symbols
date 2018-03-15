@@ -6,6 +6,7 @@ librte_eal.so.18.02 librte-eal18.02 #MINVER#
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_17.08@DPDK_17.08 17.08
  DPDK_17.11@DPDK_17.11 17.11
+ DPDK_18.02@DPDK_18.02 18.02
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
  DPDK_2.2@DPDK_2.2 16.04
@@ -42,6 +43,7 @@ librte_eal.so.18.02 librte-eal18.02 #MINVER#
  rte_dump_tailq@DPDK_2.0 16.04
  rte_eal_alarm_cancel@DPDK_2.0 16.04
  rte_eal_alarm_set@DPDK_2.0 16.04
+ rte_eal_cleanup@EXPERIMENTAL 18.02
  rte_eal_create_uio_dev@DPDK_17.11 17.11
  rte_eal_dev_attach@DPDK_16.11 16.11
  rte_eal_dev_detach@DPDK_16.11 16.11
@@ -64,6 +66,7 @@ librte_eal.so.18.02 librte-eal18.02 #MINVER#
  rte_eal_iopl_init@DPDK_2.0 16.04
  rte_eal_lcore_role@DPDK_2.0 16.04
  rte_eal_mbuf_default_mempool_ops@DPDK_17.11 17.11
+ rte_eal_mbuf_user_pool_ops@EXPERIMENTAL 18.02
  rte_eal_mp_remote_launch@DPDK_2.0 16.04
  rte_eal_mp_wait_lcore@DPDK_2.0 16.04
  rte_eal_parse_devargs_str@DPDK_2.0 16.04
@@ -82,6 +85,8 @@ librte_eal.so.18.02 librte-eal18.02 #MINVER#
  rte_free@DPDK_2.0 16.04
  rte_get_tsc_hz@DPDK_2.0 16.04
  rte_hexdump@DPDK_2.0 16.04
+ rte_hypervisor_get@DPDK_18.02 18.02
+ rte_hypervisor_get_name@DPDK_18.02 18.02
  rte_intr_allow_others@DPDK_2.1 16.04
  rte_intr_callback_register@DPDK_2.0 16.04
  rte_intr_callback_unregister@DPDK_2.0 16.04
@@ -132,9 +137,17 @@ librte_eal.so.18.02 librte-eal18.02 #MINVER#
  rte_memzone_reserve_aligned@DPDK_2.0 16.04
  rte_memzone_reserve_bounded@DPDK_2.0 16.04
  rte_memzone_walk@DPDK_2.0 16.04
+ rte_mp_action_register@EXPERIMENTAL 18.02
+ rte_mp_action_unregister@EXPERIMENTAL 18.02
+ rte_mp_reply@EXPERIMENTAL 18.02
+ rte_mp_request@EXPERIMENTAL 18.02
+ rte_mp_sendmsg@EXPERIMENTAL 18.02
  rte_openlog_stream@DPDK_2.0 16.04
  rte_realloc@DPDK_2.0 16.04
+ rte_reciprocal_value@DPDK_18.02 18.02
+ rte_reciprocal_value_u64@DPDK_18.02 18.02
  rte_service_dump@EXPERIMENTAL 17.08
+ rte_service_finalize@EXPERIMENTAL 18.02
  rte_service_get_by_name@EXPERIMENTAL 17.08
  rte_service_get_count@EXPERIMENTAL 17.08
  rte_service_get_name@EXPERIMENTAL 17.11
@@ -156,6 +169,8 @@ librte_eal.so.18.02 librte-eal18.02 #MINVER#
  rte_service_set_stats_enable@EXPERIMENTAL 17.08
  rte_service_start_with_defaults@EXPERIMENTAL 17.08
  (arch=!arm64 !ppc64el)rte_rtm_supported@DPDK_16.07 16.07~rc3
+ rte_service_attr_get@EXPERIMENTAL 18.02
+ rte_service_attr_reset_all@EXPERIMENTAL 18.02
  rte_service_component_register@EXPERIMENTAL 17.11
  rte_service_component_runstate_set@EXPERIMENTAL 17.11
  rte_service_component_unregister@EXPERIMENTAL 17.11
@@ -167,6 +182,7 @@ librte_eal.so.18.02 librte-eal18.02 #MINVER#
  rte_thread_get_affinity@DPDK_2.0 16.04
  rte_thread_set_affinity@DPDK_2.0 16.04
  rte_thread_setname@DPDK_16.07 16.07~rc1
+ rte_vfio_clear_group@DPDK_18.02 18.02
  rte_vfio_enable@DPDK_17.11 17.11
  rte_vfio_is_enabled@DPDK_17.11 17.11
  rte_vfio_noiommu_is_enabled@DPDK_17.11 17.11

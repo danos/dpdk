@@ -1,3 +1,37 @@
+dpdk (18.02-2) UNRELEASED; urgency=medium
+
+  [ Luca Boccassi ]
+  * autopkgtest: use libdpdk pkg-config to set all the required compiler
+    flags.
+  * autopkgtest: add pkg-config dependency to really fix linkate test.
+  * Backport dpdk-dev-app-testpmd-fix-DPAA-shared-library-dependency.patch
+    and dpdk-dev-mk-fix-dependencies-of-dpaaX-drivers.patch from upstream to
+    fix arm64 build.
+  * Add librte-bus-dpaa18.02, librte-bus-fslmc.02, librte-pmd-dpaa18.02 and
+    librte-mempool-dpaa18.02 on arm64, as their config is enabled by default
+    upstream.
+  * Add new symbols to symbols files for 18.02.
+
+  [ Christian Ehrhardt ]
+  * d/control: let libdpdk-dev depend on zlib1g-dev as it is used on build and
+    creeps into pkg-config. Even thou at the moment no dpdk .so uses it is
+    required to build correctly with the libs provided by pkg-config.
+  * d/t/control: depend on dpdk-dev to be able to use dpdk-sdk-env.sh
+  * d/t/testlinkage: improvements and fixes for current debci issues
+    - Use RTE_SDK to build the binary
+    - verbose execution for better debugging
+    - check for librt instead of libpthread as second level lib
+    - use a valid prototype for main
+  * Add package and build-dependency MLX4 and MLX5 PMDs.
+    With rdma-core >16 being in Debian and Ubuntu as well as some stabilization
+    work ongoing upstream we can start to enable these PMDs.
+  * d/p/dpdk-dev-eal-ppc-fix-rte_smp_mb-for-a-compilation-error-with-else-
+    clause.patch: fix build on ppc64el
+  * test-linkage: drop brittle test for secondary library dependencies
+  * debian/control: Fix MLX4/MLX5 enablement to match DPDK 18.02
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 15 Mar 2018 10:51:54 +0000
+
 dpdk (18.02-1) experimental; urgency=medium
 
   * New upstream release 18.02; for a full list of changes see:
