@@ -39,7 +39,6 @@
 
 #include <rte_cycles.h>
 #include <rte_memory.h>
-#include <rte_memzone.h>
 #include <rte_branch_prediction.h>
 #include <rte_mempool.h>
 #include <rte_malloc.h>
@@ -91,12 +90,17 @@ virtio_xmit_pkts_simple(void *tx_queue, struct rte_mbuf **tx_pkts,
 {
 	struct virtnet_tx *txvq = tx_queue;
 	struct virtqueue *vq = txvq->vq;
+	struct virtio_hw *hw = vq->hw;
 	uint16_t nb_used;
 	uint16_t desc_idx;
 	struct vring_desc *start_dp;
 	uint16_t nb_tail, nb_commit;
 	int i;
 	uint16_t desc_idx_max = (vq->vq_nentries >> 1) - 1;
+	uint16_t nb_tx = 0;
+
+	if (unlikely(hw->started == 0))
+		return nb_tx;
 
 	nb_used = VIRTQUEUE_NUSED(vq);
 	rte_compiler_barrier();

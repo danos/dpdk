@@ -17,8 +17,7 @@
 #include "ecore_hsi_common.h"
 #include "ecore_dcbx_api.h"
 
-#define ECORE_MFW_GET_FIELD(name, field) \
-	(((name) & (field ## _MASK)) >> (field ## _SHIFT))
+#define ECORE_DCBX_DSCP_DISABLED 0XFF
 
 struct ecore_dcbx_info {
 	struct lldp_status_params_s lldp_remote[LLDP_MAX_LLDP_AGENTS];
@@ -32,11 +31,13 @@ struct ecore_dcbx_info {
 	struct ecore_dcbx_set set;
 	struct ecore_dcbx_get get;
 	u8 dcbx_cap;
+	u16 iwarp_port;
 };
 
 struct ecore_dcbx_mib_meta_data {
 	struct lldp_config_params_s *lldp_local;
 	struct lldp_status_params_s *lldp_remote;
+	struct lldp_received_tlvs_s *lldp_tlvs;
 	struct dcbx_local_params *local_admin;
 	struct dcb_dscp_map *dscp_map;
 	struct dcbx_mib *mib;
@@ -49,17 +50,15 @@ enum _ecore_status_t
 ecore_dcbx_mib_update_event(struct ecore_hwfn *, struct ecore_ptt *,
 			    enum ecore_mib_read_type);
 
-enum _ecore_status_t ecore_dcbx_read_lldp_params(struct ecore_hwfn *,
-						 struct ecore_ptt *);
 enum _ecore_status_t ecore_dcbx_info_alloc(struct ecore_hwfn *p_hwfn);
-void ecore_dcbx_info_free(struct ecore_hwfn *, struct ecore_dcbx_info *);
+void ecore_dcbx_info_free(struct ecore_hwfn *p_hwfn);
 void ecore_dcbx_set_pf_update_params(struct ecore_dcbx_results *p_src,
 				     struct pf_update_ramrod_data *p_dest);
 
-#ifndef REAL_ASIC_ONLY
-/* @@@TBD eagle phy workaround */
-void ecore_dcbx_eagle_workaround(struct ecore_hwfn *, struct ecore_ptt *,
-				 bool set_to_pfc);
-#endif
+/* Returns TOS value for a given priority */
+u8 ecore_dcbx_get_dscp_value(struct ecore_hwfn *p_hwfn, u8 pri);
+
+enum _ecore_status_t
+ecore_lldp_mib_update_event(struct ecore_hwfn *p_hwfn, struct ecore_ptt *p_ptt);
 
 #endif /* __ECORE_DCBX_H__ */

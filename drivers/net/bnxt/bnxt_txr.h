@@ -34,12 +34,12 @@
 #ifndef _BNXT_TXR_H_
 #define _BNXT_TXR_H_
 
+#include <rte_io.h>
+
 #define MAX_TX_RINGS	16
 #define BNXT_TX_PUSH_THRESH 92
 
-#define B_TX_DB(db, prod)						\
-		rte_smp_wmb();						\
-		(*(uint32_t *)db = (DB_KEY_TX | prod))
+#define B_TX_DB(db, prod)	rte_write32((DB_KEY_TX | (prod)), db)
 
 struct bnxt_tx_ring_info {
 	uint16_t		tx_prod;
@@ -49,7 +49,7 @@ struct bnxt_tx_ring_info {
 	struct tx_bd_long	*tx_desc_ring;
 	struct bnxt_sw_tx_bd	*tx_buf_ring;
 
-	phys_addr_t		tx_desc_mapping;
+	rte_iova_t		tx_desc_mapping;
 
 #define BNXT_DEV_STATE_CLOSING	0x1
 	uint32_t		dev_state;

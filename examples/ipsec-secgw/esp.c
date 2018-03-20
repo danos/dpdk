@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2016-2017 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -58,8 +58,11 @@ esp_inbound(struct rte_mbuf *m, struct ipsec_sa *sa,
 	struct rte_crypto_sym_op *sym_cop;
 	int32_t payload_len, ip_hdr_len;
 
-	RTE_ASSERT(m != NULL);
 	RTE_ASSERT(sa != NULL);
+	if (sa->type == RTE_SECURITY_ACTION_TYPE_INLINE_CRYPTO)
+		return 0;
+
+	RTE_ASSERT(m != NULL);
 	RTE_ASSERT(cop != NULL);
 
 	ip4 = rte_pktmbuf_mtod(m, struct ip *);
@@ -78,73 +81,85 @@ esp_inbound(struct rte_mbuf *m, struct ipsec_sa *sa,
 		sizeof(struct esp_hdr) - sa->iv_len - sa->digest_len;
 
 	if ((payload_len & (sa->block_size - 1)) || (payload_len <= 0)) {
-		RTE_LOG(DEBUG, IPSEC_ESP, "payload %d not multiple of %u\n",
+		RTE_LOG_DP(DEBUG, IPSEC_ESP, "payload %d not multiple of %u\n",
 				payload_len, sa->block_size);
 		return -EINVAL;
 	}
 
 	sym_cop = get_sym_cop(cop);
-
 	sym_cop->m_src = m;
-	sym_cop->cipher.data.offset =  ip_hdr_len + sizeof(struct esp_hdr) +
-		sa->iv_len;
-	sym_cop->cipher.data.length = payload_len;
 
-	struct cnt_blk *icb;
-	uint8_t *aad;
-	uint8_t *iv = RTE_PTR_ADD(ip4, ip_hdr_len + sizeof(struct esp_hdr));
+	if (sa->aead_algo == RTE_CRYPTO_AEAD_AES_GCM) {
+		sym_cop->aead.data.offset =  ip_hdr_len + sizeof(struct esp_hdr) +
+			sa->iv_len;
+		sym_cop->aead.data.length = payload_len;
 
-	switch (sa->cipher_algo) {
-	case RTE_CRYPTO_CIPHER_NULL:
-	case RTE_CRYPTO_CIPHER_AES_CBC:
-		sym_cop->cipher.iv.data = iv;
-		sym_cop->cipher.iv.phys_addr = rte_pktmbuf_mtophys_offset(m,
-				 ip_hdr_len + sizeof(struct esp_hdr));
-		sym_cop->cipher.iv.length = sa->iv_len;
-		break;
-	case RTE_CRYPTO_CIPHER_AES_CTR:
-	case RTE_CRYPTO_CIPHER_AES_GCM:
+		struct cnt_blk *icb;
+		uint8_t *aad;
+		uint8_t *iv = RTE_PTR_ADD(ip4, ip_hdr_len + sizeof(struct esp_hdr));
+
 		icb = get_cnt_blk(m);
 		icb->salt = sa->salt;
 		memcpy(&icb->iv, iv, 8);
 		icb->cnt = rte_cpu_to_be_32(1);
-		sym_cop->cipher.iv.data = (uint8_t *)icb;
-		sym_cop->cipher.iv.phys_addr = rte_pktmbuf_mtophys_offset(m,
-			 (uint8_t *)icb - rte_pktmbuf_mtod(m, uint8_t *));
-		sym_cop->cipher.iv.length = 16;
-		break;
-	default:
-		RTE_LOG(ERR, IPSEC_ESP, "unsupported cipher algorithm %u\n",
-				sa->cipher_algo);
-		return -EINVAL;
-	}
 
-	switch (sa->auth_algo) {
-	case RTE_CRYPTO_AUTH_NULL:
-	case RTE_CRYPTO_AUTH_SHA1_HMAC:
-		sym_cop->auth.data.offset = ip_hdr_len;
-		sym_cop->auth.data.length = sizeof(struct esp_hdr) +
-			sa->iv_len + payload_len;
-		break;
-	case RTE_CRYPTO_AUTH_AES_GCM:
 		aad = get_aad(m);
 		memcpy(aad, iv - sizeof(struct esp_hdr), 8);
-		sym_cop->auth.aad.data = aad;
-		sym_cop->auth.aad.phys_addr = rte_pktmbuf_mtophys_offset(m,
+		sym_cop->aead.aad.data = aad;
+		sym_cop->aead.aad.phys_addr = rte_pktmbuf_iova_offset(m,
 				aad - rte_pktmbuf_mtod(m, uint8_t *));
-		sym_cop->auth.aad.length = 8;
-		break;
-	default:
-		RTE_LOG(ERR, IPSEC_ESP, "unsupported auth algorithm %u\n",
-				sa->auth_algo);
-		return -EINVAL;
-	}
 
-	sym_cop->auth.digest.data = rte_pktmbuf_mtod_offset(m, void*,
-			rte_pktmbuf_pkt_len(m) - sa->digest_len);
-	sym_cop->auth.digest.phys_addr = rte_pktmbuf_mtophys_offset(m,
-			rte_pktmbuf_pkt_len(m) - sa->digest_len);
-	sym_cop->auth.digest.length = sa->digest_len;
+		sym_cop->aead.digest.data = rte_pktmbuf_mtod_offset(m, void*,
+				rte_pktmbuf_pkt_len(m) - sa->digest_len);
+		sym_cop->aead.digest.phys_addr = rte_pktmbuf_iova_offset(m,
+				rte_pktmbuf_pkt_len(m) - sa->digest_len);
+	} else {
+		sym_cop->cipher.data.offset =  ip_hdr_len + sizeof(struct esp_hdr) +
+			sa->iv_len;
+		sym_cop->cipher.data.length = payload_len;
+
+		struct cnt_blk *icb;
+		uint8_t *iv = RTE_PTR_ADD(ip4, ip_hdr_len + sizeof(struct esp_hdr));
+		uint8_t *iv_ptr = rte_crypto_op_ctod_offset(cop,
+					uint8_t *, IV_OFFSET);
+
+		switch (sa->cipher_algo) {
+		case RTE_CRYPTO_CIPHER_NULL:
+		case RTE_CRYPTO_CIPHER_AES_CBC:
+			/* Copy IV at the end of crypto operation */
+			rte_memcpy(iv_ptr, iv, sa->iv_len);
+			break;
+		case RTE_CRYPTO_CIPHER_AES_CTR:
+			icb = get_cnt_blk(m);
+			icb->salt = sa->salt;
+			memcpy(&icb->iv, iv, 8);
+			icb->cnt = rte_cpu_to_be_32(1);
+			break;
+		default:
+			RTE_LOG(ERR, IPSEC_ESP, "unsupported cipher algorithm %u\n",
+					sa->cipher_algo);
+			return -EINVAL;
+		}
+
+		switch (sa->auth_algo) {
+		case RTE_CRYPTO_AUTH_NULL:
+		case RTE_CRYPTO_AUTH_SHA1_HMAC:
+		case RTE_CRYPTO_AUTH_SHA256_HMAC:
+			sym_cop->auth.data.offset = ip_hdr_len;
+			sym_cop->auth.data.length = sizeof(struct esp_hdr) +
+				sa->iv_len + payload_len;
+			break;
+		default:
+			RTE_LOG(ERR, IPSEC_ESP, "unsupported auth algorithm %u\n",
+					sa->auth_algo);
+			return -EINVAL;
+		}
+
+		sym_cop->auth.digest.data = rte_pktmbuf_mtod_offset(m, void*,
+				rte_pktmbuf_pkt_len(m) - sa->digest_len);
+		sym_cop->auth.digest.phys_addr = rte_pktmbuf_iova_offset(m,
+				rte_pktmbuf_pkt_len(m) - sa->digest_len);
+	}
 
 	return 0;
 }
@@ -163,27 +178,42 @@ esp_inbound_post(struct rte_mbuf *m, struct ipsec_sa *sa,
 	RTE_ASSERT(sa != NULL);
 	RTE_ASSERT(cop != NULL);
 
+	if (sa->type == RTE_SECURITY_ACTION_TYPE_INLINE_CRYPTO) {
+		if (m->ol_flags & PKT_RX_SEC_OFFLOAD) {
+			if (m->ol_flags & PKT_RX_SEC_OFFLOAD_FAILED)
+				cop->status = RTE_CRYPTO_OP_STATUS_ERROR;
+			else
+				cop->status = RTE_CRYPTO_OP_STATUS_SUCCESS;
+		} else
+			cop->status = RTE_CRYPTO_OP_STATUS_NOT_PROCESSED;
+	}
+
 	if (cop->status != RTE_CRYPTO_OP_STATUS_SUCCESS) {
 		RTE_LOG(ERR, IPSEC_ESP, "failed crypto op\n");
 		return -1;
 	}
 
-	nexthdr = rte_pktmbuf_mtod_offset(m, uint8_t*,
-			rte_pktmbuf_pkt_len(m) - sa->digest_len - 1);
-	pad_len = nexthdr - 1;
+	if (sa->type == RTE_SECURITY_ACTION_TYPE_INLINE_CRYPTO &&
+	    sa->ol_flags & RTE_SECURITY_RX_HW_TRAILER_OFFLOAD) {
+		nexthdr = &m->inner_esp_next_proto;
+	} else {
+		nexthdr = rte_pktmbuf_mtod_offset(m, uint8_t*,
+				rte_pktmbuf_pkt_len(m) - sa->digest_len - 1);
+		pad_len = nexthdr - 1;
 
-	padding = pad_len - *pad_len;
-	for (i = 0; i < *pad_len; i++) {
-		if (padding[i] != i + 1) {
-			RTE_LOG(ERR, IPSEC_ESP, "invalid padding\n");
+		padding = pad_len - *pad_len;
+		for (i = 0; i < *pad_len; i++) {
+			if (padding[i] != i + 1) {
+				RTE_LOG(ERR, IPSEC_ESP, "invalid padding\n");
+				return -EINVAL;
+			}
+		}
+
+		if (rte_pktmbuf_trim(m, *pad_len + 2 + sa->digest_len)) {
+			RTE_LOG(ERR, IPSEC_ESP,
+					"failed to remove pad_len + digest\n");
 			return -EINVAL;
 		}
-	}
-
-	if (rte_pktmbuf_trim(m, *pad_len + 2 + sa->digest_len)) {
-		RTE_LOG(ERR, IPSEC_ESP,
-				"failed to remove pad_len + digest\n");
-		return -EINVAL;
 	}
 
 	if (unlikely(sa->flags == TRANSPORT)) {
@@ -215,14 +245,13 @@ esp_outbound(struct rte_mbuf *m, struct ipsec_sa *sa,
 	struct ip *ip4;
 	struct ip6_hdr *ip6;
 	struct esp_hdr *esp = NULL;
-	uint8_t *padding, *new_ip, nlp;
+	uint8_t *padding = NULL, *new_ip, nlp;
 	struct rte_crypto_sym_op *sym_cop;
 	int32_t i;
 	uint16_t pad_payload_len, pad_len, ip_hdr_len;
 
 	RTE_ASSERT(m != NULL);
 	RTE_ASSERT(sa != NULL);
-	RTE_ASSERT(cop != NULL);
 
 	ip_hdr_len = 0;
 
@@ -272,12 +301,19 @@ esp_outbound(struct rte_mbuf *m, struct ipsec_sa *sa,
 		return -EINVAL;
 	}
 
-	padding = (uint8_t *)rte_pktmbuf_append(m, pad_len + sa->digest_len);
-	if (unlikely(padding == NULL)) {
-		RTE_LOG(ERR, IPSEC_ESP, "not enough mbuf trailing space\n");
-		return -ENOSPC;
+	/* Add trailer padding if it is not constructed by HW */
+	if (sa->type != RTE_SECURITY_ACTION_TYPE_INLINE_CRYPTO ||
+	    (sa->type == RTE_SECURITY_ACTION_TYPE_INLINE_CRYPTO &&
+	     !(sa->ol_flags & RTE_SECURITY_TX_HW_TRAILER_OFFLOAD))) {
+		padding = (uint8_t *)rte_pktmbuf_append(m, pad_len +
+							sa->digest_len);
+		if (unlikely(padding == NULL)) {
+			RTE_LOG(ERR, IPSEC_ESP,
+					"not enough mbuf trailing space\n");
+			return -ENOSPC;
+		}
+		rte_prefetch0(padding);
 	}
-	rte_prefetch0(padding);
 
 	switch (sa->flags) {
 	case IP4_TUNNEL:
@@ -311,90 +347,141 @@ esp_outbound(struct rte_mbuf *m, struct ipsec_sa *sa,
 	esp->spi = rte_cpu_to_be_32(sa->spi);
 	esp->seq = rte_cpu_to_be_32((uint32_t)sa->seq);
 
+	/* set iv */
 	uint64_t *iv = (uint64_t *)(esp + 1);
+	if (sa->aead_algo == RTE_CRYPTO_AEAD_AES_GCM) {
+		*iv = rte_cpu_to_be_64(sa->seq);
+	} else {
+		switch (sa->cipher_algo) {
+		case RTE_CRYPTO_CIPHER_NULL:
+		case RTE_CRYPTO_CIPHER_AES_CBC:
+			memset(iv, 0, sa->iv_len);
+			break;
+		case RTE_CRYPTO_CIPHER_AES_CTR:
+			*iv = rte_cpu_to_be_64(sa->seq);
+			break;
+		default:
+			RTE_LOG(ERR, IPSEC_ESP,
+				"unsupported cipher algorithm %u\n",
+				sa->cipher_algo);
+			return -EINVAL;
+		}
+	}
 
+	if (sa->type == RTE_SECURITY_ACTION_TYPE_INLINE_CRYPTO) {
+		if (sa->ol_flags & RTE_SECURITY_TX_HW_TRAILER_OFFLOAD) {
+			/* Set the inner esp next protocol for HW trailer */
+			m->inner_esp_next_proto = nlp;
+			m->packet_type |= RTE_PTYPE_TUNNEL_ESP;
+		} else {
+			padding[pad_len - 2] = pad_len - 2;
+			padding[pad_len - 1] = nlp;
+		}
+		goto done;
+	}
+
+	RTE_ASSERT(cop != NULL);
 	sym_cop = get_sym_cop(cop);
 	sym_cop->m_src = m;
-	switch (sa->cipher_algo) {
-	case RTE_CRYPTO_CIPHER_NULL:
-	case RTE_CRYPTO_CIPHER_AES_CBC:
-		memset(iv, 0, sa->iv_len);
-		sym_cop->cipher.data.offset = ip_hdr_len +
-			sizeof(struct esp_hdr);
-		sym_cop->cipher.data.length = pad_payload_len + sa->iv_len;
-		break;
-	case RTE_CRYPTO_CIPHER_AES_CTR:
-	case RTE_CRYPTO_CIPHER_AES_GCM:
-		*iv = sa->seq;
-		sym_cop->cipher.data.offset = ip_hdr_len +
+
+	if (sa->aead_algo == RTE_CRYPTO_AEAD_AES_GCM) {
+		uint8_t *aad;
+
+		sym_cop->aead.data.offset = ip_hdr_len +
 			sizeof(struct esp_hdr) + sa->iv_len;
-		sym_cop->cipher.data.length = pad_payload_len;
-		break;
-	default:
-		RTE_LOG(ERR, IPSEC_ESP, "unsupported cipher algorithm %u\n",
-				sa->cipher_algo);
-		return -EINVAL;
-	}
+		sym_cop->aead.data.length = pad_payload_len;
 
-	/* Fill pad_len using default sequential scheme */
-	for (i = 0; i < pad_len - 2; i++)
-		padding[i] = i + 1;
-	padding[pad_len - 2] = pad_len - 2;
-	padding[pad_len - 1] = nlp;
+		/* Fill pad_len using default sequential scheme */
+		for (i = 0; i < pad_len - 2; i++)
+			padding[i] = i + 1;
+		padding[pad_len - 2] = pad_len - 2;
+		padding[pad_len - 1] = nlp;
 
-	struct cnt_blk *icb = get_cnt_blk(m);
-	icb->salt = sa->salt;
-	icb->iv = sa->seq;
-	icb->cnt = rte_cpu_to_be_32(1);
-	sym_cop->cipher.iv.data = (uint8_t *)icb;
-	sym_cop->cipher.iv.phys_addr = rte_pktmbuf_mtophys_offset(m,
-			 (uint8_t *)icb - rte_pktmbuf_mtod(m, uint8_t *));
-	sym_cop->cipher.iv.length = 16;
+		struct cnt_blk *icb = get_cnt_blk(m);
+		icb->salt = sa->salt;
+		icb->iv = rte_cpu_to_be_64(sa->seq);
+		icb->cnt = rte_cpu_to_be_32(1);
 
-	uint8_t *aad;
-
-	switch (sa->auth_algo) {
-	case RTE_CRYPTO_AUTH_NULL:
-	case RTE_CRYPTO_AUTH_SHA1_HMAC:
-		sym_cop->auth.data.offset = ip_hdr_len;
-		sym_cop->auth.data.length = sizeof(struct esp_hdr) +
-			sa->iv_len + pad_payload_len;
-		break;
-	case RTE_CRYPTO_AUTH_AES_GCM:
 		aad = get_aad(m);
 		memcpy(aad, esp, 8);
-		sym_cop->auth.aad.data = aad;
-		sym_cop->auth.aad.phys_addr = rte_pktmbuf_mtophys_offset(m,
+		sym_cop->aead.aad.data = aad;
+		sym_cop->aead.aad.phys_addr = rte_pktmbuf_iova_offset(m,
 				aad - rte_pktmbuf_mtod(m, uint8_t *));
-		sym_cop->auth.aad.length = 8;
-		break;
-	default:
-		RTE_LOG(ERR, IPSEC_ESP, "unsupported auth algorithm %u\n",
-				sa->auth_algo);
-		return -EINVAL;
+
+		sym_cop->aead.digest.data = rte_pktmbuf_mtod_offset(m, uint8_t *,
+			rte_pktmbuf_pkt_len(m) - sa->digest_len);
+		sym_cop->aead.digest.phys_addr = rte_pktmbuf_iova_offset(m,
+			rte_pktmbuf_pkt_len(m) - sa->digest_len);
+	} else {
+		switch (sa->cipher_algo) {
+		case RTE_CRYPTO_CIPHER_NULL:
+		case RTE_CRYPTO_CIPHER_AES_CBC:
+			sym_cop->cipher.data.offset = ip_hdr_len +
+				sizeof(struct esp_hdr);
+			sym_cop->cipher.data.length = pad_payload_len + sa->iv_len;
+			break;
+		case RTE_CRYPTO_CIPHER_AES_CTR:
+			sym_cop->cipher.data.offset = ip_hdr_len +
+				sizeof(struct esp_hdr) + sa->iv_len;
+			sym_cop->cipher.data.length = pad_payload_len;
+			break;
+		default:
+			RTE_LOG(ERR, IPSEC_ESP, "unsupported cipher algorithm %u\n",
+					sa->cipher_algo);
+			return -EINVAL;
+		}
+
+		/* Fill pad_len using default sequential scheme */
+		for (i = 0; i < pad_len - 2; i++)
+			padding[i] = i + 1;
+		padding[pad_len - 2] = pad_len - 2;
+		padding[pad_len - 1] = nlp;
+
+		struct cnt_blk *icb = get_cnt_blk(m);
+		icb->salt = sa->salt;
+		icb->iv = rte_cpu_to_be_64(sa->seq);
+		icb->cnt = rte_cpu_to_be_32(1);
+
+		switch (sa->auth_algo) {
+		case RTE_CRYPTO_AUTH_NULL:
+		case RTE_CRYPTO_AUTH_SHA1_HMAC:
+		case RTE_CRYPTO_AUTH_SHA256_HMAC:
+			sym_cop->auth.data.offset = ip_hdr_len;
+			sym_cop->auth.data.length = sizeof(struct esp_hdr) +
+				sa->iv_len + pad_payload_len;
+			break;
+		default:
+			RTE_LOG(ERR, IPSEC_ESP, "unsupported auth algorithm %u\n",
+					sa->auth_algo);
+			return -EINVAL;
+		}
+
+		sym_cop->auth.digest.data = rte_pktmbuf_mtod_offset(m, uint8_t *,
+				rte_pktmbuf_pkt_len(m) - sa->digest_len);
+		sym_cop->auth.digest.phys_addr = rte_pktmbuf_iova_offset(m,
+				rte_pktmbuf_pkt_len(m) - sa->digest_len);
 	}
 
-	sym_cop->auth.digest.data = rte_pktmbuf_mtod_offset(m, uint8_t *,
-			rte_pktmbuf_pkt_len(m) - sa->digest_len);
-	sym_cop->auth.digest.phys_addr = rte_pktmbuf_mtophys_offset(m,
-			rte_pktmbuf_pkt_len(m) - sa->digest_len);
-	sym_cop->auth.digest.length = sa->digest_len;
-
+done:
 	return 0;
 }
 
 int
-esp_outbound_post(struct rte_mbuf *m __rte_unused,
-		struct ipsec_sa *sa __rte_unused,
-		struct rte_crypto_op *cop)
+esp_outbound_post(struct rte_mbuf *m,
+		  struct ipsec_sa *sa,
+		  struct rte_crypto_op *cop)
 {
 	RTE_ASSERT(m != NULL);
 	RTE_ASSERT(sa != NULL);
-	RTE_ASSERT(cop != NULL);
 
-	if (cop->status != RTE_CRYPTO_OP_STATUS_SUCCESS) {
-		RTE_LOG(ERR, IPSEC_ESP, "Failed crypto op\n");
-		return -1;
+	if (sa->type == RTE_SECURITY_ACTION_TYPE_INLINE_CRYPTO) {
+		m->ol_flags |= PKT_TX_SEC_OFFLOAD;
+	} else {
+		RTE_ASSERT(cop != NULL);
+		if (cop->status != RTE_CRYPTO_OP_STATUS_SUCCESS) {
+			RTE_LOG(ERR, IPSEC_ESP, "Failed crypto op\n");
+			return -1;
+		}
 	}
 
 	return 0;

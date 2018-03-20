@@ -69,6 +69,17 @@ on their system before building DPDK::
 
    make snow3G
 
+**Note**: When encrypting with SNOW3G UEA2, by default the library
+encrypts blocks of 4 bytes, regardless the number of bytes to
+be encrypted provided (which leads to a possible buffer overflow).
+To avoid this situation, it is necessary not to pass
+3GPP_SAFE_BUFFERS as a compilation flag.
+For this, in the Makefile of the library, make sure that this flag
+is commented out.::
+
+  #EXTRA_CFLAGS  += -D_3GPP_SAFE_BUFFERS
+
+
 Initialization
 --------------
 
@@ -83,9 +94,9 @@ In order to enable this virtual crypto PMD, user must:
 
 To use the PMD in an application, user must:
 
-* Call rte_eal_vdev_init("crypto_snow3g") within the application.
+* Call rte_vdev_init("crypto_snow3g") within the application.
 
-* Use --vdev="crypto_snow3g" in the EAL options, which will call rte_eal_vdev_init() internally.
+* Use --vdev="crypto_snow3g" in the EAL options, which will call rte_vdev_init() internally.
 
 The following parameters (all optional) can be provided in the previous two calls:
 
@@ -100,4 +111,5 @@ Example:
 
 .. code-block:: console
 
-    ./l2fwd-crypto -c 40 -n 4 --vdev="crypto_snow3g,socket_id=1,max_nb_sessions=128"
+    ./l2fwd-crypto -l 1 -n 4 --vdev="crypto_snow3g,socket_id=0,max_nb_sessions=128" \
+    -- -p 1 --cdev SW --chain CIPHER_ONLY --cipher_algo "snow3g-uea2"

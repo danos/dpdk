@@ -36,12 +36,15 @@ Sample Applications User Guides
     :numbered:
 
     intro
+    compiling
     cmd_line
     ethtool
     exception_path
     hello_world
     skeleton
     rxtx_callbacks
+    flow_classify
+    flow_filtering
     ip_frag
     ipv4_multicast
     ip_reassembly
@@ -57,18 +60,21 @@ Sample Applications User Guides
     l3_forward_virtual
     link_status_intr
     load_balancer
+    server_node_efd
+    service_cores
     multi_process
     qos_metering
     qos_scheduler
-    intel_quickassist
     quota_watermark
     timer
     packet_ordering
     vmdq_dcb_forwarding
     vhost
+    vhost_scsi
     netmap_compatibility
     ip_pipeline
     test_pipeline
+    eventdev_pipeline_sw_pmd
     dist_app
     vm_power_management
     tep_termination
@@ -108,8 +114,6 @@ Sample Applications User Guides
 
 :numref:`figure_qos_sched_app_arch` :ref:`figure_qos_sched_app_arch`
 
-:numref:`figure_quickassist_block_diagram` :ref:`figure_quickassist_block_diagram`
-
 :numref:`figure_pipeline_overview` :ref:`figure_pipeline_overview`
 
 :numref:`figure_ring_pipeline_perf_setup` :ref:`figure_ring_pipeline_perf_setup`
@@ -131,6 +135,8 @@ Sample Applications User Guides
 :numref:`figure_tep_termination_arch` :ref:`figure_tep_termination_arch`
 
 :numref:`figure_ptpclient_highlevel` :ref:`figure_ptpclient_highlevel`
+
+:numref:`figure_efd_sample_app_overview` :ref:`figure_efd_sample_app_overview`
 
 **Tables**
 

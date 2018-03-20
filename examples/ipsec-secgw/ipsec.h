@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2016-2017 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -38,6 +38,8 @@
 
 #include <rte_byteorder.h>
 #include <rte_crypto.h>
+#include <rte_security.h>
+#include <rte_flow.h>
 
 #define RTE_LOGTYPE_IPSEC       RTE_LOGTYPE_USER1
 #define RTE_LOGTYPE_IPSEC_ESP   RTE_LOGTYPE_USER2
@@ -47,6 +49,9 @@
 #define MAX_QP_PER_LCORE 256
 
 #define MAX_DIGEST_SIZE 32 /* Bytes -- 256 bits */
+
+#define IV_OFFSET		(sizeof(struct rte_crypto_op) + \
+				sizeof(struct rte_crypto_sym_op))
 
 #define uint32_t_to_char(ip, a, b, c, d) do {\
 		*a = (uint8_t)(ip >> 24 & 0xff);\
@@ -72,7 +77,6 @@
 
 struct rte_crypto_xform;
 struct ipsec_xform;
-struct rte_cryptodev_session;
 struct rte_mbuf;
 
 struct ipsec_sa;
@@ -90,16 +94,20 @@ struct ip_addr {
 	} ip;
 };
 
-#define MAX_KEY_SIZE		20
+#define MAX_KEY_SIZE		32
 
 struct ipsec_sa {
 	uint32_t spi;
 	uint32_t cdev_id_qp;
 	uint64_t seq;
 	uint32_t salt;
-	struct rte_cryptodev_sym_session *crypto_session;
+	union {
+		struct rte_cryptodev_sym_session *crypto_session;
+		struct rte_security_session *sec_session;
+	};
 	enum rte_crypto_cipher_algorithm cipher_algo;
 	enum rte_crypto_auth_algorithm auth_algo;
+	enum rte_crypto_aead_algorithm aead_algo;
 	uint16_t digest_len;
 	uint16_t iv_len;
 	uint16_t block_size;
@@ -114,14 +122,35 @@ struct ipsec_sa {
 	uint8_t auth_key[MAX_KEY_SIZE];
 	uint16_t auth_key_len;
 	uint16_t aad_len;
-	struct rte_crypto_sym_xform *xforms;
+	union {
+		struct rte_crypto_sym_xform *xforms;
+		struct rte_security_ipsec_xform *sec_xform;
+	};
+	enum rte_security_session_action_type type;
+	enum rte_security_ipsec_sa_direction direction;
+	uint16_t portid;
+	struct rte_security_ctx *security_ctx;
+	uint32_t ol_flags;
+
+#define MAX_RTE_FLOW_PATTERN (4)
+#define MAX_RTE_FLOW_ACTIONS (2)
+	struct rte_flow_item pattern[MAX_RTE_FLOW_PATTERN];
+	struct rte_flow_action action[MAX_RTE_FLOW_ACTIONS];
+	struct rte_flow_attr attr;
+	union {
+		struct rte_flow_item_ipv4 ipv4_spec;
+		struct rte_flow_item_ipv6 ipv6_spec;
+	};
+	struct rte_flow_item_esp esp_spec;
+	struct rte_flow *flow;
+	struct rte_security_session_conf sess_conf;
 } __rte_cache_aligned;
 
 struct ipsec_mbuf_metadata {
-	uint8_t buf[32];
 	struct ipsec_sa *sa;
 	struct rte_crypto_op cop;
 	struct rte_crypto_sym_op sym_cop;
+	uint8_t buf[32];
 } __rte_cache_aligned;
 
 struct cdev_qp {
@@ -130,6 +159,8 @@ struct cdev_qp {
 	uint16_t in_flight;
 	uint16_t len;
 	struct rte_crypto_op *buf[MAX_PKT_BURST] __rte_aligned(sizeof(void *));
+	struct rte_mbuf *ol_pkts[MAX_PKT_BURST] __rte_aligned(sizeof(void *));
+	uint16_t ol_pkts_cnt;
 };
 
 struct ipsec_ctx {
@@ -140,12 +171,14 @@ struct ipsec_ctx {
 	uint16_t nb_qps;
 	uint16_t last_qp;
 	struct cdev_qp tbl[MAX_QP_PER_LCORE];
+	struct rte_mempool *session_pool;
 };
 
 struct cdev_key {
 	uint16_t lcore_id;
 	uint8_t cipher_algo;
 	uint8_t auth_algo;
+	uint8_t aead_algo;
 };
 
 struct socket_ctx {
@@ -158,6 +191,7 @@ struct socket_ctx {
 	struct rt_ctx *rt_ip4;
 	struct rt_ctx *rt_ip6;
 	struct rte_mempool *mbuf_pool;
+	struct rte_mempool *session_pool;
 };
 
 struct cnt_blk {

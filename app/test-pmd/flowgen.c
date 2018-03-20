@@ -50,14 +50,12 @@
 #include <rte_cycles.h>
 #include <rte_memory.h>
 #include <rte_memcpy.h>
-#include <rte_memzone.h>
 #include <rte_launch.h>
 #include <rte_eal.h>
 #include <rte_per_lcore.h>
 #include <rte_lcore.h>
 #include <rte_atomic.h>
 #include <rte_branch_prediction.h>
-#include <rte_memory.h>
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
 #include <rte_interrupts.h>
@@ -68,6 +66,7 @@
 #include <rte_tcp.h>
 #include <rte_udp.h>
 #include <rte_string_fns.h>
+#include <rte_flow.h>
 
 #include "testpmd.h"
 
@@ -124,7 +123,7 @@ pkt_burst_flow_gen(struct fwd_stream *fs)
 	struct ipv4_hdr *ip_hdr;
 	struct udp_hdr *udp_hdr;
 	uint16_t vlan_tci, vlan_tci_outer;
-	uint16_t ol_flags;
+	uint64_t ol_flags;
 	uint16_t nb_rx;
 	uint16_t nb_tx;
 	uint16_t nb_pkt;
@@ -152,7 +151,13 @@ pkt_burst_flow_gen(struct fwd_stream *fs)
 	mbp = current_fwd_lcore()->mbp;
 	vlan_tci = ports[fs->tx_port].tx_vlan_id;
 	vlan_tci_outer = ports[fs->tx_port].tx_vlan_id_outer;
-	ol_flags = ports[fs->tx_port].tx_ol_flags;
+
+	if (ports[fs->tx_port].tx_ol_flags & TESTPMD_TX_OFFLOAD_INSERT_VLAN)
+		ol_flags = PKT_TX_VLAN_PKT;
+	if (ports[fs->tx_port].tx_ol_flags & TESTPMD_TX_OFFLOAD_INSERT_QINQ)
+		ol_flags |= PKT_TX_QINQ_PKT;
+	if (ports[fs->tx_port].tx_ol_flags & TESTPMD_TX_OFFLOAD_MACSEC)
+		ol_flags |= PKT_TX_MACSEC;
 
 	for (nb_pkt = 0; nb_pkt < nb_pkt_per_burst; nb_pkt++) {
 		pkt = rte_mbuf_raw_alloc(mbp);

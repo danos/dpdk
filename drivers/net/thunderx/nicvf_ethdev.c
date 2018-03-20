@@ -1,7 +1,7 @@
 /*
  *   BSD LICENSE
  *
- *   Copyright (C) Cavium networks Ltd. 2016.
+ *   Copyright (C) Cavium, Inc. 2016.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Cavium networks nor the names of its
+ *     * Neither the name of Cavium, Inc nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -53,6 +53,7 @@
 #include <rte_eal.h>
 #include <rte_ether.h>
 #include <rte_ethdev.h>
+#include <rte_ethdev_pci.h>
 #include <rte_interrupts.h>
 #include <rte_log.h>
 #include <rte_memory.h>
@@ -60,6 +61,7 @@
 #include <rte_malloc.h>
 #include <rte_random.h>
 #include <rte_pci.h>
+#include <rte_bus_pci.h>
 #include <rte_tailq.h>
 
 #include "base/nicvf_plat.h"
@@ -98,7 +100,7 @@ nicvf_set_eth_link_status(struct nicvf *nic, struct rte_eth_link *link)
 	else if (nic->duplex == NICVF_FULL_DUPLEX)
 		link->link_duplex = ETH_LINK_FULL_DUPLEX;
 	link->link_speed = nic->speed;
-	link->link_autoneg = ETH_LINK_SPEED_AUTONEG;
+	link->link_autoneg = ETH_LINK_AUTONEG;
 }
 
 static void
@@ -110,7 +112,8 @@ nicvf_interrupt(void *arg)
 	if (nicvf_reg_poll_interrupts(nic) == NIC_MBOX_MSG_BGX_LINK_CHANGE) {
 		if (dev->data->dev_conf.intr_conf.lsc)
 			nicvf_set_eth_link_status(nic, &dev->data->dev_link);
-		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL);
+		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC,
+					      NULL, NULL);
 	}
 
 	rte_eal_alarm_set(NICVF_INTR_POLL_INTERVAL_MS * 1000,
@@ -144,16 +147,29 @@ nicvf_periodic_alarm_stop(void (fn)(void *), void *arg)
  * Return 0 means link status changed, -1 means not changed
  */
 static int
-nicvf_dev_link_update(struct rte_eth_dev *dev,
-		      int wait_to_complete __rte_unused)
+nicvf_dev_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 {
+#define CHECK_INTERVAL 100  /* 100ms */
+#define MAX_CHECK_TIME 90   /* 9s (90 * 100ms) in total */
 	struct rte_eth_link link;
 	struct nicvf *nic = nicvf_pmd_priv(dev);
+	int i;
 
 	PMD_INIT_FUNC_TRACE();
 
-	memset(&link, 0, sizeof(link));
-	nicvf_set_eth_link_status(nic, &link);
+	if (wait_to_complete) {
+		/* rte_eth_link_get() might need to wait up to 9 seconds */
+		for (i = 0; i < MAX_CHECK_TIME; i++) {
+			memset(&link, 0, sizeof(link));
+			nicvf_set_eth_link_status(nic, &link);
+			if (link.link_status)
+				break;
+			rte_delay_ms(CHECK_INTERVAL);
+		}
+	} else {
+		memset(&link, 0, sizeof(link));
+		nicvf_set_eth_link_status(nic, &link);
+	}
 	return nicvf_atomic_write_link_status(dev, &link);
 }
 
@@ -227,7 +243,7 @@ nicvf_dev_get_regs(struct rte_eth_dev *dev, struct rte_dev_reg_info *regs)
 	return -ENOTSUP;
 }
 
-static void
+static int
 nicvf_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 {
 	uint16_t qidx;
@@ -317,6 +333,8 @@ nicvf_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	stats->opackets += port_stats.tx_bcast_frames_ok;
 	stats->opackets += port_stats.tx_mcast_frames_ok;
 	stats->oerrors = port_stats.tx_drops;
+
+	return 0;
 }
 
 static const uint32_t *
@@ -587,7 +605,7 @@ nicvf_qset_cq_alloc(struct rte_eth_dev *dev, struct nicvf *nic,
 
 	memset(rz->addr, 0, ring_size);
 
-	rxq->phys = rz->phys_addr;
+	rxq->phys = rz->iova;
 	rxq->desc = rz->addr;
 	rxq->qlen_mask = desc_cnt - 1;
 
@@ -611,7 +629,7 @@ nicvf_qset_sq_alloc(struct rte_eth_dev *dev, struct nicvf *nic,
 
 	memset(rz->addr, 0, ring_size);
 
-	sq->phys = rz->phys_addr;
+	sq->phys = rz->iova;
 	sq->desc = rz->addr;
 	sq->qlen_mask = desc_cnt - 1;
 
@@ -645,7 +663,7 @@ nicvf_qset_rbdr_alloc(struct rte_eth_dev *dev, struct nicvf *nic,
 
 	memset(rz->addr, 0, ring_size);
 
-	rbdr->phys = rz->phys_addr;
+	rbdr->phys = rz->iova;
 	rbdr->tail = 0;
 	rbdr->next_tail = 0;
 	rbdr->desc = rz->addr;
@@ -662,7 +680,7 @@ nicvf_qset_rbdr_alloc(struct rte_eth_dev *dev, struct nicvf *nic,
 
 static void
 nicvf_rbdr_release_mbuf(struct rte_eth_dev *dev, struct nicvf *nic,
-			nicvf_phys_addr_t phy)
+			nicvf_iova_addr_t phy)
 {
 	uint16_t qidx;
 	void *obj;
@@ -1218,6 +1236,30 @@ nicvf_dev_tx_queue_stop(struct rte_eth_dev *dev, uint16_t qidx)
 	return nicvf_vf_stop_tx_queue(dev, nic, qidx);
 }
 
+static inline void
+nicvf_rxq_mbuf_setup(struct nicvf_rxq *rxq)
+{
+	uintptr_t p;
+	struct rte_mbuf mb_def;
+
+	RTE_BUILD_BUG_ON(sizeof(union mbuf_initializer) != 8);
+	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, data_off) % 8 != 0);
+	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, refcnt) -
+				offsetof(struct rte_mbuf, data_off) != 2);
+	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, nb_segs) -
+				offsetof(struct rte_mbuf, data_off) != 4);
+	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, port) -
+				offsetof(struct rte_mbuf, data_off) != 6);
+	mb_def.nb_segs = 1;
+	mb_def.data_off = RTE_PKTMBUF_HEADROOM;
+	mb_def.port = rxq->port_id;
+	rte_mbuf_refcnt_set(&mb_def, 1);
+
+	/* Prevent compiler reordering: rearm_data covers previous fields */
+	rte_compiler_barrier();
+	p = (uintptr_t)&mb_def.rearm_data;
+	rxq->mbuf_initializer.value = *(uint64_t *)p;
+}
 
 static int
 nicvf_dev_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
@@ -1310,6 +1352,7 @@ nicvf_dev_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 	else
 		rxq->rbptr_offset = NICVF_CQE_RBPTR_WORD;
 
+	nicvf_rxq_mbuf_setup(rxq);
 
 	/* Alloc completion queue */
 	if (nicvf_qset_cq_alloc(dev, nic, rxq, rxq->queue_id, nb_desc)) {
@@ -1334,8 +1377,18 @@ static void
 nicvf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 {
 	struct nicvf *nic = nicvf_pmd_priv(dev);
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 
 	PMD_INIT_FUNC_TRACE();
+
+	dev_info->pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+
+	/* Autonegotiation may be disabled */
+	dev_info->speed_capa = ETH_LINK_SPEED_FIXED;
+	dev_info->speed_capa |= ETH_LINK_SPEED_10M | ETH_LINK_SPEED_100M |
+				 ETH_LINK_SPEED_1G | ETH_LINK_SPEED_10G;
+	if (nicvf_hw_version(nic) != PCI_SUB_DEVICE_ID_CN81XX_NICVF)
+		dev_info->speed_capa |= ETH_LINK_SPEED_40G;
 
 	dev_info->min_rx_bufsize = ETHER_MIN_MTU;
 	dev_info->max_rx_pktlen = NIC_HW_MAX_FRS;
@@ -1344,7 +1397,7 @@ nicvf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 	dev_info->max_tx_queues =
 			(uint16_t)MAX_SND_QUEUES_PER_QS * (MAX_SQS_PER_VF + 1);
 	dev_info->max_mac_addrs = 1;
-	dev_info->max_vfs = dev->pci_dev->max_vfs;
+	dev_info->max_vfs = pci_dev->max_vfs;
 
 	dev_info->rx_offload_capa = DEV_RX_OFFLOAD_VLAN_STRIP;
 	dev_info->tx_offload_capa =
@@ -1376,7 +1429,7 @@ nicvf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 	};
 }
 
-static nicvf_phys_addr_t
+static nicvf_iova_addr_t
 rbdr_rte_mempool_get(void *dev, void *opaque)
 {
 	uint16_t qidx;
@@ -1406,7 +1459,7 @@ static int
 nicvf_vf_start(struct rte_eth_dev *dev, struct nicvf *nic, uint32_t rbdrsz)
 {
 	int ret;
-	uint16_t qidx;
+	uint16_t qidx, data_off;
 	uint32_t total_rxq_desc, nb_rbdr_desc, exp_buffs;
 	uint64_t mbuf_phys_off = 0;
 	struct nicvf_rxq *rxq;
@@ -1447,9 +1500,17 @@ nicvf_vf_start(struct rte_eth_dev *dev, struct nicvf *nic, uint32_t rbdrsz)
 				     nic->vf_id, qidx, rxq->pool->name);
 			return -ENOMEM;
 		}
-		rxq->mbuf_phys_off -= nicvf_mbuff_meta_length(mbuf);
-		rxq->mbuf_phys_off -= RTE_PKTMBUF_HEADROOM;
+		data_off = nicvf_mbuff_meta_length(mbuf);
+		data_off += RTE_PKTMBUF_HEADROOM;
 		rte_pktmbuf_free(mbuf);
+
+		if (data_off % RTE_CACHE_LINE_SIZE) {
+			PMD_INIT_LOG(ERR, "%s: unaligned data_off=%d delta=%d",
+				rxq->pool->name, data_off,
+				data_off % RTE_CACHE_LINE_SIZE);
+			return -EINVAL;
+		}
+		rxq->mbuf_phys_off -= data_off;
 
 		if (mbuf_phys_off == 0)
 			mbuf_phys_off = rxq->mbuf_phys_off;
@@ -1974,7 +2035,7 @@ nicvf_eth_dev_init(struct rte_eth_dev *eth_dev)
 		}
 	}
 
-	pci_dev = eth_dev->pci_dev;
+	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	rte_eth_copy_pci_info(eth_dev, pci_dev);
 
 	nic->device_id = pci_dev->id.device_id;
@@ -2036,7 +2097,7 @@ nicvf_eth_dev_init(struct rte_eth_dev *eth_dev)
 			goto fail;
 		}
 
-		/* Detach port by returning postive error number */
+		/* Detach port by returning positive error number */
 		return ENOTSUP;
 	}
 
@@ -2107,16 +2168,26 @@ static const struct rte_pci_id pci_id_nicvf_map[] = {
 	},
 };
 
-static struct eth_driver rte_nicvf_pmd = {
-	.pci_drv = {
-		.id_table = pci_id_nicvf_map,
-		.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
-		.probe = rte_eth_dev_pci_probe,
-		.remove = rte_eth_dev_pci_remove,
-	},
-	.eth_dev_init = nicvf_eth_dev_init,
-	.dev_private_size = sizeof(struct nicvf),
+static int nicvf_eth_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
+	struct rte_pci_device *pci_dev)
+{
+	return rte_eth_dev_pci_generic_probe(pci_dev, sizeof(struct nicvf),
+		nicvf_eth_dev_init);
+}
+
+static int nicvf_eth_pci_remove(struct rte_pci_device *pci_dev)
+{
+	return rte_eth_dev_pci_generic_remove(pci_dev, NULL);
+}
+
+static struct rte_pci_driver rte_nicvf_pmd = {
+	.id_table = pci_id_nicvf_map,
+	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_KEEP_MAPPED_RES |
+			RTE_PCI_DRV_INTR_LSC,
+	.probe = nicvf_eth_pci_probe,
+	.remove = nicvf_eth_pci_remove,
 };
 
-RTE_PMD_REGISTER_PCI(net_thunderx, rte_nicvf_pmd.pci_drv);
+RTE_PMD_REGISTER_PCI(net_thunderx, rte_nicvf_pmd);
 RTE_PMD_REGISTER_PCI_TABLE(net_thunderx, pci_id_nicvf_map);
+RTE_PMD_REGISTER_KMOD_DEP(net_thunderx, "* igb_uio | uio_pci_generic | vfio-pci");

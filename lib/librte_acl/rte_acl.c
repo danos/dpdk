@@ -120,8 +120,7 @@ rte_acl_set_ctx_classify(struct rte_acl_ctx *ctx, enum rte_acl_classify_alg alg)
  * if both conditions are met:
  * at build time compiler supports AVX2 and target cpu supports AVX2.
  */
-static void __attribute__((constructor))
-rte_acl_init(void)
+RTE_INIT(rte_acl_init)
 {
 	enum rte_acl_classify_alg alg = RTE_ACL_CLASSIFY_DEFAULT;
 
@@ -313,8 +312,7 @@ acl_check_rule(const struct rte_acl_rule_data *rd)
 	if ((RTE_LEN2MASK(RTE_ACL_MAX_CATEGORIES, typeof(rd->category_mask)) &
 			rd->category_mask) == 0 ||
 			rd->priority > RTE_ACL_MAX_PRIORITY ||
-			rd->priority < RTE_ACL_MIN_PRIORITY ||
-			rd->userdata == RTE_ACL_INVALID_USERDATA)
+			rd->priority < RTE_ACL_MIN_PRIORITY)
 		return -EINVAL;
 	return 0;
 }

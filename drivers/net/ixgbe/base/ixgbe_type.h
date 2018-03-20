@@ -146,6 +146,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #define IXGBE_DEV_ID_X550EM_X_SFP		0x15AC
 #define IXGBE_DEV_ID_X550EM_X_10G_T		0x15AD
 #define IXGBE_DEV_ID_X550EM_X_1G_T		0x15AE
+#define IXGBE_DEV_ID_X550EM_X_XFI		0x15B0
 #define IXGBE_DEV_ID_X550_VF_HV			0x1564
 #define IXGBE_DEV_ID_X550_VF			0x1565
 #define IXGBE_DEV_ID_X550EM_A_VF		0x15C5
@@ -1045,7 +1046,7 @@ struct ixgbe_dmac_config {
 #define IXGBE_FTFT		0x09400 /* 0x9400-0x97FC */
 #define IXGBE_METF(_i)		(0x05190 + ((_i) * 4)) /* 4 of these (0-3) */
 #define IXGBE_MDEF_EXT(_i)	(0x05160 + ((_i) * 4)) /* 8 of these (0-7) */
-#define IXGBE_LSWFW		0x15014
+#define IXGBE_LSWFW		0x15F14
 #define IXGBE_BMCIP(_i)		(0x05050 + ((_i) * 4)) /* 0x5050-0x505C */
 #define IXGBE_BMCIPVAL		0x05060
 #define IXGBE_BMCIP_IPADDR_TYPE	0x00000001
@@ -1647,7 +1648,6 @@ struct ixgbe_dmac_config {
 #define TN1010_PHY_ID	0x00A19410
 #define TNX_FW_REV	0xB
 #define X540_PHY_ID	0x01540200
-#define X550_PHY_ID1	0x01540220
 #define X550_PHY_ID2	0x01540223
 #define X550_PHY_ID3	0x01540221
 #define X557_PHY_ID	0x01540240
@@ -2622,6 +2622,7 @@ enum {
 #define IXGBE_MRQC_VMDQRSS64EN	0x0000000B /* VMDq2 64 pools w/ RSS */
 #define IXGBE_MRQC_VMDQRT8TCEN	0x0000000C /* VMDq2/RT 16 pool 8 TC */
 #define IXGBE_MRQC_VMDQRT4TCEN	0x0000000D /* VMDq2/RT 32 pool 4 TC */
+#define IXGBE_MRQC_L3L4TXSWEN	0x00008000 /* Enable L3/L4 Tx switch */
 #define IXGBE_MRQC_RSS_FIELD_MASK	0xFFFF0000
 #define IXGBE_MRQC_RSS_FIELD_IPV4_TCP	0x00010000
 #define IXGBE_MRQC_RSS_FIELD_IPV4	0x00020000
@@ -3037,6 +3038,7 @@ enum ixgbe_fdir_pballoc_type {
 #define FW_CEM_UNUSED_VER		0x0
 #define FW_CEM_MAX_RETRIES		3
 #define FW_CEM_RESP_STATUS_SUCCESS	0x1
+#define FW_CEM_DRIVER_VERSION_SIZE	39 /* +9 would send 48 bytes to fw */
 #define FW_READ_SHADOW_RAM_CMD		0x31
 #define FW_READ_SHADOW_RAM_LEN		0x6
 #define FW_WRITE_SHADOW_RAM_CMD		0x33
@@ -3062,6 +3064,59 @@ enum ixgbe_fdir_pballoc_type {
 #define FW_INT_PHY_REQ_LEN		10
 #define FW_INT_PHY_REQ_READ		0
 #define FW_INT_PHY_REQ_WRITE		1
+#define FW_PHY_ACT_REQ_CMD		5
+#define FW_PHY_ACT_DATA_COUNT		4
+#define FW_PHY_ACT_REQ_LEN		(4 + 4 * FW_PHY_ACT_DATA_COUNT)
+#define FW_PHY_ACT_INIT_PHY		1
+#define FW_PHY_ACT_SETUP_LINK		2
+#define FW_PHY_ACT_LINK_SPEED_10	(1u << 0)
+#define FW_PHY_ACT_LINK_SPEED_100	(1u << 1)
+#define FW_PHY_ACT_LINK_SPEED_1G	(1u << 2)
+#define FW_PHY_ACT_LINK_SPEED_2_5G	(1u << 3)
+#define FW_PHY_ACT_LINK_SPEED_5G	(1u << 4)
+#define FW_PHY_ACT_LINK_SPEED_10G	(1u << 5)
+#define FW_PHY_ACT_LINK_SPEED_20G	(1u << 6)
+#define FW_PHY_ACT_LINK_SPEED_25G	(1u << 7)
+#define FW_PHY_ACT_LINK_SPEED_40G	(1u << 8)
+#define FW_PHY_ACT_LINK_SPEED_50G	(1u << 9)
+#define FW_PHY_ACT_LINK_SPEED_100G	(1u << 10)
+#define FW_PHY_ACT_SETUP_LINK_PAUSE_SHIFT 16
+#define FW_PHY_ACT_SETUP_LINK_PAUSE_MASK (3u << \
+					  FW_PHY_ACT_SETUP_LINK_PAUSE_SHIFT)
+#define FW_PHY_ACT_SETUP_LINK_PAUSE_NONE 0u
+#define FW_PHY_ACT_SETUP_LINK_PAUSE_TX	1u
+#define FW_PHY_ACT_SETUP_LINK_PAUSE_RX	2u
+#define FW_PHY_ACT_SETUP_LINK_PAUSE_RXTX 3u
+#define FW_PHY_ACT_SETUP_LINK_LP	(1u << 18)
+#define FW_PHY_ACT_SETUP_LINK_HP	(1u << 19)
+#define FW_PHY_ACT_SETUP_LINK_EEE	(1u << 20)
+#define FW_PHY_ACT_SETUP_LINK_AN	(1u << 22)
+#define FW_PHY_ACT_SETUP_LINK_RSP_DOWN	(1u << 0)
+#define FW_PHY_ACT_GET_LINK_INFO	3
+#define FW_PHY_ACT_GET_LINK_INFO_EEE	(1u << 19)
+#define FW_PHY_ACT_GET_LINK_INFO_FC_TX	(1u << 20)
+#define FW_PHY_ACT_GET_LINK_INFO_FC_RX	(1u << 21)
+#define FW_PHY_ACT_GET_LINK_INFO_POWER	(1u << 22)
+#define FW_PHY_ACT_GET_LINK_INFO_AN_COMPLETE	(1u << 24)
+#define FW_PHY_ACT_GET_LINK_INFO_TEMP	(1u << 25)
+#define FW_PHY_ACT_GET_LINK_INFO_LP_FC_TX	(1u << 28)
+#define FW_PHY_ACT_GET_LINK_INFO_LP_FC_RX	(1u << 29)
+#define FW_PHY_ACT_FORCE_LINK_DOWN	4
+#define FW_PHY_ACT_FORCE_LINK_DOWN_OFF	(1u << 0)
+#define FW_PHY_ACT_PHY_SW_RESET		5
+#define FW_PHY_ACT_PHY_HW_RESET		6
+#define FW_PHY_ACT_GET_PHY_INFO		7
+#define FW_PHY_ACT_UD_2			0x1002
+#define FW_PHY_ACT_UD_2_10G_KR_EEE	(1u << 6)
+#define FW_PHY_ACT_UD_2_10G_KX4_EEE	(1u << 5)
+#define FW_PHY_ACT_UD_2_1G_KX_EEE	(1u << 4)
+#define FW_PHY_ACT_UD_2_10G_T_EEE	(1u << 3)
+#define FW_PHY_ACT_UD_2_1G_T_EEE	(1u << 2)
+#define FW_PHY_ACT_UD_2_100M_TX_EEE	(1u << 1)
+#define FW_PHY_ACT_RETRIES		50
+#define FW_PHY_INFO_SPEED_MASK		0xFFFu
+#define FW_PHY_INFO_ID_HI_MASK		0xFFFF0000u
+#define FW_PHY_INFO_ID_LO_MASK		0x0000FFFFu
 
 /* Host Interface Command Structures */
 
@@ -3111,6 +3166,16 @@ struct ixgbe_hic_drv_info {
 	u16 pad2; /* end spacing to ensure length is mult. of dword2 */
 };
 
+struct ixgbe_hic_drv_info2 {
+	struct ixgbe_hic_hdr hdr;
+	u8 port_num;
+	u8 ver_sub;
+	u8 ver_build;
+	u8 ver_min;
+	u8 ver_maj;
+	char driver_string[FW_CEM_DRIVER_VERSION_SIZE];
+};
+
 /* These need to be dword aligned */
 struct ixgbe_hic_read_shadow_ram {
 	union ixgbe_hic_hdr2 hdr;
@@ -3157,6 +3222,19 @@ struct ixgbe_hic_internal_phy_req {
 struct ixgbe_hic_internal_phy_resp {
 	struct ixgbe_hic_hdr hdr;
 	__be32 read_data;
+};
+
+struct ixgbe_hic_phy_activity_req {
+	struct ixgbe_hic_hdr hdr;
+	u8 port_number;
+	u8 pad;
+	__le16 activity_id;
+	__be32 data[FW_PHY_ACT_DATA_COUNT];
+};
+
+struct ixgbe_hic_phy_activity_resp {
+	struct ixgbe_hic_hdr hdr;
+	__be32 data[FW_PHY_ACT_DATA_COUNT];
 };
 
 #ifdef C99
@@ -3332,23 +3410,25 @@ typedef u32 ixgbe_link_speed;
 					 IXGBE_LINK_SPEED_10GB_FULL)
 
 /* Physical layer type */
-typedef u32 ixgbe_physical_layer;
+typedef u64 ixgbe_physical_layer;
 #define IXGBE_PHYSICAL_LAYER_UNKNOWN		0
-#define IXGBE_PHYSICAL_LAYER_10GBASE_T		0x0001
-#define IXGBE_PHYSICAL_LAYER_1000BASE_T		0x0002
-#define IXGBE_PHYSICAL_LAYER_100BASE_TX		0x0004
-#define IXGBE_PHYSICAL_LAYER_SFP_PLUS_CU	0x0008
-#define IXGBE_PHYSICAL_LAYER_10GBASE_LR		0x0010
-#define IXGBE_PHYSICAL_LAYER_10GBASE_LRM	0x0020
-#define IXGBE_PHYSICAL_LAYER_10GBASE_SR		0x0040
-#define IXGBE_PHYSICAL_LAYER_10GBASE_KX4	0x0080
-#define IXGBE_PHYSICAL_LAYER_10GBASE_CX4	0x0100
-#define IXGBE_PHYSICAL_LAYER_1000BASE_KX	0x0200
-#define IXGBE_PHYSICAL_LAYER_1000BASE_BX	0x0400
-#define IXGBE_PHYSICAL_LAYER_10GBASE_KR		0x0800
-#define IXGBE_PHYSICAL_LAYER_10GBASE_XAUI	0x1000
-#define IXGBE_PHYSICAL_LAYER_SFP_ACTIVE_DA	0x2000
-#define IXGBE_PHYSICAL_LAYER_1000BASE_SX	0x4000
+#define IXGBE_PHYSICAL_LAYER_10GBASE_T		0x00001
+#define IXGBE_PHYSICAL_LAYER_1000BASE_T		0x00002
+#define IXGBE_PHYSICAL_LAYER_100BASE_TX		0x00004
+#define IXGBE_PHYSICAL_LAYER_SFP_PLUS_CU	0x00008
+#define IXGBE_PHYSICAL_LAYER_10GBASE_LR		0x00010
+#define IXGBE_PHYSICAL_LAYER_10GBASE_LRM	0x00020
+#define IXGBE_PHYSICAL_LAYER_10GBASE_SR		0x00040
+#define IXGBE_PHYSICAL_LAYER_10GBASE_KX4	0x00080
+#define IXGBE_PHYSICAL_LAYER_10GBASE_CX4	0x00100
+#define IXGBE_PHYSICAL_LAYER_1000BASE_KX	0x00200
+#define IXGBE_PHYSICAL_LAYER_1000BASE_BX	0x00400
+#define IXGBE_PHYSICAL_LAYER_10GBASE_KR		0x00800
+#define IXGBE_PHYSICAL_LAYER_10GBASE_XAUI	0x01000
+#define IXGBE_PHYSICAL_LAYER_SFP_ACTIVE_DA	0x02000
+#define IXGBE_PHYSICAL_LAYER_1000BASE_SX	0x04000
+#define IXGBE_PHYSICAL_LAYER_10BASE_T		0x08000
+#define IXGBE_PHYSICAL_LAYER_2500BASE_KX	0x10000
 
 /* Flow Control Data Sheet defined values
  * Calculation and defines taken from 802.1bb Annex O
@@ -3567,7 +3647,9 @@ enum ixgbe_phy_type {
 	ixgbe_phy_aq,
 	ixgbe_phy_x550em_kr,
 	ixgbe_phy_x550em_kx4,
+	ixgbe_phy_x550em_xfi,
 	ixgbe_phy_x550em_ext_t,
+	ixgbe_phy_ext_1g_t,
 	ixgbe_phy_cu_unknown,
 	ixgbe_phy_qt,
 	ixgbe_phy_xaui,
@@ -3586,7 +3668,7 @@ enum ixgbe_phy_type {
 	ixgbe_phy_qsfp_unknown,
 	ixgbe_phy_sfp_unsupported, /*Enforce bit set with unsupported module*/
 	ixgbe_phy_sgmii,
-	ixgbe_phy_m88,
+	ixgbe_phy_fw,
 	ixgbe_phy_generic
 };
 
@@ -3641,14 +3723,6 @@ enum ixgbe_fc_mode {
 	ixgbe_fc_tx_pause,
 	ixgbe_fc_full,
 	ixgbe_fc_default
-};
-
-/* Master/slave control */
-enum ixgbe_ms_type {
-	ixgbe_ms_hw_default = 0,
-	ixgbe_ms_force_master,
-	ixgbe_ms_force_slave,
-	ixgbe_ms_auto
 };
 
 /* Smart Speed Settings */
@@ -3833,7 +3907,7 @@ struct ixgbe_mac_operations {
 	s32 (*clear_hw_cntrs)(struct ixgbe_hw *);
 	void (*enable_relaxed_ordering)(struct ixgbe_hw *);
 	enum ixgbe_media_type (*get_media_type)(struct ixgbe_hw *);
-	u32 (*get_supported_physical_layer)(struct ixgbe_hw *);
+	u64 (*get_supported_physical_layer)(struct ixgbe_hw *);
 	s32 (*get_mac_addr)(struct ixgbe_hw *, u8 *);
 	s32 (*get_san_mac_addr)(struct ixgbe_hw *, u8 *);
 	s32 (*set_san_mac_addr)(struct ixgbe_hw *, u8 *);
@@ -3875,6 +3949,7 @@ struct ixgbe_mac_operations {
 	s32 (*led_off)(struct ixgbe_hw *, u32);
 	s32 (*blink_led_start)(struct ixgbe_hw *, u32);
 	s32 (*blink_led_stop)(struct ixgbe_hw *, u32);
+	s32 (*init_led_link_act)(struct ixgbe_hw *);
 
 	/* RAR, Multicast, VLAN */
 	s32 (*set_rar)(struct ixgbe_hw *, u32, u8 *, u32, u32);
@@ -3907,7 +3982,8 @@ struct ixgbe_mac_operations {
 	void (*fc_autoneg)(struct ixgbe_hw *);
 
 	/* Manageability interface */
-	s32 (*set_fw_drv_ver)(struct ixgbe_hw *, u8, u8, u8, u8);
+	s32 (*set_fw_drv_ver)(struct ixgbe_hw *, u8, u8, u8, u8, u16,
+			      const char *);
 	s32 (*get_thermal_sensor_data)(struct ixgbe_hw *);
 	s32 (*init_thermal_sensor_thresh)(struct ixgbe_hw *hw);
 	void (*get_rtrup2tc)(struct ixgbe_hw *hw, u8 *map);
@@ -4017,6 +4093,7 @@ struct ixgbe_mac_info {
 	struct ixgbe_dmac_config dmac_config;
 	bool set_lben;
 	u32  max_link_up_time;
+	u8   led_link_act;
 };
 
 struct ixgbe_phy_info {
@@ -4032,8 +4109,8 @@ struct ixgbe_phy_info {
 	bool reset_disable;
 	ixgbe_autoneg_advertised autoneg_advertised;
 	ixgbe_link_speed speeds_supported;
-	enum ixgbe_ms_type ms_type;
-	enum ixgbe_ms_type original_ms_type;
+	ixgbe_link_speed eee_speeds_supported;
+	ixgbe_link_speed eee_speeds_advertised;
 	enum ixgbe_smart_speed smart_speed;
 	bool smart_speed_active;
 	bool multispeed_fiber;
@@ -4257,8 +4334,8 @@ struct ixgbe_hw {
 #define IXGBE_NW_MNG_IF_SEL_PHY_SPEED_1G	(1u << 19)
 #define IXGBE_NW_MNG_IF_SEL_PHY_SPEED_2_5G	(1u << 20)
 #define IXGBE_NW_MNG_IF_SEL_PHY_SPEED_10G	(1u << 21)
-#define IXGBE_NW_MNG_IF_SEL_ENABLE_10_100M (1 << 23)
-#define IXGBE_NW_MNG_IF_SEL_INT_PHY_MODE (1 << 24)
+#define IXGBE_NW_MNG_IF_SEL_SGMII_ENABLE	(1u << 25)
+#define IXGBE_NW_MNG_IF_SEL_INT_PHY_MODE (1 << 24) /* X552 reg field only */
 #define IXGBE_NW_MNG_IF_SEL_MDIO_PHY_ADD_SHIFT 3
 #define IXGBE_NW_MNG_IF_SEL_MDIO_PHY_ADD	\
 				(0x1F << IXGBE_NW_MNG_IF_SEL_MDIO_PHY_ADD_SHIFT)

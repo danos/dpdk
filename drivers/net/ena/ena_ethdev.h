@@ -35,6 +35,7 @@
 #define _ENA_ETHDEV_H_
 
 #include <rte_pci.h>
+#include <rte_bus_pci.h>
 
 #include "ena_com.h"
 
@@ -162,6 +163,7 @@ struct ena_adapter {
 
 	u16 num_queues;
 	u16 max_mtu;
+	u8 tso4_supported;
 
 	int id_number;
 	char name[ENA_NAME_MAX_LEN];

@@ -158,7 +158,8 @@ static int parse_elf(struct elf_info *info, const char *filename)
 		 * There are more than 64k sections,
 		 * read count from .sh_size.
 		 */
-		info->num_sections = TO_NATIVE(endian, 32, sechdrs[0].sh_size);
+		info->num_sections =
+			TO_NATIVE(endian, ADDR_SIZE, sechdrs[0].sh_size);
 	} else {
 		info->num_sections = hdr->e_shnum;
 	}
@@ -181,7 +182,7 @@ static int parse_elf(struct elf_info *info, const char *filename)
 		sechdrs[i].sh_offset    =
 			TO_NATIVE(endian, ADDR_SIZE, sechdrs[i].sh_offset);
 		sechdrs[i].sh_size      =
-			TO_NATIVE(endian, 32, sechdrs[i].sh_size);
+			TO_NATIVE(endian, ADDR_SIZE, sechdrs[i].sh_size);
 		sechdrs[i].sh_link      =
 			TO_NATIVE(endian, 32, sechdrs[i].sh_link);
 		sechdrs[i].sh_info      =
@@ -270,6 +271,7 @@ struct opt_tag {
 
 static const struct opt_tag opt_tags[] = {
 	{"_param_string_export", "params"},
+	{"_kmod_dep_export", "kmod"},
 };
 
 static int complete_pmd_entry(struct elf_info *info, struct pmd_driver *drv)
@@ -400,7 +402,7 @@ static void output_pmd_info_string(struct elf_info *info, char *outfile)
 
 int main(int argc, char **argv)
 {
-	struct elf_info info;
+	struct elf_info info = {0};
 	int rc = 1;
 
 	if (argc < 3) {

@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2016 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2016-2017 Intel Corporation. All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -35,6 +35,9 @@
 
 #include <sso_zuc.h>
 
+#define CRYPTODEV_NAME_ZUC_PMD		crypto_zuc
+/**< KASUMI PMD device name */
+
 #define ZUC_LOG_ERR(fmt, args...) \
 	RTE_LOG(ERR, CRYPTODEV, "[%s] %s() line %u: " fmt "\n",  \
 			RTE_STR(CRYPTODEV_NAME_ZUC_PMD), \
@@ -56,6 +59,8 @@
 #endif
 
 #define ZUC_IV_KEY_LENGTH 16
+#define ZUC_DIGEST_LENGTH 4
+
 /** private data structure for each virtual ZUC device */
 struct zuc_private {
 	unsigned max_nb_queue_pairs;
@@ -76,6 +81,11 @@ struct zuc_qp {
 	/**< Session Mempool */
 	struct rte_cryptodev_stats qp_stats;
 	/**< Queue pair statistics */
+	uint8_t temp_digest[ZUC_DIGEST_LENGTH];
+	/**< Buffer used to store the digest generated
+	 * by the driver when verifying a digest provided
+	 * by the user (using authentication verify operation)
+	 */
 } __rte_cache_aligned;
 
 enum zuc_operation {
@@ -92,6 +102,8 @@ struct zuc_session {
 	enum rte_crypto_auth_operation auth_op;
 	uint8_t pKey_cipher[ZUC_IV_KEY_LENGTH];
 	uint8_t pKey_hash[ZUC_IV_KEY_LENGTH];
+	uint16_t cipher_iv_offset;
+	uint16_t auth_iv_offset;
 } __rte_cache_aligned;
 
 

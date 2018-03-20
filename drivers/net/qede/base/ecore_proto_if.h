@@ -21,6 +21,16 @@ struct ecore_eth_pf_params {
 	 * to update_pf_params routine invoked before slowpath start
 	 */
 	u16	num_cons;
+
+	/* per-VF number of CIDs */
+	u8	num_vf_cons;
+#define ETH_PF_PARAMS_VF_CONS_DEFAULT	(32)
+
+	/* To enable arfs, previous to HW-init a positive number needs to be
+	 * set [as filters require allocated searcher ILT memory].
+	 * This will set the maximal number of configured steering-filters.
+	 */
+	u32	num_arfs_filters;
 };
 
 /* Most of the the parameters below are described in the FW iSCSI / TCP HSI */
@@ -61,6 +71,13 @@ struct ecore_iscsi_pf_params {
 
 	u8		is_target;
 	u8		bdq_pbl_num_entries[2];
+	u8		disable_stats_collection;
+};
+
+enum ecore_rdma_protocol {
+	ECORE_RDMA_PROTOCOL_DEFAULT,
+	ECORE_RDMA_PROTOCOL_ROCE,
+	ECORE_RDMA_PROTOCOL_IWARP,
 };
 
 struct ecore_rdma_pf_params {
@@ -76,6 +93,10 @@ struct ecore_rdma_pf_params {
 
 	/* Will allocate rate limiters to be used with QPs */
 	u8		enable_dcqcn;
+
+	/* TCP port number used for the iwarp traffic */
+	u16		iwarp_port;
+	enum ecore_rdma_protocol rdma_protocol;
 };
 
 struct ecore_pf_params {

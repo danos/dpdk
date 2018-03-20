@@ -23,24 +23,51 @@ struct ecore_mcp_link_pause_params {
 	bool forced_tx;
 };
 
+enum ecore_mcp_eee_mode {
+	ECORE_MCP_EEE_DISABLED,
+	ECORE_MCP_EEE_ENABLED,
+	ECORE_MCP_EEE_UNSUPPORTED
+};
+
+struct ecore_link_eee_params {
+	u32 tx_lpi_timer;
+#define ECORE_EEE_1G_ADV	(1 << 0)
+#define ECORE_EEE_10G_ADV	(1 << 1)
+	/* Capabilities are represented using ECORE_EEE_*_ADV values */
+	u8 adv_caps;
+	u8 lp_adv_caps;
+	bool enable;
+	bool tx_lpi_enable;
+};
+
 struct ecore_mcp_link_params {
 	struct ecore_mcp_link_speed_params speed;
 	struct ecore_mcp_link_pause_params pause;
 	u32 loopback_mode; /* in PMM_LOOPBACK values */
+	struct ecore_link_eee_params eee;
 };
 
 struct ecore_mcp_link_capabilities {
 	u32 speed_capabilities;
 	bool default_speed_autoneg; /* In Mb/s */
 	u32 default_speed; /* In Mb/s */
+	enum ecore_mcp_eee_mode default_eee;
+	u32 eee_lpi_timer;
+	u8 eee_speed_caps;
 };
 
 struct ecore_mcp_link_state {
 	bool link_up;
 
-	u32 line_speed; /* In Mb/s */
 	u32 min_pf_rate; /* In Mb/s */
-	u32 speed; /* In Mb/s */
+
+	/* Actual link speed in Mb/s */
+	u32 line_speed;
+
+	/* PF max speed in MB/s, deduced from line_speed
+	 * according to PF max bandwidth configuration.
+	 */
+	u32 speed;
 	bool full_duplex;
 
 	bool an;
@@ -67,6 +94,10 @@ struct ecore_mcp_link_state {
 	u8 partner_adv_pause;
 
 	bool sfp_tx_fault;
+
+	bool eee_active;
+	u8 eee_adv_caps;
+	u8 eee_lp_adv_caps;
 };
 
 struct ecore_mcp_function_info {
@@ -84,37 +115,8 @@ struct ecore_mcp_function_info {
 
 #define ECORE_MCP_VLAN_UNSET		(0xffff)
 	u16 ovlan;
-};
 
-struct ecore_mcp_nvm_common {
-	u32 offset;
-	u32 param;
-	u32 resp;
-	u32 cmd;
-};
-
-struct ecore_mcp_nvm_rd {
-	u32 *buf_size;
-	u32 *buf;
-};
-
-struct ecore_mcp_nvm_wr {
-	u32 buf_size;
-	u32 *buf;
-};
-
-struct ecore_mcp_nvm_params {
-#define ECORE_MCP_CMD		(1 << 0)
-#define ECORE_MCP_NVM_RD	(1 << 1)
-#define ECORE_MCP_NVM_WR	(1 << 2)
-	u8 type;
-
-	struct ecore_mcp_nvm_common nvm_common;
-
-	union {
-		struct ecore_mcp_nvm_rd nvm_rd;
-		struct ecore_mcp_nvm_wr nvm_wr;
-	};
+	u16 mtu;
 };
 
 #ifndef __EXTRACT__LINUX__
@@ -173,15 +175,10 @@ union ecore_mcp_protocol_stats {
 };
 #endif
 
-enum ecore_ov_config_method {
-	ECORE_OV_CONFIG_MTU,
-	ECORE_OV_CONFIG_MAC,
-	ECORE_OV_CONFIG_WOL
-};
-
 enum ecore_ov_client {
 	ECORE_OV_CLIENT_DRV,
-	ECORE_OV_CLIENT_USER
+	ECORE_OV_CLIENT_USER,
+	ECORE_OV_CLIENT_VENDOR_SPEC
 };
 
 enum ecore_ov_driver_state {
@@ -233,6 +230,297 @@ enum ecore_mba_img_idx {
 
 struct ecore_mba_vers {
 	u32 mba_vers[ECORE_MAX_NUM_OF_ROMIMG];
+};
+
+enum ecore_mfw_tlv_type {
+	ECORE_MFW_TLV_GENERIC = 0x1, /* Core driver TLVs */
+	ECORE_MFW_TLV_ETH = 0x2, /* L2 driver TLVs */
+	ECORE_MFW_TLV_FCOE = 0x4, /* FCoE protocol TLVs */
+	ECORE_MFW_TLV_ISCSI = 0x8, /* SCSI protocol TLVs */
+	ECORE_MFW_TLV_MAX = 0x16,
+};
+
+struct ecore_mfw_tlv_generic {
+	u16 feat_flags;
+	bool feat_flags_set;
+	u64 local_mac;
+	bool local_mac_set;
+	u64 additional_mac1;
+	bool additional_mac1_set;
+	u64 additional_mac2;
+	bool additional_mac2_set;
+	u8 drv_state;
+	bool drv_state_set;
+	u8 pxe_progress;
+	bool pxe_progress_set;
+	u64 rx_frames;
+	bool rx_frames_set;
+	u64 rx_bytes;
+	bool rx_bytes_set;
+	u64 tx_frames;
+	bool tx_frames_set;
+	u64 tx_bytes;
+	bool tx_bytes_set;
+};
+
+struct ecore_mfw_tlv_eth {
+	u16 lso_maxoff_size;
+	bool lso_maxoff_size_set;
+	u16 lso_minseg_size;
+	bool lso_minseg_size_set;
+	u8 prom_mode;
+	bool prom_mode_set;
+	u16 tx_descr_size;
+	bool tx_descr_size_set;
+	u16 rx_descr_size;
+	bool rx_descr_size_set;
+	u16 netq_count;
+	bool netq_count_set;
+	u32 tcp4_offloads;
+	bool tcp4_offloads_set;
+	u32 tcp6_offloads;
+	bool tcp6_offloads_set;
+	u16 tx_descr_qdepth;
+	bool tx_descr_qdepth_set;
+	u16 rx_descr_qdepth;
+	bool rx_descr_qdepth_set;
+	u8 iov_offload;
+	bool iov_offload_set;
+	u8 txqs_empty;
+	bool txqs_empty_set;
+	u8 rxqs_empty;
+	bool rxqs_empty_set;
+	u8 num_txqs_full;
+	bool num_txqs_full_set;
+	u8 num_rxqs_full;
+	bool num_rxqs_full_set;
+};
+
+struct ecore_mfw_tlv_fcoe {
+	u8 scsi_timeout;
+	bool scsi_timeout_set;
+	u32 rt_tov;
+	bool rt_tov_set;
+	u32 ra_tov;
+	bool ra_tov_set;
+	u32 ed_tov;
+	bool ed_tov_set;
+	u32 cr_tov;
+	bool cr_tov_set;
+	u8 boot_type;
+	bool boot_type_set;
+	u8 npiv_state;
+	bool npiv_state_set;
+	u32 num_npiv_ids;
+	bool num_npiv_ids_set;
+	u8 switch_name[8];
+	bool switch_name_set;
+	u16 switch_portnum;
+	bool switch_portnum_set;
+	u8 switch_portid[3];
+	bool switch_portid_set;
+	u8 vendor_name[8];
+	bool vendor_name_set;
+	u8 switch_model[8];
+	bool switch_model_set;
+	u8 switch_fw_version[8];
+	bool switch_fw_version_set;
+	u8 qos_pri;
+	bool qos_pri_set;
+	u8 port_alias[3];
+	bool port_alias_set;
+	u8 port_state;
+	bool port_state_set;
+	u16 fip_tx_descr_size;
+	bool fip_tx_descr_size_set;
+	u16 fip_rx_descr_size;
+	bool fip_rx_descr_size_set;
+	u16 link_failures;
+	bool link_failures_set;
+	u8 fcoe_boot_progress;
+	bool fcoe_boot_progress_set;
+	u64 rx_bcast;
+	bool rx_bcast_set;
+	u64 tx_bcast;
+	bool tx_bcast_set;
+	u16 fcoe_txq_depth;
+	bool fcoe_txq_depth_set;
+	u16 fcoe_rxq_depth;
+	bool fcoe_rxq_depth_set;
+	u64 fcoe_rx_frames;
+	bool fcoe_rx_frames_set;
+	u64 fcoe_rx_bytes;
+	bool fcoe_rx_bytes_set;
+	u64 fcoe_tx_frames;
+	bool fcoe_tx_frames_set;
+	u64 fcoe_tx_bytes;
+	bool fcoe_tx_bytes_set;
+	u16 crc_count;
+	bool crc_count_set;
+	u32 crc_err_src_fcid[5];
+	bool crc_err_src_fcid_set[5];
+	u8 crc_err_tstamp[5][14];
+	bool crc_err_tstamp_set[5];
+	u16 losync_err;
+	bool losync_err_set;
+	u16 losig_err;
+	bool losig_err_set;
+	u16 primtive_err;
+	bool primtive_err_set;
+	u16 disparity_err;
+	bool disparity_err_set;
+	u16 code_violation_err;
+	bool code_violation_err_set;
+	u32 flogi_param[4];
+	bool flogi_param_set[4];
+	u8 flogi_tstamp[14];
+	bool flogi_tstamp_set;
+	u32 flogi_acc_param[4];
+	bool flogi_acc_param_set[4];
+	u8 flogi_acc_tstamp[14];
+	bool flogi_acc_tstamp_set;
+	u32 flogi_rjt;
+	bool flogi_rjt_set;
+	u8 flogi_rjt_tstamp[14];
+	bool flogi_rjt_tstamp_set;
+	u32 fdiscs;
+	bool fdiscs_set;
+	u8 fdisc_acc;
+	bool fdisc_acc_set;
+	u8 fdisc_rjt;
+	bool fdisc_rjt_set;
+	u8 plogi;
+	bool plogi_set;
+	u8 plogi_acc;
+	bool plogi_acc_set;
+	u8 plogi_rjt;
+	bool plogi_rjt_set;
+	u32 plogi_dst_fcid[5];
+	bool plogi_dst_fcid_set[5];
+	u8 plogi_tstamp[5][14];
+	bool plogi_tstamp_set[5];
+	u32 plogi_acc_src_fcid[5];
+	bool plogi_acc_src_fcid_set[5];
+	u8 plogi_acc_tstamp[5][14];
+	bool plogi_acc_tstamp_set[5];
+	u8 tx_plogos;
+	bool tx_plogos_set;
+	u8 plogo_acc;
+	bool plogo_acc_set;
+	u8 plogo_rjt;
+	bool plogo_rjt_set;
+	u32 plogo_src_fcid[5];
+	bool plogo_src_fcid_set[5];
+	u8 plogo_tstamp[5][14];
+	bool plogo_tstamp_set[5];
+	u8 rx_logos;
+	bool rx_logos_set;
+	u8 tx_accs;
+	bool tx_accs_set;
+	u8 tx_prlis;
+	bool tx_prlis_set;
+	u8 rx_accs;
+	bool rx_accs_set;
+	u8 tx_abts;
+	bool tx_abts_set;
+	u8 rx_abts_acc;
+	bool rx_abts_acc_set;
+	u8 rx_abts_rjt;
+	bool rx_abts_rjt_set;
+	u32 abts_dst_fcid[5];
+	bool abts_dst_fcid_set[5];
+	u8 abts_tstamp[5][14];
+	bool abts_tstamp_set[5];
+	u8 rx_rscn;
+	bool rx_rscn_set;
+	u32 rx_rscn_nport[4];
+	bool rx_rscn_nport_set[4];
+	u8 tx_lun_rst;
+	bool tx_lun_rst_set;
+	u8 abort_task_sets;
+	bool abort_task_sets_set;
+	u8 tx_tprlos;
+	bool tx_tprlos_set;
+	u8 tx_nos;
+	bool tx_nos_set;
+	u8 rx_nos;
+	bool rx_nos_set;
+	u8 ols;
+	bool ols_set;
+	u8 lr;
+	bool lr_set;
+	u8 lrr;
+	bool lrr_set;
+	u8 tx_lip;
+	bool tx_lip_set;
+	u8 rx_lip;
+	bool rx_lip_set;
+	u8 eofa;
+	bool eofa_set;
+	u8 eofni;
+	bool eofni_set;
+	u8 scsi_chks;
+	bool scsi_chks_set;
+	u8 scsi_cond_met;
+	bool scsi_cond_met_set;
+	u8 scsi_busy;
+	bool scsi_busy_set;
+	u8 scsi_inter;
+	bool scsi_inter_set;
+	u8 scsi_inter_cond_met;
+	bool scsi_inter_cond_met_set;
+	u8 scsi_rsv_conflicts;
+	bool scsi_rsv_conflicts_set;
+	u8 scsi_tsk_full;
+	bool scsi_tsk_full_set;
+	u8 scsi_aca_active;
+	bool scsi_aca_active_set;
+	u8 scsi_tsk_abort;
+	bool scsi_tsk_abort_set;
+	u32 scsi_rx_chk[5];
+	bool scsi_rx_chk_set[5];
+	u8 scsi_chk_tstamp[5][14];
+	bool scsi_chk_tstamp_set[5];
+};
+
+struct ecore_mfw_tlv_iscsi {
+	u8 target_llmnr;
+	bool target_llmnr_set;
+	u8 header_digest;
+	bool header_digest_set;
+	u8 data_digest;
+	bool data_digest_set;
+	u8 auth_method;
+	bool auth_method_set;
+	u16 boot_taget_portal;
+	bool boot_taget_portal_set;
+	u16 frame_size;
+	bool frame_size_set;
+	u16 tx_desc_size;
+	bool tx_desc_size_set;
+	u16 rx_desc_size;
+	bool rx_desc_size_set;
+	u8 boot_progress;
+	bool boot_progress_set;
+	u16 tx_desc_qdepth;
+	bool tx_desc_qdepth_set;
+	u16 rx_desc_qdepth;
+	bool rx_desc_qdepth_set;
+	u64 rx_frames;
+	bool rx_frames_set;
+	u64 rx_bytes;
+	bool rx_bytes_set;
+	u64 tx_frames;
+	bool tx_frames_set;
+	u64 tx_bytes;
+	bool tx_bytes_set;
+};
+
+union ecore_mfw_tlv_data {
+	struct ecore_mfw_tlv_generic generic;
+	struct ecore_mfw_tlv_eth eth;
+	struct ecore_mfw_tlv_fcoe fcoe;
+	struct ecore_mfw_tlv_iscsi iscsi;
 };
 
 /**
@@ -295,14 +583,16 @@ enum _ecore_status_t ecore_mcp_get_mfw_ver(struct ecore_hwfn *p_hwfn,
  * @brief Get media type value of the port.
  *
  * @param p_dev      - ecore dev pointer
+ * @param p_ptt
  * @param mfw_ver    - media type value
  *
  * @return enum _ecore_status_t -
  *      ECORE_SUCCESS - Operation was successful.
  *      ECORE_BUSY - Operation failed
  */
-enum _ecore_status_t ecore_mcp_get_media_type(struct ecore_dev *p_dev,
-					   u32 *media_type);
+enum _ecore_status_t ecore_mcp_get_media_type(struct ecore_hwfn *p_hwfn,
+					      struct ecore_ptt *p_ptt,
+					      u32 *media_type);
 
 /**
  * @brief - Sends a command to the MCP mailbox.
@@ -310,9 +600,9 @@ enum _ecore_status_t ecore_mcp_get_media_type(struct ecore_dev *p_dev,
  * @param p_hwfn      - hw function
  * @param p_ptt       - PTT required for register access
  * @param cmd         - command to be sent to the MCP
- * @param param       - optional param
- * @param o_mcp_resp  - the MCP response code (exclude sequence)
- * @param o_mcp_param - optional parameter provided by the MCP response
+ * @param param       - Optional param
+ * @param o_mcp_resp  - The MCP response code (exclude sequence)
+ * @param o_mcp_param - Optional parameter provided by the MCP response
  *
  * @return enum _ecore_status_t -
  *      ECORE_SUCCESS - operation was successful
@@ -343,44 +633,6 @@ enum _ecore_status_t ecore_mcp_drain(struct ecore_hwfn *p_hwfn,
 const struct ecore_mcp_function_info
 *ecore_mcp_get_function_info(struct ecore_hwfn *p_hwfn);
 #endif
-
-/**
- * @brief - Function for reading/manipulating the nvram. Following are supported
- *          functionalities.
- *          1. Read: Read the specified nvram offset.
- *             input values:
- *               type   - ECORE_MCP_NVM_RD
- *               cmd    - command code (e.g. DRV_MSG_CODE_NVM_READ_NVRAM)
- *               offset - nvm offset
- *
- *             output values:
- *               buf      - buffer
- *               buf_size - buffer size
- *
- *          2. Write: Write the data at the specified nvram offset
- *             input values:
- *               type     - ECORE_MCP_NVM_WR
- *               cmd      - command code (e.g. DRV_MSG_CODE_NVM_WRITE_NVRAM)
- *               offset   - nvm offset
- *               buf      - buffer
- *               buf_size - buffer size
- *
- *          3. Command: Send the NVM command to MCP.
- *             input values:
- *               type   - ECORE_MCP_CMD
- *               cmd    - command code (e.g. DRV_MSG_CODE_NVM_DEL_FILE)
- *               offset - nvm offset
- *
- *
- * @param p_hwfn
- * @param p_ptt
- * @param params
- *
- * @return ECORE_SUCCESS - operation was successful.
- */
-enum _ecore_status_t ecore_mcp_nvm_command(struct ecore_hwfn *p_hwfn,
-					   struct ecore_ptt *p_ptt,
-					   struct ecore_mcp_nvm_params *params);
 
 #ifndef LINUX_REMOVE
 /**
@@ -448,11 +700,21 @@ enum _ecore_status_t ecore_start_recovery_process(struct ecore_hwfn *p_hwfn,
 						  struct ecore_ptt *p_ptt);
 
 /**
+ * @brief A recovery handler must call this function as its first step.
+ *        It is assumed that the handler is not run from an interrupt context.
+ *
+ *  @param p_dev
+ *  @param p_ptt
+ *
+ * @return enum _ecore_status_t
+ */
+enum _ecore_status_t ecore_recovery_prolog(struct ecore_dev *p_dev);
+
+/**
  * @brief Notify MFW about the change in base device properties
  *
  *  @param p_hwfn
  *  @param p_ptt
- *  @param config - Configuation that has been updated
  *  @param client - ecore client type
  *
  * @return enum _ecore_status_t - ECORE_SUCCESS - operation was successful.
@@ -460,7 +722,6 @@ enum _ecore_status_t ecore_start_recovery_process(struct ecore_hwfn *p_hwfn,
 enum _ecore_status_t
 ecore_mcp_ov_update_current_config(struct ecore_hwfn *p_hwfn,
 				   struct ecore_ptt *p_ptt,
-				   enum ecore_ov_config_method config,
 				   enum ecore_ov_client client);
 
 /**
@@ -594,7 +855,7 @@ enum _ecore_status_t ecore_mcp_nvm_resp(struct ecore_dev *p_dev, u8 *p_buf);
  *  @param p_dev
  *  @param addr - nvm offset
  *  @param cmd - nvm command
- *  @param p_buf - nvm write buffer
+ *  @param p_buf - nvm read buffer
  *  @param len - buffer len
  *
  * @return enum _ecore_status_t - ECORE_SUCCESS - operation was successful.
@@ -607,13 +868,63 @@ enum _ecore_status_t ecore_mcp_phy_read(struct ecore_dev *p_dev, u32 cmd,
  *
  *  @param p_dev
  *  @param addr - nvm offset
- *  @param p_buf - nvm write buffer
+ *  @param p_buf - nvm read buffer
  *  @param len - buffer len
  *
  * @return enum _ecore_status_t - ECORE_SUCCESS - operation was successful.
  */
 enum _ecore_status_t ecore_mcp_nvm_read(struct ecore_dev *p_dev, u32 addr,
 			   u8 *p_buf, u32 len);
+
+/**
+ * @brief - Sends an NVM write command request to the MFW with
+ *          payload.
+ *
+ * @param p_hwfn
+ * @param p_ptt
+ * @param cmd - Command: Either DRV_MSG_CODE_NVM_WRITE_NVRAM or
+ *            DRV_MSG_CODE_NVM_PUT_FILE_DATA
+ * @param param - [0:23] - Offset [24:31] - Size
+ * @param o_mcp_resp - MCP response
+ * @param o_mcp_param - MCP response param
+ * @param i_txn_size -  Buffer size
+ * @param i_buf - Pointer to the buffer
+ *
+ * @param return ECORE_SUCCESS upon success.
+ */
+enum _ecore_status_t ecore_mcp_nvm_wr_cmd(struct ecore_hwfn *p_hwfn,
+					  struct ecore_ptt *p_ptt,
+					  u32 cmd,
+					  u32 param,
+					  u32 *o_mcp_resp,
+					  u32 *o_mcp_param,
+					  u32 i_txn_size,
+					  u32 *i_buf);
+
+/**
+ * @brief - Sends an NVM read command request to the MFW to get
+ *        a buffer.
+ *
+ * @param p_hwfn
+ * @param p_ptt
+ * @param cmd - Command: DRV_MSG_CODE_NVM_GET_FILE_DATA or
+ *            DRV_MSG_CODE_NVM_READ_NVRAM commands
+ * @param param - [0:23] - Offset [24:31] - Size
+ * @param o_mcp_resp - MCP response
+ * @param o_mcp_param - MCP response param
+ * @param o_txn_size -  Buffer size output
+ * @param o_buf - Pointer to the buffer returned by the MFW.
+ *
+ * @param return ECORE_SUCCESS upon success.
+ */
+enum _ecore_status_t ecore_mcp_nvm_rd_cmd(struct ecore_hwfn *p_hwfn,
+					  struct ecore_ptt *p_ptt,
+					  u32 cmd,
+					  u32 param,
+					  u32 *o_mcp_resp,
+					  u32 *o_mcp_param,
+					  u32 *o_txn_size,
+					  u32 *o_buf);
 
 /**
  * @brief Read from sfp
@@ -792,14 +1103,69 @@ enum _ecore_status_t ecore_mcp_mem_ecc_events(struct ecore_hwfn *p_hwfn,
 					      struct ecore_ptt *p_ptt,
 					      u64 *num_events);
 
-/**
- * @brief Sets whether a critical error notification from the MFW is acked, or
- *        is it being ignored and thus allowing the MFW crash dump.
- *
- * @param p_dev
- * @param mdump_enable
- *
- */
-void ecore_mcp_mdump_enable(struct ecore_dev *p_dev, bool mdump_enable);
+struct ecore_mdump_info {
+	u32 reason;
+	u32 version;
+	u32 config;
+	u32 epoch;
+	u32 num_of_logs;
+	u32 valid_logs;
+};
 
+/**
+ * @brief - Gets the MFW crash dump configuration and logs info.
+ *
+ * @param p_hwfn
+ * @param p_ptt
+ * @param p_mdump_info
+ *
+ * @param return ECORE_SUCCESS upon success.
+ */
+enum _ecore_status_t
+ecore_mcp_mdump_get_info(struct ecore_hwfn *p_hwfn, struct ecore_ptt *p_ptt,
+			 struct ecore_mdump_info *p_mdump_info);
+
+/**
+ * @brief - Clears the MFW crash dump logs.
+ *
+ * @param p_hwfn
+ * @param p_ptt
+ *
+ * @param return ECORE_SUCCESS upon success.
+ */
+enum _ecore_status_t ecore_mcp_mdump_clear_logs(struct ecore_hwfn *p_hwfn,
+						struct ecore_ptt *p_ptt);
+
+/**
+ * @brief - Clear the mdump retained data.
+ *
+ * @param p_hwfn
+ * @param p_ptt
+ *
+ * @param return ECORE_SUCCESS upon success.
+ */
+enum _ecore_status_t ecore_mcp_mdump_clr_retain(struct ecore_hwfn *p_hwfn,
+						struct ecore_ptt *p_ptt);
+
+/**
+ * @brief - Processes the TLV request from MFW i.e., get the required TLV info
+ *          from the ecore client and send it to the MFW.
+ *
+ * @param p_hwfn
+ * @param p_ptt
+ *
+ * @param return ECORE_SUCCESS upon success.
+ */
+enum _ecore_status_t ecore_mfw_process_tlv_req(struct ecore_hwfn *p_hwfn,
+					       struct ecore_ptt *p_ptt);
+
+
+/**
+ * @brief - Return whether management firmware support smart AN
+ *
+ * @param p_hwfn
+ *
+ * @return bool - true iff feature is supported.
+ */
+bool ecore_mcp_is_smart_an_supported(struct ecore_hwfn *p_hwfn);
 #endif

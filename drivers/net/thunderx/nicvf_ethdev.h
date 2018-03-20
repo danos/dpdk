@@ -1,7 +1,7 @@
 /*
  *   BSD LICENSE
  *
- *   Copyright (C) Cavium networks Ltd. 2016.
+ *   Copyright (C) Cavium, Inc. 2016.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Cavium networks nor the names of its
+ *     * Neither the name of Cavium, Inc nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -78,7 +78,7 @@ nicvf_mempool_phy_offset(struct rte_mempool *mp)
 
 	hdr = STAILQ_FIRST(&mp->mem_list);
 	assert(hdr != NULL);
-	return (uint64_t)((uintptr_t)hdr->addr - hdr->phys_addr);
+	return (uint64_t)((uintptr_t)hdr->addr - hdr->iova);
 }
 
 static inline uint16_t
@@ -104,7 +104,7 @@ nicvf_netdev_qidx(struct nicvf *nic, uint8_t local_qidx)
  * P = V - offset
  */
 static inline uintptr_t
-nicvf_mbuff_phy2virt(phys_addr_t phy, uint64_t mbuf_phys_off)
+nicvf_mbuff_phy2virt(rte_iova_t phy, uint64_t mbuf_phys_off)
 {
 	return (uintptr_t)(phy + mbuf_phys_off);
 }
@@ -112,7 +112,7 @@ nicvf_mbuff_phy2virt(phys_addr_t phy, uint64_t mbuf_phys_off)
 static inline uintptr_t
 nicvf_mbuff_virt2phy(uintptr_t virt, uint64_t mbuf_phys_off)
 {
-	return (phys_addr_t)(virt - mbuf_phys_off);
+	return (rte_iova_t)(virt - mbuf_phys_off);
 }
 
 static inline void

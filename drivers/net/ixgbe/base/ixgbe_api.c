@@ -205,6 +205,7 @@ s32 ixgbe_set_mac_type(struct ixgbe_hw *hw)
 	case IXGBE_DEV_ID_X550EM_X_10G_T:
 	case IXGBE_DEV_ID_X550EM_X_1G_T:
 	case IXGBE_DEV_ID_X550EM_X_SFP:
+	case IXGBE_DEV_ID_X550EM_X_XFI:
 		hw->mac.type = ixgbe_mac_X550EM_x;
 		hw->mvals = ixgbe_mvals_X550EM_x;
 		break;
@@ -1147,12 +1148,15 @@ s32 ixgbe_setup_fc(struct ixgbe_hw *hw)
  * @min: driver minor number to be sent to firmware
  * @build: driver build number to be sent to firmware
  * @ver: driver version number to be sent to firmware
+ * @len: length of driver_ver string
+ * @driver_ver: driver string
  **/
 s32 ixgbe_set_fw_drv_ver(struct ixgbe_hw *hw, u8 maj, u8 min, u8 build,
-			 u8 ver)
+			 u8 ver, u16 len, char *driver_ver)
 {
 	return ixgbe_call_func(hw, hw->mac.ops.set_fw_drv_ver, (hw, maj, min,
-			       build, ver), IXGBE_NOT_IMPLEMENTED);
+			       build, ver, len, driver_ver),
+			       IXGBE_NOT_IMPLEMENTED);
 }
 
 
@@ -1575,7 +1579,7 @@ s32 ixgbe_read_i2c_eeprom(struct ixgbe_hw *hw, u8 byte_offset, u8 *eeprom_data)
  *
  *  Determines physical layer capabilities of the current configuration.
  **/
-u32 ixgbe_get_supported_physical_layer(struct ixgbe_hw *hw)
+u64 ixgbe_get_supported_physical_layer(struct ixgbe_hw *hw)
 {
 	return ixgbe_call_func(hw, hw->mac.ops.get_supported_physical_layer,
 			       (hw), IXGBE_PHYSICAL_LAYER_UNKNOWN);

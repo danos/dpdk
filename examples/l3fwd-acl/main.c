@@ -47,9 +47,7 @@
 #include <rte_log.h>
 #include <rte_memory.h>
 #include <rte_memcpy.h>
-#include <rte_memzone.h>
 #include <rte_eal.h>
-#include <rte_per_lcore.h>
 #include <rte_launch.h>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
@@ -58,7 +56,6 @@
 #include <rte_per_lcore.h>
 #include <rte_branch_prediction.h>
 #include <rte_interrupts.h>
-#include <rte_pci.h>
 #include <rte_random.h>
 #include <rte_debug.h>
 #include <rte_ether.h>
@@ -91,10 +88,10 @@
  */
 
 #define NB_MBUF	RTE_MAX(\
-	(nb_ports * nb_rx_queue*RTE_TEST_RX_DESC_DEFAULT +	\
-	nb_ports * nb_lcores * MAX_PKT_BURST +			\
-	nb_ports * n_tx_queue * RTE_TEST_TX_DESC_DEFAULT +	\
-	nb_lcores * MEMPOOL_CACHE_SIZE),			\
+	(nb_ports * nb_rx_queue * nb_rxd +	\
+	nb_ports * nb_lcores * MAX_PKT_BURST +	\
+	nb_ports * n_tx_queue * nb_txd +	\
+	nb_lcores * MEMPOOL_CACHE_SIZE),	\
 	(unsigned)8192)
 
 #define MAX_PKT_BURST 32
@@ -122,7 +119,7 @@ static int promiscuous_on; /**< Ports set in promiscuous mode off by default. */
 static int numa_on = 1; /**< NUMA is enabled by default. */
 
 struct lcore_rx_queue {
-	uint8_t port_id;
+	uint16_t port_id;
 	uint8_t queue_id;
 } __rte_cache_aligned;
 
@@ -132,7 +129,7 @@ struct lcore_rx_queue {
 
 #define MAX_LCORE_PARAMS 1024
 struct lcore_params {
-	uint8_t port_id;
+	uint16_t port_id;
 	uint8_t queue_id;
 	uint8_t lcore_id;
 } __rte_cache_aligned;
@@ -185,7 +182,7 @@ static inline int
 is_valid_ipv4_pkt(struct ipv4_hdr *pkt, uint32_t link_len);
 #endif
 static inline void
-send_single_packet(struct rte_mbuf *m, uint8_t port);
+send_single_packet(struct rte_mbuf *m, uint16_t port);
 
 #define MAX_ACL_RULE_NUM	100000
 #define DEFAULT_MAX_CATEGORIES	1
@@ -1303,7 +1300,7 @@ static struct lcore_conf lcore_conf[RTE_MAX_LCORE];
 
 /* Enqueue a single packet, and send burst if queue is filled */
 static inline void
-send_single_packet(struct rte_mbuf *m, uint8_t port)
+send_single_packet(struct rte_mbuf *m, uint16_t port)
 {
 	uint32_t lcore_id;
 	struct lcore_conf *qconf;
@@ -1364,7 +1361,8 @@ main_loop(__attribute__((unused)) void *dummy)
 	unsigned lcore_id;
 	uint64_t prev_tsc, diff_tsc, cur_tsc;
 	int i, nb_rx;
-	uint8_t portid, queueid;
+	uint16_t portid;
+	uint8_t queueid;
 	struct lcore_conf *qconf;
 	int socketid;
 	const uint64_t drain_tsc = (rte_get_tsc_hz() + US_PER_S - 1)
@@ -1387,7 +1385,7 @@ main_loop(__attribute__((unused)) void *dummy)
 		portid = qconf->rx_queue_list[i].port_id;
 		queueid = qconf->rx_queue_list[i].queue_id;
 		RTE_LOG(INFO, L3FWD,
-			" -- lcoreid=%u portid=%hhu rxqueueid=%hhu\n",
+			" -- lcoreid=%u portid=%u rxqueueid=%hhu\n",
 			lcore_id, portid, queueid);
 	}
 
@@ -1506,7 +1504,7 @@ check_port_config(const unsigned nb_ports)
 }
 
 static uint8_t
-get_port_n_rx_queues(const uint8_t port)
+get_port_n_rx_queues(const uint16_t port)
 {
 	int queue = -1;
 	uint16_t i;
@@ -1781,7 +1779,7 @@ parse_args(int argc, char **argv)
 		argv[optind-1] = prgname;
 
 	ret = optind-1;
-	optind = 0; /* reset getopt lib */
+	optind = 1; /* reset getopt lib */
 	return ret;
 }
 
@@ -1835,11 +1833,12 @@ init_mem(unsigned nb_mbuf)
 
 /* Check the link status of all ports in up to 9s, and print them finally */
 static void
-check_all_ports_link_status(uint8_t port_num, uint32_t port_mask)
+check_all_ports_link_status(uint16_t port_num, uint32_t port_mask)
 {
 #define CHECK_INTERVAL 100 /* 100ms */
 #define MAX_CHECK_TIME 90 /* 9s (90 * 100ms) in total */
-	uint8_t portid, count, all_ports_up, print_flag = 0;
+	uint16_t portid;
+	uint8_t count, all_ports_up, print_flag = 0;
 	struct rte_eth_link link;
 
 	printf("\nChecking link status");
@@ -1854,14 +1853,13 @@ check_all_ports_link_status(uint8_t port_num, uint32_t port_mask)
 			/* print link status if flag set */
 			if (print_flag == 1) {
 				if (link.link_status)
-					printf("Port %d Link Up - speed %u "
-						"Mbps - %s\n", (uint8_t)portid,
-						(unsigned)link.link_speed,
+					printf(
+					"Port%d Link Up. Speed %u Mbps %s\n",
+						portid, link.link_speed,
 				(link.link_duplex == ETH_LINK_FULL_DUPLEX) ?
 					("full-duplex") : ("half-duplex\n"));
 				else
-					printf("Port %d Link Down\n",
-						(uint8_t)portid);
+					printf("Port %d Link Down\n", portid);
 				continue;
 			}
 			/* clear all_ports_up flag if any link down */
@@ -1899,7 +1897,8 @@ main(int argc, char **argv)
 	uint16_t queueid;
 	unsigned lcore_id;
 	uint32_t n_tx_queue, nb_lcores;
-	uint8_t portid, nb_rx_queue, queue, socketid;
+	uint16_t portid;
+	uint8_t nb_rx_queue, queue, socketid;
 
 	/* init EAL */
 	ret = rte_eal_init(argc, argv);
@@ -1954,6 +1953,13 @@ main(int argc, char **argv)
 		if (ret < 0)
 			rte_exit(EXIT_FAILURE,
 				"Cannot configure device: err=%d, port=%d\n",
+				ret, portid);
+
+		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
+						       &nb_txd);
+		if (ret < 0)
+			rte_exit(EXIT_FAILURE,
+				"rte_eth_dev_adjust_nb_rx_tx_desc: err=%d, port=%d\n",
 				ret, portid);
 
 		rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);

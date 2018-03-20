@@ -38,7 +38,6 @@
 
 #include <rte_atomic.h>
 #include <rte_memory.h>
-#include <rte_memzone.h>
 #include <rte_mempool.h>
 
 #include "virtio_pci.h"
@@ -80,7 +79,7 @@ struct rte_mbuf;
 #define VIRTIO_MBUF_ADDR(mb, vq) \
 	((uint64_t)(*(uintptr_t *)((uintptr_t)(mb) + (vq)->offset)))
 #else
-#define VIRTIO_MBUF_ADDR(mb, vq) ((mb)->buf_physaddr)
+#define VIRTIO_MBUF_ADDR(mb, vq) ((mb)->buf_iova)
 #endif
 
 /**
@@ -143,8 +142,8 @@ struct virtio_net_ctrl_mac {
 } __attribute__((__packed__));
 
 #define VIRTIO_NET_CTRL_MAC    1
- #define VIRTIO_NET_CTRL_MAC_TABLE_SET        0
- #define VIRTIO_NET_CTRL_MAC_ADDR_SET         1
+#define VIRTIO_NET_CTRL_MAC_TABLE_SET        0
+#define VIRTIO_NET_CTRL_MAC_ADDR_SET         1
 
 /**
  * Control VLAN filtering
@@ -204,8 +203,8 @@ struct virtqueue {
 		struct virtnet_ctl cq;
 	};
 
-	phys_addr_t vq_ring_mem; /**< physical address of vring,
-				  * or virtual address for virtio_user. */
+	rte_iova_t vq_ring_mem; /**< physical address of vring,
+	                         * or virtual address for virtio_user. */
 
 	/**
 	 * Head of the free chain in the descriptor table. If
@@ -280,7 +279,21 @@ vring_desc_init(struct vring_desc *dp, uint16_t n)
 /**
  * Tell the backend not to interrupt us.
  */
-void virtqueue_disable_intr(struct virtqueue *vq);
+static inline void
+virtqueue_disable_intr(struct virtqueue *vq)
+{
+	vq->vq_ring.avail->flags |= VRING_AVAIL_F_NO_INTERRUPT;
+}
+
+/**
+ * Tell the backend to interrupt us.
+ */
+static inline void
+virtqueue_enable_intr(struct virtqueue *vq)
+{
+	vq->vq_ring.avail->flags &= (~VRING_AVAIL_F_NO_INTERRUPT);
+}
+
 /**
  *  Dump virtqueue internal structures, for debug purpose only.
  */
@@ -291,12 +304,23 @@ void virtqueue_dump(struct virtqueue *vq);
 struct rte_mbuf *virtqueue_detatch_unused(struct virtqueue *vq);
 
 /* Flush the elements in the used ring. */
-void virtqueue_flush(struct virtqueue *vq);
+void virtqueue_rxvq_flush(struct virtqueue *vq);
 
 static inline int
 virtqueue_full(const struct virtqueue *vq)
 {
 	return vq->vq_free_cnt == 0;
+}
+
+static inline int
+virtio_get_queue_type(struct virtio_hw *hw, uint16_t vtpci_queue_idx)
+{
+	if (vtpci_queue_idx == hw->max_queue_pairs * 2)
+		return VTNET_CQ;
+	else if (vtpci_queue_idx % 2 == 0)
+		return VTNET_RQ;
+	else
+		return VTNET_TQ;
 }
 
 #define VIRTQUEUE_NUSED(vq) ((uint16_t)((vq)->vq_ring.used->idx - (vq)->vq_used_cons_idx))

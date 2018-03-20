@@ -613,17 +613,17 @@ Set up DPDK in the Virtual Machine
    cat  /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
 
    ifconfig -a
-   /root/dpdk/tools/dpdk-devbind.py --status
+   /root/dpdk/usertools/dpdk-devbind.py --status
 
    rmmod virtio-pci ixgbevf
 
    modprobe uio
    insmod /root/dpdk/x86_64-default-linuxapp-gcc/kmod/igb_uio.ko
 
-   /root/dpdk/tools/dpdk-devbind.py -b igb_uio 0000:00:03.0
-   /root/dpdk/tools/dpdk-devbind.py -b igb_uio 0000:00:04.0
+   /root/dpdk/usertools/dpdk-devbind.py -b igb_uio 0000:00:03.0
+   /root/dpdk/usertools/dpdk-devbind.py -b igb_uio 0000:00:04.0
 
-   /root/dpdk/tools/dpdk-devbind.py --status
+   /root/dpdk/usertools/dpdk-devbind.py --status
 
 run_testpmd_bonding_in_vm.sh
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -641,7 +641,7 @@ Run testpmd in the Virtual Machine.
    # use for bonding of virtio and vf tests in VM
 
    /root/dpdk/x86_64-default-linuxapp-gcc/app/testpmd \
-   -c f -n 4 --socket-mem 350 --  --i --port-topology=chained
+   -l 0-3 -n 4 --socket-mem 350 --  --i --port-topology=chained
 
 .. _lm_bond_virtio_sriov_switch_conf:
 

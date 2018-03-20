@@ -8,6 +8,7 @@ export DH_OPTIONS=-v
 include /usr/share/dpkg/default.mk
 
 DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '-' -f1 | cut -d '.'  -f1-2 | cut -d '~' -f1)
+DPDK_DRIVER_DIR ?= dpdk-$(DPDK_ABI)-drivers
 
 # see FEATURE AREAS in dpkg-buildflags(1)
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
@@ -53,15 +54,18 @@ ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
 DPDK_CONFIG ?= "arm64-armv8a-linuxapp-gcc"
 RTE_MACHINE ?= "armv8a"
 RTE_TARGET ?= "arm64-armv8a-linuxapp-gcc"
+INCLUDE_ARCH := arm
 else
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
 DPDK_CONFIG ?= "ppc_64-power8-linuxapp-gcc"
 RTE_MACHINE ?= "power8"
 RTE_TARGET ?= "ppc_64-power8-linuxapp-gcc"
+INCLUDE_ARCH := ppc_64
 else
 DPDK_CONFIG ?= "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
 RTE_MACHINE ?= "default"
 RTE_TARGET ?= "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
+INCLUDE_ARCH := x86
 endif
 endif
 DPDK_STATIC_DIR = "debian/build/static-root"
@@ -118,11 +122,11 @@ build:
 	fi
 	sh debian/prep-modules $(KSRC)
 	cat debian/control.modules >> debian/control
-	dh $@ --with python2,dkms,systemd
+	dh $@ --with python3,dkms,systemd
 endif
 
 %:
-	dh $@ --with python2,dkms,systemd
+	dh $@ --with python3,dkms,systemd
 
 override_dh_gencontrol:
 	dh_gencontrol
@@ -159,6 +163,8 @@ override_dh_auto_clean:
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	test -L config/defconfig_$(DPDK_CONFIG) && rm -f config/defconfig_$(DPDK_CONFIG) || true
+	rm -f debian/dpdk-igb-uio-dkms.dkms debian/dpdk-rte-kni-dkms.dkms
+	rm -f debian/dpdk-dev.preinst
 
 override_dh_auto_configure:
 	# Add support for a custom defconfig file in the debian directory.
@@ -176,14 +182,11 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
-		-e 's,(LIBRTE_PMD_XENVIRT=).*,\1y,' \
-		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)/dpdk-pmds/",' \
+		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/$(DPDK_DRIVER_DIR)/",' \
 		$(DPDK_STATIC_DIR)/.config
-	# xen not available on ppc64el
-ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
-	sed -ri -e 's,(LIBRTE_PMD_XENVIRT=).*,\1n,' $(DPDK_STATIC_DIR)/.config
 endif
-endif
+	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
+		$(DPDK_STATIC_DIR)/.config
 	dh_auto_configure
 
 override_dh_auto_build-indep:
@@ -220,8 +223,9 @@ ifeq (y,$(BUILD_DOCS))
 	# need to be around for dh_installman to be picked up
 	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
 endif
+	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) test-build
 
-override_dh_auto_install-arch: LIBDIR=/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+override_dh_auto_install-arch: LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
 	# Package: dpdk (runtime)
 ifeq (y,$(BUILD_STATIC_LIB))
@@ -234,7 +238,7 @@ endif
 	cp debian/dpdk.interfaces debian/dpdk/etc/dpdk/interfaces
 	rm debian/dpdk/usr/sbin/dpdk-devbind
 	mkdir -p debian/dpdk/sbin
-	ln -s /usr/share/dpdk/tools/dpdk-devbind.py \
+	ln -s /usr/share/dpdk/usertools/dpdk-devbind.py \
 		debian/dpdk/sbin/dpdk-devbind
 	# Package: dpdk-dev (build environment)
 	# workaround to fix symbolic link creation
@@ -247,9 +251,13 @@ endif
 	sed -e 's/SDK_TARGET/$(RTE_TARGET)/' debian/dpdk-sdk-env.sh.in > \
 		debian/dpdk-dev/usr/share/dpdk/dpdk-sdk-env.sh
 	# include the bundled autotest suite to be usable from the dpdk-dev package
-	mkdir -p debian/dpdk-dev/usr/share/dpdk/test
-	cp -a app/test/autotest* debian/dpdk-dev/usr/share/dpdk/test
-	cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/
+	if grep -qs 'CONFIG_RTE_APP_TEST=y' $(DPDK_SHARED_DIR)/.config; then \
+		mkdir -p debian/dpdk-dev/usr/share/dpdk/test; \
+		cp -a test/test/autotest* debian/dpdk-dev/usr/share/dpdk/test; \
+		cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/; \
+		cp $(DPDK_SHARED_DIR)/app/testacl debian/dpdk-dev/usr/share/dpdk/test/; \
+		cp $(DPDK_SHARED_DIR)/app/testpipeline debian/dpdk-dev/usr/share/dpdk/test/; \
+	fi
 	# since we move libs to multiarch dirs update the non aware symlink
 	rm debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
 	ln -rs debian/dpdk-dev/$(LIBDIR)/ \
@@ -260,8 +268,34 @@ endif
 	# linker script
 	mv debian/dpdk/$(LIBDIR)/libdpdk.so debian/libdpdk-dev/$(LIBDIR)/
 	# includes
-	mkdir -p debian/libdpdk-dev/usr/include
+	# Some headers have architecture-specific content, but the upstream build
+	# system installs them in the same directory, breaking multiarch.
+	# Move them in /usr/include/<arch>/dpdk instead.
+	mkdir -p debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk
+	# Before moving the files, remove the symlink in usr/share/dpdk and copy them over,
+	# as the SDK subdir is architecture specific and requires the arch-specific headers
+	# in the top level
+	rm -f debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
+	mkdir -p debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
+	cp -r debian/dpdk-dev/usr/include/dpdk/* debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
+	# genereate the preinst to deal with the symlink -> directory transition smoothly
+	sed "s/@@RTE_TARGET@@/$(RTE_TARGET)/g" debian/dpdk-dev.preinst.in > debian/dpdk-dev.preinst
+	mv $(addprefix debian/dpdk-dev/usr/include/dpdk/,$(notdir $(wildcard lib/librte_eal/common/include/arch/$(INCLUDE_ARCH)/*.h))) \
+		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
+	mv debian/dpdk-dev/usr/include/dpdk/rte_config.h \
+		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
 	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
+	rmdir debian/dpdk-dev/usr/include
+	# backward compatibility: to ease things for the majority of users,
+	# which are on x86_64, symlink the x86 headers into the global
+	# directory.
+ifeq (x86_64-linux-gnu,$(DEB_HOST_MULTIARCH))
+	ln -rs debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/*.h \
+		debian/libdpdk-dev/usr/include/dpdk
+endif
+	# have the DKMS build include the correct per-arch directory
+	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
+	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-rte-kni-dkms.dkms.in > debian/dpdk-rte-kni-dkms.dkms
 	# all static libs are in the dev package
 ifeq (y,$(BUILD_STATIC_LIB))
 	mv debian/dpdk/$(LIBDIR)/lib*.a debian/libdpdk-dev/$(LIBDIR)/
@@ -273,30 +307,29 @@ endif
 	# Package(s): libdpdk-<NAME><VER> (bare runtime libs)
 	for lib in $$(ls -1 debian/dpdk/$(LIBDIR)/*.so.*); do \
 	  BN=$$(basename $${lib}); \
-	  VER=$$(echo $${BN} | sed -e 's/^.*\.so\.//'); \
-	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9]*$$//' | tr '_' '-'); \
+	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9\.]*$$//' | tr '_' '-'); \
 	  if echo $${LN} | grep -q ".*[0-9]$$"; then \
-	    PKG=$${LN}-$${VER}; \
+	    PKG=$${LN}-$(DPDK_ABI); \
 	  else \
-	    PKG=$${LN}$${VER}; \
+	    PKG=$${LN}$(DPDK_ABI); \
 	  fi; \
 	  LIBF="$$(basename $${lib})"; \
 	  LIBD="debian/$${PKG}/$(LIBDIR)"; \
-	  echo "moving $${lib} for library $${PKG}"; \
+	  echo "moving $${lib} to dir $${LIBD} (PKG=$${PKG} BN=$${BN} LN={$${LN} LIBF=$${LIBF} LIBD=$${LIBD})"; \
 	  mkdir -p $${LIBD}; \
 	  mv $${lib} $${LIBD}; \
 	  if [ "$${LIBF#librte_pmd_}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/dpdk-pmds; \
-	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
-	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
+	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
+	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/$(DPDK_DRIVER_DIR)/"; \
+	    ln -s --relative --target-directory=$${LIBD}/$(DPDK_DRIVER_DIR)/ $${LIBD}/$${LIBF}; \
 	  fi; \
 	  if [ "$${LIBF#librte_mempool_}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/dpdk-pmds; \
-	    echo "MEMPOOL: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/dpdk-pmds/"; \
-	    ln -s --relative --target-directory=$${LIBD}/dpdk-pmds/ $${LIBD}/$${LIBF}; \
+	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
+	    echo "MEMPOOL: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/$(DPDK_DRIVER_DIR)/"; \
+	    ln -s --relative --target-directory=$${LIBD}/$(DPDK_DRIVER_DIR)/ $${LIBD}/$${LIBF}; \
 	  fi; \
 	  if [ "$${LIBF#librte_eal}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/dpdk-pmds; \
+	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
 	  fi; \
 	done
 	# pkg-config
@@ -304,7 +337,7 @@ endif
 	LIBS=$$(sed -e 's/GROUP ( \(.*\) )/\1/' -e 's/lib/-l/g' -e 's/\.so//g' \
 		$(CURDIR)/debian/libdpdk-dev/$(LIBDIR)/libdpdk.so); \
 	sed -e "s/@DPDK_LIBS@/$${LIBS}/" -e "s/@VERSION@/$(DEB_VERSION_UPSTREAM)/" \
-		-e "s|@LIBDIR@|$(LIBDIR)|" \
+		-e "s|@DEB_HOST_MULTIARCH@|$(DEB_HOST_MULTIARCH)|g" \
 		debian/libdpdk.pc.in > debian/libdpdk-dev/$(LIBDIR)/pkgconfig/libdpdk.pc
 	# Package: dpdk-igb-uio-dkms
 	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
@@ -331,4 +364,9 @@ override_dh_systemd_start:
 	dh_systemd_start --no-start --no-restart-on-upgrade
 
 override_dh_auto_test:
+
+override_dh_python3:
+	# dh_python only looks in /usr/share/package_name but dpdk-doc installs in
+	# /usr/share/dpdk, so pass /usr to catch all
+	dh_python3 --shebang=/usr/bin/python3 /usr
 

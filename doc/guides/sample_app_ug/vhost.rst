@@ -55,27 +55,19 @@ puts back to the same physical NIC port.
 Build
 ~~~~~
 
-Follow the *Getting Started Guide for Linux* on generic info about
-environment setup and building DPDK from source.
+To compile the sample application see :doc:`compiling`.
 
-In this example, you need build DPDK both on the host and inside guest.
-Also, you need build this example.
+The application is located in the ``vhost`` sub-directory.
 
-.. code-block:: console
-
-    export RTE_SDK=/path/to/dpdk_source
-    export RTE_TARGET=x86_64-native-linuxapp-gcc
-
-    cd ${RTE_SDK}/examples/vhost
-    make
-
+.. note::
+   In this example, you need build DPDK both on the host and inside guest.
 
 Start the vswitch example
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: console
 
-        ./vhost-switch -c f -n 4 --socket-mem 1024  \
+        ./vhost-switch -l 0-3 -n 4 --socket-mem 1024  \
              -- --socket-file /tmp/sock0 --client \
              ...
 
@@ -115,13 +107,13 @@ could be done by:
 .. code-block:: console
 
    modprobe uio_pci_generic
-   $RTE_SDK/tools/dpdk-devbind.py -b=uio_pci_generic 0000:00:04.0
+   $RTE_SDK/usertools/dpdk-devbind.py -b=uio_pci_generic 0000:00:04.0
 
 Then start testpmd for packet forwarding testing.
 
 .. code-block:: console
 
-    ./x86_64-native-gcc/app/testpmd -c 0x3 -- -i
+    ./x86_64-native-gcc/app/testpmd -l 0-1 -- -i
     > start tx_first
 
 Inject packets

@@ -1,36 +1,62 @@
 #!/bin/bash
-set -eu
+set -eux
+binary="build/testlinkage"
 
 basedir=$(dirname "$0")
 . "${basedir}"/check-dpdk-supported-arch.sh
 
 cat > testlinkage.c << EOF
 #include <stdio.h>
-#include "dpdk/rte_common.h"
+#include <rte_common.h>
 
-int main()
+int main(void)
 {
         printf("Hello rte_exit %p\n", rte_exit);
         return 0;
 }
 EOF
 
+cat >  Makefile-testlinkage << 'EOF'
+# Based on examples/helloworld/Makefile
+
+ifeq ($(RTE_SDK),)
+$(error "Please define RTE_SDK environment variable")
+endif
+
+# Default target, can be overridden by command line or environment
+RTE_TARGET ?= x86_64-native-linuxapp-gcc
+
+include $(RTE_SDK)/mk/rte.vars.mk
+
+# binary name
+APP = testlinkage
+
+# all source are stored in SRCS-y
+SRCS-y := testlinkage.c
+
+CFLAGS += -O3
+CFLAGS += $(WERROR_FLAGS)
+
+include $(RTE_SDK)/mk/rte.extapp.mk
+EOF
+
+
+printf "\n\nSet up DPDK'ish build environment\n"
+. /usr/share/dpdk/dpdk-sdk-env.sh
+export CFLAGS=$(pkg-config --libs --cflags libdpdk)
+
 # -ldpdk actually refers to a linker script now, not a real .so
 # with broken linkage this will fail with undefined symbols
 printf "\n\nChecking compile with link against DPDK\n"
-gcc -v testlinkage.c -o testlinkage.bin -Wall -Werror -ldpdk
+make V=1 -f Makefile-testlinkage
 echo "OK"
 
 printf "\n\nLinkage info\n"
-lddtree testlinkage.bin
+lddtree ${binary}
 
 printf "\n\nChecking for expected internal libraries\n"
 # a few of the sublibs that it should use
-lddtree testlinkage.bin | grep '^    librte_eal.so'
-echo "OK"
-
-printf "\n\nChecking for expected secondary library dependencies\n"
-lddtree testlinkage.bin | grep '^        libpthread.so'
+lddtree ${binary} | grep '^    librte_eal.so'
 echo "OK"
 
 printf "\n\nChecking for expected feature dependent library dependencies\n"
@@ -43,7 +69,7 @@ printf "\n\nChecking test execution\n"
 # It is known to fail without SSE3 in e.g. some adt environments, in that
 # case check at least that we get the correct error message (this will trigger
 # a test fail if it neither finds the success nor the expected error message)
-(./testlinkage.bin 2>&1 || /bin/true ) | \
+(./${binary} 2>&1 || /bin/true ) | \
 grep -E 'ERROR: This system does not support "SSSE3".|Hello rte_exit 0x'
 
 echo "OK"

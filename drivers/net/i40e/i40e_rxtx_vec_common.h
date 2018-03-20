@@ -65,9 +65,9 @@ reassemble_packets(struct i40e_rx_queue *rxq, struct rte_mbuf **rx_bufs,
 				start->ol_flags = end->ol_flags;
 				/* we need to strip crc for the whole packet */
 				start->pkt_len -= rxq->crc_len;
-				if (end->data_len > rxq->crc_len) {
+				if (end->data_len > rxq->crc_len)
 					end->data_len -= rxq->crc_len;
-				} else {
+				else {
 					/* free up last mbuf */
 					struct rte_mbuf *secondlast = start;
 
@@ -78,7 +78,6 @@ reassemble_packets(struct i40e_rx_queue *rxq, struct rte_mbuf **rx_bufs,
 							end->data_len);
 					secondlast->next = NULL;
 					rte_pktmbuf_free_seg(end);
-					end = secondlast;
 				}
 				pkts[pkt_idx++] = start;
 				start = end = NULL;
@@ -103,7 +102,7 @@ reassemble_packets(struct i40e_rx_queue *rxq, struct rte_mbuf **rx_bufs,
 	return pkt_idx;
 }
 
-static inline int __attribute__((always_inline))
+static __rte_always_inline int
 i40e_tx_free_bufs(struct i40e_tx_queue *txq)
 {
 	struct i40e_tx_entry *txep;
@@ -124,12 +123,12 @@ i40e_tx_free_bufs(struct i40e_tx_queue *txq)
 	  * tx_next_dd - (tx_rs_thresh-1)
 	  */
 	txep = &txq->sw_ring[txq->tx_next_dd - (n - 1)];
-	m = __rte_pktmbuf_prefree_seg(txep[0].mbuf);
+	m = rte_pktmbuf_prefree_seg(txep[0].mbuf);
 	if (likely(m != NULL)) {
 		free[0] = m;
 		nb_free = 1;
 		for (i = 1; i < n; i++) {
-			m = __rte_pktmbuf_prefree_seg(txep[i].mbuf);
+			m = rte_pktmbuf_prefree_seg(txep[i].mbuf);
 			if (likely(m != NULL)) {
 				if (likely(m->pool == free[0]->pool)) {
 					free[nb_free++] = m;
@@ -145,7 +144,7 @@ i40e_tx_free_bufs(struct i40e_tx_queue *txq)
 		rte_mempool_put_bulk(free[0]->pool, (void **)free, nb_free);
 	} else {
 		for (i = 1; i < n; i++) {
-			m = __rte_pktmbuf_prefree_seg(txep[i].mbuf);
+			m = rte_pktmbuf_prefree_seg(txep[i].mbuf);
 			if (m != NULL)
 				rte_mempool_put(m->pool, m);
 		}
@@ -160,7 +159,7 @@ i40e_tx_free_bufs(struct i40e_tx_queue *txq)
 	return txq->tx_rs_thresh;
 }
 
-static inline void __attribute__((always_inline))
+static __rte_always_inline void
 tx_backlog_entry(struct i40e_tx_entry *txep,
 		 struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 {
@@ -224,14 +223,6 @@ i40e_rx_vec_dev_conf_condition_check_default(struct rte_eth_dev *dev)
 #ifndef RTE_LIBRTE_IEEE1588
 	struct rte_eth_rxmode *rxmode = &dev->data->dev_conf.rxmode;
 	struct rte_fdir_conf *fconf = &dev->data->dev_conf.fdir_conf;
-
-#ifndef RTE_LIBRTE_I40E_RX_OLFLAGS_ENABLE
-	/* whithout rx ol_flags, no VP flag report */
-	if (rxmode->hw_vlan_strip != 0 ||
-	    rxmode->hw_vlan_extend != 0 ||
-	    rxmode->hw_ip_checksum != 0)
-		return -1;
-#endif
 
 	/* no fdir support */
 	if (fconf->mode != RTE_FDIR_MODE_NONE)

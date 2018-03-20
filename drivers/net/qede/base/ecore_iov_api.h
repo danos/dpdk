@@ -52,6 +52,7 @@ enum ecore_iov_pf_to_vf_status {
 	PFVF_STATUS_NOT_SUPPORTED,
 	PFVF_STATUS_NO_RESOURCE,
 	PFVF_STATUS_FORCED,
+	PFVF_STATUS_MALICIOUS,
 };
 
 struct ecore_mcp_link_params;
@@ -85,6 +86,28 @@ struct ecore_public_vf_info {
 	 */
 	u8 forced_mac[ETH_ALEN];
 	u16 forced_vlan;
+};
+
+struct ecore_iov_vf_init_params {
+	u16 rel_vf_id;
+
+	/* Number of requested Queues; Currently, don't support different
+	 * number of Rx/Tx queues.
+	 */
+	/* TODO - remove this limitation */
+	u16 num_queues;
+
+	/* Allow the client to choose which qzones to use for Rx/Tx,
+	 * and which queue_base to use for Tx queues on a per-queue basis.
+	 * Notice values should be relative to the PF resources.
+	 */
+	u16 req_rx_queue[ECORE_MAX_VF_CHAINS_PER_PF];
+	u16 req_tx_queue[ECORE_MAX_VF_CHAINS_PER_PF];
+
+	u8 vport_id;
+
+	/* Should be set in case RSS is going to be used for VF */
+	u8 rss_eng_id;
 };
 
 #ifdef CONFIG_ECORE_SW_CHANNEL
@@ -174,15 +197,14 @@ void ecore_iov_set_vf_to_disable(struct ecore_dev *p_dev,
  *
  * @param p_hwfn
  * @param p_ptt
- * @param rel_vf_id
- * @param num_rx_queues
+ * @param p_params
  *
  * @return enum _ecore_status_t
  */
 enum _ecore_status_t ecore_iov_init_hw_for_vf(struct ecore_hwfn *p_hwfn,
 					      struct ecore_ptt *p_ptt,
-					      u16 rel_vf_id,
-					      u16 num_rx_queues);
+					      struct ecore_iov_vf_init_params
+						     *p_params);
 
 /**
  * @brief ecore_iov_process_mbx_req - process a request received
@@ -301,12 +323,13 @@ bool ecore_iov_is_vf_pending_flr(struct ecore_hwfn *p_hwfn,
  * @param p_hwfn
  * @param rel_vf_id - Relative VF ID
  * @param b_enabled_only - consider only enabled VF
+ * @param b_non_malicious - true iff we want to validate vf isn't malicious.
  *
  * @return bool - true for valid VF ID
  */
 bool ecore_iov_is_valid_vfid(struct ecore_hwfn *p_hwfn,
 			     int rel_vf_id,
-			     bool b_enabled_only);
+			     bool b_enabled_only, bool b_non_malicious);
 
 /**
  * @brief Get VF's public info structure
@@ -322,21 +345,13 @@ ecore_iov_get_public_vf_info(struct ecore_hwfn *p_hwfn,
 			     u16 vfid, bool b_enabled_only);
 
 /**
- * @brief Set pending events bitmap for given @vfid
- *
- * @param p_hwfn
- * @param vfid
- */
-void ecore_iov_pf_add_pending_events(struct ecore_hwfn *p_hwfn, u8 vfid);
-
-/**
- * @brief Copy pending events bitmap in @events and clear
- *	  original copy of events
+ * @brief fills a bitmask of all VFs which have pending unhandled
+ *        messages.
  *
  * @param p_hwfn
  */
-void ecore_iov_pf_get_and_clear_pending_events(struct ecore_hwfn *p_hwfn,
-					       u64 *events);
+void ecore_iov_pf_get_pending_events(struct ecore_hwfn *p_hwfn,
+				     u64 *events);
 
 /**
  * @brief Copy VF's message to PF's buffer
@@ -397,16 +412,6 @@ ecore_iov_bulletin_set_forced_untagged_default(struct ecore_hwfn *p_hwfn,
  */
 void ecore_iov_get_vfs_opaque_fid(struct ecore_hwfn *p_hwfn, int vfid,
 				  u16 *opaque_fid);
-
-/**
- * @brief Get VFs VPORT id.
- *
- * @param p_hwfn
- * @param vfid
- * @param vport id
- */
-void ecore_iov_get_vfs_vport_id(struct ecore_hwfn *p_hwfn, int vfid,
-				u8 *p_vport_id);
 
 /**
  * @brief Set forced VLAN [pvid] in PFs copy of bulletin board
@@ -662,6 +667,17 @@ bool ecore_iov_is_vf_initialized(struct ecore_hwfn *p_hwfn,
 				 u16 rel_vf_id);
 
 /**
+ * @brief - Returm true if VF has started in FW
+ *
+ * @param p_hwfn
+ * @param rel_vf_id
+ *
+ * @return
+ */
+bool ecore_iov_is_vf_started(struct ecore_hwfn *p_hwfn,
+			     u16 rel_vf_id);
+
+/**
  * @brief - Get VF's vport min rate configured.
  * @param p_hwfn
  * @param rel_vf_id
@@ -670,17 +686,27 @@ bool ecore_iov_is_vf_initialized(struct ecore_hwfn *p_hwfn,
  */
 int ecore_iov_get_vf_min_rate(struct ecore_hwfn *p_hwfn, int vfid);
 
-/**
- * @brief - Configure min rate for VF's vport.
- * @param p_dev
- * @param vfid
- * @param - rate in Mbps
- *
- * @return
- */
-enum _ecore_status_t ecore_iov_configure_min_tx_rate(struct ecore_dev *p_dev,
-						     int vfid, u32 rate);
 #endif
+
+/**
+ * @brief ecore_pf_configure_vf_queue_coalesce - PF configure coalesce
+ *    parameters of VFs for Rx and Tx queue.
+ *    While the API allows setting coalescing per-qid, all queues sharing a SB
+ *    should be in same range [i.e., either 0-0x7f, 0x80-0xff or 0x100-0x1ff]
+ *    otherwise configuration would break.
+ *
+ * @param p_hwfn
+ * @param rx_coal - Rx Coalesce value in micro seconds.
+ * @param tx_coal - TX Coalesce value in micro seconds.
+ * @param vf_id
+ * @param qid
+ *
+ * @return int
+ **/
+enum _ecore_status_t
+ecore_iov_pf_configure_vf_queue_coalesce(struct ecore_hwfn *p_hwfn,
+					 u16 rx_coal, u16 tx_coal,
+					 u16 vf_id, u16 qid);
 
 /**
  * @brief - Given a VF index, return index of next [including that] active VF.
@@ -688,15 +714,31 @@ enum _ecore_status_t ecore_iov_configure_min_tx_rate(struct ecore_dev *p_dev,
  * @param p_hwfn
  * @param rel_vf_id
  *
- * @return MAX_NUM_VFS in case no further active VFs, otherwise index.
+ * @return MAX_NUM_VFS_E4 in case no further active VFs, otherwise index.
  */
 u16 ecore_iov_get_next_active_vf(struct ecore_hwfn *p_hwfn, u16 rel_vf_id);
 
+void ecore_iov_bulletin_set_udp_ports(struct ecore_hwfn *p_hwfn, int vfid,
+				      u16 vxlan_port, u16 geneve_port);
+
+#ifdef CONFIG_ECORE_SW_CHANNEL
+/**
+ * @brief Set whether PF should communicate with VF using SW/HW channel
+ *        Needs to be called for an enabled VF before acquire is over
+ *        [latest good point for doing that is OSAL_IOV_VF_ACQUIRE()]
+ *
+ * @param p_hwfn
+ * @param vfid - relative vf index
+ * @param b_is_hw - true iff PF is to use HW channel for communication
+ */
+void ecore_iov_set_vf_hw_channel(struct ecore_hwfn *p_hwfn, int vfid,
+				 bool b_is_hw);
+#endif
 #endif /* CONFIG_ECORE_SRIOV */
 
 #define ecore_for_each_vf(_p_hwfn, _i)					\
 	for (_i = ecore_iov_get_next_active_vf(_p_hwfn, 0);		\
-	     _i < MAX_NUM_VFS;						\
+	     _i < MAX_NUM_VFS_E4;					\
 	     _i = ecore_iov_get_next_active_vf(_p_hwfn, _i + 1))
 
 #endif

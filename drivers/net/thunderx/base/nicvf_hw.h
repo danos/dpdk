@@ -1,7 +1,7 @@
 /*
  *   BSD LICENSE
  *
- *   Copyright (C) Cavium networks Ltd. 2016.
+ *   Copyright (C) Cavium, Inc. 2016.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Cavium networks nor the names of its
+ *     * Neither the name of Cavium, Inc nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -88,7 +88,7 @@ enum nicvf_err_e {
 	NICVF_ERR_RSS_GET_SZ,    /* -8171 */
 };
 
-typedef nicvf_phys_addr_t (*rbdr_pool_get_handler)(void *dev, void *opaque);
+typedef nicvf_iova_addr_t (*rbdr_pool_get_handler)(void *dev, void *opaque);
 
 struct nicvf_hw_rx_qstats {
 	uint64_t q_rx_bytes;
