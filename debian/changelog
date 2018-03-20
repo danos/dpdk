@@ -1,3 +1,9 @@
+dpdk (17.11.1-6~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 20 Mar 2018 20:22:17 +0000
+
 dpdk (17.11.1-6) unstable; urgency=medium
 
   * test-linkage: drop brittle test for secondary library dependencies
