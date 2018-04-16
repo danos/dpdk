@@ -41,6 +41,12 @@ dpdk (18.02-1~git1) UNRELEASED; urgency=medium
   * test-linkage: drop brittle test for secondary library dependencies
   * debian/control: Fix MLX4/MLX5 enablement to match DPDK 18.02
   * d/control: add new PMDs: bbdev-null, skeleton-rawdev, vdev-netvsc
+  * Symbols of new PMDs in 18.02
+    - debian/librte-pmd-bbdev-null18.02.symbols
+    - debian/librte-pmd-mlx4-18.02.symbols
+    - debian/librte-pmd-mlx5-18.02.symbols
+    - debian/librte-pmd-skeleton-rawdev18.02.symbols
+    - debian/librte-pmd-vdev-netvsc18.02.symbols
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 19 Feb 2018 11:31:42 +0000
 
