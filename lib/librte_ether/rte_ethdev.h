@@ -262,17 +262,17 @@ __extension__
 struct rte_eth_link {
 	uint32_t link_speed;        /**< ETH_SPEED_NUM_ */
 	uint16_t link_duplex  : 1;  /**< ETH_LINK_[HALF/FULL]_DUPLEX */
-	uint16_t link_autoneg : 1;  /**< ETH_LINK_SPEED_[AUTONEG/FIXED] */
+	uint16_t link_autoneg : 1;  /**< ETH_LINK_[AUTONEG/FIXED] */
 	uint16_t link_status  : 1;  /**< ETH_LINK_[DOWN/UP] */
 } __attribute__((aligned(8)));      /**< aligned for atomic64 read/write */
 
 /* Utility constants */
-#define ETH_LINK_HALF_DUPLEX    0 /**< Half-duplex connection. */
-#define ETH_LINK_FULL_DUPLEX    1 /**< Full-duplex connection. */
-#define ETH_LINK_DOWN           0 /**< Link is down. */
-#define ETH_LINK_UP             1 /**< Link is up. */
-#define ETH_LINK_FIXED          0 /**< No autonegotiation. */
-#define ETH_LINK_AUTONEG        1 /**< Autonegotiated. */
+#define ETH_LINK_HALF_DUPLEX 0 /**< Half-duplex connection (see link_duplex). */
+#define ETH_LINK_FULL_DUPLEX 1 /**< Full-duplex connection (see link_duplex). */
+#define ETH_LINK_DOWN        0 /**< Link is down (see link_status). */
+#define ETH_LINK_UP          1 /**< Link is up (see link_status). */
+#define ETH_LINK_FIXED       0 /**< No autonegotiation (see link_autoneg). */
+#define ETH_LINK_AUTONEG     1 /**< Autonegotiated (see link_autoneg). */
 
 /**
  * A structure used to configure the ring threshold registers of an RX/TX
@@ -1694,7 +1694,7 @@ struct rte_eth_dev_data {
 	enum rte_kernel_driver kdrv;    /**< Kernel driver passthrough */
 	int numa_node;  /**< NUMA node connection */
 	const char *drv_name;   /**< Driver name */
-};
+} __rte_cache_aligned;
 
 /** Device supports hotplug detach */
 #define RTE_ETH_DEV_DETACHABLE   0x0001
@@ -1965,7 +1965,7 @@ int rte_eth_rx_queue_setup(uint8_t port_id, uint16_t rx_queue_id,
  *   the DMA memory allocated for the transmit descriptors of the ring.
  * @param tx_conf
  *   The pointer to the configuration data to be used for the transmit queue.
- *   NULL value is allowed, in which case default RX configuration
+ *   NULL value is allowed, in which case default TX configuration
  *   will be used.
  *   The *tx_conf* structure contains the following data:
  *   - The *tx_thresh* structure with the values of the Prefetch, Host, and

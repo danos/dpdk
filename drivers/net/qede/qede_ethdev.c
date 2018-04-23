@@ -282,6 +282,67 @@ qede_ucast_filter(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
 	return 0;
 }
 
+static void qede_reset_queue_stats(struct qede_dev *qdev, bool xstats)
+{
+#ifdef RTE_LIBRTE_QEDE_DEBUG_DRIVER
+	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
+#endif
+	unsigned int i = 0, j = 0, qid;
+	unsigned int rxq_stat_cntrs, txq_stat_cntrs;
+	struct qede_tx_queue *txq;
+
+	DP_VERBOSE(edev, ECORE_MSG_DEBUG, "Clearing queue stats\n");
+
+	rxq_stat_cntrs = RTE_MIN(QEDE_RSS_COUNT(qdev),
+			       RTE_ETHDEV_QUEUE_STAT_CNTRS);
+	txq_stat_cntrs = RTE_MIN(QEDE_TSS_COUNT(qdev),
+			       RTE_ETHDEV_QUEUE_STAT_CNTRS);
+
+	for (qid = 0; qid < QEDE_QUEUE_CNT(qdev); qid++) {
+		if (qdev->fp_array[qid].type & QEDE_FASTPATH_RX) {
+			OSAL_MEMSET(((char *)(qdev->fp_array[qid].rxq)) +
+			    offsetof(struct qede_rx_queue, rcv_pkts), 0,
+			    sizeof(uint64_t));
+			OSAL_MEMSET(((char *)(qdev->fp_array[qid].rxq)) +
+			    offsetof(struct qede_rx_queue, rx_hw_errors), 0,
+			    sizeof(uint64_t));
+			OSAL_MEMSET(((char *)(qdev->fp_array[qid].rxq)) +
+			    offsetof(struct qede_rx_queue, rx_alloc_errors), 0,
+			    sizeof(uint64_t));
+
+			if (xstats)
+				for (j = 0;
+				     j < RTE_DIM(qede_rxq_xstats_strings); j++)
+					OSAL_MEMSET((((char *)
+					    (qdev->fp_array[qid].rxq)) +
+					    qede_rxq_xstats_strings[j].offset),
+					    0,
+					    sizeof(uint64_t));
+
+			i++;
+			if (i == rxq_stat_cntrs)
+				break;
+		}
+	}
+
+	i = 0;
+
+	for (qid = 0; qid < QEDE_QUEUE_CNT(qdev); qid++) {
+		if (qdev->fp_array[qid].type & QEDE_FASTPATH_TX) {
+			txq = qdev->fp_array[(qid)].txqs[0];
+
+			OSAL_MEMSET((uint64_t *)(uintptr_t)
+				(((uint64_t)(uintptr_t)(txq)) +
+				 offsetof(struct qede_tx_queue, xmit_pkts)), 0,
+			    sizeof(uint64_t));
+
+			i++;
+			if (i == txq_stat_cntrs)
+				break;
+		}
+	}
+}
+
 static int
 qede_mcast_filter(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *mcast,
 		  bool add)
@@ -629,7 +690,7 @@ static int qede_init_vport(struct qede_dev *qdev)
 
 	start.remove_inner_vlan = 1;
 	start.gro_enable = 0;
-	start.mtu = ETHER_MTU + QEDE_ETH_OVERHEAD;
+	start.mtu = qdev->mtu;
 	start.vport_id = 0;
 	start.drop_ttl0 = false;
 	start.clear_stats = 1;
@@ -674,6 +735,14 @@ static int qede_dev_configure(struct rte_eth_dev *eth_dev)
 		}
 	}
 
+	/* We need to have min 1 RX queue.There is no min check in
+	 * rte_eth_dev_configure(), so we are checking it here.
+	 */
+	if (eth_dev->data->nb_rx_queues == 0) {
+		DP_ERR(edev, "Minimum one RX queue is required\n");
+		return -EINVAL;
+	}
+
 	/* Sanity checks and throw warnings */
 	if (rxmode->enable_scatter == 1)
 		eth_dev->data->scattered_rx = 1;
@@ -708,6 +777,14 @@ static int qede_dev_configure(struct rte_eth_dev *eth_dev)
 	rc = qede_alloc_fp_resc(qdev);
 	if (rc != 0)
 		return rc;
+
+	/* If jumbo enabled adjust MTU */
+	if (eth_dev->data->dev_conf.rxmode.jumbo_frame)
+		eth_dev->data->mtu =
+			eth_dev->data->dev_conf.rxmode.max_rx_pkt_len -
+			ETHER_HDR_LEN - ETHER_CRC_LEN;
+
+	qdev->mtu = eth_dev->data->mtu;
 
 	/* Issue VPORT-START with default config values to allow
 	 * other port configurations early on.
@@ -756,8 +833,7 @@ qede_dev_info_get(struct rte_eth_dev *eth_dev,
 
 	PMD_INIT_FUNC_TRACE(edev);
 
-	dev_info->min_rx_bufsize = (uint32_t)(ETHER_MIN_MTU +
-					      QEDE_ETH_OVERHEAD);
+	dev_info->min_rx_bufsize = (uint32_t)QEDE_MIN_RX_BUFF_SIZE;
 	dev_info->max_rx_pktlen = (uint32_t)ETH_TX_MAX_NON_LSO_PKT_LEN;
 	dev_info->rx_desc_lim = qede_rx_desc_lim;
 	dev_info->tx_desc_lim = qede_tx_desc_lim;
@@ -1115,6 +1191,7 @@ qede_reset_xstats(struct rte_eth_dev *dev)
 	struct ecore_dev *edev = &qdev->edev;
 
 	ecore_reset_vport_stats(edev);
+	qede_reset_queue_stats(qdev, true);
 }
 
 int qede_dev_set_link_state(struct rte_eth_dev *eth_dev, bool link_up)
@@ -1150,6 +1227,7 @@ static void qede_reset_stats(struct rte_eth_dev *eth_dev)
 	struct ecore_dev *edev = &qdev->edev;
 
 	ecore_reset_vport_stats(edev);
+	qede_reset_queue_stats(qdev, false);
 }
 
 static void qede_allmulticast_enable(struct rte_eth_dev *eth_dev)
@@ -1395,32 +1473,76 @@ int qede_rss_reta_query(struct rte_eth_dev *eth_dev,
 
 int qede_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 {
-	uint32_t frame_size;
-	struct qede_dev *qdev = dev->data->dev_private;
+	struct qede_dev *qdev = QEDE_INIT_QDEV(dev);
+	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
 	struct rte_eth_dev_info dev_info = {0};
+	struct qede_fastpath *fp;
+	uint32_t max_rx_pkt_len;
+	uint32_t frame_size;
+	uint16_t rx_buf_size;
+	uint16_t bufsz;
+	bool restart = false;
+	int i;
 
+	PMD_INIT_FUNC_TRACE(edev);
+	if (IS_VF(edev))
+		return -ENOTSUP;
 	qede_dev_info_get(dev, &dev_info);
-
-	/* VLAN_TAG = 4 */
-	frame_size = mtu + ETHER_HDR_LEN + ETHER_CRC_LEN + 4;
-
-	if ((mtu < ETHER_MIN_MTU) || (frame_size > dev_info.max_rx_pktlen))
+	max_rx_pkt_len = mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
+	frame_size = max_rx_pkt_len + QEDE_ETH_OVERHEAD;
+	if ((mtu < ETHER_MIN_MTU) || (frame_size > dev_info.max_rx_pktlen)) {
+		DP_ERR(edev, "MTU %u out of range, %u is maximum allowable\n",
+		       mtu, dev_info.max_rx_pktlen - ETHER_HDR_LEN -
+			ETHER_CRC_LEN - QEDE_ETH_OVERHEAD);
 		return -EINVAL;
-
+	}
 	if (!dev->data->scattered_rx &&
-	    frame_size > dev->data->min_rx_buf_size - RTE_PKTMBUF_HEADROOM)
+	    frame_size > dev->data->min_rx_buf_size - RTE_PKTMBUF_HEADROOM) {
+		DP_INFO(edev, "MTU greater than minimum RX buffer size of %u\n",
+			dev->data->min_rx_buf_size);
 		return -EINVAL;
-
-	if (frame_size > ETHER_MAX_LEN)
+	}
+	/* Temporarily replace I/O functions with dummy ones. It cannot
+	 * be set to NULL because rte_eth_rx_burst() doesn't check for NULL.
+	 */
+	dev->rx_pkt_burst = qede_rxtx_pkts_dummy;
+	dev->tx_pkt_burst = qede_rxtx_pkts_dummy;
+	if (dev->data->dev_started) {
+		dev->data->dev_started = 0;
+		qede_dev_stop(dev);
+		restart = true;
+	}
+	rte_delay_ms(1000);
+	qdev->mtu = mtu;
+	/* Fix up RX buf size for all queues of the port */
+	for_each_queue(i) {
+		fp = &qdev->fp_array[i];
+		if ((fp->type & QEDE_FASTPATH_RX) && (fp->rxq != NULL)) {
+			bufsz = (uint16_t)rte_pktmbuf_data_room_size(
+				fp->rxq->mb_pool) - RTE_PKTMBUF_HEADROOM;
+			if (dev->data->scattered_rx)
+				rx_buf_size = bufsz + ETHER_HDR_LEN +
+					      ETHER_CRC_LEN + QEDE_ETH_OVERHEAD;
+			else
+				rx_buf_size = frame_size;
+			rx_buf_size = QEDE_CEIL_TO_CACHE_LINE_SIZE(rx_buf_size);
+			fp->rxq->rx_buf_size = rx_buf_size;
+			DP_INFO(edev, "buf_size adjusted to %u\n", rx_buf_size);
+		}
+	}
+	if (max_rx_pkt_len > ETHER_MAX_LEN)
 		dev->data->dev_conf.rxmode.jumbo_frame = 1;
 	else
 		dev->data->dev_conf.rxmode.jumbo_frame = 0;
-
+	if (!dev->data->dev_started && restart) {
+		qede_dev_start(dev);
+		dev->data->dev_started = 1;
+	}
 	/* update max frame size */
-	dev->data->dev_conf.rxmode.max_rx_pkt_len = frame_size;
-	qdev->mtu = mtu;
-	qede_dev_stop(dev);
-	qede_dev_start(dev);
+	dev->data->dev_conf.rxmode.max_rx_pkt_len = max_rx_pkt_len;
+	/* Reassign back */
+	dev->rx_pkt_burst = qede_recv_pkts;
+	dev->tx_pkt_burst = qede_xmit_pkts;
 
 	return 0;
 }

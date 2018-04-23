@@ -39,6 +39,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdbool.h>
 #include <assert.h>
 #ifdef RTE_LIBRTE_VHOST_NUMA
 #include <numaif.h>
@@ -488,6 +489,30 @@ dump_guest_pages(struct virtio_net *dev)
 #define dump_guest_pages(dev)
 #endif
 
+static bool
+vhost_memory_changed(struct VhostUserMemory *new,
+		      struct virtio_memory *old)
+{
+	uint32_t i;
+
+	if (new->nregions != old->nregions)
+		return true;
+
+	for (i = 0; i < new->nregions; ++i) {
+		VhostUserMemoryRegion *new_r = &new->regions[i];
+		struct virtio_memory_region *old_r = &old->regions[i];
+
+		if (new_r->guest_phys_addr != old_r->guest_phys_addr)
+			return true;
+		if (new_r->memory_size != old_r->size)
+			return true;
+		if (new_r->userspace_addr != old_r->guest_user_addr)
+			return true;
+	}
+
+	return false;
+}
+
 static int
 vhost_user_set_mem_table(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 {
@@ -499,6 +524,16 @@ vhost_user_set_mem_table(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 	uint64_t alignment;
 	uint32_t i;
 	int fd;
+
+	if (dev->mem && !vhost_memory_changed(&memory, dev->mem)) {
+		RTE_LOG(INFO, VHOST_CONFIG,
+			"(%d) memory regions not changed\n", dev->vid);
+
+		for (i = 0; i < memory.nregions; i++)
+			close(pmsg->fds[i]);
+
+		return 0;
+	}
 
 	/* Remove from the data plane. */
 	if (dev->flags & VIRTIO_DEV_RUNNING) {
@@ -917,12 +952,47 @@ send_vhost_message(int sockfd, struct VhostUserMsg *msg)
 	return ret;
 }
 
+static void
+vhost_user_lock_all_queue_pairs(struct virtio_net *dev)
+{
+	unsigned int i = 0;
+	unsigned int vq_num = 0;
+
+	while (vq_num < dev->virt_qp_nb * 2) {
+		struct vhost_virtqueue *vq = dev->virtqueue[i];
+
+		if (vq) {
+			rte_spinlock_lock(&vq->access_lock);
+			vq_num++;
+		}
+		i++;
+	}
+}
+
+static void
+vhost_user_unlock_all_queue_pairs(struct virtio_net *dev)
+{
+	unsigned int i = 0;
+	unsigned int vq_num = 0;
+
+	while (vq_num < dev->virt_qp_nb * 2) {
+		struct vhost_virtqueue *vq = dev->virtqueue[i];
+
+		if (vq) {
+			rte_spinlock_unlock(&vq->access_lock);
+			vq_num++;
+		}
+		i++;
+	}
+}
+
 int
 vhost_user_msg_handler(int vid, int fd)
 {
 	struct virtio_net *dev;
 	struct VhostUserMsg msg;
 	int ret;
+	int unlock_required = 0;
 
 	dev = get_device(vid);
 	if (dev == NULL)
@@ -945,6 +1015,37 @@ vhost_user_msg_handler(int vid, int fd)
 
 	RTE_LOG(INFO, VHOST_CONFIG, "read message %s\n",
 		vhost_message_str[msg.request]);
+
+	/*
+	 * Note: we don't lock all queues on VHOST_USER_GET_VRING_BASE
+	 * and VHOST_USER_RESET_OWNER, since it is sent when virtio stops
+	 * and device is destroyed. destroy_device waits for queues to be
+	 * inactive, so it is safe. Otherwise taking the access_lock
+	 * would cause a dead lock.
+	 */
+	switch (msg.request) {
+	case VHOST_USER_SET_FEATURES:
+	case VHOST_USER_SET_PROTOCOL_FEATURES:
+	case VHOST_USER_SET_OWNER:
+	case VHOST_USER_SET_MEM_TABLE:
+	case VHOST_USER_SET_LOG_BASE:
+	case VHOST_USER_SET_LOG_FD:
+	case VHOST_USER_SET_VRING_NUM:
+	case VHOST_USER_SET_VRING_ADDR:
+	case VHOST_USER_SET_VRING_BASE:
+	case VHOST_USER_SET_VRING_KICK:
+	case VHOST_USER_SET_VRING_CALL:
+	case VHOST_USER_SET_VRING_ERR:
+	case VHOST_USER_SET_VRING_ENABLE:
+	case VHOST_USER_SEND_RARP:
+		vhost_user_lock_all_queue_pairs(dev);
+		unlock_required = 1;
+		break;
+	default:
+		break;
+
+	}
+
 	switch (msg.request) {
 	case VHOST_USER_GET_FEATURES:
 		msg.payload.u64 = vhost_user_get_features();
@@ -1033,6 +1134,9 @@ vhost_user_msg_handler(int vid, int fd)
 		break;
 
 	}
+
+	if (unlock_required)
+		vhost_user_unlock_all_queue_pairs(dev);
 
 	return 0;
 }

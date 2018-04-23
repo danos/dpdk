@@ -658,6 +658,7 @@ mlx5_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *info)
 			       (*priv->rss_conf)[0]->rss_key_len :
 			       0);
 	info->speed_capa = priv->link_speed_capa;
+	info->flow_type_rss_offloads = ~MLX5_RSS_HF_MASK;
 	priv_unlock(priv);
 }
 
@@ -985,9 +986,7 @@ recover:
 		/* Provide new values to rxq_setup(). */
 		dev->data->dev_conf.rxmode.jumbo_frame = sp;
 		dev->data->dev_conf.rxmode.max_rx_pkt_len = max_frame_len;
-		if (rehash)
-			ret = rxq_rehash(dev, rxq_ctrl);
-		else
+		if (!rehash)
 			ret = rxq_ctrl_setup(dev, rxq_ctrl, 1 << rxq->elts_n,
 					     rxq_ctrl->socket, NULL, rxq->mp);
 		if (!ret)
@@ -1239,8 +1238,12 @@ mlx5_dev_link_status_handler(void *arg)
 	struct priv *priv = dev->data->dev_private;
 	int ret;
 
-	priv_lock(priv);
-	assert(priv->pending_alarm == 1);
+	while (!priv_trylock(priv)) {
+		/* Alarm is being canceled. */
+		if (priv->pending_alarm == 0)
+			return;
+		rte_pause();
+	}
 	priv->pending_alarm = 0;
 	ret = priv_dev_link_status_handler(priv, dev);
 	priv_unlock(priv);
@@ -1287,9 +1290,10 @@ priv_dev_interrupt_handler_uninstall(struct priv *priv, struct rte_eth_dev *dev)
 	rte_intr_callback_unregister(&priv->intr_handle,
 				     mlx5_dev_interrupt_handler,
 				     dev);
-	if (priv->pending_alarm)
+	if (priv->pending_alarm) {
+		priv->pending_alarm = 0;
 		rte_eal_alarm_cancel(mlx5_dev_link_status_handler, dev);
-	priv->pending_alarm = 0;
+	}
 	priv->intr_handle.fd = 0;
 	priv->intr_handle.type = RTE_INTR_HANDLE_UNKNOWN;
 }

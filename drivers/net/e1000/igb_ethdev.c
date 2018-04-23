@@ -1121,7 +1121,7 @@ igb_check_mq_mode(struct rte_eth_dev *dev)
 	enum rte_eth_rx_mq_mode rx_mq_mode = dev->data->dev_conf.rxmode.mq_mode;
 	enum rte_eth_tx_mq_mode tx_mq_mode = dev->data->dev_conf.txmode.mq_mode;
 	uint16_t nb_rx_q = dev->data->nb_rx_queues;
-	uint16_t nb_tx_q = dev->data->nb_rx_queues;
+	uint16_t nb_tx_q = dev->data->nb_tx_queues;
 
 	if ((rx_mq_mode & ETH_MQ_RX_DCB_FLAG) ||
 	    tx_mq_mode == ETH_MQ_TX_DCB ||
@@ -2226,7 +2226,7 @@ eth_igb_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 		link.link_speed = 0;
 		link.link_duplex = ETH_LINK_HALF_DUPLEX;
 		link.link_status = ETH_LINK_DOWN;
-		link.link_autoneg = ETH_LINK_SPEED_FIXED;
+		link.link_autoneg = ETH_LINK_FIXED;
 	}
 	rte_igb_dev_atomic_write_link_status(dev, &link);
 
@@ -2757,12 +2757,17 @@ void igbvf_mbx_process(struct rte_eth_dev *dev)
 	struct e1000_mbx_info *mbx = &hw->mbx;
 	u32 in_msg = 0;
 
-	if (mbx->ops.read(hw, &in_msg, 1, 0))
-		return;
+	/* peek the message first */
+	in_msg = E1000_READ_REG(hw, E1000_VMBMEM(0));
 
 	/* PF reset VF event */
-	if (in_msg == E1000_PF_CONTROL_MSG)
-		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_RESET, NULL);
+	if (in_msg == E1000_PF_CONTROL_MSG) {
+		/* dummy mbx read to ack pf */
+		if (mbx->ops.read(hw, &in_msg, 1, 0))
+			return;
+		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_RESET,
+					      NULL);
+	}
 }
 
 static int
@@ -3085,7 +3090,8 @@ igbvf_dev_start(struct rte_eth_dev *dev)
 	}
 
 	/* check and configure queue intr-vector mapping */
-	if (dev->data->dev_conf.intr_conf.rxq != 0) {
+	if (rte_intr_cap_multiple(intr_handle) &&
+	    dev->data->dev_conf.intr_conf.rxq) {
 		intr_vector = dev->data->nb_rx_queues;
 		ret = rte_intr_efd_enable(intr_handle, intr_vector);
 		if (ret)
