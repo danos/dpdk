@@ -1,9 +1,9 @@
-dpdk (18.02.1-1) UNRELEASED; urgency=medium
+dpdk (18.02.1-1) experimental; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 18.02.1; for a full list of changes see:
     https://dpdk.org/doc/guides-18.02/rel_notes/release_18_02.html
-    * Fixes CVE-2018-1059
+    * Fixes CVE-2018-1059 (Closes: #896688).
 
   [ Christian Ehrhardt ]
   * d/control: add new PMDs: bbdev-null, skeleton-rawdev, vdev-netvsc
@@ -14,7 +14,9 @@ dpdk (18.02.1-1) UNRELEASED; urgency=medium
     - debian/librte-pmd-skeleton-rawdev18.02.symbols
     - debian/librte-pmd-vdev-netvsc18.02.symbols
 
- -- Luca Boccassi <bluca@debian.org>  Mon, 23 Apr 2018 15:40:32 +0000
+  [ Luca Boccassi ]
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 23 Apr 2018 15:58:42 +0100
 
 dpdk (18.02-2) experimental; urgency=medium
 
