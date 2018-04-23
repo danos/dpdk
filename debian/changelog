@@ -1,8 +1,11 @@
-dpdk (18.02-1~git1) UNRELEASED; urgency=medium
+dpdk (18.02.1-1~git1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 18.02; for a full list of changes see:
     https://dpdk.org/doc/guides/rel_notes/release_18_02.html
+  * New upstream release 18.02.1; for a full list of changes see:
+    https://dpdk.org/doc/guides-18.02/rel_notes/release_18_02.html
+    * Fixes CVE-2018-1059
   * Bump ABI version of packages from 17.11 to 18.02.
   * Drop testpmd-link-virtio.patch, not needed.
   * Refresh fix-vhost-user-socket-permission.patch to remove fuzz from
