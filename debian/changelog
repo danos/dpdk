@@ -1,3 +1,9 @@
+dpdk (17.11.2-1~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 23 Apr 2018 17:59:47 +0100
+
 dpdk (17.11.2-1) unstable; urgency=high
 
   * New upstream release 17.11.2; for a full list of changes see:
