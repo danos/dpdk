@@ -1,3 +1,11 @@
+dpdk (17.11.2-1) unstable; urgency=high
+
+  * New upstream release 17.11.2; for a full list of changes see:
+    https://dpdk.org/doc/guides-17.11/rel_notes/release_17_11.html
+    * Fixes CVE-2018-1059 (Closes: #896688).
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 23 Apr 2018 14:45:21 +0100
+
 dpdk (17.11.1-6~bpo9+1) stretch-backports; urgency=medium
 
   * Rebuild for stretch-backports.
