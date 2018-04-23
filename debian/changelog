@@ -1,3 +1,14 @@
+dpdk (16.11.6-1+deb9u1) stretch; urgency=medium
+
+  * Merge stable update to 16.11.5; For a list of changes see
+    http://dpdk.org/ml/archives/announce/2018-March/000180.html
+  * Merge stable update to 16.11.6; For a list of changes see
+    https://dpdk.org/doc/guides-16.11/rel_notes/release_16_11.html
+    * Fixes CVE-2018-1059 (Closes: #896688).
+  * Drop patches merged upstream in 16.11.6.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 23 Apr 2018 14:33:27 +0100
+
 dpdk (16.11.4-1+deb9u1) stretch; urgency=medium
 
   [ Luca Boccassi ]
