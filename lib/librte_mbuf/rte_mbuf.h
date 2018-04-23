@@ -1233,13 +1233,14 @@ rte_pktmbuf_free_seg(struct rte_mbuf *m)
  * segment is added back into its original mempool.
  *
  * @param m
- *   The packet mbuf to be freed.
+ *   The packet mbuf to be freed. If NULL, the function does nothing.
  */
 static inline void rte_pktmbuf_free(struct rte_mbuf *m)
 {
 	struct rte_mbuf *m_next;
 
-	__rte_mbuf_sanity_check(m, 1);
+	if (m != NULL)
+		__rte_mbuf_sanity_check(m, 1);
 
 	while (m != NULL) {
 		m_next = m->next;
@@ -1361,12 +1362,10 @@ static inline uint16_t rte_pktmbuf_tailroom(const struct rte_mbuf *m)
  */
 static inline struct rte_mbuf *rte_pktmbuf_lastseg(struct rte_mbuf *m)
 {
-	struct rte_mbuf *m2 = (struct rte_mbuf *)m;
-
 	__rte_mbuf_sanity_check(m, 1);
-	while (m2->next != NULL)
-		m2 = m2->next;
-	return m2;
+	while (m->next != NULL)
+		m = m->next;
+	return m;
 }
 
 /**

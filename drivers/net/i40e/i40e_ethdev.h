@@ -103,6 +103,14 @@
 	(((vf)->version_major == I40E_VIRTCHNL_VERSION_MAJOR) && \
 	((vf)->version_minor == 1))
 
+static inline void
+I40E_WRITE_GLB_REG(struct i40e_hw *hw, uint32_t reg, uint32_t value) {
+	I40E_WRITE_REG(hw, reg, value);
+	PMD_DRV_LOG(DEBUG, "Global register 0x%08x is modified "
+		    "with value 0x%08x",
+		    reg, value);
+}
+
 /* index flex payload per layer */
 enum i40e_flxpld_layer_idx {
 	I40E_FLXPLD_L2_IDX    = 0,
@@ -477,6 +485,8 @@ struct i40e_pf {
 	bool floating_veb; /* The flag to use the floating VEB */
 	/* The floating enable flag for the specific VF */
 	bool floating_veb_list[I40E_MAX_VF];
+
+	bool support_multi_driver; /* 1 - support multiple driver */
 };
 
 enum pending_msg {
@@ -567,6 +577,22 @@ struct i40e_adapter {
 	struct rte_timecounter systime_tc;
 	struct rte_timecounter rx_tstamp_tc;
 	struct rte_timecounter tx_tstamp_tc;
+};
+
+enum I40E_WARNING_IDX {
+	I40E_WARNING_DIS_FLX_PLD,
+	I40E_WARNING_ENA_FLX_PLD,
+	I40E_WARNING_QINQ_PARSER,
+	I40E_WARNING_QINQ_CLOUD_FILTER,
+	I40E_WARNING_TPID,
+	I40E_WARNING_FLOW_CTL,
+	I40E_WARNING_GRE_KEY_LEN,
+	I40E_WARNING_QF_CTL,
+	I40E_WARNING_HASH_INSET,
+	I40E_WARNING_HSYM,
+	I40E_WARNING_HASH_MSK,
+	I40E_WARNING_FD_MSK,
+	I40E_WARNING_RPL_CLD_FILTER,
 };
 
 int i40e_dev_switch_queues(struct i40e_pf *pf, bool on);
@@ -694,13 +720,44 @@ i40e_align_floor(int n)
 }
 
 static inline uint16_t
-i40e_calc_itr_interval(int16_t interval)
+i40e_calc_itr_interval(int16_t interval, bool is_multi_drv)
 {
-	if (interval < 0 || interval > I40E_QUEUE_ITR_INTERVAL_MAX)
-		interval = I40E_QUEUE_ITR_INTERVAL_DEFAULT;
+	if (interval < 0 || interval > I40E_QUEUE_ITR_INTERVAL_MAX) {
+		if (is_multi_drv)
+			interval = I40E_QUEUE_ITR_INTERVAL_MAX;
+		else
+			interval = I40E_QUEUE_ITR_INTERVAL_DEFAULT;
+	}
 
 	/* Convert to hardware count, as writing each 1 represents 2 us */
 	return interval / 2;
+}
+
+static inline void
+i40e_global_cfg_warning(enum I40E_WARNING_IDX idx)
+{
+	const char *warning;
+	static const char *const warning_list[] = {
+		[I40E_WARNING_DIS_FLX_PLD] = "disable FDIR flexible payload",
+		[I40E_WARNING_ENA_FLX_PLD] = "enable FDIR flexible payload",
+		[I40E_WARNING_QINQ_PARSER] = "support QinQ parser",
+		[I40E_WARNING_QINQ_CLOUD_FILTER] = "support QinQ cloud filter",
+		[I40E_WARNING_TPID] = "support TPID configuration",
+		[I40E_WARNING_FLOW_CTL] = "configure water marker",
+		[I40E_WARNING_GRE_KEY_LEN] = "support GRE key length setting",
+		[I40E_WARNING_QF_CTL] = "support hash function setting",
+		[I40E_WARNING_HASH_INSET] = "configure hash input set",
+		[I40E_WARNING_HSYM] = "set symmetric hash",
+		[I40E_WARNING_HASH_MSK] = "configure hash mask",
+		[I40E_WARNING_FD_MSK] = "configure fdir mask",
+		[I40E_WARNING_RPL_CLD_FILTER] = "replace cloud filter",
+	};
+
+	warning = warning_list[idx];
+
+	RTE_LOG(WARNING, PMD,
+		"Global register is changed during %s\n",
+		warning);
 }
 
 #define I40E_VALID_FLOW(flow_type) \

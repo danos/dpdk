@@ -412,8 +412,13 @@ __eth_bond_slave_add_lock_free(uint8_t bonded_port_id, uint8_t slave_port_id)
 	if (internals->slave_count < 1) {
 		/* if MAC is not user defined then use MAC of first slave add to
 		 * bonded device */
-		if (!internals->user_defined_mac)
-			mac_address_set(bonded_eth_dev, slave_eth_dev->data->mac_addrs);
+		if (!internals->user_defined_mac) {
+			if (mac_address_set(bonded_eth_dev,
+					    slave_eth_dev->data->mac_addrs)) {
+				RTE_BOND_LOG(ERR, "Failed to set MAC address");
+				return -1;
+			}
+		}
 
 		/* Inherit eth dev link properties from first slave */
 		link_properties_set(bonded_eth_dev,
@@ -565,7 +570,7 @@ __eth_bond_slave_remove_lock_free(uint8_t bonded_port_id, uint8_t slave_port_id)
 			&rte_eth_devices[bonded_port_id].data->port_id);
 
 	/* Restore original MAC address of slave device */
-	mac_address_set(&rte_eth_devices[slave_port_id],
+	rte_eth_dev_default_mac_addr_set(slave_port_id,
 			&(internals->slaves[slave_idx].persisted_mac_addr));
 
 	slave_eth_dev = &rte_eth_devices[slave_port_id];

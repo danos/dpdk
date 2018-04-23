@@ -39,6 +39,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdbool.h>
 #include <assert.h>
 #ifdef RTE_LIBRTE_VHOST_NUMA
 #include <numaif.h>
@@ -302,21 +303,26 @@ numa_realloc(struct virtio_net *dev, int index __rte_unused)
  * used to convert the ring addresses to our address space.
  */
 static uint64_t
-qva_to_vva(struct virtio_net *dev, uint64_t qva)
+qva_to_vva(struct virtio_net *dev, uint64_t qva, uint64_t *len)
 {
-	struct virtio_memory_region *reg;
+	struct virtio_memory_region *r;
 	uint32_t i;
 
 	/* Find the region where the address lives. */
 	for (i = 0; i < dev->mem->nregions; i++) {
-		reg = &dev->mem->regions[i];
+		r = &dev->mem->regions[i];
 
-		if (qva >= reg->guest_user_addr &&
-		    qva <  reg->guest_user_addr + reg->size) {
-			return qva - reg->guest_user_addr +
-			       reg->host_user_addr;
+		if (qva >= r->guest_user_addr &&
+		    qva <  r->guest_user_addr + r->size) {
+
+			if (unlikely(*len > r->guest_user_addr + r->size - qva))
+				*len = r->guest_user_addr + r->size - qva;
+
+			return qva - r->guest_user_addr +
+			       r->host_user_addr;
 		}
 	}
+	*len = 0;
 
 	return 0;
 }
@@ -326,9 +332,12 @@ qva_to_vva(struct virtio_net *dev, uint64_t qva)
  * This function then converts these to our address space.
  */
 static int
-vhost_user_set_vring_addr(struct virtio_net *dev, struct vhost_vring_addr *addr)
+vhost_user_set_vring_addr(struct virtio_net **pdev,
+						  struct vhost_vring_addr *addr)
 {
 	struct vhost_virtqueue *vq;
+	struct virtio_net *dev = *pdev;
+	uint64_t size, req_size;
 
 	if (dev->mem == NULL)
 		return -1;
@@ -337,30 +346,39 @@ vhost_user_set_vring_addr(struct virtio_net *dev, struct vhost_vring_addr *addr)
 	vq = dev->virtqueue[addr->index];
 
 	/* The addresses are converted from QEMU virtual to Vhost virtual. */
+	req_size = sizeof(struct vring_desc) * vq->size;
+	size = req_size;
 	vq->desc = (struct vring_desc *)(uintptr_t)qva_to_vva(dev,
-			addr->desc_user_addr);
-	if (vq->desc == 0) {
+			addr->desc_user_addr, &size);
+	if (vq->desc == 0 || size != req_size) {
 		RTE_LOG(ERR, VHOST_CONFIG,
-			"(%d) failed to find desc ring address.\n",
+			"(%d) failed to map desc ring address.\n",
 			dev->vid);
 		return -1;
 	}
 
 	dev = numa_realloc(dev, addr->index);
+	*pdev = dev;
+
 	vq = dev->virtqueue[addr->index];
 
+	req_size = sizeof(struct vring_avail) + sizeof(uint16_t) * vq->size;
+	size = req_size;
 	vq->avail = (struct vring_avail *)(uintptr_t)qva_to_vva(dev,
-			addr->avail_user_addr);
-	if (vq->avail == 0) {
+			addr->avail_user_addr, &size);
+	if (vq->avail == 0 || size != req_size) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"(%d) failed to find avail ring address.\n",
 			dev->vid);
 		return -1;
 	}
 
+	req_size = sizeof(struct vring_used);
+	req_size += sizeof(struct vring_used_elem) * vq->size;
+	size = req_size;
 	vq->used = (struct vring_used *)(uintptr_t)qva_to_vva(dev,
-			addr->used_user_addr);
-	if (vq->used == 0) {
+			addr->used_user_addr, &size);
+	if (vq->used == 0 || size != req_size) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"(%d) failed to find used ring address.\n",
 			dev->vid);
@@ -488,6 +506,30 @@ dump_guest_pages(struct virtio_net *dev)
 #define dump_guest_pages(dev)
 #endif
 
+static bool
+vhost_memory_changed(struct VhostUserMemory *new,
+		      struct virtio_memory *old)
+{
+	uint32_t i;
+
+	if (new->nregions != old->nregions)
+		return true;
+
+	for (i = 0; i < new->nregions; ++i) {
+		VhostUserMemoryRegion *new_r = &new->regions[i];
+		struct virtio_memory_region *old_r = &old->regions[i];
+
+		if (new_r->guest_phys_addr != old_r->guest_phys_addr)
+			return true;
+		if (new_r->memory_size != old_r->size)
+			return true;
+		if (new_r->userspace_addr != old_r->guest_user_addr)
+			return true;
+	}
+
+	return false;
+}
+
 static int
 vhost_user_set_mem_table(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 {
@@ -499,6 +541,16 @@ vhost_user_set_mem_table(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 	uint64_t alignment;
 	uint32_t i;
 	int fd;
+
+	if (dev->mem && !vhost_memory_changed(&memory, dev->mem)) {
+		RTE_LOG(INFO, VHOST_CONFIG,
+			"(%d) memory regions not changed\n", dev->vid);
+
+		for (i = 0; i < memory.nregions; i++)
+			close(pmsg->fds[i]);
+
+		return 0;
+	}
 
 	/* Remove from the data plane. */
 	if (dev->flags & VIRTIO_DEV_RUNNING) {
@@ -917,12 +969,47 @@ send_vhost_message(int sockfd, struct VhostUserMsg *msg)
 	return ret;
 }
 
+static void
+vhost_user_lock_all_queue_pairs(struct virtio_net *dev)
+{
+	unsigned int i = 0;
+	unsigned int vq_num = 0;
+
+	while (vq_num < dev->virt_qp_nb * 2) {
+		struct vhost_virtqueue *vq = dev->virtqueue[i];
+
+		if (vq) {
+			rte_spinlock_lock(&vq->access_lock);
+			vq_num++;
+		}
+		i++;
+	}
+}
+
+static void
+vhost_user_unlock_all_queue_pairs(struct virtio_net *dev)
+{
+	unsigned int i = 0;
+	unsigned int vq_num = 0;
+
+	while (vq_num < dev->virt_qp_nb * 2) {
+		struct vhost_virtqueue *vq = dev->virtqueue[i];
+
+		if (vq) {
+			rte_spinlock_unlock(&vq->access_lock);
+			vq_num++;
+		}
+		i++;
+	}
+}
+
 int
 vhost_user_msg_handler(int vid, int fd)
 {
 	struct virtio_net *dev;
 	struct VhostUserMsg msg;
 	int ret;
+	int unlock_required = 0;
 
 	dev = get_device(vid);
 	if (dev == NULL)
@@ -945,6 +1032,37 @@ vhost_user_msg_handler(int vid, int fd)
 
 	RTE_LOG(INFO, VHOST_CONFIG, "read message %s\n",
 		vhost_message_str[msg.request]);
+
+	/*
+	 * Note: we don't lock all queues on VHOST_USER_GET_VRING_BASE
+	 * and VHOST_USER_RESET_OWNER, since it is sent when virtio stops
+	 * and device is destroyed. destroy_device waits for queues to be
+	 * inactive, so it is safe. Otherwise taking the access_lock
+	 * would cause a dead lock.
+	 */
+	switch (msg.request) {
+	case VHOST_USER_SET_FEATURES:
+	case VHOST_USER_SET_PROTOCOL_FEATURES:
+	case VHOST_USER_SET_OWNER:
+	case VHOST_USER_SET_MEM_TABLE:
+	case VHOST_USER_SET_LOG_BASE:
+	case VHOST_USER_SET_LOG_FD:
+	case VHOST_USER_SET_VRING_NUM:
+	case VHOST_USER_SET_VRING_ADDR:
+	case VHOST_USER_SET_VRING_BASE:
+	case VHOST_USER_SET_VRING_KICK:
+	case VHOST_USER_SET_VRING_CALL:
+	case VHOST_USER_SET_VRING_ERR:
+	case VHOST_USER_SET_VRING_ENABLE:
+	case VHOST_USER_SEND_RARP:
+		vhost_user_lock_all_queue_pairs(dev);
+		unlock_required = 1;
+		break;
+	default:
+		break;
+
+	}
+
 	switch (msg.request) {
 	case VHOST_USER_GET_FEATURES:
 		msg.payload.u64 = vhost_user_get_features();
@@ -991,7 +1109,7 @@ vhost_user_msg_handler(int vid, int fd)
 		vhost_user_set_vring_num(dev, &msg.payload.state);
 		break;
 	case VHOST_USER_SET_VRING_ADDR:
-		vhost_user_set_vring_addr(dev, &msg.payload.addr);
+		vhost_user_set_vring_addr(&dev, &msg.payload.addr);
 		break;
 	case VHOST_USER_SET_VRING_BASE:
 		vhost_user_set_vring_base(dev, &msg.payload.state);
@@ -1033,6 +1151,9 @@ vhost_user_msg_handler(int vid, int fd)
 		break;
 
 	}
+
+	if (unlock_required)
+		vhost_user_unlock_all_queue_pairs(dev);
 
 	return 0;
 }

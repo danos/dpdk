@@ -174,9 +174,9 @@ int bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	 * by ethtool.
 	 */
 	if (vnic->flags & BNXT_VNIC_INFO_PROMISC)
-		mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
+		mask |= HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
 	if (vnic->flags & BNXT_VNIC_INFO_ALLMULTI)
-		mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+		mask |= HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
 	req.mask = rte_cpu_to_le_32(mask);
 
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req));
@@ -504,7 +504,8 @@ static int bnxt_hwrm_port_phy_cfg(struct bnxt *bp, struct bnxt_link_info *conf)
 				HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_ALL_SPEEDS;
 		}
 		/* AutoNeg - Advertise speeds specified. */
-		if (conf->auto_link_speed_mask) {
+		if (conf->auto_link_speed_mask &&
+		    !(conf->phy_flags & HWRM_PORT_PHY_CFG_INPUT_FLAGS_FORCE)) {
 			req.auto_mode =
 				HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_SPEED_MASK;
 			req.auto_link_speed_mask =
@@ -566,6 +567,7 @@ static int bnxt_hwrm_port_phy_qcfg(struct bnxt *bp,
 	link_info->support_speeds = rte_le_to_cpu_16(resp->support_speeds);
 	link_info->auto_link_speed = rte_le_to_cpu_16(resp->auto_link_speed);
 	link_info->preemphasis = rte_le_to_cpu_32(resp->preemphasis);
+	link_info->force_link_speed = rte_le_to_cpu_16(resp->force_link_speed);
 	link_info->phy_ver[0] = resp->phy_maj;
 	link_info->phy_ver[1] = resp->phy_min;
 	link_info->phy_ver[2] = resp->phy_bld;
@@ -604,7 +606,7 @@ int bnxt_hwrm_queue_qportcfg(struct bnxt *bp)
 int bnxt_hwrm_ring_alloc(struct bnxt *bp,
 			 struct bnxt_ring *ring,
 			 uint32_t ring_type, uint32_t map_index,
-			 uint32_t stats_ctx_id)
+			 uint32_t stats_ctx_id, uint32_t cmpl_ring_id)
 {
 	int rc = 0;
 	struct hwrm_ring_alloc_input req = {.req_type = 0 };
@@ -625,11 +627,12 @@ int bnxt_hwrm_ring_alloc(struct bnxt *bp,
 		/* FALLTHROUGH */
 	case HWRM_RING_ALLOC_INPUT_RING_TYPE_RX:
 		req.ring_type = ring_type;
-		req.cmpl_ring_id =
-		    rte_cpu_to_le_16(bp->grp_info[map_index].cp_fw_ring_id);
+		req.cmpl_ring_id = rte_cpu_to_le_16(cmpl_ring_id);
 		req.length = rte_cpu_to_le_32(ring->ring_size);
 		req.stat_ctx_id = rte_cpu_to_le_16(stats_ctx_id);
-		req.enables = rte_cpu_to_le_32(rte_le_to_cpu_32(req.enables) |
+		if (stats_ctx_id != INVALID_STATS_CTX_ID)
+			req.enables =
+			rte_cpu_to_le_32(rte_le_to_cpu_32(req.enables) |
 			HWRM_RING_ALLOC_INPUT_ENABLES_STAT_CTX_ID_VALID);
 		break;
 	case HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL:
@@ -796,7 +799,9 @@ int bnxt_hwrm_stat_ctx_alloc(struct bnxt *bp,
 	HWRM_CHECK_RESULT;
 
 	cpr->hw_stats_ctx_id = rte_le_to_cpu_16(resp->stat_ctx_id);
-	bp->grp_info[idx].fw_stats_ctx = cpr->hw_stats_ctx_id;
+	//Tx rings don't need grp_info entry. It is a Rx only attribute.
+	if (idx)
+		bp->grp_info[idx].fw_stats_ctx = cpr->hw_stats_ctx_id;
 
 	return rc;
 }
@@ -818,7 +823,9 @@ int bnxt_hwrm_stat_ctx_free(struct bnxt *bp,
 	HWRM_CHECK_RESULT;
 
 	cpr->hw_stats_ctx_id = HWRM_NA_SIGNATURE;
-	bp->grp_info[idx].fw_stats_ctx = cpr->hw_stats_ctx_id;
+	//Tx rings don't have a grp_info entry. It is a Rx only attribute.
+	if (idx)
+		bp->grp_info[idx].fw_stats_ctx = cpr->hw_stats_ctx_id;
 
 	return rc;
 }
@@ -1025,10 +1032,13 @@ int bnxt_free_all_hwrm_stat_ctxs(struct bnxt *bp)
 	for (i = 0; i < bp->rx_cp_nr_rings + bp->tx_cp_nr_rings; i++) {
 		unsigned int idx = i + 1;
 
-		if (i >= bp->rx_cp_nr_rings)
+		if (i >= bp->rx_cp_nr_rings) {
 			cpr = bp->tx_queues[i - bp->rx_cp_nr_rings]->cp_ring;
-		else
+			//Tx rings don't have a grp_info entry.
+			idx = 0;
+		} else {
 			cpr = bp->rx_queues[i]->cp_ring;
+		}
 		if (cpr->hw_stats_ctx_id != HWRM_NA_SIGNATURE) {
 			rc = bnxt_hwrm_stat_ctx_free(bp, cpr, idx);
 			if (rc)
@@ -1052,6 +1062,8 @@ int bnxt_alloc_all_hwrm_stat_ctxs(struct bnxt *bp)
 		if (i >= bp->rx_cp_nr_rings) {
 			txq = bp->tx_queues[i - bp->rx_cp_nr_rings];
 			cpr = txq->cp_ring;
+			//Tx rings don't need grp_info entry.
+			idx = 0;
 		} else {
 			rxq = bp->rx_queues[i];
 			cpr = rxq->cp_ring;
@@ -1089,14 +1101,13 @@ int bnxt_free_all_hwrm_ring_grps(struct bnxt *bp)
 }
 
 static void bnxt_free_cp_ring(struct bnxt *bp,
-			      struct bnxt_cp_ring_info *cpr, unsigned int idx)
+			      struct bnxt_cp_ring_info *cpr)
 {
 	struct bnxt_ring *cp_ring = cpr->cp_ring_struct;
 
 	bnxt_hwrm_ring_free(bp, cp_ring,
 			HWRM_RING_FREE_INPUT_RING_TYPE_CMPL);
 	cp_ring->fw_ring_id = INVALID_HW_RING_ID;
-	bp->grp_info[idx].cp_fw_ring_id = INVALID_HW_RING_ID;
 	memset(cpr->cp_desc_ring, 0, cpr->cp_ring_struct->ring_size *
 			sizeof(*cpr->cp_desc_ring));
 	cpr->cp_raw_cons = 0;
@@ -1112,7 +1123,6 @@ int bnxt_free_all_hwrm_rings(struct bnxt *bp)
 		struct bnxt_tx_ring_info *txr = txq->tx_ring;
 		struct bnxt_ring *ring = txr->tx_ring_struct;
 		struct bnxt_cp_ring_info *cpr = txq->cp_ring;
-		unsigned int idx = bp->rx_cp_nr_rings + i + 1;
 
 		if (ring->fw_ring_id != INVALID_HW_RING_ID) {
 			bnxt_hwrm_ring_free(bp, ring,
@@ -1128,7 +1138,7 @@ int bnxt_free_all_hwrm_rings(struct bnxt *bp)
 			txr->tx_cons = 0;
 		}
 		if (cpr->cp_ring_struct->fw_ring_id != INVALID_HW_RING_ID)
-			bnxt_free_cp_ring(bp, cpr, idx);
+			bnxt_free_cp_ring(bp, cpr);
 	}
 
 	for (i = 0; i < bp->rx_cp_nr_rings; i++) {
@@ -1152,7 +1162,8 @@ int bnxt_free_all_hwrm_rings(struct bnxt *bp)
 			rxr->rx_prod = 0;
 		}
 		if (cpr->cp_ring_struct->fw_ring_id != INVALID_HW_RING_ID)
-			bnxt_free_cp_ring(bp, cpr, idx);
+			bnxt_free_cp_ring(bp, cpr);
+		bp->grp_info[idx].cp_fw_ring_id = INVALID_HW_RING_ID;
 	}
 
 	/* Default completion ring */
@@ -1160,7 +1171,8 @@ int bnxt_free_all_hwrm_rings(struct bnxt *bp)
 		struct bnxt_cp_ring_info *cpr = bp->def_cp_ring;
 
 		if (cpr->cp_ring_struct->fw_ring_id != INVALID_HW_RING_ID)
-			bnxt_free_cp_ring(bp, cpr, 0);
+			bnxt_free_cp_ring(bp, cpr);
+		bp->grp_info[0].cp_fw_ring_id = INVALID_HW_RING_ID;
 	}
 
 	return rc;
@@ -1511,7 +1523,9 @@ int bnxt_set_hwrm_link_config(struct bnxt *bp, bool link_up)
 	autoneg = bnxt_check_eth_link_autoneg(dev_conf->link_speeds);
 	speed = bnxt_parse_eth_link_speed(dev_conf->link_speeds);
 	link_req.phy_flags = HWRM_PORT_PHY_CFG_INPUT_FLAGS_RESET_PHY;
-	if (autoneg == 1) {
+	/* Autoneg can be done only when the FW allows */
+	if (autoneg == 1 && !(bp->link_info.auto_link_speed ||
+				bp->link_info.force_link_speed)) {
 		link_req.phy_flags |=
 				HWRM_PORT_PHY_CFG_INPUT_FLAGS_RESTART_AUTONEG;
 		link_req.auto_link_speed_mask =
@@ -1529,7 +1543,13 @@ int bnxt_set_hwrm_link_config(struct bnxt *bp, bool link_up)
 		}
 
 		link_req.phy_flags |= HWRM_PORT_PHY_CFG_INPUT_FLAGS_FORCE;
-		link_req.link_speed = speed;
+		/* If user wants a particular speed try that first. */
+		if (speed)
+			link_req.link_speed = speed;
+		else if (bp->link_info.force_link_speed)
+			link_req.link_speed = bp->link_info.force_link_speed;
+		else
+			link_req.link_speed = bp->link_info.auto_link_speed;
 	}
 	link_req.duplex = bnxt_parse_eth_link_duplex(dev_conf->link_speeds);
 	link_req.auto_pause = bp->link_info.auto_pause;
