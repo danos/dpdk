@@ -344,11 +344,11 @@ endif
 		debian/libdpdk.pc.in > debian/libdpdk-dev/$(LIBDIR)/pkgconfig/libdpdk.pc
 	# Package: dpdk-igb-uio-dkms
 	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
-	cp lib/librte_eal/linuxapp/igb_uio/* \
+	cp kernel/linux/igb_uio/* \
 		debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
 	# Package: dpdk-rte-kni-dkms
 	mkdir -p debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
-	cp -a lib/librte_eal/linuxapp/kni/* \
+	cp -a kernel/linux/kni/* \
 		debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
