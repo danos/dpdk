@@ -1,6 +1,7 @@
 librte_sched.so.18.05 librte-sched18.05 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
+ EXPERIMENTAL@EXPERIMENTAL 18.05
  rte_approx@DPDK_2.0 16.04
  rte_red_config_init@DPDK_2.0 16.04
  rte_red_log2_1_minus_Wq@DPDK_2.0 16.04
@@ -14,6 +15,7 @@ librte_sched.so.18.05 librte-sched18.05 #MINVER#
  rte_sched_port_enqueue@DPDK_2.0 16.04
  rte_sched_port_free@DPDK_2.0 16.04
  rte_sched_port_get_memory_footprint@DPDK_2.0 16.04
+ rte_sched_port_pipe_profile_add@EXPERIMENTAL 18.05
  rte_sched_port_pkt_read_color@DPDK_2.1 16.04
  rte_sched_port_pkt_read_tree_path@DPDK_2.1 16.04
  rte_sched_port_pkt_write@DPDK_2.1 16.04

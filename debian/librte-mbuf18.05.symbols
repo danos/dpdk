@@ -4,7 +4,6 @@ librte_mbuf.so.18.05 librte-mbuf18.05 #MINVER#
  DPDK_2.1@DPDK_2.1 16.04
  EXPERIMENTAL@EXPERIMENTAL 18.02
  __rte_pktmbuf_read@DPDK_16.11 16.11
- rte_ctrlmbuf_init@DPDK_2.0 16.04
  rte_get_ptype_inner_l2_name@DPDK_16.11 16.11
  rte_get_ptype_inner_l3_name@DPDK_16.11 16.11
  rte_get_ptype_inner_l4_name@DPDK_16.11 16.11

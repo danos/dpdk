@@ -4,6 +4,8 @@ librte_cryptodev.so.18.05 librte-cryptodev18.05 #MINVER#
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_17.08@DPDK_17.08 17.08
  DPDK_17.11@DPDK_17.11 17.11
+ DPDK_18.05@DPDK_18.05 18.05
+ EXPERIMENTAL@EXPERIMENTAL 18.05
  rte_crypto_aead_algorithm_strings@DPDK_17.08 17.08
  rte_crypto_aead_operation_strings@DPDK_17.08 17.08
  rte_crypto_auth_algorithm_strings@DPDK_17.02 17.05
@@ -56,8 +58,12 @@ librte_cryptodev.so.18.05 librte-cryptodev18.05 #MINVER#
  rte_cryptodev_sym_capability_check_auth@DPDK_17.02 17.05
  rte_cryptodev_sym_capability_check_cipher@DPDK_17.02 17.05
  rte_cryptodev_sym_capability_get@DPDK_17.02 17.05
+ rte_cryptodev_sym_get_header_session_size@DPDK_18.05 18.05
+ rte_cryptodev_sym_get_private_session_size@DPDK_18.05 18.05
  rte_cryptodev_sym_session_clear@DPDK_17.08 17.08
  rte_cryptodev_sym_session_create@DPDK_16.04 16.04
  rte_cryptodev_sym_session_free@DPDK_16.04 16.04
+ rte_cryptodev_sym_session_get_private_data@EXPERIMENTAL 18.05
  rte_cryptodev_sym_session_init@DPDK_17.08 17.08
+ rte_cryptodev_sym_session_set_private_data@EXPERIMENTAL 18.05
  rte_cryptodevs@DPDK_16.04 16.04

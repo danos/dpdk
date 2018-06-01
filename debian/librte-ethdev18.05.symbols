@@ -6,6 +6,7 @@ librte_ethdev.so.18.05 librte-ethdev18.05 #MINVER#
  DPDK_17.08@DPDK_17.08 17.08
  DPDK_17.11@DPDK_17.11 17.11
  DPDK_18.02@DPDK_18.02 18.02
+ DPDK_18.05@DPDK_18.05 18.05
  DPDK_2.2@DPDK_2.2 16.07~rc1
  EXPERIMENTAL@EXPERIMENTAL 17.11
  _rte_eth_dev_callback_process@DPDK_17.08 17.08
@@ -26,10 +27,13 @@ librte_ethdev.so.18.05 librte-ethdev18.05 #MINVER#
  rte_eth_dev_close@DPDK_2.2 16.07~rc1
  rte_eth_dev_configure@DPDK_2.2 16.07~rc1
  rte_eth_dev_count@DPDK_2.2 16.07~rc1
+ rte_eth_dev_count_avail@DPDK_18.05 18.05
+ rte_eth_dev_count_total@EXPERIMENTAL 18.05
+ rte_eth_dev_create@EXPERIMENTAL 18.05
  rte_eth_dev_default_mac_addr_set@DPDK_2.2 16.07~rc1
+ rte_eth_dev_destroy@EXPERIMENTAL 18.05
  rte_eth_dev_detach@DPDK_2.2 16.07~rc1
  rte_eth_dev_filter_ctrl@DPDK_18.02 18.02
- rte_eth_dev_filter_ctrl@DPDK_2.2 16.07~rc1
  rte_eth_dev_filter_supported@DPDK_2.2 16.07~rc1
  rte_eth_dev_flow_ctrl_get@DPDK_2.2 16.07~rc1
  rte_eth_dev_flow_ctrl_set@DPDK_2.2 16.07~rc1
@@ -37,6 +41,8 @@ librte_ethdev.so.18.05 librte-ethdev18.05 #MINVER#
  rte_eth_dev_get_dcb_info@DPDK_2.2 16.07~rc1
  rte_eth_dev_get_eeprom@DPDK_2.2 16.07~rc1
  rte_eth_dev_get_eeprom_length@DPDK_2.2 16.07~rc1
+ rte_eth_dev_get_module_eeprom@EXPERIMENTAL 18.05
+ rte_eth_dev_get_module_info@EXPERIMENTAL 18.05
  rte_eth_dev_get_mtu@DPDK_2.2 16.07~rc1
  rte_eth_dev_get_name_by_port@DPDK_16.07 16.07~rc1
  rte_eth_dev_get_port_by_name@DPDK_16.07 16.07~rc1
@@ -58,6 +64,7 @@ librte_ethdev.so.18.05 librte-ethdev18.05 #MINVER#
  rte_eth_dev_owner_unset@EXPERIMENTAL 18.02
  rte_eth_dev_pool_ops_supported@DPDK_17.11 17.11
  rte_eth_dev_priority_flow_ctrl_set@DPDK_2.2 16.07~rc1
+ rte_eth_dev_probing_finish@DPDK_18.05 18.05
  rte_eth_dev_release_port@DPDK_2.2 16.07~rc1
  rte_eth_dev_reset@DPDK_17.11 17.11
  rte_eth_dev_rss_hash_conf_get@DPDK_2.2 16.07~rc1
@@ -93,10 +100,11 @@ librte_ethdev.so.18.05 librte-ethdev18.05 #MINVER#
  rte_eth_dev_udp_tunnel_port_add@DPDK_16.04 16.07~rc1
  rte_eth_dev_udp_tunnel_port_delete@DPDK_16.04 16.07~rc1
  rte_eth_dev_vlan_filter@DPDK_2.2 16.07~rc1
+ rte_eth_devargs_parse@EXPERIMENTAL 18.05
  rte_eth_devices@DPDK_2.2 16.07~rc1
  rte_eth_dma_zone_reserve@DPDK_2.2 16.07~rc1
  rte_eth_find_next@DPDK_17.05 17.05
- rte_eth_find_next_owned_by@EXPERIMENTAL 18.02
+ rte_eth_find_next_owned_by@DPDK_18.05 18.05
  rte_eth_led_off@DPDK_2.2 16.07~rc1
  rte_eth_led_on@DPDK_2.2 16.07~rc1
  rte_eth_link_get@DPDK_2.2 16.07~rc1
@@ -115,6 +123,8 @@ librte_ethdev.so.18.05 librte-ethdev18.05 #MINVER#
  rte_eth_speed_bitflag@DPDK_16.04 16.07~rc1
  rte_eth_stats_get@DPDK_2.2 16.07~rc1
  rte_eth_stats_reset@DPDK_2.2 16.07~rc1
+ rte_eth_switch_domain_alloc@EXPERIMENTAL 18.05
+ rte_eth_switch_domain_free@EXPERIMENTAL 18.05
  rte_eth_timesync_adjust_time@DPDK_2.2 16.07~rc1
  rte_eth_timesync_disable@DPDK_2.2 16.07~rc1
  rte_eth_timesync_enable@DPDK_2.2 16.07~rc1
@@ -135,14 +145,14 @@ librte_ethdev.so.18.05 librte-ethdev18.05 #MINVER#
  rte_eth_xstats_get_names@DPDK_16.07 16.07~rc1
  rte_eth_xstats_get_names_by_id@DPDK_17.05 17.05
  rte_eth_xstats_reset@DPDK_2.2 16.07~rc1
- rte_flow_copy@DPDK_17.08 17.08
- rte_flow_create@DPDK_17.02 17.05
- rte_flow_destroy@DPDK_17.02 17.05
- rte_flow_error_set@DPDK_17.11 17.11
- rte_flow_flush@DPDK_17.02 17.05
- rte_flow_isolate@DPDK_17.08 17.08
- rte_flow_query@DPDK_17.02 17.05
- rte_flow_validate@DPDK_17.02 17.05
+ rte_flow_copy@DPDK_18.05 18.05
+ rte_flow_create@DPDK_18.05 18.05
+ rte_flow_destroy@DPDK_18.05 18.05
+ rte_flow_error_set@DPDK_18.05 18.05
+ rte_flow_flush@DPDK_18.05 18.05
+ rte_flow_isolate@DPDK_18.05 18.05
+ rte_flow_query@DPDK_18.05 18.05
+ rte_flow_validate@DPDK_18.05 18.05
  rte_mtr_capabilities_get@EXPERIMENTAL 17.11
  rte_mtr_create@EXPERIMENTAL 17.11
  rte_mtr_destroy@EXPERIMENTAL 17.11
@@ -156,6 +166,7 @@ librte_ethdev.so.18.05 librte-ethdev18.05 #MINVER#
  rte_mtr_stats_read@EXPERIMENTAL 17.11
  rte_mtr_stats_update@EXPERIMENTAL 17.11
  rte_tm_capabilities_get@DPDK_17.08 17.08
+ rte_tm_get_number_of_leaf_nodes@DPDK_17.08 18.05
  rte_tm_hierarchy_commit@DPDK_17.08 17.08
  rte_tm_level_capabilities_get@DPDK_17.08 17.08
  rte_tm_mark_ip_dscp@DPDK_17.08 17.08
