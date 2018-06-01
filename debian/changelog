@@ -2,6 +2,7 @@ dpdk (18.05-1~git1) UNRELEASED; urgency=medium
 
   * New upstream release 18.05; for a full list of changes see:
     https://dpdk.org/doc/guides/rel_notes/release_18_05.html
+    - refresh d/p/fix-vhost-user-socket-permission.patch for 18.05
   * Droped changes that are upstream in 18.05:
     - Backport dpdk-dev-app-testpmd-fix-DPAA-shared-library-dependency.patch
       and dpdk-dev-mk-fix-dependencies-of-dpaaX-drivers.patch from upstream to
