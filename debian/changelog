@@ -1,3 +1,10 @@
+dpdk (18.05-1~git1) UNRELEASED; urgency=medium
+
+  * New upstream release 18.05; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_05.html
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 01 Jun 2018 09:18:32 +0200
+
 dpdk (18.02.1-1~git1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
