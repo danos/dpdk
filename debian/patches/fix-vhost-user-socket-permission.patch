@@ -72,10 +72,10 @@ Last-Update: 2017-08-23
  ----------------------------
 --- a/lib/librte_eal/common/eal_common_options.c
 +++ b/lib/librte_eal/common/eal_common_options.c
-@@ -73,6 +73,8 @@ eal_long_options[] = {
- 	{OPT_VDEV,              1, NULL, OPT_VDEV_NUM             },
- 	{OPT_VFIO_INTR,         1, NULL, OPT_VFIO_INTR_NUM        },
+@@ -76,6 +76,8 @@ eal_long_options[] = {
  	{OPT_VMWARE_TSC_MAP,    0, NULL, OPT_VMWARE_TSC_MAP_NUM   },
+ 	{OPT_LEGACY_MEM,        0, NULL, OPT_LEGACY_MEM_NUM       },
+ 	{OPT_SINGLE_FILE_SEGMENTS, 0, NULL, OPT_SINGLE_FILE_SEGMENTS_NUM},
 +	{OPT_VHOST_OWNER,       1, NULL, OPT_VHOST_OWNER_NUM      },
 +	{OPT_VHOST_PERM,        1, NULL, OPT_VHOST_PERM_NUM       },
  	{0,                     0, NULL, 0                        }
@@ -83,10 +83,10 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_eal/common/eal_options.h
 +++ b/lib/librte_eal/common/eal_options.h
-@@ -55,6 +55,10 @@ enum {
- 	OPT_VFIO_INTR_NUM,
- #define OPT_VMWARE_TSC_MAP    "vmware-tsc-map"
- 	OPT_VMWARE_TSC_MAP_NUM,
+@@ -59,6 +59,10 @@ enum {
+ 	OPT_LEGACY_MEM_NUM,
+ #define OPT_SINGLE_FILE_SEGMENTS    "single-file-segments"
+ 	OPT_SINGLE_FILE_SEGMENTS_NUM,
 +#define OPT_VHOST_OWNER       "vhost-owner"
 +	OPT_VHOST_OWNER_NUM,
 +#define OPT_VHOST_PERM        "vhost-perm"
@@ -96,7 +96,7 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_eal/common/include/rte_eal.h
 +++ b/lib/librte_eal/common/include/rte_eal.h
-@@ -472,6 +472,11 @@ rte_eal_mbuf_user_pool_ops(void);
+@@ -512,6 +512,11 @@ __rte_deprecated
  const char *
  rte_eal_mbuf_default_mempool_ops(void);
  
@@ -133,16 +133,16 @@ Last-Update: 2017-08-23
  /* used by rte_rdtsc() */
  int rte_cycles_vmware_tsc_map;
  
-@@ -348,6 +357,8 @@ eal_usage(const char *prgname)
- 	       "  --"OPT_BASE_VIRTADDR"     Base virtual address\n"
- 	       "  --"OPT_CREATE_UIO_DEV"    Create /dev/uioX (usually done by hotplug)\n"
+@@ -412,6 +421,8 @@ eal_usage(const char *prgname)
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
+ 	       "  --"OPT_LEGACY_MEM"        Legacy memory mode (no dynamic allocation, contiguous segments)\n"
+ 	       "  --"OPT_SINGLE_FILE_SEGMENTS" Put all hugepage memory in single files\n"
 +	       "  --"OPT_VHOST_OWNER"       Create vhost-user sockets with this owner:group\n"
 +	       "  --"OPT_VHOST_PERM"        Create vhost-user sockets with these permissions\n"
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -507,6 +518,121 @@ eal_log_level_parse(int argc, char **arg
+@@ -571,6 +582,121 @@ eal_log_level_parse(int argc, char **arg
  	optarg = old_optarg;
  }
  
@@ -264,8 +264,8 @@ Last-Update: 2017-08-23
  /* Parse the argument given in the command line of the application */
  static int
  eal_parse_args(int argc, char **argv)
-@@ -594,6 +720,26 @@ eal_parse_args(int argc, char **argv)
- 			internal_config.user_mbuf_pool_ops_name = optarg;
+@@ -659,6 +785,26 @@ eal_parse_args(int argc, char **argv)
+ 			    strdup(optarg);
  			break;
  
 +		case OPT_VHOST_OWNER_NUM:
@@ -291,7 +291,7 @@ Last-Update: 2017-08-23
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -1038,3 +1184,47 @@ rte_eal_check_module(const char *module_
+@@ -1118,3 +1264,47 @@ rte_eal_check_module(const char *module_
  	/* Module has been found */
  	return 1;
  }
@@ -341,7 +341,7 @@ Last-Update: 2017-08-23
 +}
 --- a/lib/librte_eal/rte_eal_version.map
 +++ b/lib/librte_eal/rte_eal_version.map
-@@ -118,6 +118,7 @@ DPDK_16.04 {
+@@ -116,6 +116,7 @@ DPDK_16.04 {
  
  	rte_cpu_get_flag_name;
  	rte_eal_primary_proc_alive;
@@ -351,7 +351,7 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_vhost/socket.c
 +++ b/lib/librte_vhost/socket.c
-@@ -71,6 +71,8 @@ struct vhost_user {
+@@ -77,6 +77,8 @@ struct vhost_user {
  	pthread_mutex_t mutex;
  };
  
@@ -360,7 +360,7 @@ Last-Update: 2017-08-23
  #define MAX_VIRTIO_BACKLOG 128
  
  static void vhost_user_server_new_connection(int fd, void *data, int *remove);
-@@ -340,6 +342,7 @@ vhost_user_start_server(struct vhost_use
+@@ -374,6 +376,7 @@ vhost_user_start_server(struct vhost_use
  		goto err;
  	}
  
