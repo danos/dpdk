@@ -29,6 +29,40 @@ extern "C" {
 #define RTE_VHOST_USER_DEQUEUE_ZERO_COPY	(1ULL << 2)
 #define RTE_VHOST_USER_IOMMU_SUPPORT	(1ULL << 3)
 
+/** Protocol features. */
+#ifndef VHOST_USER_PROTOCOL_F_MQ
+#define VHOST_USER_PROTOCOL_F_MQ	0
+#endif
+
+#ifndef VHOST_USER_PROTOCOL_F_LOG_SHMFD
+#define VHOST_USER_PROTOCOL_F_LOG_SHMFD	1
+#endif
+
+#ifndef VHOST_USER_PROTOCOL_F_RARP
+#define VHOST_USER_PROTOCOL_F_RARP	2
+#endif
+
+#ifndef VHOST_USER_PROTOCOL_F_REPLY_ACK
+#define VHOST_USER_PROTOCOL_F_REPLY_ACK	3
+#endif
+
+#ifndef VHOST_USER_PROTOCOL_F_NET_MTU
+#define VHOST_USER_PROTOCOL_F_NET_MTU	4
+#endif
+
+#ifndef VHOST_USER_PROTOCOL_F_SLAVE_REQ
+#define VHOST_USER_PROTOCOL_F_SLAVE_REQ	5
+#endif
+
+#ifndef VHOST_USER_PROTOCOL_F_CRYPTO_SESSION
+#define VHOST_USER_PROTOCOL_F_CRYPTO_SESSION 7
+#endif
+
+/** Indicate whether protocol features negotiation is supported. */
+#ifndef VHOST_USER_F_PROTOCOL_FEATURES
+#define VHOST_USER_F_PROTOCOL_FEATURES	30
+#endif
+
 /**
  * Information relating to memory regions including offsets to
  * addresses in QEMUs memory file.
@@ -216,6 +250,41 @@ int rte_vhost_driver_register(const char *path, uint64_t flags);
 int rte_vhost_driver_unregister(const char *path);
 
 /**
+ * Set the vdpa device id, enforce single connection per socket
+ *
+ * @param path
+ *  The vhost-user socket file path
+ * @param did
+ *  Device id
+ * @return
+ *  0 on success, -1 on failure
+ */
+int __rte_experimental
+rte_vhost_driver_attach_vdpa_device(const char *path, int did);
+
+/**
+ * Unset the vdpa device id
+ *
+ * @param path
+ *  The vhost-user socket file path
+ * @return
+ *  0 on success, -1 on failure
+ */
+int __rte_experimental
+rte_vhost_driver_detach_vdpa_device(const char *path);
+
+/**
+ * Get the device id
+ *
+ * @param path
+ *  The vhost-user socket file path
+ * @return
+ *  Device id, -1 on failure
+ */
+int __rte_experimental
+rte_vhost_driver_get_vdpa_device_id(const char *path);
+
+/**
  * Set the feature bits the vhost-user driver supports.
  *
  * @param path
@@ -269,6 +338,33 @@ int rte_vhost_driver_disable_features(const char *path, uint64_t features);
  *  0 on success, -1 on failure
  */
 int rte_vhost_driver_get_features(const char *path, uint64_t *features);
+
+/**
+ * Get the protocol feature bits before feature negotiation.
+ *
+ * @param path
+ *  The vhost-user socket file path
+ * @param protocol_features
+ *  A pointer to store the queried protocol feature bits
+ * @return
+ *  0 on success, -1 on failure
+ */
+int __rte_experimental
+rte_vhost_driver_get_protocol_features(const char *path,
+		uint64_t *protocol_features);
+
+/**
+ * Get the queue number bits before feature negotiation.
+ *
+ * @param path
+ *  The vhost-user socket file path
+ * @param queue_num
+ *  A pointer to store the queried queue number bits
+ * @return
+ *  0 on success, -1 on failure
+ */
+int __rte_experimental
+rte_vhost_driver_get_queue_num(const char *path, uint32_t *queue_num);
 
 /**
  * Get the feature bits after negotiation
@@ -479,6 +575,68 @@ int rte_vhost_vring_call(int vid, uint16_t vring_idx);
  *  num of desc available
  */
 uint32_t rte_vhost_rx_queue_count(int vid, uint16_t qid);
+
+/**
+ * Get log base and log size of the vhost device
+ *
+ * @param vid
+ *  vhost device ID
+ * @param log_base
+ *  vhost log base
+ * @param log_size
+ *  vhost log size
+ * @return
+ *  0 on success, -1 on failure
+ */
+int __rte_experimental
+rte_vhost_get_log_base(int vid, uint64_t *log_base, uint64_t *log_size);
+
+/**
+ * Get last_avail/used_idx of the vhost virtqueue
+ *
+ * @param vid
+ *  vhost device ID
+ * @param queue_id
+ *  vhost queue index
+ * @param last_avail_idx
+ *  vhost last_avail_idx to get
+ * @param last_used_idx
+ *  vhost last_used_idx to get
+ * @return
+ *  0 on success, -1 on failure
+ */
+int __rte_experimental
+rte_vhost_get_vring_base(int vid, uint16_t queue_id,
+		uint16_t *last_avail_idx, uint16_t *last_used_idx);
+
+/**
+ * Set last_avail/used_idx of the vhost virtqueue
+ *
+ * @param vid
+ *  vhost device ID
+ * @param queue_id
+ *  vhost queue index
+ * @param last_avail_idx
+ *  last_avail_idx to set
+ * @param last_used_idx
+ *  last_used_idx to set
+ * @return
+ *  0 on success, -1 on failure
+ */
+int __rte_experimental
+rte_vhost_set_vring_base(int vid, uint16_t queue_id,
+		uint16_t last_avail_idx, uint16_t last_used_idx);
+
+/**
+ * Get vdpa device id for vhost device.
+ *
+ * @param vid
+ *  vhost device id
+ * @return
+ *  device id
+ */
+int __rte_experimental
+rte_vhost_get_vdpa_device_id(int vid);
 
 #ifdef __cplusplus
 }
