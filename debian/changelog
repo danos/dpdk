@@ -24,6 +24,7 @@ dpdk (18.05-1~git1) UNRELEASED; urgency=medium
       - librte-pmd-ifpga-rawdev
       - librte-pmd-virtio-crypto
     - d/rules: adapt to move of kernel modules directories in 18.05
+    - d/control: dpaa drivers build on non arm64 as well now
   * Droped changes that are upstream in 18.05:
     - Backport dpdk-dev-app-testpmd-fix-DPAA-shared-library-dependency.patch
       and dpdk-dev-mk-fix-dependencies-of-dpaaX-drivers.patch from upstream to
