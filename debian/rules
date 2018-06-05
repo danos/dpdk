@@ -331,6 +331,11 @@ endif
 	    echo "MEMPOOL: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/$(DPDK_DRIVER_DIR)/"; \
 	    ln -s --relative --target-directory=$${LIBD}/$(DPDK_DRIVER_DIR)/ $${LIBD}/$${LIBF}; \
 	  fi; \
+	  if [ "$${LIBF#librte_ifcvf_}x" != "$${LIBF}x" ]; then \
+	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
+	    echo "IFCVF: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/$(DPDK_DRIVER_DIR)/"; \
+	    ln -s --relative --target-directory=$${LIBD}/$(DPDK_DRIVER_DIR)/ $${LIBD}/$${LIBF}; \
+	  fi; \
 	  if [ "$${LIBF#librte_eal}x" != "$${LIBF}x" ]; then \
 	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
 	  fi; \
