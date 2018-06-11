@@ -1,5 +1,6 @@
-dpdk (18.05-1) UNRELEASED; urgency=medium
+dpdk (18.05-1) experimental; urgency=medium
 
+  [ Christian Ehrhardt ]
   * New upstream release 18.05; for a full list of changes see:
     https://dpdk.org/doc/guides/rel_notes/release_18_05.html
     - refresh d/p/fix-vhost-user-socket-permission.patch for 18.05
@@ -33,7 +34,7 @@ dpdk (18.05-1) UNRELEASED; urgency=medium
       clause.patch: fix build on ppc64el
       fix arm64 build.
 
- -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 01 Jun 2018 09:18:32 +0200
+ -- Luca Boccassi <bluca@debian.org>  Mon, 11 Jun 2018 14:34:19 +0100
 
 dpdk (18.02.1-1) experimental; urgency=medium
 
