@@ -1,0 +1,168 @@
+From aac6f11f586480f9222dba99910654eda989c649 Mon Sep 17 00:00:00 2001
+From: Wisam Jaddo <wisamm@mellanox.com>
+Date: Sun, 14 Jan 2018 10:27:10 +0200
+Subject: [PATCH] app/testpmd: add ethernet peer command
+
+This command will simulate the process of setting the
+eth-peer from command line.
+
+It will be useful to perform extra testing.
+
+usage:
+ testpmd> set eth-peer <port_id> <peer_addr>.
+
+Signed-off-by: Wisam Jaddo <wisamm@mellanox.com>
+Acked-by: Wenzhuo Lu <wenzhuo.lu@intel.com>
+
+This will help Debian/Ubuntu to have the MLX PMDs much more testable
+while at the same time not affecting
+  a) any other formerly existing PMDs
+  b) any other parts than the testpmd helper
+  c) not changing things if not specified
+
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Original-Author: Wisam Jaddo <wisamm@mellanox.com>
+Origin: backport, http://git.dpdk.org/dpdk/commit/?id=aac6f11f586480f9222dba99910654eda989c649
+Last-Update: 2018-06-18
+---
+ app/test-pmd/cmdline.c                      | 48 +++++++++++++++++++++
+ app/test-pmd/config.c                       | 19 ++++++++
+ app/test-pmd/testpmd.h                      |  2 +
+ doc/guides/testpmd_app_ug/testpmd_funcs.rst |  9 ++++
+ 4 files changed, 78 insertions(+)
+
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -486,6 +486,9 @@ static void cmd_help_long_parsed(void *p
+ 			"set vf mac addr (port_id) (vf_id) (XX:XX:XX:XX:XX:XX)\n"
+ 			"    Set the MAC address for a VF from the PF.\n\n"
+ 
++			"set eth-peer (port_id) (peer_addr)\n"
++			"    set the peer address for certain port.\n\n"
++
+ 			"set port (port_id) uta (mac_address|all) (on|off)\n"
+ 			"    Add/Remove a or all unicast hash filter(s)"
+ 			"from port X.\n\n"
+@@ -7124,6 +7127,50 @@ cmdline_parse_inst_t cmd_mac_addr = {
+ 	},
+ };
+ 
++/* *** SET THE PEER ADDRESS FOR CERTAIN PORT *** */
++struct cmd_eth_peer_result {
++	cmdline_fixed_string_t set;
++	cmdline_fixed_string_t eth_peer;
++	portid_t port_id;
++	cmdline_fixed_string_t peer_addr;
++};
++
++static void cmd_set_eth_peer_parsed(void *parsed_result,
++			__attribute__((unused)) struct cmdline *cl,
++			__attribute__((unused)) void *data)
++{
++		struct cmd_eth_peer_result *res = parsed_result;
++
++		if (test_done == 0) {
++			printf("Please stop forwarding first\n");
++			return;
++		}
++		if (!strcmp(res->eth_peer, "eth-peer")) {
++			set_fwd_eth_peer(res->port_id, res->peer_addr);
++			fwd_config_setup();
++		}
++}
++cmdline_parse_token_string_t cmd_eth_peer_set =
++	TOKEN_STRING_INITIALIZER(struct cmd_eth_peer_result, set, "set");
++cmdline_parse_token_string_t cmd_eth_peer =
++	TOKEN_STRING_INITIALIZER(struct cmd_eth_peer_result, eth_peer, "eth-peer");
++cmdline_parse_token_num_t cmd_eth_peer_port_id =
++	TOKEN_NUM_INITIALIZER(struct cmd_eth_peer_result, port_id, UINT16);
++cmdline_parse_token_string_t cmd_eth_peer_addr =
++	TOKEN_STRING_INITIALIZER(struct cmd_eth_peer_result, peer_addr, NULL);
++
++cmdline_parse_inst_t cmd_set_fwd_eth_peer = {
++	.f = cmd_set_eth_peer_parsed,
++	.data = NULL,
++	.help_str = "set eth-peer <port_id> <peer_mac>",
++	.tokens = {
++		(void *)&cmd_eth_peer_set,
++		(void *)&cmd_eth_peer,
++		(void *)&cmd_eth_peer_port_id,
++		(void *)&cmd_eth_peer_addr,
++		NULL,
++	},
++};
+ 
+ /* *** CONFIGURE QUEUE STATS COUNTER MAPPINGS *** */
+ struct cmd_set_qmap_result {
+@@ -15629,6 +15676,7 @@ cmdline_parse_ctx_t main_ctx[] = {
+ 	(cmdline_parse_inst_t *)&cmd_read_rxd_txd,
+ 	(cmdline_parse_inst_t *)&cmd_stop,
+ 	(cmdline_parse_inst_t *)&cmd_mac_addr,
++	(cmdline_parse_inst_t *)&cmd_set_fwd_eth_peer,
+ 	(cmdline_parse_inst_t *)&cmd_set_qmap,
+ 	(cmdline_parse_inst_t *)&cmd_set_xstats_hide_zero,
+ 	(cmdline_parse_inst_t *)&cmd_operate_port,
+--- a/app/test-pmd/config.c
++++ b/app/test-pmd/config.c
+@@ -78,6 +78,7 @@
+ #include <rte_pmd_bnxt.h>
+ #endif
+ #include <rte_gro.h>
++#include <cmdline_parse_etheraddr.h>
+ 
+ #include "testpmd.h"
+ 
+@@ -2213,6 +2214,24 @@ pkt_fwd_config_display(struct fwd_config
+ 	printf("\n");
+ }
+ 
++void
++set_fwd_eth_peer(portid_t port_id, char *peer_addr)
++{
++	uint8_t c, new_peer_addr[6];
++	if (!rte_eth_dev_is_valid_port(port_id)) {
++		printf("Error: Invalid port number %i\n", port_id);
++		return;
++	}
++	if (cmdline_parse_etheraddr(NULL, peer_addr, &new_peer_addr,
++					sizeof(new_peer_addr)) < 0) {
++		printf("Error: Invalid ethernet address: %s\n", peer_addr);
++		return;
++	}
++	for (c = 0; c < 6; c++)
++		peer_eth_addrs[port_id].addr_bytes[c] =
++			new_peer_addr[c];
++}
++
+ int
+ set_fwd_lcores_list(unsigned int *lcorelist, unsigned int nb_lc)
+ {
+--- a/app/test-pmd/testpmd.h
++++ b/app/test-pmd/testpmd.h
+@@ -601,6 +601,8 @@ void reconfig(portid_t new_port_id, unsi
+ int init_fwd_streams(void);
+ void update_fwd_ports(portid_t new_pid);
+ 
++void set_fwd_eth_peer(portid_t port_id, char *peer_addr);
++
+ void port_mtu_set(portid_t port_id, uint16_t mtu);
+ void port_reg_bit_display(portid_t port_id, uint32_t reg_off, uint8_t bit_pos);
+ void port_reg_bit_set(portid_t port_id, uint32_t reg_off, uint8_t bit_pos,
+--- a/doc/guides/testpmd_app_ug/testpmd_funcs.rst
++++ b/doc/guides/testpmd_app_ug/testpmd_funcs.rst
+@@ -1091,6 +1091,15 @@ Set the MAC address for a VF from the PF
+ 
+    testpmd> set vf mac addr (port_id) (vf_id) (XX:XX:XX:XX:XX:XX)
+ 
++set eth-peer
++~~~~~~~~~~~~
++
++Set the forwarding peer address for certain port::
++
++   testpmd> set eth-peer (port_id) (perr_addr)
++
++This is equivalent to the ``--eth-peer`` command-line option.
++
+ set port-uta
+ ~~~~~~~~~~~~
+ 
