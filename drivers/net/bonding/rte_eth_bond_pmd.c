@@ -1912,7 +1912,7 @@ bond_ethdev_start(struct rte_eth_dev *eth_dev)
 
 	if (internals->slave_count == 0) {
 		RTE_BOND_LOG(ERR, "Cannot start port since there are no slave devices");
-		return -1;
+		goto out_err;
 	}
 
 	if (internals->user_defined_mac == 0) {
@@ -1923,18 +1923,18 @@ bond_ethdev_start(struct rte_eth_dev *eth_dev)
 				new_mac_addr = &internals->slaves[i].persisted_mac_addr;
 
 		if (new_mac_addr == NULL)
-			return -1;
+			goto out_err;
 
 		if (mac_address_set(eth_dev, new_mac_addr) != 0) {
 			RTE_BOND_LOG(ERR, "bonded port (%d) failed to update MAC address",
 					eth_dev->data->port_id);
-			return -1;
+			goto out_err;
 		}
 	}
 
 	/* Update all slave devices MACs*/
 	if (mac_address_slaves_update(eth_dev) != 0)
-		return -1;
+		goto out_err;
 
 	/* If bonded device is configure in promiscuous mode then re-apply config */
 	if (internals->promiscuous_en)
@@ -1959,7 +1959,7 @@ bond_ethdev_start(struct rte_eth_dev *eth_dev)
 				"bonded port (%d) failed to reconfigure slave device (%d)",
 				eth_dev->data->port_id,
 				internals->slaves[i].port_id);
-			return -1;
+			goto out_err;
 		}
 		/* We will need to poll for link status if any slave doesn't
 		 * support interrupts
@@ -1967,6 +1967,7 @@ bond_ethdev_start(struct rte_eth_dev *eth_dev)
 		if (internals->slaves[i].link_status_poll_enabled)
 			internals->link_status_polling_enabled = 1;
 	}
+
 	/* start polling if needed */
 	if (internals->link_status_polling_enabled) {
 		rte_eal_alarm_set(
@@ -1986,6 +1987,10 @@ bond_ethdev_start(struct rte_eth_dev *eth_dev)
 		bond_tlb_enable(internals);
 
 	return 0;
+
+out_err:
+	eth_dev->data->dev_started = 0;
+	return -1;
 }
 
 static void
@@ -2519,14 +2524,21 @@ bond_ethdev_lsc_event_callback(uint16_t port_id, enum rte_eth_event_type type,
 	if (!valid_slave)
 		return rc;
 
+	/* Synchronize lsc callback parallel calls either by real link event
+	 * from the slaves PMDs or by the bonding PMD itself.
+	 */
+	rte_spinlock_lock(&internals->lsc_lock);
+
 	/* Search for port in active port list */
 	active_pos = find_slave_by_id(internals->active_slaves,
 			internals->active_slave_count, port_id);
 
 	rte_eth_link_get_nowait(port_id, &link);
 	if (link.link_status) {
-		if (active_pos < internals->active_slave_count)
+		if (active_pos < internals->active_slave_count) {
+			rte_spinlock_unlock(&internals->lsc_lock);
 			return rc;
+		}
 
 		/* if no active slave ports then set this port to be primary port */
 		if (internals->active_slave_count < 1) {
@@ -2545,8 +2557,10 @@ bond_ethdev_lsc_event_callback(uint16_t port_id, enum rte_eth_event_type type,
 				internals->primary_port == port_id)
 			bond_ethdev_primary_set(internals, port_id);
 	} else {
-		if (active_pos == internals->active_slave_count)
+		if (active_pos == internals->active_slave_count) {
+			rte_spinlock_unlock(&internals->lsc_lock);
 			return rc;
+		}
 
 		/* Remove from active slave list */
 		deactivate_slave(bonded_eth_dev, port_id);
@@ -2599,6 +2613,9 @@ bond_ethdev_lsc_event_callback(uint16_t port_id, enum rte_eth_event_type type,
 						NULL, NULL);
 		}
 	}
+
+	rte_spinlock_unlock(&internals->lsc_lock);
+
 	return 0;
 }
 
@@ -2766,6 +2783,7 @@ bond_alloc(struct rte_vdev_device *dev, uint8_t mode)
 	eth_dev->data->dev_flags = RTE_ETH_DEV_INTR_LSC;
 
 	rte_spinlock_init(&internals->lock);
+	rte_spinlock_init(&internals->lsc_lock);
 
 	internals->port_id = eth_dev->data->port_id;
 	internals->mode = BONDING_MODE_INVALID;
@@ -2967,6 +2985,10 @@ bond_remove(struct rte_vdev_device *dev)
 	eth_dev->tx_pkt_burst = NULL;
 
 	internals = eth_dev->data->dev_private;
+	/* Try to release mempool used in mode6. If the bond
+	 * device is not mode6, free the NULL is not problem.
+	 */
+	rte_mempool_free(internals->mode6.mempool);
 	rte_bitmap_free(internals->vlan_filter_bmp);
 	rte_free(internals->vlan_filter_bmpmem);
 	rte_free(eth_dev->data->dev_private);

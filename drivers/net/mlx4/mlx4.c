@@ -85,6 +85,8 @@ const char *pmd_mlx4_init_params[] = {
 	NULL,
 };
 
+static void mlx4_dev_stop(struct rte_eth_dev *dev);
+
 /**
  * DPDK callback for Ethernet device configuration.
  *
@@ -108,7 +110,13 @@ mlx4_dev_configure(struct rte_eth_dev *dev)
 		      " flow error type %d, cause %p, message: %s",
 		      -ret, strerror(-ret), error.type, error.cause,
 		      error.message ? error.message : "(unspecified)");
+		goto exit;
 	}
+	ret = mlx4_intr_install(priv);
+	if (ret)
+		ERROR("%p: interrupt handler installation failed",
+		      (void *)dev);
+exit:
 	return ret;
 }
 
@@ -141,7 +149,7 @@ mlx4_dev_start(struct rte_eth_dev *dev)
 		      (void *)dev, strerror(-ret));
 		goto err;
 	}
-	ret = mlx4_intr_install(priv);
+	ret = mlx4_rxq_intr_enable(priv);
 	if (ret) {
 		ERROR("%p: interrupt handler installation failed",
 		     (void *)dev);
@@ -161,8 +169,7 @@ mlx4_dev_start(struct rte_eth_dev *dev)
 	dev->rx_pkt_burst = mlx4_rx_burst;
 	return 0;
 err:
-	/* Rollback. */
-	priv->started = 0;
+	mlx4_dev_stop(dev);
 	return ret;
 }
 
@@ -187,7 +194,7 @@ mlx4_dev_stop(struct rte_eth_dev *dev)
 	dev->rx_pkt_burst = mlx4_rx_burst_removed;
 	rte_wmb();
 	mlx4_flow_sync(priv, NULL);
-	mlx4_intr_uninstall(priv);
+	mlx4_rxq_intr_disable(priv);
 	mlx4_rss_deinit(priv);
 }
 
@@ -212,6 +219,7 @@ mlx4_dev_close(struct rte_eth_dev *dev)
 	dev->tx_pkt_burst = mlx4_tx_burst_removed;
 	rte_wmb();
 	mlx4_flow_clean(priv);
+	mlx4_rss_deinit(priv);
 	for (i = 0; i != dev->data->nb_rx_queues; ++i)
 		mlx4_rx_queue_release(dev->data->rx_queues[i]);
 	for (i = 0; i != dev->data->nb_tx_queues; ++i)
@@ -336,7 +344,7 @@ mlx4_arg_parse(const char *key, const char *val, struct mlx4_conf *conf)
 		return -rte_errno;
 	}
 	if (strcmp(MLX4_PMD_PORT_KVARG, key) == 0) {
-		uint32_t ports = rte_log2_u32(conf->ports.present);
+		uint32_t ports = rte_log2_u32(conf->ports.present + 1);
 
 		if (tmp >= ports) {
 			ERROR("port index %lu outside range [0,%" PRIu32 ")",

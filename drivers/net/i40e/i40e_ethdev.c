@@ -1554,6 +1554,7 @@ eth_i40e_dev_uninit(struct rte_eth_dev *dev)
 	struct rte_flow *p_flow;
 	int ret;
 	uint8_t aq_fail = 0;
+	int retries = 0;
 
 	PMD_INIT_FUNC_TRACE();
 
@@ -1595,9 +1596,20 @@ eth_i40e_dev_uninit(struct rte_eth_dev *dev)
 	/* disable uio intr before callback unregister */
 	rte_intr_disable(intr_handle);
 
-	/* register callback func to eal lib */
-	rte_intr_callback_unregister(intr_handle,
-				     i40e_dev_interrupt_handler, dev);
+	/* unregister callback func to eal lib */
+	do {
+		ret = rte_intr_callback_unregister(intr_handle,
+				i40e_dev_interrupt_handler, dev);
+		if (ret >= 0) {
+			break;
+		} else if (ret != -EAGAIN) {
+			PMD_INIT_LOG(ERR,
+				 "intr callback unregister failed: %d",
+				 ret);
+			return ret;
+		}
+		i40e_msec_delay(500);
+	} while (retries++ < 5);
 
 	i40e_rm_ethtype_filter_list(pf);
 	i40e_rm_tunnel_filter_list(pf);
@@ -2297,6 +2309,8 @@ i40e_dev_close(struct rte_eth_dev *dev)
 	i40e_pf_disable_irq0(hw);
 	rte_intr_disable(intr_handle);
 
+	i40e_fdir_teardown(pf);
+
 	/* shutdown and destroy the HMC */
 	i40e_shutdown_lan_hmc(hw);
 
@@ -2308,7 +2322,6 @@ i40e_dev_close(struct rte_eth_dev *dev)
 	pf->vmdq = NULL;
 
 	/* release all the existing VSIs and VEBs */
-	i40e_fdir_teardown(pf);
 	i40e_vsi_release(pf->main_vsi);
 
 	/* shutdown the adminq */
@@ -2444,77 +2457,139 @@ i40e_dev_set_link_down(struct rte_eth_dev *dev)
 	return i40e_phy_conf_link(hw, abilities, speed, false);
 }
 
-int
-i40e_dev_link_update(struct rte_eth_dev *dev,
-		     int wait_to_complete)
+static __rte_always_inline void
+update_link_no_wait(struct i40e_hw *hw, struct rte_eth_link *link)
 {
-#define CHECK_INTERVAL 100  /* 100ms */
-#define MAX_REPEAT_TIME 10  /* 1s (10 * 100ms) in total */
-	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
-	struct i40e_link_status link_status;
-	struct rte_eth_link link, old;
-	int status;
-	unsigned rep_cnt = MAX_REPEAT_TIME;
-	bool enable_lse = dev->data->dev_conf.intr_conf.lsc ? true : false;
+/* Link status registers and values*/
+#define I40E_PRTMAC_LINKSTA		0x001E2420
+#define I40E_REG_LINK_UP		0x40000080
+#define I40E_PRTMAC_MACC		0x001E24E0
+#define I40E_REG_MACC_25GB		0x00020000
+#define I40E_REG_SPEED_MASK		0x38000000
+#define I40E_REG_SPEED_100MB		0x00000000
+#define I40E_REG_SPEED_1GB		0x08000000
+#define I40E_REG_SPEED_10GB		0x10000000
+#define I40E_REG_SPEED_20GB		0x20000000
+#define I40E_REG_SPEED_25_40GB		0x18000000
+	uint32_t link_speed;
+	uint32_t reg_val;
 
-	memset(&link, 0, sizeof(link));
-	memset(&old, 0, sizeof(old));
+	reg_val = I40E_READ_REG(hw, I40E_PRTMAC_LINKSTA);
+	link_speed = reg_val & I40E_REG_SPEED_MASK;
+	reg_val &= I40E_REG_LINK_UP;
+	link->link_status = (reg_val == I40E_REG_LINK_UP) ? 1 : 0;
+
+	if (unlikely(link->link_status == 0))
+		return;
+
+	/* Parse the link status */
+	switch (link_speed) {
+	case I40E_REG_SPEED_100MB:
+		link->link_speed = ETH_SPEED_NUM_100M;
+		break;
+	case I40E_REG_SPEED_1GB:
+		link->link_speed = ETH_SPEED_NUM_1G;
+		break;
+	case I40E_REG_SPEED_10GB:
+		link->link_speed = ETH_SPEED_NUM_10G;
+		break;
+	case I40E_REG_SPEED_20GB:
+		link->link_speed = ETH_SPEED_NUM_20G;
+		break;
+	case I40E_REG_SPEED_25_40GB:
+		reg_val = I40E_READ_REG(hw, I40E_PRTMAC_MACC);
+
+		if (reg_val & I40E_REG_MACC_25GB)
+			link->link_speed = ETH_SPEED_NUM_25G;
+		else
+			link->link_speed = ETH_SPEED_NUM_40G;
+
+		break;
+	default:
+		PMD_DRV_LOG(ERR, "Unknown link speed info %u", link_speed);
+		break;
+	}
+}
+
+static __rte_always_inline void
+update_link_wait(struct i40e_hw *hw, struct rte_eth_link *link,
+	bool enable_lse)
+{
+#define CHECK_INTERVAL             100  /* 100ms */
+#define MAX_REPEAT_TIME            10  /* 1s (10 * 100ms) in total */
+	uint32_t rep_cnt = MAX_REPEAT_TIME;
+	struct i40e_link_status link_status;
+	int status;
+
 	memset(&link_status, 0, sizeof(link_status));
-	rte_i40e_dev_atomic_read_link_status(dev, &old);
 
 	do {
 		/* Get link status information from hardware */
 		status = i40e_aq_get_link_info(hw, enable_lse,
 						&link_status, NULL);
-		if (status != I40E_SUCCESS) {
-			link.link_speed = ETH_SPEED_NUM_100M;
-			link.link_duplex = ETH_LINK_FULL_DUPLEX;
+		if (unlikely(status != I40E_SUCCESS)) {
+			link->link_speed = ETH_SPEED_NUM_100M;
+			link->link_duplex = ETH_LINK_FULL_DUPLEX;
 			PMD_DRV_LOG(ERR, "Failed to get link info");
-			goto out;
+			return;
 		}
 
-		link.link_status = link_status.link_info & I40E_AQ_LINK_UP;
-		if (!wait_to_complete || link.link_status)
+		link->link_status = link_status.link_info & I40E_AQ_LINK_UP;
+		if (unlikely(link->link_status != 0))
 			break;
 
 		rte_delay_ms(CHECK_INTERVAL);
 	} while (--rep_cnt);
 
-	if (!link.link_status)
-		goto out;
-
-	/* i40e uses full duplex only */
-	link.link_duplex = ETH_LINK_FULL_DUPLEX;
-
 	/* Parse the link status */
 	switch (link_status.link_speed) {
 	case I40E_LINK_SPEED_100MB:
-		link.link_speed = ETH_SPEED_NUM_100M;
+		link->link_speed = ETH_SPEED_NUM_100M;
 		break;
 	case I40E_LINK_SPEED_1GB:
-		link.link_speed = ETH_SPEED_NUM_1G;
+		link->link_speed = ETH_SPEED_NUM_1G;
 		break;
 	case I40E_LINK_SPEED_10GB:
-		link.link_speed = ETH_SPEED_NUM_10G;
+		link->link_speed = ETH_SPEED_NUM_10G;
 		break;
 	case I40E_LINK_SPEED_20GB:
-		link.link_speed = ETH_SPEED_NUM_20G;
+		link->link_speed = ETH_SPEED_NUM_20G;
 		break;
 	case I40E_LINK_SPEED_25GB:
-		link.link_speed = ETH_SPEED_NUM_25G;
+		link->link_speed = ETH_SPEED_NUM_25G;
 		break;
 	case I40E_LINK_SPEED_40GB:
-		link.link_speed = ETH_SPEED_NUM_40G;
+		link->link_speed = ETH_SPEED_NUM_40G;
 		break;
 	default:
-		link.link_speed = ETH_SPEED_NUM_100M;
+		link->link_speed = ETH_SPEED_NUM_100M;
 		break;
 	}
+}
 
+int
+i40e_dev_link_update(struct rte_eth_dev *dev,
+		     int wait_to_complete)
+{
+	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+	struct rte_eth_link link, old;
+	bool enable_lse = dev->data->dev_conf.intr_conf.lsc ? true : false;
+
+	memset(&link, 0, sizeof(link));
+	memset(&old, 0, sizeof(old));
+
+	rte_i40e_dev_atomic_read_link_status(dev, &old);
+
+	/* i40e uses full duplex only */
+	link.link_duplex = ETH_LINK_FULL_DUPLEX;
 	link.link_autoneg = !(dev->data->dev_conf.link_speeds &
 			ETH_LINK_SPEED_FIXED);
 
-out:
+	if (!wait_to_complete)
+		update_link_no_wait(hw, &link);
+	else
+		update_link_wait(hw, &link, enable_lse);
+
 	rte_i40e_dev_atomic_write_link_status(dev, &link);
 	if (link.link_status == old.link_status)
 		return -1;
@@ -11329,7 +11404,8 @@ i40e_find_customized_pctype(struct i40e_pf *pf, uint8_t index)
 static int
 i40e_update_customized_pctype(struct rte_eth_dev *dev, uint8_t *pkg,
 			      uint32_t pkg_size, uint32_t proto_num,
-			      struct rte_pmd_i40e_proto_info *proto)
+			      struct rte_pmd_i40e_proto_info *proto,
+			      enum rte_pmd_i40e_package_op op)
 {
 	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 	uint32_t pctype_num;
@@ -11341,6 +11417,12 @@ i40e_update_customized_pctype(struct rte_eth_dev *dev, uint8_t *pkg,
 	char name[64];
 	uint32_t i, j, n;
 	int ret;
+
+	if (op != RTE_PMD_I40E_PKG_OP_WR_ADD &&
+	    op != RTE_PMD_I40E_PKG_OP_WR_DEL) {
+		PMD_DRV_LOG(ERR, "Unsupported operation.");
+		return -1;
+	}
 
 	ret = rte_pmd_i40e_get_ddp_info(pkg, pkg_size,
 				(uint8_t *)&pctype_num, sizeof(pctype_num),
@@ -11404,8 +11486,13 @@ i40e_update_customized_pctype(struct rte_eth_dev *dev, uint8_t *pkg,
 				i40e_find_customized_pctype(pf,
 						      I40E_CUSTOMIZED_GTPU);
 		if (new_pctype) {
-			new_pctype->pctype = pctype_value;
-			new_pctype->valid = true;
+			if (op == RTE_PMD_I40E_PKG_OP_WR_ADD) {
+				new_pctype->pctype = pctype_value;
+				new_pctype->valid = true;
+			} else {
+				new_pctype->pctype = I40E_FILTER_PCTYPE_INVALID;
+				new_pctype->valid = false;
+			}
 		}
 	}
 
@@ -11415,8 +11502,9 @@ i40e_update_customized_pctype(struct rte_eth_dev *dev, uint8_t *pkg,
 
 static int
 i40e_update_customized_ptype(struct rte_eth_dev *dev, uint8_t *pkg,
-			       uint32_t pkg_size, uint32_t proto_num,
-			       struct rte_pmd_i40e_proto_info *proto)
+			     uint32_t pkg_size, uint32_t proto_num,
+			     struct rte_pmd_i40e_proto_info *proto,
+			     enum rte_pmd_i40e_package_op op)
 {
 	struct rte_pmd_i40e_ptype_mapping *ptype_mapping;
 	uint16_t port_id = dev->data->port_id;
@@ -11428,6 +11516,17 @@ i40e_update_customized_ptype(struct rte_eth_dev *dev, uint8_t *pkg,
 	uint32_t i, j, n;
 	bool inner_ip;
 	int ret;
+
+	if (op != RTE_PMD_I40E_PKG_OP_WR_ADD &&
+	    op != RTE_PMD_I40E_PKG_OP_WR_DEL) {
+		PMD_DRV_LOG(ERR, "Unsupported operation.");
+		return -1;
+	}
+
+	if (op == RTE_PMD_I40E_PKG_OP_WR_DEL) {
+		rte_pmd_i40e_ptype_mapping_reset(port_id);
+		return 0;
+	}
 
 	/* get information about new ptype num */
 	ret = rte_pmd_i40e_get_ddp_info(pkg, pkg_size,
@@ -11547,7 +11646,7 @@ i40e_update_customized_ptype(struct rte_eth_dev *dev, uint8_t *pkg,
 
 void
 i40e_update_customized_info(struct rte_eth_dev *dev, uint8_t *pkg,
-			      uint32_t pkg_size)
+			    uint32_t pkg_size, enum rte_pmd_i40e_package_op op)
 {
 	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 	uint32_t proto_num;
@@ -11555,6 +11654,12 @@ i40e_update_customized_info(struct rte_eth_dev *dev, uint8_t *pkg,
 	uint32_t buff_size;
 	uint32_t i;
 	int ret;
+
+	if (op != RTE_PMD_I40E_PKG_OP_WR_ADD &&
+	    op != RTE_PMD_I40E_PKG_OP_WR_DEL) {
+		PMD_DRV_LOG(ERR, "Unsupported operation.");
+		return;
+	}
 
 	/* get information about protocol number */
 	ret = rte_pmd_i40e_get_ddp_info(pkg, pkg_size,
@@ -11589,20 +11694,23 @@ i40e_update_customized_info(struct rte_eth_dev *dev, uint8_t *pkg,
 	/* Check if GTP is supported. */
 	for (i = 0; i < proto_num; i++) {
 		if (!strncmp(proto[i].name, "GTP", 3)) {
-			pf->gtp_support = true;
+			if (op == RTE_PMD_I40E_PKG_OP_WR_ADD)
+				pf->gtp_support = true;
+			else
+				pf->gtp_support = false;
 			break;
 		}
 	}
 
 	/* Update customized pctype info */
 	ret = i40e_update_customized_pctype(dev, pkg, pkg_size,
-					    proto_num, proto);
+					    proto_num, proto, op);
 	if (ret)
 		PMD_DRV_LOG(INFO, "No pctype is updated.");
 
 	/* Update customized ptype info */
 	ret = i40e_update_customized_ptype(dev, pkg, pkg_size,
-					   proto_num, proto);
+					   proto_num, proto, op);
 	if (ret)
 		PMD_DRV_LOG(INFO, "No ptype is updated.");
 
