@@ -126,6 +126,7 @@ struct priv {
 	uint32_t vf:1; /**< This is a VF device. */
 	uint32_t intr_alarm:1; /**< An interrupt alarm is scheduled. */
 	uint32_t isolated:1; /**< Toggle isolated mode. */
+	uint32_t rss_init:1; /**< Common RSS context is initialized. */
 	uint32_t hw_csum:1; /* Checksum offload is supported. */
 	uint32_t hw_csum_l2tun:1; /* Checksum support for L2 tunnels. */
 	struct rte_intr_handle intr_handle; /**< Port interrupt handle. */
@@ -170,6 +171,8 @@ const uint32_t *mlx4_dev_supported_ptypes_get(struct rte_eth_dev *dev);
 
 int mlx4_intr_uninstall(struct priv *priv);
 int mlx4_intr_install(struct priv *priv);
+int mlx4_rxq_intr_enable(struct priv *priv);
+void mlx4_rxq_intr_disable(struct priv *priv);
 int mlx4_rx_intr_disable(struct rte_eth_dev *dev, uint16_t idx);
 int mlx4_rx_intr_enable(struct rte_eth_dev *dev, uint16_t idx);
 
