@@ -1,4 +1,4 @@
-dpdk (17.11.2-1~git1) UNRELEASED; urgency=medium
+dpdk (17.11.3-1~git1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 17.11; for a full list of changes see:
@@ -50,6 +50,8 @@ dpdk (17.11.2-1~git1) UNRELEASED; urgency=medium
   * autopkgtest: add pkg-config dependency to really fix linkate test.
 
   [ Christian Ehrhardt ]
+  * New upstream release 17.11.3; for a full list of changes see:
+    https://dpdk.org/doc/guides-17.11/rel_notes/release_17_11.html
   * d/control: improve dpdk-pmdinfo user experience by making
     python-pyelftools a recommended dependency.
   * d/control: add librte-pmd-octeontx17.11
@@ -69,7 +71,7 @@ dpdk (17.11.2-1~git1) UNRELEASED; urgency=medium
     - use a valid prototype for main
   * test-linkage: drop brittle test for secondary library dependencies
 
- -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 18 Jun 2018 13:38:06 +0200
 
 dpdk (17.08-1~git1) UNRELEASED; urgency=medium
 
