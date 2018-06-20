@@ -252,6 +252,9 @@ int bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt *bp,
 	struct hwrm_cfa_l2_set_rx_mask_output *resp = bp->hwrm_cmd_resp_addr;
 	uint32_t mask = 0;
 
+	if (vnic->fw_vnic_id == INVALID_HW_RING_ID)
+		return rc;
+
 	HWRM_PREP(req, CFA_L2_SET_RX_MASK);
 	req.vnic_id = rte_cpu_to_le_16(vnic->fw_vnic_id);
 
@@ -1100,7 +1103,8 @@ int bnxt_hwrm_vnic_alloc(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	HWRM_PREP(req, VNIC_ALLOC);
 
 	if (vnic->func_default)
-		req.flags = HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT;
+		req.flags =
+			rte_cpu_to_le_32(HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT);
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req));
 
 	HWRM_CHECK_RESULT();
@@ -1121,7 +1125,7 @@ static int bnxt_hwrm_vnic_plcmodes_qcfg(struct bnxt *bp,
 
 	HWRM_PREP(req, VNIC_PLCMODES_QCFG);
 
-	req.vnic_id = rte_cpu_to_le_32(vnic->fw_vnic_id);
+	req.vnic_id = rte_cpu_to_le_16(vnic->fw_vnic_id);
 
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req));
 
@@ -1149,7 +1153,7 @@ static int bnxt_hwrm_vnic_plcmodes_cfg(struct bnxt *bp,
 
 	HWRM_PREP(req, VNIC_PLCMODES_CFG);
 
-	req.vnic_id = rte_cpu_to_le_32(vnic->fw_vnic_id);
+	req.vnic_id = rte_cpu_to_le_16(vnic->fw_vnic_id);
 	req.flags = rte_cpu_to_le_32(pmode->flags);
 	req.jumbo_thresh = rte_cpu_to_le_16(pmode->jumbo_thresh);
 	req.hds_offset = rte_cpu_to_le_16(pmode->hds_offset);
@@ -1393,7 +1397,7 @@ int bnxt_hwrm_vnic_plcmode_cfg(struct bnxt *bp,
 	size -= RTE_PKTMBUF_HEADROOM;
 
 	req.jumbo_thresh = rte_cpu_to_le_16(size);
-	req.vnic_id = rte_cpu_to_le_32(vnic->fw_vnic_id);
+	req.vnic_id = rte_cpu_to_le_16(vnic->fw_vnic_id);
 
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req));
 
@@ -1424,12 +1428,12 @@ int bnxt_hwrm_vnic_tpa_cfg(struct bnxt *bp,
 				HWRM_VNIC_TPA_CFG_INPUT_FLAGS_GRO |
 				HWRM_VNIC_TPA_CFG_INPUT_FLAGS_AGG_WITH_ECN |
 			HWRM_VNIC_TPA_CFG_INPUT_FLAGS_AGG_WITH_SAME_GRE_SEQ);
-		req.vnic_id = rte_cpu_to_le_32(vnic->fw_vnic_id);
 		req.max_agg_segs = rte_cpu_to_le_16(5);
 		req.max_aggs =
 			rte_cpu_to_le_16(HWRM_VNIC_TPA_CFG_INPUT_MAX_AGGS_MAX);
 		req.min_agg_len = rte_cpu_to_le_32(512);
 	}
+	req.vnic_id = rte_cpu_to_le_16(vnic->fw_vnic_id);
 
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req));
 

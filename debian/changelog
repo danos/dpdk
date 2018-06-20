@@ -1,3 +1,15 @@
+dpdk (17.11.3-1) UNRELEASED; urgency=high
+
+  [ Christian Ehrhardt ]
+  * New upstream release 17.11.3; for a full list of changes see:
+    https://dpdk.org/doc/guides-17.11/rel_notes/release_17_11.html
+  * d/control: binary package and build-dependency for MLX4 and MLX5 PMDs.
+    - d/librte-pmd-mlx*.symbols: symbol files for mlx PMDs
+    - d/p/app-testpmd-add-ethernet-peer-command.patch: ensure MLX PMDs are
+      well testable
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 20 Jun 2018 13:40:12 +0100
+
 dpdk (17.11.2-1) unstable; urgency=high
 
   * New upstream release 17.11.2; for a full list of changes see:
