@@ -1,4 +1,4 @@
-dpdk (17.11.3-1) UNRELEASED; urgency=high
+dpdk (17.11.3-1) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
   * New upstream release 17.11.3; for a full list of changes see:
@@ -8,7 +8,7 @@ dpdk (17.11.3-1) UNRELEASED; urgency=high
     - d/p/app-testpmd-add-ethernet-peer-command.patch: ensure MLX PMDs are
       well testable
 
- -- Luca Boccassi <bluca@debian.org>  Wed, 20 Jun 2018 13:40:12 +0100
+ -- Luca Boccassi <bluca@debian.org>  Wed, 20 Jun 2018 13:42:27 +0100
 
 dpdk (17.11.2-1) unstable; urgency=high
 
