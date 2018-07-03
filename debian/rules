@@ -182,8 +182,6 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
-		-e 's,(CONFIG_RTE_LIBRTE_MLX4_PMD=).*,\1y,' \
-		-e 's,(CONFIG_RTE_LIBRTE_MLX5_PMD=).*,\1y,' \
 		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/$(DPDK_DRIVER_DIR)/",' \
 		$(DPDK_STATIC_DIR)/.config
 endif
