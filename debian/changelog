@@ -1,3 +1,10 @@
+dpdk (17.11.3-2) unstable; urgency=medium
+
+  * Temporarily disable ML4 and MLX5 again to fix FTBS due to
+    incompatibility with rdma-core 19.0.
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 03 Jul 2018 11:14:22 +0100
+
 dpdk (17.11.3-1) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
