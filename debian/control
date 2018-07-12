@@ -529,7 +529,7 @@ Homepage: https://dpdk.org/doc/guides/prog_guide/bpf_lib.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte-net runtime library)
+Description: Data Plane Development Kit (librte-bpf runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
@@ -546,11 +546,11 @@ Homepage: https://dpdk.org/doc/guides/compressdevs/isal.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte-net runtime library)
+Description: Data Plane Development Kit (librte-compressdev runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for librte_bpf.
+ This package contains the runtime libraries for librte_compressdev.
  .
  Provides poll mode compression & decompression driver support.
 
