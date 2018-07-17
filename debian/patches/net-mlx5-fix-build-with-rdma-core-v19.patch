@@ -19,6 +19,9 @@ support the new API will be submitted.
 Fixes: 9a761de8ea14 ("net/mlx5: flow counter support")
 Cc: stable@dpdk.org
 
+Note: lacking b42c000 "net/mlx5: remove flow support" this was not
+enough and needed special handling for ibv_flow_spec_counter_action.
+
 Reported-by: Stephen Hemminger <stephen@networkplumber.org>
 Reported-by: Ferruh Yigit <ferruh.yigit@intel.com>
 Signed-off-by: Shahaf Shuler <shahafs@mellanox.com>
@@ -34,12 +37,35 @@ Last-Update: 2018-06-17
 
 --- a/drivers/net/mlx5/Makefile
 +++ b/drivers/net/mlx5/Makefile
-@@ -145,7 +145,7 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtoo
+@@ -145,7 +145,12 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtoo
  	$Q sh -- '$<' '$@' \
  		HAVE_IBV_DEVICE_COUNTERS_SET_SUPPORT \
  		infiniband/verbs.h \
 -		enum IBV_FLOW_SPEC_ACTION_COUNT \
 +		type 'struct ibv_counter_set_init_attr' \
++		$(AUTOCONF_OUTPUT)
++	$Q sh -- '$<' '$@' \
++		HAVE_IBV_FLOW_SPEC_COUNTER_ACTION \
++		infiniband/verbs.h \
++		type 'struct ibv_flow_spec_counter_action' \
  		$(AUTOCONF_OUTPUT)
  
  # Create mlx5_autoconf.h or update it in case it differs from the new one.
+--- a/drivers/net/mlx5/mlx5_flow.c
++++ b/drivers/net/mlx5/mlx5_flow.c
+@@ -66,9 +66,15 @@
+ struct ibv_counter_set_init_attr {
+ 	int dummy;
+ };
++/* rdma-core v19 has no ibv_counter_set_init_attr, but it has
++ * ibv_flow_spec_counter_action which would conflict.
++ * Newer DPDK, doesn't have the issue due to the series starting with
++ * "net/mlx5: remove flow support" */
++#ifndef HAVE_IBV_FLOW_SPEC_COUNTER_ACTION
+ struct ibv_flow_spec_counter_action {
+ 	int dummy;
+ };
++#endif
+ struct ibv_counter_set {
+ 	int dummy;
+ };
