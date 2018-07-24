@@ -1,3 +1,10 @@
+dpdk (16.11.7-1+deb9u1) stretch; urgency=medium
+
+  * Merge stable update to 16.11.7; For a list of changes see
+    http://mails.dpdk.org/archives/announce/2018-June/000209.html
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 24 Jul 2018 16:56:46 +0100
+
 dpdk (16.11.6-1+deb9u1) stretch; urgency=medium
 
   * Merge stable update to 16.11.5; For a list of changes see
