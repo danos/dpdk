@@ -204,12 +204,8 @@ extern "C" {
  *  - set the PKT_TX_TCP_SEG flag in mbuf->ol_flags (this flag implies
  *    PKT_TX_TCP_CKSUM)
  *  - set the flag PKT_TX_IPV4 or PKT_TX_IPV6
- *  - if it's IPv4, set the PKT_TX_IP_CKSUM flag and write the IP checksum
- *    to 0 in the packet
+ *  - if it's IPv4, set the PKT_TX_IP_CKSUM flag
  *  - fill the mbuf offload information: l2_len, l3_len, l4_len, tso_segsz
- *  - calculate the pseudo header checksum without taking ip_len in account,
- *    and set it in the TCP header. Refer to rte_ipv4_phdr_cksum() and
- *    rte_ipv6_phdr_cksum() that can be used as helpers.
  */
 #define PKT_TX_TCP_SEG       (1ULL << 50)
 
@@ -222,9 +218,6 @@ extern "C" {
  *  - fill l2_len and l3_len in mbuf
  *  - set the flags PKT_TX_TCP_CKSUM, PKT_TX_SCTP_CKSUM or PKT_TX_UDP_CKSUM
  *  - set the flag PKT_TX_IPV4 or PKT_TX_IPV6
- *  - calculate the pseudo header checksum and set it in the L4 header (only
- *    for TCP or UDP). See rte_ipv4_phdr_cksum() and rte_ipv6_phdr_cksum().
- *    For SCTP, set the crc field to 0.
  */
 #define PKT_TX_L4_NO_CKSUM   (0ULL << 52) /**< Disable L4 cksum of TX pkt. */
 #define PKT_TX_TCP_CKSUM     (1ULL << 52) /**< TCP cksum of TX pkt. computed by NIC. */
@@ -236,7 +229,6 @@ extern "C" {
  * Offload the IP checksum in the hardware. The flag PKT_TX_IPV4 should
  * also be set by the application, although a PMD will only check
  * PKT_TX_IP_CKSUM.
- *  - set the IP checksum field in the packet to 0
  *  - fill the mbuf offload information: l2_len, l3_len
  */
 #define PKT_TX_IP_CKSUM      (1ULL << 54)
@@ -261,10 +253,8 @@ extern "C" {
 
 /**
  * Offload the IP checksum of an external header in the hardware. The
- * flag PKT_TX_OUTER_IPV4 should also be set by the application, alto ugh
- * a PMD will only check PKT_TX_IP_CKSUM.  The IP checksum field in the
- * packet must be set to 0.
- *  - set the outer IP checksum field in the packet to 0
+ * flag PKT_TX_OUTER_IPV4 should also be set by the application, although
+ * a PMD will only check PKT_TX_OUTER_IP_CKSUM.
  *  - fill the mbuf offload information: outer_l2_len, outer_l3_len
  */
 #define PKT_TX_OUTER_IP_CKSUM   (1ULL << 58)
@@ -655,7 +645,7 @@ rte_mbuf_refcnt_read(const struct rte_mbuf *m)
 static inline void
 rte_mbuf_refcnt_set(struct rte_mbuf *m, uint16_t new_value)
 {
-	rte_atomic16_set(&m->refcnt_atomic, new_value);
+	rte_atomic16_set(&m->refcnt_atomic, (int16_t)new_value);
 }
 
 /**
@@ -678,8 +668,9 @@ rte_mbuf_refcnt_update(struct rte_mbuf *m, int16_t value)
 	 * reference counter can occur.
 	 */
 	if (likely(rte_mbuf_refcnt_read(m) == 1)) {
-		rte_mbuf_refcnt_set(m, 1 + value);
-		return 1 + value;
+		++value;
+		rte_mbuf_refcnt_set(m, (uint16_t)value);
+		return (uint16_t)value;
 	}
 
 	return (uint16_t)(rte_atomic16_add_return(&m->refcnt_atomic, value));
@@ -998,7 +989,8 @@ rte_pktmbuf_priv_size(struct rte_mempool *mp)
  */
 static inline void rte_pktmbuf_reset_headroom(struct rte_mbuf *m)
 {
-	m->data_off = RTE_MIN(RTE_PKTMBUF_HEADROOM, (uint16_t)m->buf_len);
+	m->data_off = (uint16_t)RTE_MIN((uint16_t)RTE_PKTMBUF_HEADROOM,
+					(uint16_t)m->buf_len);
 }
 
 /**
@@ -1176,10 +1168,11 @@ static inline void rte_pktmbuf_detach(struct rte_mbuf *m)
 {
 	struct rte_mbuf *md = rte_mbuf_from_indirect(m);
 	struct rte_mempool *mp = m->pool;
-	uint32_t mbuf_size, buf_len, priv_size;
+	uint32_t mbuf_size, buf_len;
+	uint16_t priv_size;
 
 	priv_size = rte_pktmbuf_priv_size(mp);
-	mbuf_size = sizeof(struct rte_mbuf) + priv_size;
+	mbuf_size = (uint32_t)(sizeof(struct rte_mbuf) + priv_size);
 	buf_len = rte_pktmbuf_data_room_size(mp);
 
 	m->priv_size = priv_size;
@@ -1463,7 +1456,10 @@ static inline char *rte_pktmbuf_prepend(struct rte_mbuf *m,
 	if (unlikely(len > rte_pktmbuf_headroom(m)))
 		return NULL;
 
-	m->data_off -= len;
+	/* NB: elaborating the subtraction like this instead of using
+	 *     -= allows us to ensure the result type is uint16_t
+	 *     avoiding compiler warnings on gcc 8.1 at least */
+	m->data_off = (uint16_t)(m->data_off - len);
 	m->data_len = (uint16_t)(m->data_len + len);
 	m->pkt_len  = (m->pkt_len + len);
 
@@ -1523,8 +1519,11 @@ static inline char *rte_pktmbuf_adj(struct rte_mbuf *m, uint16_t len)
 	if (unlikely(len > m->data_len))
 		return NULL;
 
+	/* NB: elaborating the addition like this instead of using
+	 *     += allows us to ensure the result type is uint16_t
+	 *     avoiding compiler warnings on gcc 8.1 at least */
 	m->data_len = (uint16_t)(m->data_len - len);
-	m->data_off += len;
+	m->data_off = (uint16_t)(m->data_off + len);
 	m->pkt_len  = (m->pkt_len - len);
 	return (char *)m->buf_addr + m->data_off;
 }
@@ -1636,7 +1635,10 @@ static inline int rte_pktmbuf_chain(struct rte_mbuf *head, struct rte_mbuf *tail
 	cur_tail = rte_pktmbuf_lastseg(head);
 	cur_tail->next = tail;
 
-	/* accumulate number of segments and total length. */
+	/* accumulate number of segments and total length.
+	 * NB: elaborating the addition like this instead of using
+	 *     -= allows us to ensure the result type is uint16_t
+	 *     avoiding compiler warnings on gcc 8.1 at least */
 	head->nb_segs = (uint8_t)(head->nb_segs + tail->nb_segs);
 	head->pkt_len += tail->pkt_len;
 

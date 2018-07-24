@@ -379,7 +379,8 @@ static void bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 			.wthresh = 0,
 		},
 		.rx_free_thresh = 32,
-		.rx_drop_en = 0,
+		/* If no descriptors available, pkts are dropped by default */
+		.rx_drop_en = 1,
 	};
 
 	dev_info->default_txconf = (struct rte_eth_txconf) {
@@ -552,6 +553,8 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 	bnxt_set_hwrm_link_config(bp, false);
 	bnxt_disable_int(bp);
 	bnxt_free_int(bp);
+	bnxt_free_tx_mbufs(bp);
+	bnxt_free_rx_mbufs(bp);
 	bnxt_shutdown_nic(bp);
 	bp->dev_stopped = 1;
 }
@@ -563,8 +566,6 @@ static void bnxt_dev_close_op(struct rte_eth_dev *eth_dev)
 	if (bp->dev_stopped == 0)
 		bnxt_dev_stop_op(eth_dev);
 
-	bnxt_free_tx_mbufs(bp);
-	bnxt_free_rx_mbufs(bp);
 	bnxt_free_mem(bp);
 	if (eth_dev->data->mac_addrs != NULL) {
 		rte_free(eth_dev->data->mac_addrs);

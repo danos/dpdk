@@ -52,6 +52,8 @@
 
 #define BUF_VECTOR_MAX 256
 
+#define VHOST_LOG_CACHE_NR 32
+
 /**
  * Structure contains buffer address, length and descriptor index
  * from vring to do scatter RX.
@@ -74,6 +76,14 @@ struct zcopy_mbuf {
 	TAILQ_ENTRY(zcopy_mbuf) next;
 };
 TAILQ_HEAD(zcopy_mbuf_list, zcopy_mbuf);
+
+/*
+ * Structure that contains the info for batched dirty logging.
+ */
+struct log_cache_entry {
+	uint32_t offset;
+	unsigned long val;
+};
 
 /**
  * Structure contains variables relevant to RX/TX virtqueues.
@@ -110,6 +120,9 @@ struct vhost_virtqueue {
 
 	struct vring_used_elem  *shadow_used_ring;
 	uint16_t                shadow_used_idx;
+
+	struct log_cache_entry log_cache[VHOST_LOG_CACHE_NR];
+	uint16_t log_cache_nb_elem;
 } __rte_cache_aligned;
 
 /* Old kernels have no such macros defined */
@@ -195,7 +208,8 @@ struct virtio_memory {
 #ifdef RTE_LIBRTE_VHOST_DEBUG
 #define VHOST_MAX_PRINT_BUFF 6072
 #define LOG_LEVEL RTE_LOG_DEBUG
-#define LOG_DEBUG(log_type, fmt, args...) RTE_LOG(DEBUG, log_type, fmt, ##args)
+#define VHOST_LOG_DEBUG(log_type, fmt, args...) \
+	RTE_LOG(DEBUG, log_type, fmt, ##args)
 #define PRINT_PACKET(device, addr, size, header) do { \
 	char *pkt_addr = (char *)(addr); \
 	unsigned int index; \
@@ -211,11 +225,11 @@ struct virtio_memory {
 	} \
 	snprintf(packet + strnlen(packet, VHOST_MAX_PRINT_BUFF), VHOST_MAX_PRINT_BUFF - strnlen(packet, VHOST_MAX_PRINT_BUFF), "\n"); \
 	\
-	LOG_DEBUG(VHOST_DATA, "%s", packet); \
+	VHOST_LOG_DEBUG(VHOST_DATA, "%s", packet); \
 } while (0)
 #else
 #define LOG_LEVEL RTE_LOG_INFO
-#define LOG_DEBUG(log_type, fmt, args...) do {} while (0)
+#define VHOST_LOG_DEBUG(log_type, fmt, args...) do {} while (0)
 #define PRINT_PACKET(device, addr, size, header) do {} while (0)
 #endif
 

@@ -1254,6 +1254,8 @@ int enic_set_mtu(struct enic *enic, uint16_t new_mtu)
 	/* free and reallocate RQs with the new MTU */
 	for (rq_idx = 0; rq_idx < enic->rq_count; rq_idx++) {
 		rq = &enic->rq[enic_rte_rq_idx_to_sop_idx(rq_idx)];
+		if (!rq->in_use)
+			continue;
 
 		enic_free_rq(rq);
 		rc = enic_alloc_rq(enic, rq_idx, rq->socket_id, rq->mp,
@@ -1377,6 +1379,15 @@ int enic_probe(struct enic *enic)
 		enic_alloc_consistent,
 		enic_free_consistent);
 
+	/*
+	 * Allocate the consistent memory for stats upfront so both primary and
+	 * secondary processes can dump stats.
+	 */
+	err = vnic_dev_alloc_stats_mem(enic->vdev);
+	if (err) {
+		dev_err(enic, "Failed to allocate cmd memory, aborting\n");
+		goto err_out_unregister;
+	}
 	/* Issue device open to get device in known state */
 	err = enic_dev_open(enic);
 	if (err) {

@@ -169,7 +169,7 @@ vhost_user_set_features(struct virtio_net *dev, uint64_t features)
 	} else {
 		dev->vhost_hlen = sizeof(struct virtio_net_hdr);
 	}
-	LOG_DEBUG(VHOST_CONFIG,
+	VHOST_LOG_DEBUG(VHOST_CONFIG,
 		"(%d) mergeable RX buffers %s, virtio 1 %s\n",
 		dev->vid,
 		(dev->features & (1 << VIRTIO_NET_F_MRG_RXBUF)) ? "on" : "off",
@@ -396,13 +396,13 @@ vhost_user_set_vring_addr(struct virtio_net **pdev,
 
 	vq->log_guest_addr = addr->log_guest_addr;
 
-	LOG_DEBUG(VHOST_CONFIG, "(%d) mapped address desc: %p\n",
+	VHOST_LOG_DEBUG(VHOST_CONFIG, "(%d) mapped address desc: %p\n",
 			dev->vid, vq->desc);
-	LOG_DEBUG(VHOST_CONFIG, "(%d) mapped address avail: %p\n",
+	VHOST_LOG_DEBUG(VHOST_CONFIG, "(%d) mapped address avail: %p\n",
 			dev->vid, vq->avail);
-	LOG_DEBUG(VHOST_CONFIG, "(%d) mapped address used: %p\n",
+	VHOST_LOG_DEBUG(VHOST_CONFIG, "(%d) mapped address used: %p\n",
 			dev->vid, vq->used);
-	LOG_DEBUG(VHOST_CONFIG, "(%d) log_guest_addr: %" PRIx64 "\n",
+	VHOST_LOG_DEBUG(VHOST_CONFIG, "(%d) log_guest_addr: %" PRIx64 "\n",
 			dev->vid, vq->log_guest_addr);
 
 	return 0;
@@ -421,7 +421,7 @@ vhost_user_set_vring_base(struct virtio_net *dev,
 	return 0;
 }
 
-static void
+static int
 add_one_guest_page(struct virtio_net *dev, uint64_t guest_phys_addr,
 		   uint64_t host_phys_addr, uint64_t size)
 {
@@ -431,6 +431,10 @@ add_one_guest_page(struct virtio_net *dev, uint64_t guest_phys_addr,
 		dev->max_guest_pages *= 2;
 		dev->guest_pages = realloc(dev->guest_pages,
 					dev->max_guest_pages * sizeof(*page));
+		if (!dev->guest_pages) {
+			RTE_LOG(ERR, VHOST_CONFIG, "cannot realloc guest_pages\n");
+			return -1;
+		}
 	}
 
 	if (dev->nr_guest_pages > 0) {
@@ -439,7 +443,7 @@ add_one_guest_page(struct virtio_net *dev, uint64_t guest_phys_addr,
 		if (host_phys_addr == last_page->host_phys_addr +
 				      last_page->size) {
 			last_page->size += size;
-			return;
+			return 0;
 		}
 	}
 
@@ -447,9 +451,11 @@ add_one_guest_page(struct virtio_net *dev, uint64_t guest_phys_addr,
 	page->guest_phys_addr = guest_phys_addr;
 	page->host_phys_addr  = host_phys_addr;
 	page->size = size;
+
+	return 0;
 }
 
-static void
+static int
 add_guest_pages(struct virtio_net *dev, struct virtio_memory_region *reg,
 		uint64_t page_size)
 {
@@ -463,7 +469,9 @@ add_guest_pages(struct virtio_net *dev, struct virtio_memory_region *reg,
 	size = page_size - (guest_phys_addr & (page_size - 1));
 	size = RTE_MIN(size, reg_size);
 
-	add_one_guest_page(dev, guest_phys_addr, host_phys_addr, size);
+	if (add_one_guest_page(dev, guest_phys_addr, host_phys_addr, size) < 0)
+		return -1;
+
 	host_user_addr  += size;
 	guest_phys_addr += size;
 	reg_size -= size;
@@ -472,12 +480,16 @@ add_guest_pages(struct virtio_net *dev, struct virtio_memory_region *reg,
 		size = RTE_MIN(reg_size, page_size);
 		host_phys_addr = rte_mem_virt2phy((void *)(uintptr_t)
 						  host_user_addr);
-		add_one_guest_page(dev, guest_phys_addr, host_phys_addr, size);
+		if (add_one_guest_page(dev, guest_phys_addr, host_phys_addr,
+				size) < 0)
+			return -1;
 
 		host_user_addr  += size;
 		guest_phys_addr += size;
 		reg_size -= size;
 	}
+
+	return 0;
 }
 
 #ifdef RTE_LIBRTE_VHOST_DEBUG
@@ -624,7 +636,12 @@ vhost_user_set_mem_table(struct virtio_net *dev, struct VhostUserMsg *pmsg)
 				      mmap_offset;
 
 		if (dev->dequeue_zero_copy)
-			add_guest_pages(dev, reg, alignment);
+			if (add_guest_pages(dev, reg, alignment) < 0) {
+				RTE_LOG(ERR, VHOST_CONFIG,
+					"adding guest pages to region %u failed.\n",
+					i);
+				goto err_mmap;
+			}
 
 		RTE_LOG(INFO, VHOST_CONFIG,
 			"guest memory region %u, size: 0x%" PRIx64 "\n"
@@ -869,7 +886,7 @@ vhost_user_set_log_base(struct virtio_net *dev, struct VhostUserMsg *msg)
 	 * mmap from 0 to workaround a hugepage mmap bug: mmap will
 	 * fail when offset is not page size aligned.
 	 */
-	addr = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	addr = mmap(0, size + off, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	close(fd);
 	if (addr == MAP_FAILED) {
 		RTE_LOG(ERR, VHOST_CONFIG, "mmap log base failed!\n");

@@ -192,6 +192,38 @@ fdset_del(struct fdset *pfdset, int fd)
 	return dat;
 }
 
+/**
+ *  Unregister the fd from the fdset.
+ *
+ *  If parameters are invalid, return directly -2.
+ *  And check whether fd is busy, if yes, return -1.
+ *  Otherwise, try to delete the fd from fdset and
+ *  return true.
+ */
+int
+fdset_try_del(struct fdset *pfdset, int fd)
+{
+	int i;
+
+	if (pfdset == NULL || fd == -1)
+		return -2;
+
+	pthread_mutex_lock(&pfdset->fd_mutex);
+	i = fdset_find_fd(pfdset, fd);
+	if (i != -1 && pfdset->fd[i].busy) {
+		pthread_mutex_unlock(&pfdset->fd_mutex);
+		return -1;
+	}
+
+	if (i != -1) {
+		pfdset->fd[i].fd = -1;
+		pfdset->fd[i].rcb = pfdset->fd[i].wcb = NULL;
+		pfdset->fd[i].dat = NULL;
+	}
+
+	pthread_mutex_unlock(&pfdset->fd_mutex);
+	return 0;
+}
 
 /**
  * This functions runs in infinite blocking loop until there is no fd in
@@ -275,7 +307,7 @@ fdset_event_dispatch(struct fdset *pfdset)
 			 * because the fd is closed in the cb,
 			 * the old fd val could be reused by when creates new
 			 * listen fd in another thread, we couldn't call
-			 * fd_set_del.
+			 * fdset_del.
 			 */
 			if (remove1 || remove2) {
 				pfdentry->fd = -1;

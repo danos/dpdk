@@ -71,6 +71,7 @@ static inline int bnxt_alloc_rx_data(struct bnxt_rx_queue *rxq,
 		return -ENOMEM;
 
 	rx_buf->mbuf = data;
+	data->data_off = RTE_PKTMBUF_HEADROOM;
 
 	rxbd->addr = rte_cpu_to_le_64(rte_mbuf_data_dma_addr_default(data));
 
@@ -152,11 +153,15 @@ static uint16_t bnxt_rx_pkt(struct rte_mbuf **rx_pkt,
 
 	if (likely(RX_CMP_IP_CS_OK(rxcmp1)))
 		mbuf->ol_flags |= PKT_RX_IP_CKSUM_GOOD;
+	else if (likely(RX_CMP_IP_CS_UNKNOWN(rxcmp1)))
+		mbuf->ol_flags |= PKT_RX_IP_CKSUM_UNKNOWN;
 	else
 		mbuf->ol_flags |= PKT_RX_IP_CKSUM_BAD;
 
 	if (likely(RX_CMP_L4_CS_OK(rxcmp1)))
 		mbuf->ol_flags |= PKT_RX_L4_CKSUM_GOOD;
+	else if (likely(RX_CMP_L4_CS_UNKNOWN(rxcmp1)))
+		mbuf->ol_flags |= PKT_RX_L4_CKSUM_UNKNOWN;
 	else
 		mbuf->ol_flags |= PKT_RX_L4_CKSUM_BAD;
 

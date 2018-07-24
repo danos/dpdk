@@ -323,7 +323,7 @@ nfp_net_tx_queue_release_mbufs(struct nfp_net_txq *txq)
 
 	for (i = 0; i < txq->tx_count; i++) {
 		if (txq->txbufs[i].mbuf) {
-			rte_pktmbuf_free(txq->txbufs[i].mbuf);
+			rte_pktmbuf_free_seg(txq->txbufs[i].mbuf);
 			txq->txbufs[i].mbuf = NULL;
 		}
 	}
@@ -620,7 +620,7 @@ static void nfp_net_read_mac(struct nfp_net_hw *hw)
 	uint32_t tmp;
 
 	tmp = rte_be_to_cpu_32(nn_cfg_readl(hw, NFP_NET_CFG_MACADDR));
-	memcpy(&hw->mac_addr[0], &tmp, sizeof(struct ether_addr));
+	memcpy(&hw->mac_addr[0], &tmp, 4);
 
 	tmp = rte_be_to_cpu_32(nn_cfg_readl(hw, NFP_NET_CFG_MACADDR + 4));
 	memcpy(&hw->mac_addr[4], &tmp, 2);
@@ -1731,15 +1731,15 @@ nfp_net_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 			break;
 		}
 
+		rxds = &rxq->rxds[idx];
+		if ((rxds->rxd.meta_len_dd & PCIE_DESC_RX_DD) == 0)
+			break;
+
 		/*
 		 * Memory barrier to ensure that we won't do other
 		 * reads before the DD bit.
 		 */
 		rte_rmb();
-
-		rxds = &rxq->rxds[idx];
-		if ((rxds->rxd.meta_len_dd & PCIE_DESC_RX_DD) == 0)
-			break;
 
 		/*
 		 * We got a packet. Let's alloc a new mbuff for refilling the
@@ -1800,6 +1800,8 @@ nfp_net_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 		/* No scatter mode supported */
 		mb->nb_segs = 1;
 		mb->next = NULL;
+
+		mb->port = rxq->port_id;
 
 		/* Checking the RSS flag */
 		nfp_net_set_hash(rxq, rxds, mb);
