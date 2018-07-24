@@ -170,10 +170,10 @@ bnx2x_dma_alloc(struct bnx2x_softc *sc, size_t size, struct bnx2x_dma *dma,
 
 	dma->sc = sc;
 	if (IS_PF(sc))
-		sprintf(mz_name, "bnx2x%d_%s_%" PRIx64, SC_ABS_FUNC(sc), msg,
+		snprintf(mz_name, sizeof(mz_name), "bnx2x%d_%s_%" PRIx64, SC_ABS_FUNC(sc), msg,
 			rte_get_timer_cycles());
 	else
-		sprintf(mz_name, "bnx2x%d_%s_%" PRIx64, sc->pcie_device, msg,
+		snprintf(mz_name, sizeof(mz_name), "bnx2x%d_%s_%" PRIx64, sc->pcie_device, msg,
 			rte_get_timer_cycles());
 
 	/* Caller must take care that strlen(mz_name) < RTE_MEMZONE_NAMESIZE */
@@ -8289,16 +8289,6 @@ static int bnx2x_get_device_info(struct bnx2x_softc *sc)
 			REG_WR(sc, PXP2_REG_PGL_ADDR_90_F1, 0);
 			REG_WR(sc, PXP2_REG_PGL_ADDR_94_F1, 0);
 		}
-
-/*
- * Enable internal target-read (in case we are probed after PF
- * FLR). Must be done prior to any BAR read access. Only for
- * 57712 and up
- */
-		if (!CHIP_IS_E1x(sc)) {
-			REG_WR(sc, PGLUE_B_REG_INTERNAL_PFID_ENABLE_TARGET_READ,
-			       1);
-		}
 	}
 
 	/* get the nvram size */
@@ -9675,7 +9665,17 @@ int bnx2x_attach(struct bnx2x_softc *sc)
 	bnx2x_init_rte(sc);
 
 	if (IS_PF(sc)) {
-/* get device info and set params */
+		/* Enable internal target-read (in case we are probed after PF
+		 * FLR). Must be done prior to any BAR read access. Only for
+		 * 57712 and up
+		 */
+		if (!CHIP_IS_E1x(sc)) {
+			REG_WR(sc, PGLUE_B_REG_INTERNAL_PFID_ENABLE_TARGET_READ,
+			       1);
+			DELAY(200000);
+		}
+
+		/* get device info and set params */
 		if (bnx2x_get_device_info(sc) != 0) {
 			PMD_DRV_LOG(NOTICE, "getting device info");
 			return -ENXIO;
@@ -9684,7 +9684,7 @@ int bnx2x_attach(struct bnx2x_softc *sc)
 /* get phy settings from shmem and 'and' against admin settings */
 		bnx2x_get_phy_info(sc);
 	} else {
-/* Left mac of VF unfilled, PF should set it for VF */
+		/* Left mac of VF unfilled, PF should set it for VF */
 		memset(sc->link_params.mac_addr, 0, ETHER_ADDR_LEN);
 	}
 

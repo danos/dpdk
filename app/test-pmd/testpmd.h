@@ -493,6 +493,7 @@ void fwd_config_setup(void);
 void set_def_fwd_config(void);
 void reconfig(portid_t new_port_id, unsigned socket_id);
 int init_fwd_streams(void);
+void update_fwd_ports(portid_t new_pid);
 
 void port_mtu_set(portid_t port_id, uint16_t mtu);
 void port_reg_bit_display(portid_t port_id, uint32_t reg_off, uint8_t bit_pos);
@@ -599,6 +600,7 @@ enum print_warning {
 	DISABLED_WARN
 };
 int port_id_is_invalid(portid_t port_id, enum print_warning warning);
+void print_valid_ports(void);
 
 /*
  * Work-around of a compilation error with ICC on invocations of the

@@ -422,17 +422,16 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *pci_dev)
 		break;
 	}
 	if (attr_ctx == NULL) {
-		ibv_free_device_list(list);
 		switch (err) {
 		case 0:
 			ERROR("cannot access device, is mlx5_ib loaded?");
-			return -ENODEV;
+			err = ENODEV;
+			break;
 		case EINVAL:
 			ERROR("cannot use device, are drivers up to date?");
-			return -EINVAL;
+			break;
 		}
-		assert(err > 0);
-		return -err;
+		goto error;
 	}
 	ibv_dev = list[i];
 
@@ -685,6 +684,8 @@ port_error:
 			claim_zero(ibv_dealloc_pd(pd));
 		if (ctx)
 			claim_zero(ibv_close_device(ctx));
+		if (eth_dev && rte_eal_process_type() == RTE_PROC_PRIMARY)
+			rte_eth_dev_release_port(eth_dev);
 		break;
 	}
 
