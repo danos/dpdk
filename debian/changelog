@@ -1,10 +1,10 @@
-dpdk (17.11.3-3) UNRELEASED; urgency=medium
+dpdk (17.11.3-3) unstable; urgency=medium
 
   * d/p/net-mlx5-fix-build-with-rdma-core-v19.patch: fix Build against
     rdma-core v19 which is in Debian unstable now. (This will most likely be
     in 17.11.4 and can then be dropped)
 
- -- Luca Boccassi <bluca@debian.org>  Mon, 30 Jul 2018 10:30:07 +0100
+ -- Luca Boccassi <bluca@debian.org>  Mon, 30 Jul 2018 10:34:20 +0100
 
 dpdk (17.11.3-2) unstable; urgency=medium
 
