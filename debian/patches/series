@@ -1,3 +1,4 @@
 fix-vhost-user-socket-permission.patch
 testpmd-link-virtio.patch
 app-testpmd-add-ethernet-peer-command.patch
+net-mlx5-fix-build-with-rdma-core-v19.patch
