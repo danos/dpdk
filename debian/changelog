@@ -1,5 +1,6 @@
 dpdk (18.05-1~git1) UNRELEASED; urgency=medium
 
+  [ Christian Ehrhardt ]
   * New upstream release 18.05; for a full list of changes see:
     https://dpdk.org/doc/guides/rel_notes/release_18_05.html
     - refresh d/p/fix-vhost-user-socket-permission.patch for 18.05
@@ -32,6 +33,10 @@ dpdk (18.05-1~git1) UNRELEASED; urgency=medium
     - d/p/dpdk-dev-eal-ppc-fix-rte_smp_mb-for-a-compilation-error-with-else-
       clause.patch: fix build on ppc64el
       fix arm64 build.
+
+  [ Luca Boccassi ]
+  * Enable librte-pmd-avf on arm64, i386 and ppc64el since it's available.
+    (Closes: #905041)
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 01 Jun 2018 09:18:32 +0200
 
