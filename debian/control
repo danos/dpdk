@@ -1198,7 +1198,7 @@ Description: Data Plane Development Kit (librte_pmd_ark runtime library)
  This package contains the runtime libraries for librte_pmd_ark.
 
 Package: librte-pmd-avf18.05
-Architecture: amd64
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
