@@ -13,6 +13,7 @@ Build-Depends: debhelper (>= 9),
                inkscape <!nodoc>,
                libcap-dev,
                libibverbs-dev,
+               libipsec-mb-dev [amd64],
                libpcap-dev,
                libnuma-dev,
                libssl-dev,
@@ -1184,6 +1185,30 @@ Description: Data Plane Development Kit (librte_metrics runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_metrics.
+
+Package: librte-pmd-aesni-gcm18.05
+Architecture: amd64
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte_pmd_aesni_gcm runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_aesni_gcm.
+
+Package: librte-pmd-aesni-mb18.05
+Architecture: amd64
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte_pmd_aesni_mb runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_aesni_mb.
 
 Package: librte-pmd-ark18.05
 Architecture: amd64 arm64 i386 ppc64el

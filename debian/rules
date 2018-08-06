@@ -190,6 +190,12 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 endif
 	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
 		$(DPDK_STATIC_DIR)/.config
+	# Intel IPSEC library is amd64-only
+ifneq (,$(filter $(DEB_HOST_ARCH), amd64))
+	sed -ri -e 's,(CONFIG_RTE_LIBRTE_PMD_AESNI_MB=).*,\1y,' \
+		-e 's,(CONFIG_RTE_LIBRTE_PMD_AESNI_GCM=).*,\1y,' \
+		$(DPDK_STATIC_DIR)/.config
+endif
 	dh_auto_configure
 
 override_dh_auto_build-indep:
