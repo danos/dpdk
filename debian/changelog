@@ -37,6 +37,9 @@ dpdk (18.05-1~git1) UNRELEASED; urgency=medium
   [ Luca Boccassi ]
   * Enable librte-pmd-avf on arm64, i386 and ppc64el since it's available.
     (Closes: #905041)
+  * Enable AESNI-MB/AESNI-GCM crypto drivers PMDs and packages with build
+    dependency on libipsec-mb-dev (amd64-only).
+    (Closes: #905580)
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 01 Jun 2018 09:18:32 +0200
 
