@@ -5,6 +5,7 @@ dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
     - refresh d/p/fix-vhost-user-socket-permission.patch for 18.08
     - add build-dependency on libmnl-dev, needed by MLX PMD
     - d/control: bump ABI version on packages
+    - bump d/*.symbols for new ABI
 
  -- Luca Boccassi <bluca@debian.org>  Tue, 14 Aug 2018 18:58:11 +0100
 
