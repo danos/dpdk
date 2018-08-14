@@ -15,9 +15,9 @@
 /*
  * Global variables of the max portal/pool number this bman version supported
  */
-u16 bman_ip_rev;
+static u16 bman_ip_rev;
 u16 bman_pool_max;
-void *bman_ccsr_map;
+static void *bman_ccsr_map;
 
 /*****************/
 /* Portal driver */
@@ -161,7 +161,7 @@ int bman_init_ccsr(const struct device_node *node)
 			     PROT_WRITE, MAP_SHARED, ccsr_map_fd, phys_addr);
 	if (bman_ccsr_map == MAP_FAILED) {
 		pr_err("Can not map BMan CCSR base Bman: "
-		       "0x%x Phys: 0x%lx size 0x%lx",
+		       "0x%x Phys: 0x%" PRIx64 " size 0x%" PRIu64,
 		       *bman_addr, phys_addr, regs_size);
 		return -EINVAL;
 	}

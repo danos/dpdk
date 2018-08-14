@@ -218,6 +218,8 @@ test_pmd_ring_pair_create_attach(int portd, int porte)
 	struct rte_mbuf buf, *pbuf = &buf;
 	struct rte_eth_conf null_conf;
 
+	memset(&null_conf, 0, sizeof(struct rte_eth_conf));
+
 	if ((rte_eth_dev_configure(portd, 1, 1, &null_conf) < 0)
 		|| (rte_eth_dev_configure(porte, 1, 1, &null_conf) < 0)) {
 		printf("Configure failed for port\n");
@@ -399,7 +401,7 @@ test_pmd_ring(void)
 	int port, cmdl_port0 = -1;
 	uint8_t nb_ports;
 
-	nb_ports = rte_eth_dev_count();
+	nb_ports = rte_eth_dev_count_avail();
 	printf("nb_ports=%d\n", (int)nb_ports);
 
 	/*  create the rings and eth_rings in the test code.
@@ -473,7 +475,7 @@ test_pmd_ring(void)
 		return -1;
 
 	/* find a port created with the --vdev=net_ring0 command line option */
-	for (port = 0; port < nb_ports; port++) {
+	RTE_ETH_FOREACH_DEV(port) {
 		struct rte_eth_dev_info dev_info;
 
 		rte_eth_dev_info_get(port, &dev_info);

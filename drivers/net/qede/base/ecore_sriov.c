@@ -1,9 +1,7 @@
-/*
- * Copyright (c) 2016 QLogic Corporation.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2016 - 2018 Cavium Inc.
  * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.qede_pmd for copyright and licensing details.
+ * www.cavium.com
  */
 
 #include "bcm_osal.h"
@@ -61,6 +59,8 @@ const char *ecore_channel_tlvs_string[] = {
 	"CHANNEL_TLV_COALESCE_UPDATE",
 	"CHANNEL_TLV_QID",
 	"CHANNEL_TLV_COALESCE_READ",
+	"CHANNEL_TLV_BULLETIN_UPDATE_MAC",
+	"CHANNEL_TLV_UPDATE_MTU",
 	"CHANNEL_TLV_MAX"
 };
 
@@ -590,8 +590,7 @@ enum _ecore_status_t ecore_iov_alloc(struct ecore_hwfn *p_hwfn)
 
 	p_sriov = OSAL_ZALLOC(p_hwfn->p_dev, GFP_KERNEL, sizeof(*p_sriov));
 	if (!p_sriov) {
-		DP_NOTICE(p_hwfn, true,
-			  "Failed to allocate `struct ecore_sriov'\n");
+		DP_NOTICE(p_hwfn, false, "Failed to allocate `struct ecore_sriov'\n");
 		return ECORE_NOMEM;
 	}
 
@@ -648,7 +647,7 @@ enum _ecore_status_t ecore_iov_hw_info(struct ecore_hwfn *p_hwfn)
 	p_dev->p_iov_info = OSAL_ZALLOC(p_dev, GFP_KERNEL,
 					sizeof(*p_dev->p_iov_info));
 	if (!p_dev->p_iov_info) {
-		DP_NOTICE(p_hwfn, true,
+		DP_NOTICE(p_hwfn, false,
 			  "Can't support IOV due to lack of memory\n");
 		return ECORE_NOMEM;
 	}
@@ -1968,7 +1967,8 @@ ecore_iov_configure_vport_forced(struct ecore_hwfn *p_hwfn,
 	if (!p_vf->vport_instance)
 		return ECORE_INVAL;
 
-	if (events & (1 << MAC_ADDR_FORCED)) {
+	if ((events & (1 << MAC_ADDR_FORCED)) ||
+	    p_hwfn->pf_params.eth_pf_params.allow_vf_mac_change) {
 		/* Since there's no way [currently] of removing the MAC,
 		 * we can always assume this means we need to force it.
 		 */
@@ -1989,7 +1989,11 @@ ecore_iov_configure_vport_forced(struct ecore_hwfn *p_hwfn,
 			return rc;
 		}
 
-		p_vf->configured_features |= 1 << MAC_ADDR_FORCED;
+		if (p_hwfn->pf_params.eth_pf_params.allow_vf_mac_change)
+			p_vf->configured_features |=
+				1 << VFPF_BULLETIN_MAC_ADDR;
+		else
+			p_vf->configured_features |= 1 << MAC_ADDR_FORCED;
 	}
 
 	if (events & (1 << VLAN_ADDR_FORCED)) {
@@ -2854,6 +2858,45 @@ out:
 			       length, status);
 }
 
+static enum _ecore_status_t
+ecore_iov_vf_pf_update_mtu(struct ecore_hwfn *p_hwfn,
+				    struct ecore_ptt *p_ptt,
+				    struct ecore_vf_info *p_vf)
+{
+	struct ecore_iov_vf_mbx *mbx = &p_vf->vf_mbx;
+	struct ecore_sp_vport_update_params params;
+	enum _ecore_status_t rc = ECORE_SUCCESS;
+	struct vfpf_update_mtu_tlv *p_req;
+	u8 status = PFVF_STATUS_SUCCESS;
+
+	/* Valiate PF can send such a request */
+	if (!p_vf->vport_instance) {
+		DP_VERBOSE(p_hwfn, ECORE_MSG_IOV,
+			   "No VPORT instance available for VF[%d], failing MTU update\n",
+			   p_vf->abs_vf_id);
+		status = PFVF_STATUS_FAILURE;
+		goto send_status;
+	}
+
+	p_req = &mbx->req_virt->update_mtu;
+
+	OSAL_MEMSET(&params, 0, sizeof(params));
+	params.opaque_fid =  p_vf->opaque_fid;
+	params.vport_id = p_vf->vport_id;
+	params.mtu = p_req->mtu;
+	rc = ecore_sp_vport_update(p_hwfn, &params, ECORE_SPQ_MODE_EBLOCK,
+				   OSAL_NULL);
+
+	if (rc)
+		status = PFVF_STATUS_FAILURE;
+send_status:
+	ecore_iov_prepare_resp(p_hwfn, p_ptt, p_vf,
+			       CHANNEL_TLV_UPDATE_MTU,
+			       sizeof(struct pfvf_def_resp_tlv),
+			       status);
+	return rc;
+}
+
 void *ecore_iov_search_list_tlvs(struct ecore_hwfn *p_hwfn,
 				 void *p_tlvs_list, u16 req_type)
 {
@@ -2975,8 +3018,7 @@ ecore_iov_vp_update_mcast_bin_param(struct ecore_hwfn *p_hwfn,
 
 	p_data->update_approx_mcast_flg = 1;
 	OSAL_MEMCPY(p_data->bins, p_mcast_tlv->bins,
-		    sizeof(unsigned long) *
-		    ETH_MULTICAST_MAC_BINS_IN_REGS);
+		    sizeof(u32) * ETH_MULTICAST_MAC_BINS_IN_REGS);
 	*tlvs_mask |= 1 << ECORE_IOV_VP_UPDATE_MCAST;
 }
 
@@ -4137,6 +4179,9 @@ void ecore_iov_process_mbx_req(struct ecore_hwfn *p_hwfn,
 		case CHANNEL_TLV_COALESCE_READ:
 			ecore_iov_vf_pf_get_coalesce(p_hwfn, p_ptt, p_vf);
 			break;
+		case CHANNEL_TLV_UPDATE_MTU:
+			ecore_iov_vf_pf_update_mtu(p_hwfn, p_ptt, p_vf);
+			break;
 		}
 	} else if (ecore_iov_tlv_supported(mbx->first_tlv.tl.type)) {
 		/* If we've received a message from a VF we consider malicious
@@ -4370,7 +4415,11 @@ void ecore_iov_bulletin_set_forced_mac(struct ecore_hwfn *p_hwfn,
 		return;
 	}
 
-	feature = 1 << MAC_ADDR_FORCED;
+	if (p_hwfn->pf_params.eth_pf_params.allow_vf_mac_change)
+		feature = 1 << VFPF_BULLETIN_MAC_ADDR;
+	else
+		feature = 1 << MAC_ADDR_FORCED;
+
 	OSAL_MEMCPY(vf_info->bulletin.p_virt->mac, mac, ETH_ALEN);
 
 	vf_info->bulletin.p_virt->valid_bitmap |= feature;
@@ -4411,9 +4460,13 @@ enum _ecore_status_t ecore_iov_bulletin_set_mac(struct ecore_hwfn *p_hwfn,
 
 	vf_info->bulletin.p_virt->valid_bitmap |= feature;
 
+	if (p_hwfn->pf_params.eth_pf_params.allow_vf_mac_change)
+		ecore_iov_configure_vport_forced(p_hwfn, vf_info, feature);
+
 	return ECORE_SUCCESS;
 }
 
+#ifndef LINUX_REMOVE
 enum _ecore_status_t
 ecore_iov_bulletin_set_forced_untagged_default(struct ecore_hwfn *p_hwfn,
 					       bool b_untagged_only, int vfid)
@@ -4470,6 +4523,7 @@ void ecore_iov_get_vfs_opaque_fid(struct ecore_hwfn *p_hwfn, int vfid,
 
 	*opaque_fid = vf_info->opaque_fid;
 }
+#endif
 
 void ecore_iov_bulletin_set_forced_vlan(struct ecore_hwfn *p_hwfn,
 					u16 pvid, int vfid)
@@ -4655,6 +4709,22 @@ bool ecore_iov_is_valid_vfpf_msg_length(u32 length)
 u32 ecore_iov_pfvf_msg_length(void)
 {
 	return sizeof(union pfvf_tlvs);
+}
+
+u8 *ecore_iov_bulletin_get_mac(struct ecore_hwfn *p_hwfn,
+				      u16 rel_vf_id)
+{
+	struct ecore_vf_info *p_vf;
+
+	p_vf = ecore_iov_get_vf_info(p_hwfn, rel_vf_id, true);
+	if (!p_vf || !p_vf->bulletin.p_virt)
+		return OSAL_NULL;
+
+	if (!(p_vf->bulletin.p_virt->valid_bitmap &
+		(1 << VFPF_BULLETIN_MAC_ADDR)))
+		return OSAL_NULL;
+
+	return p_vf->bulletin.p_virt->mac;
 }
 
 u8 *ecore_iov_bulletin_get_forced_mac(struct ecore_hwfn *p_hwfn, u16 rel_vf_id)

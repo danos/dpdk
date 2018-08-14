@@ -166,7 +166,7 @@ pipeline_opt_check(struct evt_options *opt, uint64_t nb_queues)
 	 */
 	lcores = 2;
 
-	if (!rte_eth_dev_count()) {
+	if (!rte_eth_dev_count_avail()) {
 		evt_err("test needs minimum 1 ethernet dev");
 		return -1;
 	}
@@ -213,7 +213,7 @@ pipeline_opt_check(struct evt_options *opt, uint64_t nb_queues)
 int
 pipeline_ethdev_setup(struct evt_test *test, struct evt_options *opt)
 {
-	int i;
+	uint16_t i;
 	uint8_t nb_queues = 1;
 	uint8_t mt_state = 0;
 	struct test_pipeline *t = evt_test_priv(test);
@@ -223,7 +223,6 @@ pipeline_ethdev_setup(struct evt_test *test, struct evt_options *opt)
 			.mq_mode = ETH_MQ_RX_RSS,
 			.max_rx_pkt_len = ETHER_MAX_LEN,
 			.offloads = DEV_RX_OFFLOAD_CRC_STRIP,
-			.ignore_offload_bitfield = 1,
 		},
 		.rx_adv_conf = {
 			.rss_conf = {
@@ -234,23 +233,34 @@ pipeline_ethdev_setup(struct evt_test *test, struct evt_options *opt)
 	};
 
 	RTE_SET_USED(opt);
-	if (!rte_eth_dev_count()) {
+	if (!rte_eth_dev_count_avail()) {
 		evt_err("No ethernet ports found.\n");
 		return -ENODEV;
 	}
 
-	for (i = 0; i < rte_eth_dev_count(); i++) {
+	RTE_ETH_FOREACH_DEV(i) {
 		struct rte_eth_dev_info dev_info;
+		struct rte_eth_conf local_port_conf = port_conf;
 
-		memset(&dev_info, 0, sizeof(struct rte_eth_dev_info));
 		rte_eth_dev_info_get(i, &dev_info);
 		mt_state = !(dev_info.tx_offload_capa &
 				DEV_TX_OFFLOAD_MT_LOCKFREE);
 		rx_conf = dev_info.default_rxconf;
 		rx_conf.offloads = port_conf.rxmode.offloads;
 
+		local_port_conf.rx_adv_conf.rss_conf.rss_hf &=
+			dev_info.flow_type_rss_offloads;
+		if (local_port_conf.rx_adv_conf.rss_conf.rss_hf !=
+				port_conf.rx_adv_conf.rss_conf.rss_hf) {
+			evt_info("Port %u modified RSS hash function based on hardware support,"
+				"requested:%#"PRIx64" configured:%#"PRIx64"\n",
+				i,
+				port_conf.rx_adv_conf.rss_conf.rss_hf,
+				local_port_conf.rx_adv_conf.rss_conf.rss_hf);
+		}
+
 		if (rte_eth_dev_configure(i, nb_queues, nb_queues,
-					&port_conf)
+					&local_port_conf)
 				< 0) {
 			evt_err("Failed to configure eth port [%d]\n", i);
 			return -EINVAL;
@@ -337,7 +347,7 @@ pipeline_event_rx_adapter_setup(struct evt_options *opt, uint8_t stride,
 	memset(&queue_conf, 0,
 			sizeof(struct rte_event_eth_rx_adapter_queue_conf));
 	queue_conf.ev.sched_type = opt->sched_type_list[0];
-	for (prod = 0; prod < rte_eth_dev_count(); prod++) {
+	RTE_ETH_FOREACH_DEV(prod) {
 		uint32_t cap;
 
 		ret = rte_event_eth_rx_adapter_caps_get(opt->dev_id,
@@ -419,7 +429,7 @@ pipeline_event_tx_service_setup(struct evt_test *test, struct evt_options *opt,
 	tx->dev_id = opt->dev_id;
 	tx->queue_id = tx_queue_id;
 	tx->port_id = tx_port_id;
-	tx->nb_ethports = rte_eth_dev_count();
+	tx->nb_ethports = rte_eth_dev_count_avail();
 	tx->t = t;
 
 	/* Register Tx service */
@@ -453,7 +463,7 @@ pipeline_event_tx_service_setup(struct evt_test *test, struct evt_options *opt,
 void
 pipeline_ethdev_destroy(struct evt_test *test, struct evt_options *opt)
 {
-	int i;
+	uint16_t i;
 	RTE_SET_USED(test);
 	RTE_SET_USED(opt);
 	struct test_pipeline *t = evt_test_priv(test);
@@ -464,10 +474,9 @@ pipeline_ethdev_destroy(struct evt_test *test, struct evt_options *opt)
 		rte_service_component_unregister(t->tx_service.service_id);
 	}
 
-	for (i = 0; i < rte_eth_dev_count(); i++) {
+	RTE_ETH_FOREACH_DEV(i) {
 		rte_event_eth_rx_adapter_stop(i);
 		rte_eth_dev_stop(i);
-		rte_eth_dev_close(i);
 	}
 }
 

@@ -635,9 +635,7 @@ action_apply(struct rte_flow_classifier *cls,
 		}
 		if (count) {
 			ret = 0;
-			ntuple_stats =
-				(struct rte_flow_classify_ipv4_5tuple_stats *)
-				stats->stats;
+			ntuple_stats = stats->stats;
 			ntuple_stats->counter1 = count;
 			ntuple_stats->ipv4_5tuple = rule->rules.u.ipv4_5tuple;
 		}
@@ -675,10 +673,7 @@ rte_flow_classifier_query(struct rte_flow_classifier *cls,
 	return ret;
 }
 
-RTE_INIT(librte_flow_classify_init_log);
-
-static void
-librte_flow_classify_init_log(void)
+RTE_INIT(librte_flow_classify_init_log)
 {
 	librte_flow_classify_logtype =
 		rte_log_register("lib.flow_classify");

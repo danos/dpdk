@@ -74,6 +74,9 @@ struct rte_pci_device {
  */
 #define RTE_DEV_TO_PCI(ptr) container_of(ptr, struct rte_pci_device, device)
 
+#define RTE_DEV_TO_PCI_CONST(ptr) \
+	container_of(ptr, const struct rte_pci_device, device)
+
 #define RTE_ETH_DEV_TO_PCI(eth_dev)	RTE_DEV_TO_PCI((eth_dev)->device)
 
 /** Any PCI device identifier (vendor, device, ...) */
@@ -132,6 +135,8 @@ struct rte_pci_bus {
 
 /** Device needs PCI BAR mapping (done with either IGB_UIO or VFIO) */
 #define RTE_PCI_DRV_NEED_MAPPING 0x0001
+/** Device needs PCI BAR mapping with enabled write combining (wc) */
+#define RTE_PCI_DRV_WC_ACTIVATE 0x0002
 /** Device driver supports link state interrupt */
 #define RTE_PCI_DRV_INTR_LSC	0x0008
 /** Device driver supports device removal interrupt */
@@ -186,8 +191,7 @@ void rte_pci_register(struct rte_pci_driver *driver);
 
 /** Helper for PCI device registration from driver (eth, crypto) instance */
 #define RTE_PMD_REGISTER_PCI(nm, pci_drv) \
-RTE_INIT(pciinitfn_ ##nm); \
-static void pciinitfn_ ##nm(void) \
+RTE_INIT(pciinitfn_ ##nm) \
 {\
 	(pci_drv).driver.name = RTE_STR(nm);\
 	rte_pci_register(&pci_drv); \

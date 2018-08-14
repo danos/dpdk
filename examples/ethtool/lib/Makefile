@@ -10,7 +10,7 @@ RTE_TARGET ?= x86_64-native-linuxapp-gcc
 
 include $(RTE_SDK)/mk/rte.vars.mk
 
-ifneq ($(CONFIG_RTE_EXEC_ENV),"linuxapp")
+ifneq ($(CONFIG_RTE_EXEC_ENV_LINUXAPP),y)
 $(error This application can only operate in a linuxapp environment, \
 please change the definition of the RTE_TARGET environment variable)
 endif
@@ -25,6 +25,7 @@ SRCS-y := rte_ethtool.c
 
 CFLAGS += -O3
 CFLAGS += $(WERROR_FLAGS)
+CFLAGS += -DALLOW_EXPERIMENTAL_API
 
 ifeq ($(CONFIG_RTE_BUILD_SHARED_LIB),y)
 ifeq ($(CONFIG_RTE_LIBRTE_IXGBE_PMD),y)

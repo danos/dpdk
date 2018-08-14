@@ -119,7 +119,7 @@ eal_thread_loop(__attribute__((unused)) void *arg)
 	if (eal_thread_set_affinity() < 0)
 		rte_panic("cannot set affinity\n");
 
-	ret = eal_thread_dump_affinity(cpuset, RTE_CPU_AFFINITY_STR_LEN);
+	ret = eal_thread_dump_affinity(cpuset, sizeof(cpuset));
 
 	RTE_LOG(DEBUG, EAL, "lcore %u is ready (tid=%x;cpuset=[%s%s])\n",
 		lcore_id, (int)thread_id, cpuset, ret == 0 ? "" : "...");
@@ -176,7 +176,7 @@ int rte_sys_gettid(void)
 
 int rte_thread_setname(pthread_t id, const char *name)
 {
-	int ret = -1;
+	int ret = ENOSYS;
 #if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
 #if __GLIBC_PREREQ(2, 12)
 	ret = pthread_setname_np(id, name);
@@ -184,5 +184,5 @@ int rte_thread_setname(pthread_t id, const char *name)
 #endif
 	RTE_SET_USED(id);
 	RTE_SET_USED(name);
-	return ret;
+	return -ret;
 }

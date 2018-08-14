@@ -21,8 +21,6 @@
 #include "cperf_test_verify.h"
 #include "cperf_test_pmd_cyclecount.h"
 
-#define NUM_SESSIONS 2048
-#define SESS_MEMPOOL_CACHE_SIZE 64
 
 const char *cperf_test_type_strs[] = {
 	[CPERF_TEST_TYPE_THROUGHPUT] = "throughput",
@@ -67,6 +65,7 @@ cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
 			struct rte_mempool *session_pool_socket[])
 {
 	uint8_t enabled_cdev_count = 0, nb_lcores, cdev_id;
+	uint32_t sessions_needed = 0;
 	unsigned int i, j;
 	int ret;
 
@@ -80,18 +79,24 @@ cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
 
 	nb_lcores = rte_lcore_count() - 1;
 
-	if (enabled_cdev_count > nb_lcores) {
-		printf("Number of capable crypto devices (%d) "
-				"has to be less or equal to number of slave "
-				"cores (%d)\n", enabled_cdev_count, nb_lcores);
+	if (nb_lcores < 1) {
+		RTE_LOG(ERR, USER1,
+			"Number of enabled cores need to be higher than 1\n");
 		return -EINVAL;
 	}
+
+	/*
+	 * Use less number of devices,
+	 * if there are more available than cores.
+	 */
+	if (enabled_cdev_count > nb_lcores)
+		enabled_cdev_count = nb_lcores;
 
 	/* Create a mempool shared by all the devices */
 	uint32_t max_sess_size = 0, sess_size;
 
 	for (cdev_id = 0; cdev_id < rte_cryptodev_count(); cdev_id++) {
-		sess_size = rte_cryptodev_get_private_session_size(cdev_id);
+		sess_size = rte_cryptodev_sym_get_private_session_size(cdev_id);
 		if (sess_size > max_sess_size)
 			max_sess_size = sess_size;
 	}
@@ -143,17 +148,62 @@ cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
 			.nb_descriptors = opts->nb_descriptors
 		};
 
+		/**
+		 * Device info specifies the min headroom and tailroom
+		 * requirement for the crypto PMD. This need to be honoured
+		 * by the application, while creating mbuf.
+		 */
+		if (opts->headroom_sz < cdev_info.min_mbuf_headroom_req) {
+			/* Update headroom */
+			opts->headroom_sz = cdev_info.min_mbuf_headroom_req;
+		}
+		if (opts->tailroom_sz < cdev_info.min_mbuf_tailroom_req) {
+			/* Update tailroom */
+			opts->tailroom_sz = cdev_info.min_mbuf_tailroom_req;
+		}
+
+		/* Update segment size to include headroom & tailroom */
+		opts->segment_sz += (opts->headroom_sz + opts->tailroom_sz);
+
+		uint32_t dev_max_nb_sess = cdev_info.sym.max_nb_sessions;
+		/*
+		 * Two sessions objects are required for each session
+		 * (one for the header, one for the private data)
+		 */
+		if (!strcmp((const char *)opts->device_type,
+					"crypto_scheduler")) {
+#ifdef RTE_LIBRTE_PMD_CRYPTO_SCHEDULER
+			uint32_t nb_slaves =
+				rte_cryptodev_scheduler_slaves_get(cdev_id,
+								NULL);
+
+			sessions_needed = 2 * enabled_cdev_count *
+				opts->nb_qps * nb_slaves;
+#endif
+		} else
+			sessions_needed = 2 * enabled_cdev_count *
+						opts->nb_qps;
+
+		/*
+		 * A single session is required per queue pair
+		 * in each device
+		 */
+		if (dev_max_nb_sess != 0 && dev_max_nb_sess < opts->nb_qps) {
+			RTE_LOG(ERR, USER1,
+				"Device does not support at least "
+				"%u sessions\n", opts->nb_qps);
+			return -ENOTSUP;
+		}
 		if (session_pool_socket[socket_id] == NULL) {
 			char mp_name[RTE_MEMPOOL_NAMESIZE];
 			struct rte_mempool *sess_mp;
 
 			snprintf(mp_name, RTE_MEMPOOL_NAMESIZE,
 				"sess_mp_%u", socket_id);
-
 			sess_mp = rte_mempool_create(mp_name,
-						NUM_SESSIONS,
+						sessions_needed,
 						max_sess_size,
-						SESS_MEMPOOL_CACHE_SIZE,
+						0,
 						0, NULL, NULL, NULL,
 						NULL, socket_id,
 						0);

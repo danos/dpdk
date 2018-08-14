@@ -1,3 +1,6 @@
+..  SPDX-License-Identifier: BSD-3-Clause
+    Copyright 2018 The DPDK contributors
+
 .. _coding_style:
 
 DPDK Coding Style
@@ -614,8 +617,8 @@ In the DPDK environment, use the logging interface provided:
   * is DEBUG) */
  rte_log_set_level(my_logtype2, RTE_LOG_NOTICE);
 
- /* enable all PMD logs (whose identifier string starts with "pmd") */
- rte_log_set_level_regexp("pmd.*", RTE_LOG_DEBUG);
+ /* enable all PMD logs (whose identifier string starts with "pmd.") */
+ rte_log_set_level_pattern("pmd.*", RTE_LOG_DEBUG);
 
  /* log in debug level */
  rte_log_set_global_level(RTE_LOG_DEBUG);

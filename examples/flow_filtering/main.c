@@ -1,33 +1,5 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2017 Mellanox.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of Mellanox. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2017 Mellanox Technologies, Ltd
  */
 
 #include <stdio.h>
@@ -149,7 +121,6 @@ init_port(void)
 	struct rte_eth_conf port_conf = {
 		.rxmode = {
 			.split_hdr_size = 0,
-			.ignore_offload_bitfield = 1,
 			.offloads = DEV_RX_OFFLOAD_CRC_STRIP,
 		},
 		.txmode = {
@@ -160,6 +131,22 @@ init_port(void)
 				DEV_TX_OFFLOAD_TCP_CKSUM   |
 				DEV_TX_OFFLOAD_SCTP_CKSUM  |
 				DEV_TX_OFFLOAD_TCP_TSO,
+		},
+		/*
+		 * Initialize fdir_conf of rte_eth_conf.
+		 * Fdir is used in flow filtering for I40e,
+		 * so rte_flow rules involve some fdir
+		 * configurations. In long term it's better
+		 * that drivers don't require any fdir
+		 * configuration for rte_flow, but we need to
+		 * get this workaround so that sample app can
+		 * run on I40e.
+		 */
+		.fdir_conf = {
+			.mode = RTE_FDIR_MODE_PERFECT,
+			.pballoc = RTE_FDIR_PBALLOC_64K,
+			.status = RTE_FDIR_REPORT_STATUS,
+			.drop_queue = 127,
 		},
 	};
 	struct rte_eth_txconf txq_conf;
@@ -232,7 +219,7 @@ int
 main(int argc, char **argv)
 {
 	int ret;
-	uint8_t nr_ports;
+	uint16_t nr_ports;
 	struct rte_flow_error error;
 
 	ret = rte_eal_init(argc, argv);
@@ -243,7 +230,7 @@ main(int argc, char **argv)
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
 
-	nr_ports = rte_eth_dev_count();
+	nr_ports = rte_eth_dev_count_avail();
 	if (nr_ports == 0)
 		rte_exit(EXIT_FAILURE, ":: no Ethernet ports found\n");
 	port_id = 0;

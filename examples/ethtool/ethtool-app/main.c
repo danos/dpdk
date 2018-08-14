@@ -99,7 +99,6 @@ static void setup_ports(struct app_config *app_cfg, int cnt_ports)
 
 	memset(&cfg_port, 0, sizeof(cfg_port));
 	cfg_port.txmode.mq_mode = ETH_MQ_TX_NONE;
-	cfg_port.rxmode.ignore_offload_bitfield = 1;
 
 	for (idx_port = 0; idx_port < cnt_ports; idx_port++) {
 		struct app_port *ptr_port = &app_cfg->ports[idx_port];
@@ -142,7 +141,6 @@ static void setup_ports(struct app_config *app_cfg, int cnt_ports)
 				 "rte_eth_rx_queue_setup failed"
 				);
 		txconf = dev_info.default_txconf;
-		txconf.txq_flags = ETH_TXQ_FLAGS_IGNORE;
 		if (rte_eth_tx_queue_setup(
 			    idx_port, 0, nb_txd,
 			    rte_eth_dev_socket_id(idx_port), &txconf) < 0)
@@ -251,7 +249,7 @@ int main(int argc, char **argv)
 	if (cnt_args_parsed < 0)
 		rte_exit(EXIT_FAILURE, "rte_eal_init(): Failed");
 
-	cnt_ports = rte_eth_dev_count();
+	cnt_ports = rte_eth_dev_count_avail();
 	printf("Number of NICs: %i\n", cnt_ports);
 	if (cnt_ports == 0)
 		rte_exit(EXIT_FAILURE, "No available NIC ports!\n");

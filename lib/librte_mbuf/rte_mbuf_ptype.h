@@ -423,6 +423,53 @@ extern "C" {
  */
 #define RTE_PTYPE_TUNNEL_L2TP               0x0000a000
 /**
+ * VXLAN-GPE (VXLAN Generic Protocol Extension) tunneling packet type.
+ *
+ * Packet format:
+ * <'ether type'=0x0800
+ * | 'version'=4, 'protocol'=17
+ * | 'destination port'=4790>
+ * or,
+ * <'ether type'=0x86DD
+ * | 'version'=6, 'next header'=17
+ * | 'destination port'=4790>
+ */
+#define RTE_PTYPE_TUNNEL_VXLAN_GPE          0x0000b000
+/**
+ * MPLS-in-GRE tunneling packet type (RFC 4023).
+ *
+ * Packet format:
+ * <'ether type'=0x0800
+ * | 'version'=4, 'protocol'=47
+ * | 'protocol'=0x8847>
+ * or,
+ * <'ether type'=0x0800
+ * | 'version'=4, 'protocol'=47
+ * | 'protocol'=0x8848>
+ * or,
+ * <'ether type'=0x86DD
+ * | 'version'=6, 'protocol'=47
+ * | 'protocol'=0x8847>
+ * or,
+ * <'ether type'=0x86DD
+ * | 'version'=6, 'next header'=47
+ * | 'protocol'=0x8848>
+ */
+#define RTE_PTYPE_TUNNEL_MPLS_IN_GRE       0x0000c000
+/**
+ * MPLS-in-UDP tunneling packet type (RFC 7510).
+ *
+ * Packet format:
+ * <'ether type'=0x0800
+ * | 'version'=4, 'protocol'=17
+ * | 'destination port'=6635>
+ * or,
+ * <'ether type'=0x86DD
+ * | 'version'=6, 'next header'=17
+ * | 'destination port'=6635>
+ */
+#define RTE_PTYPE_TUNNEL_MPLS_IN_UDP      0x0000d000
+/**
  * Mask of tunneling packet types.
  */
 #define RTE_PTYPE_TUNNEL_MASK               0x0000f000
@@ -606,9 +653,9 @@ extern "C" {
 #define  RTE_ETH_IS_IPV4_HDR(ptype) ((ptype) & RTE_PTYPE_L3_IPV4)
 
 /**
- * Check if the (outer) L3 header is IPv4. To avoid comparing IPv4 types one by
- * one, bit 6 is selected to be used for IPv4 only. Then checking bit 6 can
- * determine if it is an IPV4 packet.
+ * Check if the (outer) L3 header is IPv6. To avoid comparing IPv6 types one by
+ * one, bit 6 is selected to be used for IPv6 only. Then checking bit 6 can
+ * determine if it is an IPV6 packet.
  */
 #define  RTE_ETH_IS_IPV6_HDR(ptype) ((ptype) & RTE_PTYPE_L3_IPV6)
 

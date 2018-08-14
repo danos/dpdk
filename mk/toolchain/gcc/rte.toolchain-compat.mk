@@ -12,7 +12,13 @@
 
 GCC_MAJOR = $(shell echo __GNUC__ | $(CC) -E -x c - | tail -n 1)
 GCC_MINOR = $(shell echo __GNUC_MINOR__ | $(CC) -E -x c - | tail -n 1)
+GCC_PATCHLEVEL = $(shell echo __GNUC_PATCHLEVEL__ | $(CC) -E -x c - | tail -n 1)
 GCC_VERSION = $(GCC_MAJOR)$(GCC_MINOR)
+
+HOST_GCC_MAJOR = $(shell echo __GNUC__ | $(HOSTCC) -E -x c - | tail -n 1)
+HOST_GCC_MINOR = $(shell echo __GNUC_MINOR__ | $(HOSTCC) -E -x c - | tail -n 1)
+HOST_GCC_PATCHLEVEL = $(shell echo __GNUC_PATCHLEVEL__ | $(HOSTCC) -E -x c - | tail -n 1)
+HOST_GCC_VERSION = $(HOST_GCC_MAJOR)$(HOST_GCC_MINOR)
 
 # if GCC is older than 4.x
 ifeq ($(shell test $(GCC_VERSION) -lt 40 && echo 1), 1)
@@ -71,6 +77,13 @@ else
 	# Disable OPDL PMD for gcc < 4.7
 	ifeq ($(shell test $(GCC_VERSION) -lt 47 && echo 1), 1)
 		CONFIG_RTE_LIBRTE_PMD_OPDL_EVENTDEV=d
+	endif
+
+	# Disable octeontx event PMD for gcc < 4.8.6
+	ifeq ($(shell test $(GCC_VERSION)$(GCC_PATCHLEVEL) -lt 486 && echo 1), 1)
+		CONFIG_RTE_LIBRTE_PMD_OCTEONTX_SSOVF=d
+		CONFIG_RTE_LIBRTE_OCTEONTX_MEMPOOL=d
+		CONFIG_RTE_LIBRTE_OCTEONTX_PMD=d
 	endif
 
 endif

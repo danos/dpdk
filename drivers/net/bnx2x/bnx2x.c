@@ -1,4 +1,4 @@
-/*-
+/* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2007-2013 Broadcom Corporation.
  *
  * Eric Davis        <edavis@broadcom.com>
@@ -6,11 +6,9 @@
  * Gary Zambrano     <zambrano@broadcom.com>
  *
  * Copyright (c) 2013-2015 Brocade Communications Systems, Inc.
- * Copyright (c) 2015 QLogic Corporation.
+ * Copyright (c) 2015-2018 Cavium Inc.
  * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.bnx2x_pmd for copyright and licensing details.
+ * www.cavium.com
  */
 
 #define BNX2X_DRIVER_VERSION "1.78.18"
@@ -31,7 +29,7 @@
 #define BNX2X_PMD_VER_PREFIX "BNX2X PMD"
 #define BNX2X_PMD_VERSION_MAJOR 1
 #define BNX2X_PMD_VERSION_MINOR 0
-#define BNX2X_PMD_VERSION_REVISION 5
+#define BNX2X_PMD_VERSION_REVISION 6
 #define BNX2X_PMD_VERSION_PATCH 1
 
 static inline const char *
@@ -125,7 +123,6 @@ int bnx2x_nic_load(struct bnx2x_softc *sc);
 
 static int bnx2x_handle_sp_tq(struct bnx2x_softc *sc);
 static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp, int scan_fp);
-static void bnx2x_periodic_stop(struct bnx2x_softc *sc);
 static void bnx2x_ack_sb(struct bnx2x_softc *sc, uint8_t igu_sb_id,
 			 uint8_t storm, uint16_t index, uint8_t op,
 			 uint8_t update);
@@ -170,16 +167,16 @@ bnx2x_dma_alloc(struct bnx2x_softc *sc, size_t size, struct bnx2x_dma *dma,
 
 	dma->sc = sc;
 	if (IS_PF(sc))
-		sprintf(mz_name, "bnx2x%d_%s_%" PRIx64, SC_ABS_FUNC(sc), msg,
+		snprintf(mz_name, sizeof(mz_name), "bnx2x%d_%s_%" PRIx64, SC_ABS_FUNC(sc), msg,
 			rte_get_timer_cycles());
 	else
-		sprintf(mz_name, "bnx2x%d_%s_%" PRIx64, sc->pcie_device, msg,
+		snprintf(mz_name, sizeof(mz_name), "bnx2x%d_%s_%" PRIx64, sc->pcie_device, msg,
 			rte_get_timer_cycles());
 
 	/* Caller must take care that strlen(mz_name) < RTE_MEMZONE_NAMESIZE */
-	z = rte_memzone_reserve_aligned(mz_name, (uint64_t) (size),
+	z = rte_memzone_reserve_aligned(mz_name, (uint64_t)size,
 					SOCKET_ID_ANY,
-					0, align);
+					RTE_MEMZONE_IOVA_CONTIG, align);
 	if (z == NULL) {
 		PMD_DRV_LOG(ERR, "DMA alloc failed for %s", msg);
 		return -ENOMEM;
@@ -1968,9 +1965,6 @@ bnx2x_nic_unload(struct bnx2x_softc *sc, uint32_t unload_mode, uint8_t keep_link
 	uint32_t val;
 
 	PMD_DRV_LOG(DEBUG, "Starting NIC unload...");
-
-	/* stop the periodic callout */
-	bnx2x_periodic_stop(sc);
 
 	/* mark driver as unloaded in shmem2 */
 	if (IS_PF(sc) && SHMEM2_HAS(sc, drv_capabilities_flag)) {
@@ -4490,6 +4484,8 @@ static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp, int scan_fp)
 	struct bnx2x_softc *sc = fp->sc;
 	uint8_t more_rx = FALSE;
 
+	PMD_DRV_LOG(DEBUG, "---> FP TASK QUEUE (%d) <--", fp->index);
+
 	/* update the fastpath index */
 	bnx2x_update_fp_sb_idx(fp);
 
@@ -4506,7 +4502,7 @@ static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp, int scan_fp)
 	}
 
 	bnx2x_ack_sb(sc, fp->igu_sb_id, USTORM_ID,
-		   le16toh(fp->fp_hc_idx), IGU_INT_DISABLE, 1);
+		   le16toh(fp->fp_hc_idx), IGU_INT_ENABLE, 1);
 }
 
 /*
@@ -6997,16 +6993,6 @@ void bnx2x_link_status_update(struct bnx2x_softc *sc)
 	}
 }
 
-static void bnx2x_periodic_start(struct bnx2x_softc *sc)
-{
-	atomic_store_rel_long(&sc->periodic_flags, PERIODIC_GO);
-}
-
-static void bnx2x_periodic_stop(struct bnx2x_softc *sc)
-{
-	atomic_store_rel_long(&sc->periodic_flags, PERIODIC_STOP);
-}
-
 static int bnx2x_initial_phy_init(struct bnx2x_softc *sc, int load_mode)
 {
 	int rc, cfg_idx = bnx2x_get_link_cfg_idx(sc);
@@ -7039,10 +7025,6 @@ static int bnx2x_initial_phy_init(struct bnx2x_softc *sc, int load_mode)
 	if (sc->link_vars.link_up) {
 		bnx2x_stats_handle(sc, STATS_EVENT_LINK_UP);
 		bnx2x_link_report(sc);
-	}
-
-	if (!CHIP_REV_IS_SLOW(sc)) {
-		bnx2x_periodic_start(sc);
 	}
 
 	sc->link_params.req_line_speed[cfg_idx] = req_line_speed;
@@ -8284,16 +8266,6 @@ static int bnx2x_get_device_info(struct bnx2x_softc *sc)
 			REG_WR(sc, PXP2_REG_PGL_ADDR_8C_F1, 0);
 			REG_WR(sc, PXP2_REG_PGL_ADDR_90_F1, 0);
 			REG_WR(sc, PXP2_REG_PGL_ADDR_94_F1, 0);
-		}
-
-/*
- * Enable internal target-read (in case we are probed after PF
- * FLR). Must be done prior to any BAR read access. Only for
- * 57712 and up
- */
-		if (!CHIP_IS_E1x(sc)) {
-			REG_WR(sc, PGLUE_B_REG_INTERNAL_PFID_ENABLE_TARGET_READ,
-			       1);
 		}
 	}
 
@@ -9671,7 +9643,17 @@ int bnx2x_attach(struct bnx2x_softc *sc)
 	bnx2x_init_rte(sc);
 
 	if (IS_PF(sc)) {
-/* get device info and set params */
+		/* Enable internal target-read (in case we are probed after PF
+		 * FLR). Must be done prior to any BAR read access. Only for
+		 * 57712 and up
+		 */
+		if (!CHIP_IS_E1x(sc)) {
+			REG_WR(sc, PGLUE_B_REG_INTERNAL_PFID_ENABLE_TARGET_READ,
+			       1);
+			DELAY(200000);
+		}
+
+		/* get device info and set params */
 		if (bnx2x_get_device_info(sc) != 0) {
 			PMD_DRV_LOG(NOTICE, "getting device info");
 			return -ENXIO;
@@ -9680,7 +9662,7 @@ int bnx2x_attach(struct bnx2x_softc *sc)
 /* get phy settings from shmem and 'and' against admin settings */
 		bnx2x_get_phy_info(sc);
 	} else {
-/* Left mac of VF unfilled, PF should set it for VF */
+		/* Left mac of VF unfilled, PF should set it for VF */
 		memset(sc->link_params.mac_addr, 0, ETHER_ADDR_LEN);
 	}
 

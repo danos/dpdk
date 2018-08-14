@@ -115,7 +115,7 @@ smp_parse_args(int argc, char **argv)
 	int opt, ret;
 	char **argvopt;
 	int option_index;
-	unsigned i, port_mask = 0;
+	uint16_t i, port_mask = 0;
 	char *prgname = argv[0];
 	static struct option lgopts[] = {
 			{PARAM_NUM_PROCS, 1, 0, 0},
@@ -156,7 +156,7 @@ smp_parse_args(int argc, char **argv)
 		smp_usage(prgname, "Invalid or missing port mask\n");
 
 	/* get the port numbers from the port mask */
-	for(i = 0; i < rte_eth_dev_count(); i++)
+	RTE_ETH_FOREACH_DEV(i)
 		if(port_mask & (1 << i))
 			ports[num_ports++] = (uint8_t)i;
 
@@ -178,7 +178,6 @@ smp_port_init(uint16_t port, struct rte_mempool *mbuf_pool,
 			.rxmode = {
 				.mq_mode	= ETH_MQ_RX_RSS,
 				.split_hdr_size = 0,
-				.ignore_offload_bitfield = 1,
 				.offloads = (DEV_RX_OFFLOAD_CHECKSUM |
 					     DEV_RX_OFFLOAD_CRC_STRIP),
 			},
@@ -200,11 +199,12 @@ smp_port_init(uint16_t port, struct rte_mempool *mbuf_pool,
 	uint16_t q;
 	uint16_t nb_rxd = RX_RING_SIZE;
 	uint16_t nb_txd = TX_RING_SIZE;
+	uint64_t rss_hf_tmp;
 
 	if (rte_eal_process_type() == RTE_PROC_SECONDARY)
 		return 0;
 
-	if (port >= rte_eth_dev_count())
+	if (!rte_eth_dev_is_valid_port(port))
 		return -1;
 
 	printf("# Initialising port %u... ", port);
@@ -216,6 +216,17 @@ smp_port_init(uint16_t port, struct rte_mempool *mbuf_pool,
 	if (info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
 		port_conf.txmode.offloads |=
 			DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+
+	rss_hf_tmp = port_conf.rx_adv_conf.rss_conf.rss_hf;
+	port_conf.rx_adv_conf.rss_conf.rss_hf &= info.flow_type_rss_offloads;
+	if (port_conf.rx_adv_conf.rss_conf.rss_hf != rss_hf_tmp) {
+		printf("Port %u modified RSS hash function based on hardware support,"
+			"requested:%#"PRIx64" configured:%#"PRIx64"\n",
+			port,
+			rss_hf_tmp,
+			port_conf.rx_adv_conf.rss_conf.rss_hf);
+	}
+
 	retval = rte_eth_dev_configure(port, rx_rings, tx_rings, &port_conf);
 	if (retval < 0)
 		return retval;
@@ -236,7 +247,6 @@ smp_port_init(uint16_t port, struct rte_mempool *mbuf_pool,
 	}
 
 	txq_conf = info.default_txconf;
-	txq_conf.txq_flags = ETH_TXQ_FLAGS_IGNORE;
 	txq_conf.offloads = port_conf.txmode.offloads;
 	for (q = 0; q < tx_rings; q ++) {
 		retval = rte_eth_tx_queue_setup(port, q, nb_txd,
@@ -418,7 +428,7 @@ main(int argc, char **argv)
 	argv += ret;
 
 	/* determine the NIC devices available */
-	if (rte_eth_dev_count() == 0)
+	if (rte_eth_dev_count_avail() == 0)
 		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
 
 	/* parse application arguments (those after the EAL ones) */

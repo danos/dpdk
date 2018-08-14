@@ -5,12 +5,18 @@
 #ifndef _I40E_ETHDEV_H_
 #define _I40E_ETHDEV_H_
 
+#include <stdint.h>
+
 #include <rte_eth_ctrl.h>
 #include <rte_time.h>
 #include <rte_kvargs.h>
 #include <rte_hash.h>
+#include <rte_flow.h>
 #include <rte_flow_driver.h>
 #include <rte_tm_driver.h>
+#include "rte_pmd_i40e.h"
+
+#include "base/i40e_register.h"
 
 #define I40E_VLAN_TAG_SIZE        4
 
@@ -22,6 +28,7 @@
 #define I40E_NUM_DESC_ALIGN       32
 #define I40E_BUF_SIZE_MIN         1024
 #define I40E_FRAME_SIZE_MAX       9728
+#define I40E_TSO_FRAME_SIZE_MAX   262144
 #define I40E_QUEUE_BASE_ADDR_UNIT 128
 /* number of VSIs and queue default setting */
 #define I40E_MAX_QP_NUM_PER_VF    16
@@ -80,11 +87,19 @@
 
 #define I40E_WRITE_GLB_REG(hw, reg, value)				\
 	do {								\
+		uint32_t ori_val;					\
+		struct rte_eth_dev *dev;				\
+		ori_val = I40E_READ_REG((hw), (reg));			\
+		dev = ((struct i40e_adapter *)hw->back)->eth_dev;	\
 		I40E_PCI_REG_WRITE(I40E_PCI_REG_ADDR((hw),		\
 						     (reg)), (value));	\
-		PMD_DRV_LOG(DEBUG, "Global register 0x%08x is modified " \
-			    "with value 0x%08x",			\
-			    (reg), (value));				\
+		if (ori_val != value)					\
+			PMD_DRV_LOG(WARNING,				\
+				    "i40e device %s changed global "	\
+				    "register [0x%08x]. original: 0x%08x, " \
+				    "new: 0x%08x ",			\
+				    (dev->device->name), (reg),		\
+				    (ori_val), (value));		\
 	} while (0)
 
 /* index flex payload per layer */
@@ -170,7 +185,7 @@ enum i40e_flxpld_layer_idx {
 #define I40E_ITR_INDEX_NONE             3
 #define I40E_QUEUE_ITR_INTERVAL_DEFAULT 32 /* 32 us */
 #define I40E_QUEUE_ITR_INTERVAL_MAX     8160 /* 8160 us */
-#define I40E_VF_QUEUE_ITR_INTERVAL_DEFAULT 8160 /* 8160 us */
+#define I40E_VF_QUEUE_ITR_INTERVAL_DEFAULT 32 /* 32 us */
 /* Special FW support this floating VEB feature */
 #define FLOATING_VEB_SUPPORTED_FW_MAJ 5
 #define FLOATING_VEB_SUPPORTED_FW_MIN 0
@@ -877,9 +892,11 @@ struct i40e_customized_pctype {
 };
 
 struct i40e_rte_flow_rss_conf {
-	struct rte_eth_rss_conf rss_conf; /**< RSS parameters. */
+	struct rte_flow_action_rss conf; /**< RSS parameters. */
 	uint16_t queue_region_conf; /**< Queue region config flag */
-	uint16_t num; /**< Number of entries in queue[]. */
+	uint8_t key[(I40E_VFQF_HKEY_MAX_INDEX > I40E_PFQF_HKEY_MAX_INDEX ?
+		     I40E_VFQF_HKEY_MAX_INDEX : I40E_PFQF_HKEY_MAX_INDEX + 1) *
+		    sizeof(uint32_t)]; /* Hash key. */
 	uint16_t queue[I40E_MAX_Q_PER_TC]; /**< Queues indices to use. */
 };
 
@@ -956,6 +973,8 @@ struct i40e_pf {
 	bool gtp_support; /* 1 - support GTP-C and GTP-U */
 	/* customer customized pctype */
 	struct i40e_customized_pctype customized_pctype[I40E_CUSTOMIZED_MAX];
+	/* Switch Domain Id */
+	uint16_t switch_domain_id;
 };
 
 enum pending_msg {
@@ -1004,6 +1023,9 @@ struct i40e_vf {
 	uint32_t version_minor; /* Minor version number */
 	uint16_t promisc_flags; /* Promiscuous setting */
 	uint32_t vlan[I40E_VFTA_SIZE]; /* VLAN bit map */
+
+	struct ether_addr mc_addrs[I40E_NUM_MACADDR_MAX]; /* Multicast addrs */
+	uint16_t mc_addrs_num;   /* Multicast mac addresses number */
 
 	/* Event from pf */
 	bool dev_closed;
@@ -1058,6 +1080,20 @@ struct i40e_adapter {
 	uint64_t pctypes_mask;
 };
 
+/**
+ * Strucute to store private data for each VF representor instance
+ */
+struct i40e_vf_representor {
+	uint16_t switch_domain_id;
+	/**< Virtual Function ID */
+	uint16_t vf_id;
+	/**< Virtual Function ID */
+	struct i40e_adapter *adapter;
+	/**< Private data store of assocaiated physical function */
+	struct i40e_eth_stats stats_offset;
+	/**< Zero-point of VF statistics*/
+};
+
 extern const struct rte_flow_ops i40e_flow_ops;
 
 union i40e_filter_t {
@@ -1077,22 +1113,6 @@ typedef int (*parse_filter_t)(struct rte_eth_dev *dev,
 struct i40e_valid_pattern {
 	enum rte_flow_item_type *items;
 	parse_filter_t parse_filter;
-};
-
-enum I40E_WARNING_IDX {
-	I40E_WARNING_DIS_FLX_PLD,
-	I40E_WARNING_ENA_FLX_PLD,
-	I40E_WARNING_QINQ_PARSER,
-	I40E_WARNING_QINQ_CLOUD_FILTER,
-	I40E_WARNING_TPID,
-	I40E_WARNING_FLOW_CTL,
-	I40E_WARNING_GRE_KEY_LEN,
-	I40E_WARNING_QF_CTL,
-	I40E_WARNING_HASH_INSET,
-	I40E_WARNING_HSYM,
-	I40E_WARNING_HASH_MSK,
-	I40E_WARNING_FD_MSK,
-	I40E_WARNING_RPL_CLD_FILTER,
 };
 
 int i40e_dev_switch_queues(struct i40e_pf *pf, bool on);
@@ -1206,7 +1226,8 @@ void i40e_tm_conf_uninit(struct rte_eth_dev *dev);
 struct i40e_customized_pctype*
 i40e_find_customized_pctype(struct i40e_pf *pf, uint8_t index);
 void i40e_update_customized_info(struct rte_eth_dev *dev, uint8_t *pkg,
-				 uint32_t pkg_size);
+				 uint32_t pkg_size,
+				 enum rte_pmd_i40e_package_op op);
 int i40e_dcb_init_configure(struct rte_eth_dev *dev, bool sw_dcb);
 int i40e_flush_queue_region_all_conf(struct rte_eth_dev *dev,
 		struct i40e_hw *hw, struct i40e_pf *pf, uint16_t on);
@@ -1214,8 +1235,14 @@ void i40e_init_queue_region_conf(struct rte_eth_dev *dev);
 void i40e_flex_payload_reg_set_default(struct i40e_hw *hw);
 int i40e_set_rss_key(struct i40e_vsi *vsi, uint8_t *key, uint8_t key_len);
 int i40e_set_rss_lut(struct i40e_vsi *vsi, uint8_t *lut, uint16_t lut_size);
+int i40e_rss_conf_init(struct i40e_rte_flow_rss_conf *out,
+		       const struct rte_flow_action_rss *in);
+int i40e_action_rss_same(const struct rte_flow_action_rss *comp,
+			 const struct rte_flow_action_rss *with);
 int i40e_config_rss_filter(struct i40e_pf *pf,
 		struct i40e_rte_flow_rss_conf *conf, bool add);
+int i40e_vf_representor_init(struct rte_eth_dev *ethdev, void *init_params);
+int i40e_vf_representor_uninit(struct rte_eth_dev *ethdev);
 
 #define I40E_DEV_TO_PCI(eth_dev) \
 	RTE_DEV_TO_PCI((eth_dev)->device)
@@ -1292,48 +1319,21 @@ i40e_align_floor(int n)
 }
 
 static inline uint16_t
-i40e_calc_itr_interval(int16_t interval, bool is_pf, bool is_multi_drv)
+i40e_calc_itr_interval(bool is_pf, bool is_multi_drv)
 {
-	if (interval < 0 || interval > I40E_QUEUE_ITR_INTERVAL_MAX) {
-		if (is_multi_drv) {
-			interval = I40E_QUEUE_ITR_INTERVAL_MAX;
-		} else {
-			if (is_pf)
-				interval = I40E_QUEUE_ITR_INTERVAL_DEFAULT;
-			else
-				interval = I40E_VF_QUEUE_ITR_INTERVAL_DEFAULT;
-		}
+	uint16_t interval = 0;
+
+	if (is_multi_drv) {
+		interval = I40E_QUEUE_ITR_INTERVAL_MAX;
+	} else {
+		if (is_pf)
+			interval = I40E_QUEUE_ITR_INTERVAL_DEFAULT;
+		else
+			interval = I40E_VF_QUEUE_ITR_INTERVAL_DEFAULT;
 	}
 
 	/* Convert to hardware count, as writing each 1 represents 2 us */
 	return interval / 2;
-}
-
-static inline void
-i40e_global_cfg_warning(enum I40E_WARNING_IDX idx)
-{
-	const char *warning;
-	static const char *const warning_list[] = {
-		[I40E_WARNING_DIS_FLX_PLD] = "disable FDIR flexible payload",
-		[I40E_WARNING_ENA_FLX_PLD] = "enable FDIR flexible payload",
-		[I40E_WARNING_QINQ_PARSER] = "support QinQ parser",
-		[I40E_WARNING_QINQ_CLOUD_FILTER] = "support QinQ cloud filter",
-		[I40E_WARNING_TPID] = "support TPID configuration",
-		[I40E_WARNING_FLOW_CTL] = "configure water marker",
-		[I40E_WARNING_GRE_KEY_LEN] = "support GRE key length setting",
-		[I40E_WARNING_QF_CTL] = "support hash function setting",
-		[I40E_WARNING_HASH_INSET] = "configure hash input set",
-		[I40E_WARNING_HSYM] = "set symmetric hash",
-		[I40E_WARNING_HASH_MSK] = "configure hash mask",
-		[I40E_WARNING_FD_MSK] = "configure fdir mask",
-		[I40E_WARNING_RPL_CLD_FILTER] = "replace cloud filter",
-	};
-
-	warning = warning_list[idx];
-
-	RTE_LOG(WARNING, PMD,
-		"Global register is changed during %s\n",
-		warning);
 }
 
 #define I40E_VALID_FLOW(flow_type) \

@@ -26,7 +26,6 @@
 struct rte_eth_conf eth_conf = {
 	.rxmode = {
 		.split_hdr_size = 0,
-		.ignore_offload_bitfield = 1,
 		.offloads = DEV_RX_OFFLOAD_CRC_STRIP,
 	},
 	.txmode = {
@@ -236,7 +235,7 @@ int main(int argc, char *argv[])
 	if (ports.num == 0)
 		rte_exit(EXIT_FAILURE, "no ports specified\n");
 
-	if (rte_eth_dev_count() < 1)
+	if (rte_eth_dev_count_avail() < 1)
 		rte_exit(EXIT_FAILURE, "Not enough ethernet ports available\n");
 
 	pool = rte_pktmbuf_pool_create("mbuf_pool", MBUF_PER_POOL, 32, 0,

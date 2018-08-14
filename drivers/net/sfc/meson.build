@@ -6,7 +6,7 @@
 # This software was jointly developed between OKTET Labs (under contract
 # for Solarflare) and Solarflare Communications, Inc.
 
-if arch_subdir != 'x86'
+if arch_subdir != 'x86' or cc.sizeof('void *') == 4
 	build = false
 endif
 
@@ -29,10 +29,6 @@ extra_flags += [
 	'-Wnested-externs',
 	'-Wbad-function-cast'
 ]
-
-# Suppress ICC false positive warning on 'bulk' may be used before its
-# value is set
-extra_flags += '-wd3656'
 
 foreach flag: extra_flags
 	if cc.has_argument(flag)
@@ -58,6 +54,7 @@ sources = files(
 	'sfc_flow.c',
 	'sfc_dp.c',
 	'sfc_ef10_rx.c',
+	'sfc_ef10_essb_rx.c',
 	'sfc_ef10_tx.c'
 )
 

@@ -40,6 +40,7 @@
 #include <rte_hash.h>
 #include <rte_jhash.h>
 #include <rte_cryptodev.h>
+#include <rte_security.h>
 
 #include "ipsec.h"
 #include "parser.h"
@@ -57,10 +58,6 @@
 #define CDEV_MP_NB_OBJS 2048
 #define CDEV_MP_CACHE_SZ 64
 #define MAX_QUEUE_PAIRS 1
-
-#define OPTION_CONFIG		"config"
-#define OPTION_SINGLE_SA	"single-sa"
-#define OPTION_CRYPTODEV_MASK	"cryptodev_mask"
 
 #define BURST_TX_DRAIN_US 100 /* TX drain every ~100us */
 
@@ -124,6 +121,29 @@ struct ethaddr_info ethaddr_tbl[RTE_MAX_ETHPORTS] = {
 	{ 0, ETHADDR(0x00, 0x16, 0x3e, 0x49, 0x9e, 0xdd) }
 };
 
+#define CMD_LINE_OPT_CONFIG		"config"
+#define CMD_LINE_OPT_SINGLE_SA		"single-sa"
+#define CMD_LINE_OPT_CRYPTODEV_MASK	"cryptodev_mask"
+
+enum {
+	/* long options mapped to a short option */
+
+	/* first long only option value must be >= 256, so that we won't
+	 * conflict with short options
+	 */
+	CMD_LINE_OPT_MIN_NUM = 256,
+	CMD_LINE_OPT_CONFIG_NUM,
+	CMD_LINE_OPT_SINGLE_SA_NUM,
+	CMD_LINE_OPT_CRYPTODEV_MASK_NUM,
+};
+
+static const struct option lgopts[] = {
+	{CMD_LINE_OPT_CONFIG, 1, 0, CMD_LINE_OPT_CONFIG_NUM},
+	{CMD_LINE_OPT_SINGLE_SA, 1, 0, CMD_LINE_OPT_SINGLE_SA_NUM},
+	{CMD_LINE_OPT_CRYPTODEV_MASK, 1, 0, CMD_LINE_OPT_CRYPTODEV_MASK_NUM},
+	{NULL, 0, 0, 0}
+};
+
 /* mask of enabled ports */
 static uint32_t enabled_port_mask;
 static uint64_t enabled_cryptodev_mask = UINT64_MAX;
@@ -179,7 +199,6 @@ static struct rte_eth_conf port_conf = {
 		.split_hdr_size = 0,
 		.offloads = DEV_RX_OFFLOAD_CHECKSUM |
 			    DEV_RX_OFFLOAD_CRC_STRIP,
-		.ignore_offload_bitfield = 1,
 	},
 	.rx_adv_conf = {
 		.rss_conf = {
@@ -311,6 +330,7 @@ prepare_tx_pkt(struct rte_mbuf *pkt, uint16_t port)
 		pkt->l3_len = sizeof(struct ip);
 		pkt->l2_len = ETHER_HDR_LEN;
 
+		ip->ip_sum = 0;
 		ethhdr->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
 	} else {
 		pkt->ol_flags |= PKT_TX_IPV6;
@@ -490,11 +510,13 @@ outbound_sp(struct sp_ctx *sp, struct traffic_type *ip,
 		sa_idx = ip->res[i] & PROTECT_MASK;
 		if (ip->res[i] & DISCARD)
 			rte_pktmbuf_free(m);
+		else if (ip->res[i] & BYPASS)
+			ip->pkts[j++] = m;
 		else if (sa_idx < IPSEC_SA_MAX_ENTRIES) {
 			ipsec->res[ipsec->num] = sa_idx;
 			ipsec->pkts[ipsec->num++] = m;
-		} else /* BYPASS */
-			ip->pkts[j++] = m;
+		} else /* invalid SA idx */
+			rte_pktmbuf_free(m);
 	}
 	ip->num = j;
 }
@@ -848,7 +870,7 @@ static int32_t
 check_params(void)
 {
 	uint8_t lcore;
-	uint16_t portid, nb_ports;
+	uint16_t portid;
 	uint16_t i;
 	int32_t socket_id;
 
@@ -856,8 +878,6 @@ check_params(void)
 		printf("Error: No port/queue/core mappings\n");
 		return -1;
 	}
-
-	nb_ports = rte_eth_dev_count();
 
 	for (i = 0; i < nb_lcore_params; ++i) {
 		lcore = lcore_params[i].lcore_id;
@@ -877,7 +897,7 @@ check_params(void)
 			printf("port %u is not enabled in port mask\n", portid);
 			return -1;
 		}
-		if (portid >= nb_ports) {
+		if (!rte_eth_dev_is_valid_port(portid)) {
 			printf("port %u is not present on the board\n", portid);
 			return -1;
 		}
@@ -926,20 +946,28 @@ init_lcore_rx_queues(void)
 static void
 print_usage(const char *prgname)
 {
-	printf("%s [EAL options] -- -p PORTMASK -P -u PORTMASK"
-		"  --"OPTION_CONFIG" (port,queue,lcore)[,(port,queue,lcore]"
-		" --single-sa SAIDX -f CONFIG_FILE\n"
-		"  -p PORTMASK: hexadecimal bitmask of ports to configure\n"
-		"  -P : enable promiscuous mode\n"
-		"  -u PORTMASK: hexadecimal bitmask of unprotected ports\n"
-		"  -j FRAMESIZE: jumbo frame maximum size\n"
-		"  --"OPTION_CONFIG": (port,queue,lcore): "
-		"rx queues configuration\n"
-		"  --single-sa SAIDX: use single SA index for outbound, "
-		"bypassing the SP\n"
-		"  --cryptodev_mask MASK: hexadecimal bitmask of the "
-		"crypto devices to configure\n"
-		"  -f CONFIG_FILE: Configuration file path\n",
+	fprintf(stderr, "%s [EAL options] --"
+		" -p PORTMASK"
+		" [-P]"
+		" [-u PORTMASK]"
+		" [-j FRAMESIZE]"
+		" -f CONFIG_FILE"
+		" --config (port,queue,lcore)[,(port,queue,lcore)]"
+		" [--single-sa SAIDX]"
+		" [--cryptodev_mask MASK]"
+		"\n\n"
+		"  -p PORTMASK: Hexadecimal bitmask of ports to configure\n"
+		"  -P : Enable promiscuous mode\n"
+		"  -u PORTMASK: Hexadecimal bitmask of unprotected ports\n"
+		"  -j FRAMESIZE: Enable jumbo frame with 'FRAMESIZE' as maximum\n"
+		"                packet size\n"
+		"  -f CONFIG_FILE: Configuration file\n"
+		"  --config (port,queue,lcore): Rx queue configuration\n"
+		"  --single-sa SAIDX: Use single SA index for outbound traffic,\n"
+		"                     bypassing the SP\n"
+		"  --cryptodev_mask MASK: Hexadecimal bitmask of the crypto\n"
+		"                         devices to configure\n"
+		"\n",
 		prgname);
 }
 
@@ -1029,42 +1057,6 @@ parse_config(const char *q_arg)
 	return 0;
 }
 
-#define __STRNCMP(name, opt) (!strncmp(name, opt, sizeof(opt)))
-static int32_t
-parse_args_long_options(struct option *lgopts, int32_t option_index)
-{
-	int32_t ret = -1;
-	const char *optname = lgopts[option_index].name;
-
-	if (__STRNCMP(optname, OPTION_CONFIG)) {
-		ret = parse_config(optarg);
-		if (ret)
-			printf("invalid config\n");
-	}
-
-	if (__STRNCMP(optname, OPTION_SINGLE_SA)) {
-		ret = parse_decimal(optarg);
-		if (ret != -1) {
-			single_sa = 1;
-			single_sa_idx = ret;
-			printf("Configured with single SA index %u\n",
-					single_sa_idx);
-			ret = 0;
-		}
-	}
-
-	if (__STRNCMP(optname, OPTION_CRYPTODEV_MASK)) {
-		ret = parse_portmask(optarg);
-		if (ret != -1) {
-			enabled_cryptodev_mask = ret;
-			ret = 0;
-		}
-	}
-
-	return ret;
-}
-#undef __STRNCMP
-
 static int32_t
 parse_args(int32_t argc, char **argv)
 {
@@ -1072,12 +1064,6 @@ parse_args(int32_t argc, char **argv)
 	char **argvopt;
 	int32_t option_index;
 	char *prgname = argv[0];
-	static struct option lgopts[] = {
-		{OPTION_CONFIG, 1, 0, 0},
-		{OPTION_SINGLE_SA, 1, 0, 0},
-		{OPTION_CRYPTODEV_MASK, 1, 0, 0},
-		{NULL, 0, 0, 0}
-	};
 	int32_t f_present = 0;
 
 	argvopt = argv;
@@ -1138,11 +1124,38 @@ parse_args(int32_t argc, char **argv)
 			}
 			printf("Enabled jumbo frames size %u\n", frame_size);
 			break;
-		case 0:
-			if (parse_args_long_options(lgopts, option_index)) {
+		case CMD_LINE_OPT_CONFIG_NUM:
+			ret = parse_config(optarg);
+			if (ret) {
+				printf("Invalid config\n");
 				print_usage(prgname);
 				return -1;
 			}
+			break;
+		case CMD_LINE_OPT_SINGLE_SA_NUM:
+			ret = parse_decimal(optarg);
+			if (ret == -1) {
+				printf("Invalid argument[sa_idx]\n");
+				print_usage(prgname);
+				return -1;
+			}
+
+			/* else */
+			single_sa = 1;
+			single_sa_idx = ret;
+			printf("Configured with single SA index %u\n",
+					single_sa_idx);
+			break;
+		case CMD_LINE_OPT_CRYPTODEV_MASK_NUM:
+			ret = parse_portmask(optarg);
+			if (ret == -1) {
+				printf("Invalid argument[portmask]\n");
+				print_usage(prgname);
+				return -1;
+			}
+
+			/* else */
+			enabled_cryptodev_mask = ret;
 			break;
 		default:
 			print_usage(prgname);
@@ -1173,7 +1186,7 @@ print_ethaddr(const char *name, const struct ether_addr *eth_addr)
 
 /* Check the link status of all ports in up to 9s, and print them finally */
 static void
-check_all_ports_link_status(uint16_t port_num, uint32_t port_mask)
+check_all_ports_link_status(uint32_t port_mask)
 {
 #define CHECK_INTERVAL 100 /* 100ms */
 #define MAX_CHECK_TIME 90 /* 9s (90 * 100ms) in total */
@@ -1185,7 +1198,7 @@ check_all_ports_link_status(uint16_t port_num, uint32_t port_mask)
 	fflush(stdout);
 	for (count = 0; count <= MAX_CHECK_TIME; count++) {
 		all_ports_up = 1;
-		for (portid = 0; portid < port_num; portid++) {
+		RTE_ETH_FOREACH_DEV(portid) {
 			if ((port_mask & (1 << portid)) == 0)
 				continue;
 			memset(&link, 0, sizeof(link));
@@ -1379,11 +1392,11 @@ cryptodevs_init(void)
 
 	uint32_t max_sess_sz = 0, sess_sz;
 	for (cdev_id = 0; cdev_id < rte_cryptodev_count(); cdev_id++) {
-		sess_sz = rte_cryptodev_get_private_session_size(cdev_id);
+		sess_sz = rte_cryptodev_sym_get_private_session_size(cdev_id);
 		if (sess_sz > max_sess_sz)
 			max_sess_sz = sess_sz;
 	}
-	for (port_id = 0; port_id < rte_eth_dev_count(); port_id++) {
+	RTE_ETH_FOREACH_DEV(port_id) {
 		void *sec_ctx;
 
 		if ((enabled_port_mask & (1 << port_id)) == 0)
@@ -1429,6 +1442,12 @@ cryptodevs_init(void)
 		dev_conf.socket_id = rte_cryptodev_socket_id(cdev_id);
 		dev_conf.nb_queue_pairs = qp;
 
+		uint32_t dev_max_sess = cdev_info.sym.max_nb_sessions;
+		if (dev_max_sess != 0 && dev_max_sess < (CDEV_MP_NB_OBJS / 2))
+			rte_exit(EXIT_FAILURE,
+				"Device does not support at least %u "
+				"sessions", CDEV_MP_NB_OBJS / 2);
+
 		if (!socket_ctx[dev_conf.socket_id].session_pool) {
 			char mp_name[RTE_MEMPOOL_NAMESIZE];
 			struct rte_mempool *sess_mp;
@@ -1470,7 +1489,7 @@ cryptodevs_init(void)
 	}
 
 	/* create session pools for eth devices that implement security */
-	for (port_id = 0; port_id < rte_eth_dev_count(); port_id++) {
+	RTE_ETH_FOREACH_DEV(port_id) {
 		if ((enabled_port_mask & (1 << port_id)) &&
 				rte_eth_dev_get_sec_ctx(port_id)) {
 			int socket_id = rte_eth_dev_socket_id(port_id);
@@ -1555,6 +1574,18 @@ port_init(uint16_t portid)
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
 		local_port_conf.txmode.offloads |=
 			DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+
+	local_port_conf.rx_adv_conf.rss_conf.rss_hf &=
+		dev_info.flow_type_rss_offloads;
+	if (local_port_conf.rx_adv_conf.rss_conf.rss_hf !=
+			port_conf.rx_adv_conf.rss_conf.rss_hf) {
+		printf("Port %u modified RSS hash function based on hardware support,"
+			"requested:%#"PRIx64" configured:%#"PRIx64"\n",
+			portid,
+			port_conf.rx_adv_conf.rss_conf.rss_hf,
+			local_port_conf.rx_adv_conf.rss_conf.rss_hf);
+	}
+
 	ret = rte_eth_dev_configure(portid, nb_rx_queue, nb_tx_queue,
 			&local_port_conf);
 	if (ret < 0)
@@ -1581,7 +1612,6 @@ port_init(uint16_t portid)
 		printf("Setup txq=%u,%d,%d\n", lcore_id, tx_queueid, socket_id);
 
 		txconf = &dev_info.default_txconf;
-		txconf->txq_flags = ETH_TXQ_FLAGS_IGNORE;
 		txconf->offloads = local_port_conf.txmode.offloads;
 
 		ret = rte_eth_tx_queue_setup(portid, tx_queueid, nb_txd,
@@ -1640,13 +1670,68 @@ pool_init(struct socket_ctx *ctx, int32_t socket_id, uint32_t nb_mbuf)
 		printf("Allocated mbuf pool on socket %d\n", socket_id);
 }
 
+static inline int
+inline_ipsec_event_esn_overflow(struct rte_security_ctx *ctx, uint64_t md)
+{
+	struct ipsec_sa *sa;
+
+	/* For inline protocol processing, the metadata in the event will
+	 * uniquely identify the security session which raised the event.
+	 * Application would then need the userdata it had registered with the
+	 * security session to process the event.
+	 */
+
+	sa = (struct ipsec_sa *)rte_security_get_userdata(ctx, md);
+
+	if (sa == NULL) {
+		/* userdata could not be retrieved */
+		return -1;
+	}
+
+	/* Sequence number over flow. SA need to be re-established */
+	RTE_SET_USED(sa);
+	return 0;
+}
+
+static int
+inline_ipsec_event_callback(uint16_t port_id, enum rte_eth_event_type type,
+		 void *param, void *ret_param)
+{
+	uint64_t md;
+	struct rte_eth_event_ipsec_desc *event_desc = NULL;
+	struct rte_security_ctx *ctx = (struct rte_security_ctx *)
+					rte_eth_dev_get_sec_ctx(port_id);
+
+	RTE_SET_USED(param);
+
+	if (type != RTE_ETH_EVENT_IPSEC)
+		return -1;
+
+	event_desc = ret_param;
+	if (event_desc == NULL) {
+		printf("Event descriptor not set\n");
+		return -1;
+	}
+
+	md = event_desc->metadata;
+
+	if (event_desc->subtype == RTE_ETH_EVENT_IPSEC_ESN_OVERFLOW)
+		return inline_ipsec_event_esn_overflow(ctx, md);
+	else if (event_desc->subtype >= RTE_ETH_EVENT_IPSEC_MAX) {
+		printf("Invalid IPsec event reported\n");
+		return -1;
+	}
+
+	return -1;
+}
+
 int32_t
 main(int32_t argc, char **argv)
 {
 	int32_t ret;
 	uint32_t lcore_id;
 	uint8_t socket_id;
-	uint16_t portid, nb_ports;
+	uint16_t portid;
 
 	/* init EAL */
 	ret = rte_eal_init(argc, argv);
@@ -1664,8 +1749,6 @@ main(int32_t argc, char **argv)
 			unprotected_port_mask)
 		rte_exit(EXIT_FAILURE, "Invalid unprotected portmask 0x%x\n",
 				unprotected_port_mask);
-
-	nb_ports = rte_eth_dev_count();
 
 	if (check_params() < 0)
 		rte_exit(EXIT_FAILURE, "check_params failed\n");
@@ -1700,7 +1783,7 @@ main(int32_t argc, char **argv)
 		pool_init(&socket_ctx[socket_id], socket_id, NB_MBUF);
 	}
 
-	for (portid = 0; portid < nb_ports; portid++) {
+	RTE_ETH_FOREACH_DEV(portid) {
 		if ((enabled_port_mask & (1 << portid)) == 0)
 			continue;
 
@@ -1710,7 +1793,7 @@ main(int32_t argc, char **argv)
 	cryptodevs_init();
 
 	/* start ports */
-	for (portid = 0; portid < nb_ports; portid++) {
+	RTE_ETH_FOREACH_DEV(portid) {
 		if ((enabled_port_mask & (1 << portid)) == 0)
 			continue;
 
@@ -1727,9 +1810,12 @@ main(int32_t argc, char **argv)
 		 */
 		if (promiscuous_on)
 			rte_eth_promiscuous_enable(portid);
+
+		rte_eth_dev_callback_register(portid,
+			RTE_ETH_EVENT_IPSEC, inline_ipsec_event_callback, NULL);
 	}
 
-	check_all_ports_link_status(nb_ports, enabled_port_mask);
+	check_all_ports_link_status(enabled_port_mask);
 
 	/* launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(main_loop, NULL, CALL_MASTER);

@@ -1,17 +1,7 @@
-/*
- * Copyright (c) 2016 QLogic Corporation.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2016 - 2018 Cavium Inc.
  * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.qede_pmd for copyright and licensing details.
- */
-
-/*
- * Copyright (c) 2016 QLogic Corporation.
- * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.qede_pmd for copyright and licensing details.
+ * www.cavium.com
  */
 
 #define  CDU_REG_CID_ADDR_PARAMS_CONTEXT_SIZE_SHIFT \
@@ -1222,3 +1212,5 @@
   #define MCP_REG_CPU_STATE_SOFT_HALTED (0x1 << 10)
 #define PRS_REG_SEARCH_TENANT_ID 0x1f044cUL
 #define PGLUE_B_REG_VF_BAR1_SIZE 0x2aae68UL
+
+#define RSS_REG_RSS_RAM_MASK 0x238c10UL

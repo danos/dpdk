@@ -1,34 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright 2017 NXP.
- *   Copyright(c) 2017 Intel Corporation. All rights reserved.
- *
- *   Redistribution and use in source and binary forms, with or without
- *   modification, are permitted provided that the following conditions
- *   are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *     * Neither the name of NXP nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright 2017 NXP.
+ * Copyright(c) 2017 Intel Corporation.
  */
 
 #ifndef _RTE_SECURITY_H_
@@ -222,6 +194,8 @@ struct rte_security_ipsec_xform {
 	/**< IPsec SA Mode - transport/tunnel */
 	struct rte_security_ipsec_tunnel_param tunnel;
 	/**< Tunnel parameters, NULL for transport mode */
+	uint64_t esn_soft_limit;
+	/**< ESN for which the overflow event need to be raised */
 };
 
 /**
@@ -362,15 +336,17 @@ rte_security_set_pkt_metadata(struct rte_security_ctx *instance,
 			      struct rte_mbuf *mb, void *params);
 
 /**
- * Get userdata associated with the security session which processed the
- * packet. This userdata would be registered while creating the session, and
- * application can use this to identify the SA etc. Device-specific metadata
- * in the mbuf would be used for this.
+ * Get userdata associated with the security session. Device specific metadata
+ * provided would be used to uniquely identify the security session being
+ * referred to. This userdata would be registered while creating the session,
+ * and application can use this to identify the SA etc.
  *
- * This is valid only for inline processed ingress packets.
+ * Device specific metadata would be set in mbuf for inline processed inbound
+ * packets. In addition, the same metadata would be set for IPsec events
+ * reported by rte_eth_event framework.
  *
  * @param   instance	security instance
- * @param   md		device-specific metadata set in mbuf
+ * @param   md		device-specific metadata
  *
  * @return
  *  - On success, userdata

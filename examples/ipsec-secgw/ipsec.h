@@ -17,9 +17,12 @@
 #define RTE_LOGTYPE_IPSEC_IPIP  RTE_LOGTYPE_USER3
 
 #define MAX_PKT_BURST 32
+#define MAX_INFLIGHT 128
 #define MAX_QP_PER_LCORE 256
 
 #define MAX_DIGEST_SIZE 32 /* Bytes -- 256 bits */
+
+#define IPSEC_OFFLOAD_ESN_SOFTLIMIT 0xffffff00
 
 #define IV_OFFSET		(sizeof(struct rte_crypto_op) + \
 				sizeof(struct rte_crypto_sym_op))
@@ -188,7 +191,7 @@ ipsec_metadata_size(void)
 static inline struct ipsec_mbuf_metadata *
 get_priv(struct rte_mbuf *m)
 {
-	return RTE_PTR_ADD(m, sizeof(struct rte_mbuf));
+	return rte_mbuf_to_priv(m);
 }
 
 static inline void *

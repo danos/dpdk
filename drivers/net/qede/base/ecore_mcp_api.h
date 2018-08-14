@@ -1,9 +1,7 @@
-/*
- * Copyright (c) 2016 QLogic Corporation.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2016 - 2018 Cavium Inc.
  * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.qede_pmd for copyright and licensing details.
+ * www.cavium.com
  */
 
 #ifndef __ECORE_MCP_API_H__
@@ -593,6 +591,52 @@ enum _ecore_status_t ecore_mcp_get_mfw_ver(struct ecore_hwfn *p_hwfn,
 enum _ecore_status_t ecore_mcp_get_media_type(struct ecore_hwfn *p_hwfn,
 					      struct ecore_ptt *p_ptt,
 					      u32 *media_type);
+
+/**
+ * @brief Get transceiver data of the port.
+ *
+ * @param p_dev      - ecore dev pointer
+ * @param p_ptt
+ * @param p_transceiver_type - media type value
+ *
+ * @return enum _ecore_status_t -
+ *      ECORE_SUCCESS - Operation was successful.
+ *      ECORE_BUSY - Operation failed
+ */
+enum _ecore_status_t ecore_mcp_get_transceiver_data(struct ecore_hwfn *p_hwfn,
+						    struct ecore_ptt *p_ptt,
+						    u32 *p_tranceiver_type);
+
+/**
+ * @brief Get transceiver supported speed mask.
+ *
+ * @param p_dev      - ecore dev pointer
+ * @param p_ptt
+ * @param p_speed_mask - Bit mask of all supported speeds.
+ *
+ * @return enum _ecore_status_t -
+ *      ECORE_SUCCESS - Operation was successful.
+ *      ECORE_BUSY - Operation failed
+ */
+
+enum _ecore_status_t ecore_mcp_trans_speed_mask(struct ecore_hwfn *p_hwfn,
+						struct ecore_ptt *p_ptt,
+						u32 *p_speed_mask);
+
+/**
+ * @brief Get board configuration.
+ *
+ * @param p_dev      - ecore dev pointer
+ * @param p_ptt
+ * @param p_board_config - Board config.
+ *
+ * @return enum _ecore_status_t -
+ *      ECORE_SUCCESS - Operation was successful.
+ *      ECORE_BUSY - Operation failed
+ */
+enum _ecore_status_t ecore_mcp_get_board_config(struct ecore_hwfn *p_hwfn,
+						struct ecore_ptt *p_ptt,
+						u32 *p_board_config);
 
 /**
  * @brief - Sends a command to the MCP mailbox.

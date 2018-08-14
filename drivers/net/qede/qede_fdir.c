@@ -1,9 +1,7 @@
-/*
- * Copyright (c) 2017 QLogic Corporation.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2017 Cavium Inc.
  * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.qede_pmd for copyright and licensing details.
+ * www.cavium.com
  */
 
 #include <rte_udp.h>
@@ -141,8 +139,8 @@ qede_config_cmn_fdir_filter(struct rte_eth_dev *eth_dev,
 	if (add) {
 		SLIST_FOREACH(tmp, &qdev->fdir_info.fdir_list_head, list) {
 			if (memcmp(tmp->mz->addr, pkt, pkt_len) == 0) {
-				DP_ERR(edev, "flowdir filter exist\n");
-				rc = -EEXIST;
+				DP_INFO(edev, "flowdir filter exist\n");
+				rc = 0;
 				goto err2;
 			}
 		}
@@ -465,5 +463,8 @@ int qede_ntuple_filter_conf(struct rte_eth_dev *eth_dev,
 		udpv4_flow->src_port = ntuple->src_port;
 		udpv4_flow->dst_port = ntuple->dst_port;
 	}
+
+	fdir_entry.action.rx_queue = ntuple->queue;
+
 	return qede_config_cmn_fdir_filter(eth_dev, &fdir_entry, add);
 }

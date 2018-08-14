@@ -8,6 +8,7 @@ test_sources = files('commands.c',
 	'test_alarm.c',
 	'test_atomic.c',
 	'test_barrier.c',
+	'test_bpf.c',
 	'test_byteorder.c',
 	'test_cmdline.c',
 	'test_cmdline_cirbuf.c',
@@ -21,10 +22,10 @@ test_sources = files('commands.c',
 	'test_cpuflags.c',
 	'test_crc.c',
 	'test_cryptodev.c',
+	'test_cryptodev_asym.c',
 	'test_cryptodev_blockcipher.c',
 	'test_cycles.c',
 	'test_debug.c',
-	'test_devargs.c',
 	'test_distributor.c',
 	'test_distributor_perf.c',
 	'test_eal_flags.c',
@@ -98,6 +99,7 @@ test_sources = files('commands.c',
 )
 
 test_deps = ['acl',
+	'bpf',
 	'cfgfile',
 	'cmdline',
 	'cryptodev',
@@ -129,13 +131,14 @@ test_names = [
 	'cryptodev_qat_autotest',
 	'cryptodev_aesni_mb_autotest',
 	'cryptodev_openssl_autotest',
+	'cryptodev_openssl_asym_autotest',
 	'cryptodev_aesni_gcm_autotest',
 	'cryptodev_null_autotest',
 	'cryptodev_sw_snow3g_autotest',
 	'cryptodev_sw_kasumi_autotest',
 	'cryptodev_sw_zuc_autotest',
 	'cryptodev_sw_armv8_autotest',
-	'cryptodev_sw_mrvl_autotest',
+	'cryptodev_sw_mvsam_autotest',
 	'cryptodev_dpaa2_sec_autotest',
 	'cryptodev_dpaa_sec_autotest',
 	'cycles_autotest',
@@ -234,7 +237,20 @@ if dpdk_conf.has('RTE_LIBRTE_KNI')
 	test_deps += 'kni'
 endif
 
+cflags = machine_args
+if cc.has_argument('-Wno-format-truncation')
+    cflags += '-Wno-format-truncation'
+endif
+
 test_dep_objs = []
+compress_test_dep = dependency('zlib', required: false)
+if compress_test_dep.found()
+	test_dep_objs += compress_test_dep
+	test_sources += 'test_compressdev.c'
+	test_deps += 'compressdev'
+	test_names += 'compressdev_autotest'
+endif
+
 foreach d:test_deps
 	def_lib = get_option('default_library')
 	test_dep_objs += get_variable(def_lib + '_rte_' + d)
@@ -251,7 +267,7 @@ if get_option('tests')
 		test_sources,
 		link_whole: link_libs,
 		dependencies: test_dep_objs,
-		c_args: [machine_args, '-DALLOW_EXPERIMENTAL_API'],
+		c_args: [cflags, '-DALLOW_EXPERIMENTAL_API'],
 		install_rpath: driver_install_path,
 		install: false)
 

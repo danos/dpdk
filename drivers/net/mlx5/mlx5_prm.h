@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright 2016 6WIND S.A.
- * Copyright 2016 Mellanox.
+ * Copyright 2016 Mellanox Technologies, Ltd
  */
 
 #ifndef RTE_PMD_MLX5_PRM_H_
@@ -20,6 +20,9 @@
 
 #include <rte_vect.h>
 #include "mlx5_autoconf.h"
+
+/* RSS hash key size. */
+#define MLX5_RSS_HASH_KEY_LEN 40
 
 /* Get CQE owner bit. */
 #define MLX5_CQE_OWNER(op_own) ((op_own) & MLX5_CQE_OWNER_MASK)
@@ -106,6 +109,30 @@
 
 /* Inner L4 checksum offload (Tunneled packets only). */
 #define MLX5_ETH_WQE_L4_INNER_CSUM (1u << 5)
+
+/* Outer L4 type is TCP. */
+#define MLX5_ETH_WQE_L4_OUTER_TCP  (0u << 5)
+
+/* Outer L4 type is UDP. */
+#define MLX5_ETH_WQE_L4_OUTER_UDP  (1u << 5)
+
+/* Outer L3 type is IPV4. */
+#define MLX5_ETH_WQE_L3_OUTER_IPV4 (0u << 4)
+
+/* Outer L3 type is IPV6. */
+#define MLX5_ETH_WQE_L3_OUTER_IPV6 (1u << 4)
+
+/* Inner L4 type is TCP. */
+#define MLX5_ETH_WQE_L4_INNER_TCP (0u << 1)
+
+/* Inner L4 type is UDP. */
+#define MLX5_ETH_WQE_L4_INNER_UDP (1u << 1)
+
+/* Inner L3 type is IPV4. */
+#define MLX5_ETH_WQE_L3_INNER_IPV4 (0u << 0)
+
+/* Inner L3 type is IPV6. */
+#define MLX5_ETH_WQE_L3_INNER_IPV6 (1u << 0)
 
 /* Is flow mark valid. */
 #if RTE_BYTE_ORDER == RTE_LITTLE_ENDIAN
@@ -195,13 +222,30 @@ struct mlx5_mpw {
 	} data;
 };
 
+/* WQE for Multi-Packet RQ. */
+struct mlx5_wqe_mprq {
+	struct mlx5_wqe_srq_next_seg next_seg;
+	struct mlx5_wqe_data_seg dseg;
+};
+
+#define MLX5_MPRQ_LEN_MASK 0x000ffff
+#define MLX5_MPRQ_LEN_SHIFT 0
+#define MLX5_MPRQ_STRIDE_NUM_MASK 0x3fff0000
+#define MLX5_MPRQ_STRIDE_NUM_SHIFT 16
+#define MLX5_MPRQ_FILLER_MASK 0x80000000
+#define MLX5_MPRQ_FILLER_SHIFT 31
+
+#define MLX5_MPRQ_STRIDE_SHIFT_BYTE 2
+
 /* CQ element structure - should be equal to the cache line size */
 struct mlx5_cqe {
 #if (RTE_CACHE_LINE_SIZE == 128)
 	uint8_t padding[64];
 #endif
 	uint8_t pkt_info;
-	uint8_t rsvd0[11];
+	uint8_t rsvd0;
+	uint16_t wqe_id;
+	uint8_t rsvd3[8];
 	uint32_t rx_hash_res;
 	uint8_t rx_hash_type;
 	uint8_t rsvd1[11];
@@ -246,7 +290,10 @@ struct mlx5_cqe {
 struct mlx5_mini_cqe8 {
 	union {
 		uint32_t rx_hash_result;
-		uint32_t checksum;
+		struct {
+			uint16_t checksum;
+			uint16_t stride_idx;
+		};
 		struct {
 			uint16_t wqe_counter;
 			uint8_t  s_wqe_opcode;

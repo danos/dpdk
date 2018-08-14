@@ -106,9 +106,6 @@
 #define FM10K_MISC_VEC_ID               RTE_INTR_VEC_ZERO_OFFSET
 #define FM10K_RX_VEC_START              RTE_INTR_VEC_RXTX_OFFSET
 
-#define FM10K_SIMPLE_TX_FLAG ((uint32_t)ETH_TXQ_FLAGS_NOMULTSEGS | \
-				ETH_TXQ_FLAGS_NOOFFLOADS)
-
 struct fm10k_macvlan_filter_info {
 	uint16_t vlan_num;       /* Total VLAN number */
 	uint16_t mac_num;        /* Total mac number */
@@ -180,6 +177,7 @@ struct fm10k_rx_queue {
 	uint8_t drop_en;
 	uint8_t rx_deferred_start; /* don't start this queue in dev start. */
 	uint16_t rx_ftag_en; /* indicates FTAG RX supported */
+	uint64_t offloads; /* offloads of DEV_RX_OFFLOAD_* */
 };
 
 /*
@@ -211,7 +209,7 @@ struct fm10k_tx_queue {
 	uint16_t next_rs; /* Next pos to set RS flag */
 	uint16_t next_dd; /* Next pos to check DD flag */
 	volatile uint32_t *tail_ptr;
-	uint32_t txq_flags; /* Holds flags for this TXq */
+	uint64_t offloads; /* Offloads of DEV_TX_OFFLOAD_* */
 	uint16_t nb_desc;
 	uint16_t port_id;
 	uint8_t tx_deferred_start; /** don't start this queue in dev start. */
@@ -327,6 +325,13 @@ uint16_t fm10k_recv_scattered_pkts(void *rx_queue,
 
 int
 fm10k_dev_rx_descriptor_done(void *rx_queue, uint16_t offset);
+
+int
+fm10k_dev_rx_descriptor_status(void *rx_queue, uint16_t offset);
+
+int
+fm10k_dev_tx_descriptor_status(void *rx_queue, uint16_t offset);
+
 
 uint16_t fm10k_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 	uint16_t nb_pkts);

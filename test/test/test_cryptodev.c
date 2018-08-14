@@ -21,6 +21,8 @@
 #include <rte_cryptodev_scheduler_operations.h>
 #endif
 
+#include <rte_lcore.h>
+
 #include "test.h"
 #include "test_cryptodev.h"
 
@@ -35,6 +37,9 @@
 #include "test_cryptodev_zuc_test_vectors.h"
 #include "test_cryptodev_aead_test_vectors.h"
 #include "test_cryptodev_hmac_test_vectors.h"
+
+#define VDEV_ARGS_SIZE 100
+#define MAX_NB_SESSIONS            4
 
 static int gbl_driver_id;
 
@@ -316,40 +321,81 @@ testsuite_setup(void)
 		}
 	}
 
-	/* Create a MRVL device if required */
+	/* Create a MVSAM device if required */
 	if (gbl_driver_id == rte_cryptodev_driver_id_get(
-			RTE_STR(CRYPTODEV_MRVL_PMD))) {
-#ifndef RTE_LIBRTE_PMD_MRVL_CRYPTO
-		RTE_LOG(ERR, USER1, "CONFIG_RTE_LIBRTE_PMD_MRVL_CRYPTO must be"
-			" enabled in config file to run this testsuite.\n");
-		return TEST_FAILED;
-#endif
+			RTE_STR(CRYPTODEV_NAME_MVSAM_PMD))) {
 		nb_devs = rte_cryptodev_device_count_by_driver(
 				rte_cryptodev_driver_id_get(
-				RTE_STR(CRYPTODEV_NAME_MRVL_PMD)));
+				RTE_STR(CRYPTODEV_NAME_MVSAM_PMD)));
 		if (nb_devs < 1) {
 			ret = rte_vdev_init(
-				RTE_STR(CRYPTODEV_NAME_MRVL_PMD),
+				RTE_STR(CRYPTODEV_NAME_MVSAM_PMD),
 				NULL);
 
 			TEST_ASSERT(ret == 0, "Failed to create "
 				"instance of pmd : %s",
-				RTE_STR(CRYPTODEV_NAME_MRVL_PMD));
+				RTE_STR(CRYPTODEV_NAME_MVSAM_PMD));
+		}
+	}
+
+	/* Create an CCP device if required */
+	if (gbl_driver_id == rte_cryptodev_driver_id_get(
+			RTE_STR(CRYPTODEV_NAME_CCP_PMD))) {
+		nb_devs = rte_cryptodev_device_count_by_driver(
+				rte_cryptodev_driver_id_get(
+				RTE_STR(CRYPTODEV_NAME_CCP_PMD)));
+		if (nb_devs < 1) {
+			ret = rte_vdev_init(
+				RTE_STR(CRYPTODEV_NAME_CCP_PMD),
+				NULL);
+
+			TEST_ASSERT(ret == 0, "Failed to create "
+				"instance of pmd : %s",
+				RTE_STR(CRYPTODEV_NAME_CCP_PMD));
 		}
 	}
 
 #ifdef RTE_LIBRTE_PMD_CRYPTO_SCHEDULER
+	char vdev_args[VDEV_ARGS_SIZE] = {""};
+	char temp_str[VDEV_ARGS_SIZE] = {"mode=multi-core,"
+		"ordering=enable,name=cryptodev_test_scheduler,corelist="};
+	uint16_t slave_core_count = 0;
+	uint16_t socket_id = 0;
+
 	if (gbl_driver_id == rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_SCHEDULER_PMD))) {
 
+		/* Identify the Slave Cores
+		 * Use 2 slave cores for the device args
+		 */
+		RTE_LCORE_FOREACH_SLAVE(i) {
+			if (slave_core_count > 1)
+				break;
+			snprintf(vdev_args, sizeof(vdev_args),
+					"%s%d", temp_str, i);
+			strcpy(temp_str, vdev_args);
+			strcat(temp_str, ";");
+			slave_core_count++;
+			socket_id = lcore_config[i].socket_id;
+		}
+		if (slave_core_count != 2) {
+			RTE_LOG(ERR, USER1,
+				"Cryptodev scheduler test require at least "
+				"two slave cores to run. "
+				"Please use the correct coremask.\n");
+			return TEST_FAILED;
+		}
+		strcpy(temp_str, vdev_args);
+		snprintf(vdev_args, sizeof(vdev_args), "%s,socket_id=%d",
+				temp_str, socket_id);
+		RTE_LOG(DEBUG, USER1, "vdev_args: %s\n", vdev_args);
 		nb_devs = rte_cryptodev_device_count_by_driver(
 				rte_cryptodev_driver_id_get(
 				RTE_STR(CRYPTODEV_NAME_SCHEDULER_PMD)));
 		if (nb_devs < 1) {
 			ret = rte_vdev_init(
 				RTE_STR(CRYPTODEV_NAME_SCHEDULER_PMD),
-				NULL);
-
+					vdev_args);
 			TEST_ASSERT(ret == 0,
 				"Failed to create instance %u of"
 				" pmd : %s",
@@ -383,15 +429,24 @@ testsuite_setup(void)
 	ts_params->conf.nb_queue_pairs = info.max_nb_queue_pairs;
 	ts_params->conf.socket_id = SOCKET_ID_ANY;
 
-	unsigned int session_size = rte_cryptodev_get_private_session_size(dev_id);
+	unsigned int session_size =
+		rte_cryptodev_sym_get_private_session_size(dev_id);
 
 	/*
 	 * Create mempool with maximum number of sessions * 2,
 	 * to include the session headers
 	 */
+	if (info.sym.max_nb_sessions != 0 &&
+			info.sym.max_nb_sessions < MAX_NB_SESSIONS) {
+		RTE_LOG(ERR, USER1, "Device does not support "
+				"at least %u sessions\n",
+				MAX_NB_SESSIONS);
+		return TEST_FAILED;
+	}
+
 	ts_params->session_mpool = rte_mempool_create(
 				"test_sess_mp",
-				info.sym.max_nb_sessions * 2,
+				MAX_NB_SESSIONS * 2,
 				session_size,
 				0, 0, NULL, NULL, NULL,
 				NULL, SOCKET_ID_ANY,
@@ -539,7 +594,7 @@ test_device_configure_invalid_dev_id(void)
 	dev_id = ts_params->valid_devs[ts_params->valid_dev_count - 1];
 
 	/* Stop the device in case it's started so it can be configured */
-	rte_cryptodev_stop(ts_params->valid_devs[dev_id]);
+	rte_cryptodev_stop(dev_id);
 
 	TEST_ASSERT_SUCCESS(rte_cryptodev_configure(dev_id, &ts_params->conf),
 			"Failed test for rte_cryptodev_configure: "
@@ -1727,6 +1782,44 @@ test_AES_cipheronly_openssl_all(void)
 }
 
 static int
+test_AES_chain_ccp_all(void)
+{
+	struct crypto_testsuite_params *ts_params = &testsuite_params;
+	int status;
+
+	status = test_blockcipher_all_tests(ts_params->mbuf_pool,
+		ts_params->op_mpool,
+		ts_params->session_mpool,
+		ts_params->valid_devs[0],
+		rte_cryptodev_driver_id_get(
+		RTE_STR(CRYPTODEV_NAME_CCP_PMD)),
+		BLKCIPHER_AES_CHAIN_TYPE);
+
+	TEST_ASSERT_EQUAL(status, 0, "Test failed");
+
+	return TEST_SUCCESS;
+}
+
+static int
+test_AES_cipheronly_ccp_all(void)
+{
+	struct crypto_testsuite_params *ts_params = &testsuite_params;
+	int status;
+
+	status = test_blockcipher_all_tests(ts_params->mbuf_pool,
+		ts_params->op_mpool,
+		ts_params->session_mpool,
+		ts_params->valid_devs[0],
+		rte_cryptodev_driver_id_get(
+		RTE_STR(CRYPTODEV_NAME_CCP_PMD)),
+		BLKCIPHER_AES_CIPHERONLY_TYPE);
+
+	TEST_ASSERT_EQUAL(status, 0, "Test failed");
+
+	return TEST_SUCCESS;
+}
+
+static int
 test_AES_chain_qat_all(void)
 {
 	struct crypto_testsuite_params *ts_params = &testsuite_params;
@@ -1757,6 +1850,25 @@ test_AES_cipheronly_qat_all(void)
 		ts_params->valid_devs[0],
 		rte_cryptodev_driver_id_get(
 		RTE_STR(CRYPTODEV_NAME_QAT_SYM_PMD)),
+		BLKCIPHER_AES_CIPHERONLY_TYPE);
+
+	TEST_ASSERT_EQUAL(status, 0, "Test failed");
+
+	return TEST_SUCCESS;
+}
+
+static int
+test_AES_cipheronly_virtio_all(void)
+{
+	struct crypto_testsuite_params *ts_params = &testsuite_params;
+	int status;
+
+	status = test_blockcipher_all_tests(ts_params->mbuf_pool,
+		ts_params->op_mpool,
+		ts_params->session_mpool,
+		ts_params->valid_devs[0],
+		rte_cryptodev_driver_id_get(
+		RTE_STR(CRYPTODEV_NAME_VIRTIO_PMD)),
 		BLKCIPHER_AES_CIPHERONLY_TYPE);
 
 	TEST_ASSERT_EQUAL(status, 0, "Test failed");
@@ -1898,6 +2010,25 @@ test_authonly_openssl_all(void)
 }
 
 static int
+test_authonly_ccp_all(void)
+{
+	struct crypto_testsuite_params *ts_params = &testsuite_params;
+	int status;
+
+	status = test_blockcipher_all_tests(ts_params->mbuf_pool,
+		ts_params->op_mpool,
+		ts_params->session_mpool,
+		ts_params->valid_devs[0],
+		rte_cryptodev_driver_id_get(
+		RTE_STR(CRYPTODEV_NAME_CCP_PMD)),
+		BLKCIPHER_AUTHONLY_TYPE);
+
+	TEST_ASSERT_EQUAL(status, 0, "Test failed");
+
+	return TEST_SUCCESS;
+}
+
+static int
 test_AES_chain_armv8_all(void)
 {
 	struct crypto_testsuite_params *ts_params = &testsuite_params;
@@ -1927,7 +2058,7 @@ test_AES_chain_mrvl_all(void)
 		ts_params->session_mpool,
 		ts_params->valid_devs[0],
 		rte_cryptodev_driver_id_get(
-		RTE_STR(CRYPTODEV_NAME_MRVL_PMD)),
+		RTE_STR(CRYPTODEV_NAME_MVSAM_PMD)),
 		BLKCIPHER_AES_CHAIN_TYPE);
 
 	TEST_ASSERT_EQUAL(status, 0, "Test failed");
@@ -1946,7 +2077,7 @@ test_AES_cipheronly_mrvl_all(void)
 		ts_params->session_mpool,
 		ts_params->valid_devs[0],
 		rte_cryptodev_driver_id_get(
-		RTE_STR(CRYPTODEV_NAME_MRVL_PMD)),
+		RTE_STR(CRYPTODEV_NAME_MVSAM_PMD)),
 		BLKCIPHER_AES_CIPHERONLY_TYPE);
 
 	TEST_ASSERT_EQUAL(status, 0, "Test failed");
@@ -1965,7 +2096,7 @@ test_authonly_mrvl_all(void)
 		ts_params->session_mpool,
 		ts_params->valid_devs[0],
 		rte_cryptodev_driver_id_get(
-		RTE_STR(CRYPTODEV_NAME_MRVL_PMD)),
+		RTE_STR(CRYPTODEV_NAME_MVSAM_PMD)),
 		BLKCIPHER_AUTHONLY_TYPE);
 
 	TEST_ASSERT_EQUAL(status, 0, "Test failed");
@@ -1984,7 +2115,7 @@ test_3DES_chain_mrvl_all(void)
 		ts_params->session_mpool,
 		ts_params->valid_devs[0],
 		rte_cryptodev_driver_id_get(
-		RTE_STR(CRYPTODEV_NAME_MRVL_PMD)),
+		RTE_STR(CRYPTODEV_NAME_MVSAM_PMD)),
 		BLKCIPHER_3DES_CHAIN_TYPE);
 
 	TEST_ASSERT_EQUAL(status, 0, "Test failed");
@@ -2003,7 +2134,7 @@ test_3DES_cipheronly_mrvl_all(void)
 		ts_params->session_mpool,
 		ts_params->valid_devs[0],
 		rte_cryptodev_driver_id_get(
-		RTE_STR(CRYPTODEV_NAME_MRVL_PMD)),
+		RTE_STR(CRYPTODEV_NAME_MVSAM_PMD)),
 		BLKCIPHER_3DES_CIPHERONLY_TYPE);
 
 	TEST_ASSERT_EQUAL(status, 0, "Test failed");
@@ -3029,8 +3160,11 @@ test_kasumi_encryption_sgl(const struct kasumi_test_data *tdata)
 	struct rte_cryptodev_info dev_info;
 
 	rte_cryptodev_info_get(ts_params->valid_devs[0], &dev_info);
-	if (!(dev_info.feature_flags & RTE_CRYPTODEV_FF_MBUF_SCATTER_GATHER)) {
-		printf("Device doesn't support scatter-gather. "
+
+	uint64_t feat_flags = dev_info.feature_flags;
+
+	if (!(feat_flags & RTE_CRYPTODEV_FF_IN_PLACE_SGL)) {
+		printf("Device doesn't support in-place scatter-gather. "
 				"Test Skipped.\n");
 		return 0;
 	}
@@ -3177,8 +3311,11 @@ test_kasumi_encryption_oop_sgl(const struct kasumi_test_data *tdata)
 	struct rte_cryptodev_info dev_info;
 
 	rte_cryptodev_info_get(ts_params->valid_devs[0], &dev_info);
-	if (!(dev_info.feature_flags & RTE_CRYPTODEV_FF_MBUF_SCATTER_GATHER)) {
-		printf("Device doesn't support scatter-gather. "
+
+	uint64_t feat_flags = dev_info.feature_flags;
+	if (!(feat_flags & RTE_CRYPTODEV_FF_OOP_SGL_IN_SGL_OUT)) {
+		printf("Device doesn't support out-of-place scatter-gather "
+				"in both input and output mbufs. "
 				"Test Skipped.\n");
 		return 0;
 	}
@@ -3528,8 +3665,12 @@ test_snow3g_encryption_oop_sgl(const struct snow3g_test_data *tdata)
 	struct rte_cryptodev_info dev_info;
 
 	rte_cryptodev_info_get(ts_params->valid_devs[0], &dev_info);
-	if (!(dev_info.feature_flags & RTE_CRYPTODEV_FF_MBUF_SCATTER_GATHER)) {
-		printf("Device doesn't support scatter-gather. "
+
+	uint64_t feat_flags = dev_info.feature_flags;
+
+	if (!(feat_flags & RTE_CRYPTODEV_FF_OOP_SGL_IN_SGL_OUT)) {
+		printf("Device doesn't support out-of-place scatter-gather "
+				"in both input and output mbufs. "
 				"Test Skipped.\n");
 		return 0;
 	}
@@ -4362,10 +4503,13 @@ test_zuc_encryption_sgl(const struct wireless_test_data *tdata)
 		return -ENOTSUP;
 
 	rte_cryptodev_info_get(ts_params->valid_devs[0], &dev_info);
-	if (!(dev_info.feature_flags & RTE_CRYPTODEV_FF_MBUF_SCATTER_GATHER)) {
-		printf("Device doesn't support scatter-gather. "
+
+	uint64_t feat_flags = dev_info.feature_flags;
+
+	if (!(feat_flags & RTE_CRYPTODEV_FF_IN_PLACE_SGL)) {
+		printf("Device doesn't support in-place scatter-gather. "
 				"Test Skipped.\n");
-		return -ENOTSUP;
+		return 0;
 	}
 
 	plaintext_len = ceil_byte_length(tdata->plaintext.len);
@@ -4876,6 +5020,24 @@ test_DES_cipheronly_mb_all(void)
 
 	return TEST_SUCCESS;
 }
+static int
+test_3DES_cipheronly_mb_all(void)
+{
+	struct crypto_testsuite_params *ts_params = &testsuite_params;
+	int status;
+
+	status = test_blockcipher_all_tests(ts_params->mbuf_pool,
+		ts_params->op_mpool,
+		ts_params->session_mpool,
+		ts_params->valid_devs[0],
+		rte_cryptodev_driver_id_get(
+		RTE_STR(CRYPTODEV_NAME_AESNI_MB_PMD)),
+		BLKCIPHER_3DES_CIPHERONLY_TYPE);
+
+	TEST_ASSERT_EQUAL(status, 0, "Test failed");
+
+	return TEST_SUCCESS;
+}
 
 static int
 test_DES_docsis_mb_all(void)
@@ -4965,6 +5127,44 @@ test_3DES_cipheronly_dpaa2_sec_all(void)
 		ts_params->valid_devs[0],
 		rte_cryptodev_driver_id_get(
 		RTE_STR(CRYPTODEV_NAME_DPAA2_SEC_PMD)),
+		BLKCIPHER_3DES_CIPHERONLY_TYPE);
+
+	TEST_ASSERT_EQUAL(status, 0, "Test failed");
+
+	return TEST_SUCCESS;
+}
+
+static int
+test_3DES_chain_ccp_all(void)
+{
+	struct crypto_testsuite_params *ts_params = &testsuite_params;
+	int status;
+
+	status = test_blockcipher_all_tests(ts_params->mbuf_pool,
+		ts_params->op_mpool,
+		ts_params->session_mpool,
+		ts_params->valid_devs[0],
+		rte_cryptodev_driver_id_get(
+		RTE_STR(CRYPTODEV_NAME_CCP_PMD)),
+		BLKCIPHER_3DES_CHAIN_TYPE);
+
+	TEST_ASSERT_EQUAL(status, 0, "Test failed");
+
+	return TEST_SUCCESS;
+}
+
+static int
+test_3DES_cipheronly_ccp_all(void)
+{
+	struct crypto_testsuite_params *ts_params = &testsuite_params;
+	int status;
+
+	status = test_blockcipher_all_tests(ts_params->mbuf_pool,
+		ts_params->op_mpool,
+		ts_params->session_mpool,
+		ts_params->valid_devs[0],
+		rte_cryptodev_driver_id_get(
+		RTE_STR(CRYPTODEV_NAME_CCP_PMD)),
 		BLKCIPHER_3DES_CIPHERONLY_TYPE);
 
 	TEST_ASSERT_EQUAL(status, 0, "Test failed");
@@ -6339,10 +6539,10 @@ test_multi_session(void)
 
 	sessions = rte_malloc(NULL,
 			(sizeof(struct rte_cryptodev_sym_session *) *
-			dev_info.sym.max_nb_sessions) + 1, 0);
+			MAX_NB_SESSIONS) + 1, 0);
 
 	/* Create multiple crypto sessions*/
-	for (i = 0; i < dev_info.sym.max_nb_sessions; i++) {
+	for (i = 0; i < MAX_NB_SESSIONS; i++) {
 
 		sessions[i] = rte_cryptodev_sym_session_create(
 				ts_params->session_mpool);
@@ -6391,7 +6591,7 @@ test_multi_session(void)
 	TEST_ASSERT_NULL(sessions[i],
 			"Session creation succeeded unexpectedly!");
 
-	for (i = 0; i < dev_info.sym.max_nb_sessions; i++) {
+	for (i = 0; i < MAX_NB_SESSIONS; i++) {
 		rte_cryptodev_sym_session_clear(ts_params->valid_devs[0],
 				sessions[i]);
 		rte_cryptodev_sym_session_free(sessions[i]);
@@ -6450,13 +6650,13 @@ test_multi_session_random_usage(void)
 
 	sessions = rte_malloc(NULL,
 			(sizeof(struct rte_cryptodev_sym_session *)
-					* dev_info.sym.max_nb_sessions) + 1, 0);
+					* MAX_NB_SESSIONS) + 1, 0);
 
 	for (i = 0; i < MB_SESSION_NUMBER; i++) {
 		sessions[i] = rte_cryptodev_sym_session_create(
 				ts_params->session_mpool);
 
-		rte_memcpy(&ut_paramz[i].ut_params, &testsuite_params,
+		rte_memcpy(&ut_paramz[i].ut_params, &unittest_params,
 				sizeof(struct crypto_unittest_params));
 
 		test_AES_CBC_HMAC_SHA512_decrypt_create_session_params(
@@ -8375,8 +8575,17 @@ test_scheduler_attach_slave_op(void)
 			rte_mempool_free(ts_params->session_mpool);
 			ts_params->session_mpool = NULL;
 		}
-		unsigned int session_size = rte_cryptodev_get_private_session_size(i);
+		unsigned int session_size =
+			rte_cryptodev_sym_get_private_session_size(i);
 
+		if (info.sym.max_nb_sessions != 0 &&
+				info.sym.max_nb_sessions < MAX_NB_SESSIONS) {
+			RTE_LOG(ERR, USER1,
+					"Device does not support "
+					"at least %u sessions\n",
+					MAX_NB_SESSIONS);
+			return TEST_FAILED;
+		}
 		/*
 		 * Create mempool with maximum number of sessions * 2,
 		 * to include the session headers
@@ -8384,7 +8593,7 @@ test_scheduler_attach_slave_op(void)
 		if (ts_params->session_mpool == NULL) {
 			ts_params->session_mpool = rte_mempool_create(
 					"test_sess_mp",
-					info.sym.max_nb_sessions * 2,
+					MAX_NB_SESSIONS * 2,
 					session_size,
 					0, 0, NULL, NULL, NULL,
 					NULL, SOCKET_ID_ANY,
@@ -8428,33 +8637,47 @@ test_scheduler_detach_slave_op(void)
 }
 
 static int
-test_scheduler_mode_op(void)
+test_scheduler_mode_op(enum rte_cryptodev_scheduler_mode scheduler_mode)
 {
 	struct crypto_testsuite_params *ts_params = &testsuite_params;
 	uint8_t sched_id = ts_params->valid_devs[0];
-	struct rte_cryptodev_scheduler_ops op = {0};
-	struct rte_cryptodev_scheduler dummy_scheduler = {
-		.description = "dummy scheduler to test mode",
-		.name = "dummy scheduler",
-		.mode = CDEV_SCHED_MODE_USERDEFINED,
-		.ops = &op
-	};
-	int ret;
+	/* set mode */
+	return rte_cryptodev_scheduler_mode_set(sched_id,
+		scheduler_mode);
+}
 
-	/* set user defined mode */
-	ret = rte_cryptodev_scheduler_load_user_scheduler(sched_id,
-			&dummy_scheduler);
-	TEST_ASSERT(ret == 0,
-		"Failed to set cdev %u to user defined mode", sched_id);
+static int
+test_scheduler_mode_roundrobin_op(void)
+{
+	TEST_ASSERT(test_scheduler_mode_op(CDEV_SCHED_MODE_ROUNDROBIN) ==
+			0, "Failed to set roundrobin mode");
+	return 0;
 
-	/* set round robin mode */
-	ret = rte_cryptodev_scheduler_mode_set(sched_id,
-			CDEV_SCHED_MODE_ROUNDROBIN);
-	TEST_ASSERT(ret == 0,
-		"Failed to set cdev %u to round-robin mode", sched_id);
-	TEST_ASSERT(rte_cryptodev_scheduler_mode_get(sched_id) ==
-			CDEV_SCHED_MODE_ROUNDROBIN, "Scheduling Mode "
-					"not match");
+}
+
+static int
+test_scheduler_mode_multicore_op(void)
+{
+	TEST_ASSERT(test_scheduler_mode_op(CDEV_SCHED_MODE_MULTICORE) ==
+			0, "Failed to set multicore mode");
+
+	return 0;
+}
+
+static int
+test_scheduler_mode_failover_op(void)
+{
+	TEST_ASSERT(test_scheduler_mode_op(CDEV_SCHED_MODE_FAILOVER) ==
+			0, "Failed to set failover mode");
+
+	return 0;
+}
+
+static int
+test_scheduler_mode_pkt_size_distr_op(void)
+{
+	TEST_ASSERT(test_scheduler_mode_op(CDEV_SCHED_MODE_PKT_SIZE_DISTR) ==
+			0, "Failed to set pktsize mode");
 
 	return 0;
 }
@@ -8464,8 +8687,20 @@ static struct unit_test_suite cryptodev_scheduler_testsuite  = {
 	.setup = testsuite_setup,
 	.teardown = testsuite_teardown,
 	.unit_test_cases = {
+		/* Multi Core */
 		TEST_CASE_ST(NULL, NULL, test_scheduler_attach_slave_op),
-		TEST_CASE_ST(NULL, NULL, test_scheduler_mode_op),
+		TEST_CASE_ST(NULL, NULL, test_scheduler_mode_multicore_op),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_AES_chain_scheduler_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_AES_cipheronly_scheduler_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_authonly_scheduler_all),
+		TEST_CASE_ST(NULL, NULL, test_scheduler_detach_slave_op),
+
+		/* Round Robin */
+		TEST_CASE_ST(NULL, NULL, test_scheduler_attach_slave_op),
+		TEST_CASE_ST(NULL, NULL, test_scheduler_mode_roundrobin_op),
 		TEST_CASE_ST(ut_setup, ut_teardown,
 				test_AES_chain_scheduler_all),
 		TEST_CASE_ST(ut_setup, ut_teardown,
@@ -8473,6 +8708,29 @@ static struct unit_test_suite cryptodev_scheduler_testsuite  = {
 		TEST_CASE_ST(ut_setup, ut_teardown,
 				test_authonly_scheduler_all),
 		TEST_CASE_ST(NULL, NULL, test_scheduler_detach_slave_op),
+
+		/* Fail over */
+		TEST_CASE_ST(NULL, NULL, test_scheduler_attach_slave_op),
+		TEST_CASE_ST(NULL, NULL, test_scheduler_mode_failover_op),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_AES_chain_scheduler_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_AES_cipheronly_scheduler_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_authonly_scheduler_all),
+		TEST_CASE_ST(NULL, NULL, test_scheduler_detach_slave_op),
+
+		/* PKT SIZE */
+		TEST_CASE_ST(NULL, NULL, test_scheduler_attach_slave_op),
+		TEST_CASE_ST(NULL, NULL, test_scheduler_mode_pkt_size_distr_op),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_AES_chain_scheduler_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_AES_cipheronly_scheduler_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+					test_authonly_scheduler_all),
+		TEST_CASE_ST(NULL, NULL, test_scheduler_detach_slave_op),
+
 		TEST_CASES_END() /**< NULL terminate unit test array */
 	}
 };
@@ -8767,6 +9025,18 @@ static struct unit_test_suite cryptodev_qat_testsuite  = {
 	}
 };
 
+static struct unit_test_suite cryptodev_virtio_testsuite = {
+	.suite_name = "Crypto VIRTIO Unit Test Suite",
+	.setup = testsuite_setup,
+	.teardown = testsuite_teardown,
+	.unit_test_cases = {
+		TEST_CASE_ST(ut_setup, ut_teardown,
+				test_AES_cipheronly_virtio_all),
+
+		TEST_CASES_END() /**< NULL terminate unit test array */
+	}
+};
+
 static struct unit_test_suite cryptodev_aesni_mb_testsuite  = {
 	.suite_name = "Crypto Device AESNI MB Unit Test Suite",
 	.setup = testsuite_setup,
@@ -8780,6 +9050,8 @@ static struct unit_test_suite cryptodev_aesni_mb_testsuite  = {
 						test_DES_cipheronly_mb_all),
 		TEST_CASE_ST(ut_setup, ut_teardown,
 						test_DES_docsis_mb_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+						test_3DES_cipheronly_mb_all),
 		TEST_CASE_ST(ut_setup, ut_teardown,
 			test_AES_CCM_authenticated_encryption_test_case_128_1),
 		TEST_CASE_ST(ut_setup, ut_teardown,
@@ -9646,6 +9918,38 @@ static struct unit_test_suite cryptodev_mrvl_testsuite  = {
 	}
 };
 
+static struct unit_test_suite cryptodev_ccp_testsuite  = {
+	.suite_name = "Crypto Device CCP Unit Test Suite",
+	.setup = testsuite_setup,
+	.teardown = testsuite_teardown,
+	.unit_test_cases = {
+		TEST_CASE_ST(ut_setup, ut_teardown, test_multi_session),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+				test_multi_session_random_usage),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+				test_AES_chain_ccp_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+				test_AES_cipheronly_ccp_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+				test_3DES_chain_ccp_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+				test_3DES_cipheronly_ccp_all),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+				test_authonly_ccp_all),
+
+		/** Negative tests */
+		TEST_CASE_ST(ut_setup, ut_teardown,
+			authentication_verify_HMAC_SHA1_fail_data_corrupt),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+			authentication_verify_HMAC_SHA1_fail_tag_corrupt),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+			auth_decryption_AES128CBC_HMAC_SHA1_fail_data_corrupt),
+		TEST_CASE_ST(ut_setup, ut_teardown,
+			auth_decryption_AES128CBC_HMAC_SHA1_fail_tag_corrupt),
+
+		TEST_CASES_END() /**< NULL terminate unit test array */
+	}
+};
 
 static int
 test_cryptodev_qat(void /*argv __rte_unused, int argc __rte_unused*/)
@@ -9654,13 +9958,29 @@ test_cryptodev_qat(void /*argv __rte_unused, int argc __rte_unused*/)
 			RTE_STR(CRYPTODEV_NAME_QAT_SYM_PMD));
 
 	if (gbl_driver_id == -1) {
-		RTE_LOG(ERR, USER1, "QAT PMD must be loaded. Check if "
-				"CONFIG_RTE_LIBRTE_PMD_QAT is enabled "
-				"in config file to run this testsuite.\n");
+		RTE_LOG(ERR, USER1, "QAT PMD must be loaded. Check that both "
+		"CONFIG_RTE_LIBRTE_PMD_QAT and CONFIG_RTE_LIBRTE_PMD_QAT_SYM "
+		"are enabled in config file to run this testsuite.\n");
 		return TEST_SKIPPED;
 	}
 
 	return unit_test_suite_runner(&cryptodev_qat_testsuite);
+}
+
+static int
+test_cryptodev_virtio(void /*argv __rte_unused, int argc __rte_unused*/)
+{
+	gbl_driver_id =	rte_cryptodev_driver_id_get(
+			RTE_STR(CRYPTODEV_NAME_VIRTIO_PMD));
+
+	if (gbl_driver_id == -1) {
+		RTE_LOG(ERR, USER1, "VIRTIO PMD must be loaded. Check if "
+				"CONFIG_RTE_LIBRTE_PMD_VIRTIO_CRYPTO is enabled "
+				"in config file to run this testsuite.\n");
+		return TEST_FAILED;
+	}
+
+	return unit_test_suite_runner(&cryptodev_virtio_testsuite);
 }
 
 static int
@@ -9795,11 +10115,11 @@ static int
 test_cryptodev_mrvl(void)
 {
 	gbl_driver_id = rte_cryptodev_driver_id_get(
-			RTE_STR(CRYPTODEV_NAME_MRVL_PMD));
+			RTE_STR(CRYPTODEV_NAME_MVSAM_PMD));
 
 	if (gbl_driver_id == -1) {
-		RTE_LOG(ERR, USER1, "MRVL PMD must be loaded. Check if "
-				"CONFIG_RTE_LIBRTE_PMD_MRVL_CRYPTO is enabled "
+		RTE_LOG(ERR, USER1, "MVSAM PMD must be loaded. Check if "
+				"CONFIG_RTE_LIBRTE_PMD_MVSAM_CRYPTO is enabled "
 				"in config file to run this testsuite.\n");
 		return TEST_SKIPPED;
 	}
@@ -9867,6 +10187,22 @@ test_cryptodev_dpaa_sec(void /*argv __rte_unused, int argc __rte_unused*/)
 	return unit_test_suite_runner(&cryptodev_dpaa_sec_testsuite);
 }
 
+static int
+test_cryptodev_ccp(void)
+{
+	gbl_driver_id = rte_cryptodev_driver_id_get(
+			RTE_STR(CRYPTODEV_NAME_CCP_PMD));
+
+	if (gbl_driver_id == -1) {
+		RTE_LOG(ERR, USER1, "CCP PMD must be loaded. Check if "
+				"CONFIG_RTE_LIBRTE_PMD_CCP is enabled "
+				"in config file to run this testsuite.\n");
+		return TEST_FAILED;
+	}
+
+	return unit_test_suite_runner(&cryptodev_ccp_testsuite);
+}
+
 REGISTER_TEST_COMMAND(cryptodev_qat_autotest, test_cryptodev_qat);
 REGISTER_TEST_COMMAND(cryptodev_aesni_mb_autotest, test_cryptodev_aesni_mb);
 REGISTER_TEST_COMMAND(cryptodev_openssl_autotest, test_cryptodev_openssl);
@@ -9876,6 +10212,8 @@ REGISTER_TEST_COMMAND(cryptodev_sw_snow3g_autotest, test_cryptodev_sw_snow3g);
 REGISTER_TEST_COMMAND(cryptodev_sw_kasumi_autotest, test_cryptodev_sw_kasumi);
 REGISTER_TEST_COMMAND(cryptodev_sw_zuc_autotest, test_cryptodev_sw_zuc);
 REGISTER_TEST_COMMAND(cryptodev_sw_armv8_autotest, test_cryptodev_armv8);
-REGISTER_TEST_COMMAND(cryptodev_sw_mrvl_autotest, test_cryptodev_mrvl);
+REGISTER_TEST_COMMAND(cryptodev_sw_mvsam_autotest, test_cryptodev_mrvl);
 REGISTER_TEST_COMMAND(cryptodev_dpaa2_sec_autotest, test_cryptodev_dpaa2_sec);
 REGISTER_TEST_COMMAND(cryptodev_dpaa_sec_autotest, test_cryptodev_dpaa_sec);
+REGISTER_TEST_COMMAND(cryptodev_ccp_autotest, test_cryptodev_ccp);
+REGISTER_TEST_COMMAND(cryptodev_virtio_autotest, test_cryptodev_virtio);

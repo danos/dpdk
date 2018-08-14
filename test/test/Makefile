@@ -70,6 +70,7 @@ SRCS-y += test_memzone.c
 SRCS-y += test_bitmap.c
 SRCS-y += test_reciprocal_division.c
 SRCS-y += test_reciprocal_division_perf.c
+SRCS-y += test_fbarray.c
 
 SRCS-y += test_ring.c
 SRCS-y += test_ring_perf.c
@@ -113,6 +114,7 @@ SRCS-$(CONFIG_RTE_LIBRTE_HASH) += test_hash_perf.c
 SRCS-$(CONFIG_RTE_LIBRTE_HASH) += test_hash_functions.c
 SRCS-$(CONFIG_RTE_LIBRTE_HASH) += test_hash_scaling.c
 SRCS-$(CONFIG_RTE_LIBRTE_HASH) += test_hash_multiwriter.c
+SRCS-$(CONFIG_RTE_LIBRTE_HASH) += test_hash_readwrite.c
 
 SRCS-$(CONFIG_RTE_LIBRTE_LPM) += test_lpm.c
 SRCS-$(CONFIG_RTE_LIBRTE_LPM) += test_lpm_perf.c
@@ -161,7 +163,6 @@ SRCS-$(CONFIG_RTE_LIBRTE_DISTRIBUTOR) += test_distributor_perf.c
 
 SRCS-$(CONFIG_RTE_LIBRTE_REORDER) += test_reorder.c
 
-SRCS-y += test_devargs.c
 SRCS-y += virtual_pmd.c
 SRCS-y += packet_burst_generator.c
 SRCS-$(CONFIG_RTE_LIBRTE_ACL) += test_acl.c
@@ -180,11 +181,18 @@ SRCS-$(CONFIG_RTE_LIBRTE_PMD_RING) += test_pmd_ring_perf.c
 
 SRCS-$(CONFIG_RTE_LIBRTE_CRYPTODEV) += test_cryptodev_blockcipher.c
 SRCS-$(CONFIG_RTE_LIBRTE_CRYPTODEV) += test_cryptodev.c
+SRCS-$(CONFIG_RTE_LIBRTE_CRYPTODEV) += test_cryptodev_asym.c
+
+ifeq ($(CONFIG_RTE_COMPRESSDEV_TEST),y)
+SRCS-$(CONFIG_RTE_LIBRTE_COMPRESSDEV) += test_compressdev.c
+endif
 
 ifeq ($(CONFIG_RTE_LIBRTE_EVENTDEV),y)
 SRCS-y += test_eventdev.c
 SRCS-y += test_event_ring.c
 SRCS-y += test_event_eth_rx_adapter.c
+SRCS-y += test_event_timer_adapter.c
+SRCS-y += test_event_crypto_adapter.c
 endif
 
 ifeq ($(CONFIG_RTE_LIBRTE_RAWDEV),y)
@@ -192,6 +200,8 @@ SRCS-y += test_rawdev.c
 endif
 
 SRCS-$(CONFIG_RTE_LIBRTE_KVARGS) += test_kvargs.c
+
+SRCS-$(CONFIG_RTE_LIBRTE_BPF) += test_bpf.c
 
 CFLAGS += -DALLOW_EXPERIMENTAL_API
 
@@ -201,6 +211,11 @@ CFLAGS += $(WERROR_FLAGS)
 CFLAGS += -D_GNU_SOURCE
 
 LDLIBS += -lm
+ifeq ($(CONFIG_RTE_COMPRESSDEV_TEST),y)
+ifeq ($(CONFIG_RTE_LIBRTE_COMPRESSDEV),y)
+LDLIBS += -lz
+endif
+endif
 
 # Disable VTA for memcpy test
 ifeq ($(CONFIG_RTE_TOOLCHAIN_GCC),y)
@@ -211,6 +226,8 @@ CFLAGS_test_memcpy_perf.o += -fno-var-tracking-assignments
 # designated initializers.
 ifeq ($(shell test $(GCC_VERSION) -le 50 && echo 1), 1)
 CFLAGS_test_eventdev_sw.o += -Wno-missing-field-initializers
+CFLAGS_test_event_timer_adapter.o += -Wno-missing-field-initializers
+CFLAGS_test_event_crypto_adapter.o += -Wno-missing-field-initializers
 endif
 endif
 endif

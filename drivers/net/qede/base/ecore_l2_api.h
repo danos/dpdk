@@ -1,9 +1,7 @@
-/*
- * Copyright (c) 2016 QLogic Corporation.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2016 - 2018 Cavium Inc.
  * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.qede_pmd for copyright and licensing details.
+ * www.cavium.com
  */
 
 #ifndef __ECORE_L2_API_H__
@@ -332,7 +330,7 @@ struct ecore_sp_vport_update_params {
 	u8			anti_spoofing_en;
 	u8			update_accept_any_vlan_flg;
 	u8			accept_any_vlan;
-	unsigned long		bins[8];
+	u32			bins[8];
 	struct ecore_rss_params	*rss_params;
 	struct ecore_filter_accept_flags accept_flags;
 	struct ecore_sge_tpa_params *sge_tpa_params;

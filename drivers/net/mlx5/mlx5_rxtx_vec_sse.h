@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright 2017 6WIND S.A.
- * Copyright 2017 Mellanox.
+ * Copyright 2017 Mellanox Technologies, Ltd
  */
 
 #ifndef RTE_PMD_MLX5_RXTX_VEC_SSE_H_
@@ -107,8 +107,6 @@ txq_scatter_v(struct mlx5_txq_data *txq, struct rte_mbuf **pkts,
 
 	assert(elts_n > pkts_n);
 	mlx5_tx_complete(txq);
-	/* A CQE slot must always be available. */
-	assert((1u << txq->cqe_n) - (txq->cq_pi - txq->cq_ci));
 	if (unlikely(!pkts_n))
 		return 0;
 	for (n = 0; n < pkts_n; ++n) {
@@ -144,7 +142,7 @@ txq_scatter_v(struct mlx5_txq_data *txq, struct rte_mbuf **pkts,
 		}
 		wqe = &((volatile struct mlx5_wqe64 *)
 			 txq->wqes)[wqe_ci & wq_mask].hdr;
-		cs_flags = txq_ol_cksum_to_cs(txq, buf);
+		cs_flags = txq_ol_cksum_to_cs(buf);
 		/* Title WQEBB pointer. */
 		t_wqe = (__m128i *)wqe;
 		dseg = (__m128i *)(wqe + 1);
@@ -177,12 +175,11 @@ txq_scatter_v(struct mlx5_txq_data *txq, struct rte_mbuf **pkts,
 	txq->elts_comp += (uint16_t)(elts_head - txq->elts_head);
 	txq->elts_head = elts_head;
 	if (txq->elts_comp >= MLX5_TX_COMP_THRESH) {
+		/* A CQE slot must always be available. */
+		assert((1u << txq->cqe_n) - (txq->cq_pi++ - txq->cq_ci));
 		wqe->ctrl[2] = rte_cpu_to_be_32(8);
 		wqe->ctrl[3] = txq->elts_head;
 		txq->elts_comp = 0;
-#ifndef NDEBUG
-		++txq->cq_pi;
-#endif
 	}
 #ifdef MLX5_PMD_SOFT_COUNTERS
 	txq->stats.opackets += n;
@@ -244,8 +241,6 @@ txq_burst_v(struct mlx5_txq_data *txq, struct rte_mbuf **pkts, uint16_t pkts_n,
 	assert(elts_n > pkts_n);
 	mlx5_tx_complete(txq);
 	max_elts = (elts_n - (elts_head - txq->elts_tail));
-	/* A CQE slot must always be available. */
-	assert((1u << txq->cqe_n) - (txq->cq_pi - txq->cq_ci));
 	max_wqe = (1u << txq->wqe_n) - (txq->wqe_ci - txq->wqe_pi);
 	pkts_n = RTE_MIN((unsigned int)RTE_MIN(pkts_n, max_wqe), max_elts);
 	assert(pkts_n <= MLX5_DSEG_MAX - nb_dword_in_hdr);
@@ -283,11 +278,10 @@ txq_burst_v(struct mlx5_txq_data *txq, struct rte_mbuf **pkts, uint16_t pkts_n,
 	if (txq->elts_comp + pkts_n < MLX5_TX_COMP_THRESH) {
 		txq->elts_comp += pkts_n;
 	} else {
+		/* A CQE slot must always be available. */
+		assert((1u << txq->cqe_n) - (txq->cq_pi++ - txq->cq_ci));
 		/* Request a completion. */
 		txq->elts_comp = 0;
-#ifndef NDEBUG
-		++txq->cq_pi;
-#endif
 		comp_req = 8;
 	}
 	/* Fill CTRL in the header. */
@@ -542,6 +536,7 @@ rxq_cq_to_ptype_oflags_v(struct mlx5_rxq_data *rxq, __m128i cqes[4],
 	const __m128i mbuf_init =
 		_mm_loadl_epi64((__m128i *)&rxq->mbuf_initializer);
 	__m128i rearm0, rearm1, rearm2, rearm3;
+	uint8_t pt_idx0, pt_idx1, pt_idx2, pt_idx3;
 
 	/* Extract pkt_info field. */
 	pinfo0 = _mm_unpacklo_epi32(cqes[0], cqes[1]);
@@ -595,10 +590,18 @@ rxq_cq_to_ptype_oflags_v(struct mlx5_rxq_data *rxq, __m128i cqes[4],
 	/* Errored packets will have RTE_PTYPE_ALL_MASK. */
 	op_err = _mm_srli_epi16(op_err, 8);
 	ptype = _mm_or_si128(ptype, op_err);
-	pkts[0]->packet_type = mlx5_ptype_table[_mm_extract_epi8(ptype, 0)];
-	pkts[1]->packet_type = mlx5_ptype_table[_mm_extract_epi8(ptype, 2)];
-	pkts[2]->packet_type = mlx5_ptype_table[_mm_extract_epi8(ptype, 4)];
-	pkts[3]->packet_type = mlx5_ptype_table[_mm_extract_epi8(ptype, 6)];
+	pt_idx0 = _mm_extract_epi8(ptype, 0);
+	pt_idx1 = _mm_extract_epi8(ptype, 2);
+	pt_idx2 = _mm_extract_epi8(ptype, 4);
+	pt_idx3 = _mm_extract_epi8(ptype, 6);
+	pkts[0]->packet_type = mlx5_ptype_table[pt_idx0] |
+			       !!(pt_idx0 & (1 << 6)) * rxq->tunnel;
+	pkts[1]->packet_type = mlx5_ptype_table[pt_idx1] |
+			       !!(pt_idx1 & (1 << 6)) * rxq->tunnel;
+	pkts[2]->packet_type = mlx5_ptype_table[pt_idx2] |
+			       !!(pt_idx2 & (1 << 6)) * rxq->tunnel;
+	pkts[3]->packet_type = mlx5_ptype_table[pt_idx3] |
+			       !!(pt_idx3 & (1 << 6)) * rxq->tunnel;
 	/* Fill flags for checksum and VLAN. */
 	pinfo = _mm_and_si128(pinfo, ptype_ol_mask);
 	pinfo = _mm_shuffle_epi8(cv_flag_sel, pinfo);
@@ -715,7 +718,7 @@ rxq_burst_v(struct mlx5_rxq_data *rxq, struct rte_mbuf **pkts, uint16_t pkts_n,
 	 *   N - (rq_ci - rq_pi) := # of buffers consumed (to be replenished).
 	 */
 	repl_n = q_n - (rxq->rq_ci - rxq->rq_pi);
-	if (repl_n >= MLX5_VPMD_RXQ_RPLNSH_THRESH)
+	if (repl_n >= MLX5_VPMD_RXQ_RPLNSH_THRESH(q_n))
 		mlx5_rx_replenish_bulk_mbuf(rxq, repl_n);
 	/* See if there're unreturned mbufs from compressed CQE. */
 	rcvd_pkt = rxq->cq_ci - rxq->rq_pi;

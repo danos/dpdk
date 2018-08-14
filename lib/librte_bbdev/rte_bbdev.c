@@ -495,11 +495,20 @@ rte_bbdev_queue_configure(uint16_t dev_id, uint16_t queue_id,
 					conf->queue_size, queue_id, dev_id);
 			return -EINVAL;
 		}
-		if (conf->priority > dev_info.max_queue_priority) {
+		if (conf->op_type == RTE_BBDEV_OP_TURBO_DEC &&
+			conf->priority > dev_info.max_ul_queue_priority) {
 			rte_bbdev_log(ERR,
 					"Priority (%u) of queue %u of bdev %u must be <= %u",
 					conf->priority, queue_id, dev_id,
-					dev_info.max_queue_priority);
+					dev_info.max_ul_queue_priority);
+			return -EINVAL;
+		}
+		if (conf->op_type == RTE_BBDEV_OP_TURBO_ENC &&
+			conf->priority > dev_info.max_dl_queue_priority) {
+			rte_bbdev_log(ERR,
+					"Priority (%u) of queue %u of bdev %u must be <= %u",
+					conf->priority, queue_id, dev_id,
+					dev_info.max_dl_queue_priority);
 			return -EINVAL;
 		}
 	}
@@ -1116,9 +1125,7 @@ rte_bbdev_op_type_str(enum rte_bbdev_op_type op_type)
 	return NULL;
 }
 
-RTE_INIT(rte_bbdev_init_log);
-static void
-rte_bbdev_init_log(void)
+RTE_INIT(rte_bbdev_init_log)
 {
 	bbdev_logtype = rte_log_register("lib.bbdev");
 	if (bbdev_logtype >= 0)

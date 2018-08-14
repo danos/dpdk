@@ -24,6 +24,7 @@
 #include <rte_kvargs.h>
 #include <rte_mempool.h>
 #include <rte_ring.h>
+#include <rte_string_fns.h>
 #include <rte_pdump.h>
 
 #define CMD_LINE_OPT_PDUMP "pdump"
@@ -36,11 +37,10 @@
 #define PDUMP_RING_SIZE_ARG "ring-size"
 #define PDUMP_MSIZE_ARG "mbuf-size"
 #define PDUMP_NUM_MBUFS_ARG "total-num-mbufs"
-#define CMD_LINE_OPT_SER_SOCK_PATH "server-socket-path"
-#define CMD_LINE_OPT_CLI_SOCK_PATH "client-socket-path"
 
-#define VDEV_PCAP "net_pcap_%s_%d,tx_pcap=%s"
-#define VDEV_IFACE "net_pcap_%s_%d,tx_iface=%s"
+#define VDEV_NAME_FMT "net_pcap_%s_%d"
+#define VDEV_PCAP_ARGS_FMT "tx_pcap=%s"
+#define VDEV_IFACE_ARGS_FMT "tx_iface=%s"
 #define TX_STREAM_SIZE 64
 
 #define MP_NAME "pdump_pool_%d"
@@ -139,8 +139,6 @@ struct parse_val {
 int num_tuples;
 static struct rte_eth_conf port_conf_default;
 volatile uint8_t quit_signal;
-static char server_socket_path[PATH_MAX];
-static char client_socket_path[PATH_MAX];
 
 /**< display usage */
 static void
@@ -153,11 +151,7 @@ pdump_usage(const char *prgname)
 			" tx-dev=<iface or pcap file>,"
 			"[ring-size=<ring size>default:16384],"
 			"[mbuf-size=<mbuf data size>default:2176],"
-			"[total-num-mbufs=<number of mbufs>default:65535]'\n"
-			"[--server-socket-path=<server socket dir>"
-				"default:/var/run/.dpdk/ (or) ~/.dpdk/]\n"
-			"[--client-socket-path=<client socket dir>"
-				"default:/var/run/.dpdk/ (or) ~/.dpdk/]\n",
+			"[total-num-mbufs=<number of mbufs>default:65535]'\n",
 			prgname);
 }
 
@@ -382,8 +376,6 @@ launch_args_parse(int argc, char **argv, char *prgname)
 	int option_index;
 	static struct option long_option[] = {
 		{"pdump", 1, 0, 0},
-		{"server-socket-path", 1, 0, 0},
-		{"client-socket-path", 1, 0, 0},
 		{NULL, 0, 0, 0}
 	};
 
@@ -404,23 +396,6 @@ launch_args_parse(int argc, char **argv, char *prgname)
 					return -1;
 				}
 			}
-
-			if (!strncmp(long_option[option_index].name,
-					CMD_LINE_OPT_SER_SOCK_PATH,
-					sizeof(CMD_LINE_OPT_SER_SOCK_PATH))) {
-				snprintf(server_socket_path,
-					sizeof(server_socket_path), "%s",
-					optarg);
-			}
-
-			if (!strncmp(long_option[option_index].name,
-					CMD_LINE_OPT_CLI_SOCK_PATH,
-					sizeof(CMD_LINE_OPT_CLI_SOCK_PATH))) {
-				snprintf(client_socket_path,
-					sizeof(client_socket_path), "%s",
-					optarg);
-			}
-
 			break;
 		default:
 			pdump_usage(prgname);
@@ -554,11 +529,10 @@ configure_vdev(uint16_t port_id)
 {
 	struct ether_addr addr;
 	const uint16_t rxRings = 0, txRings = 1;
-	const uint8_t nb_ports = rte_eth_dev_count();
 	int ret;
 	uint16_t q;
 
-	if (port_id > nb_ports)
+	if (!rte_eth_dev_is_valid_port(port_id))
 		return -1;
 
 	ret = rte_eth_dev_configure(port_id, rxRings, txRings,
@@ -597,6 +571,7 @@ create_mp_ring_vdev(void)
 	uint16_t portid;
 	struct pdump_tuples *pt = NULL;
 	struct rte_mempool *mbuf_pool = NULL;
+	char vdev_name[SIZE];
 	char vdev_args[SIZE];
 	char ring_name[SIZE];
 	char mempool_name[SIZE];
@@ -646,16 +621,27 @@ create_mp_ring_vdev(void)
 			}
 
 			/* create vdevs */
+			snprintf(vdev_name, sizeof(vdev_name),
+				 VDEV_NAME_FMT, RX_STR, i);
 			(pt->rx_vdev_stream_type == IFACE) ?
-			snprintf(vdev_args, SIZE, VDEV_IFACE, RX_STR, i,
-			pt->rx_dev) :
-			snprintf(vdev_args, SIZE, VDEV_PCAP, RX_STR, i,
-			pt->rx_dev);
-			if (rte_eth_dev_attach(vdev_args, &portid) < 0) {
+			snprintf(vdev_args, sizeof(vdev_args),
+				 VDEV_IFACE_ARGS_FMT, pt->rx_dev) :
+			snprintf(vdev_args, sizeof(vdev_args),
+				 VDEV_PCAP_ARGS_FMT, pt->rx_dev);
+			if (rte_eal_hotplug_add("vdev", vdev_name,
+						vdev_args) < 0) {
 				cleanup_rings();
 				rte_exit(EXIT_FAILURE,
 					"vdev creation failed:%s:%d\n",
 					__func__, __LINE__);
+			}
+			if (rte_eth_dev_get_port_by_name(vdev_name,
+							 &portid) != 0) {
+				rte_eal_hotplug_remove("vdev", vdev_name);
+				cleanup_rings();
+				rte_exit(EXIT_FAILURE,
+					"cannot find added vdev %s:%s:%d\n",
+					vdev_name, __func__, __LINE__);
 			}
 			pt->rx_vdev_id = portid;
 
@@ -665,17 +651,28 @@ create_mp_ring_vdev(void)
 			if (pt->single_pdump_dev)
 				pt->tx_vdev_id = portid;
 			else {
-				(pt->tx_vdev_stream_type == IFACE) ?
-				snprintf(vdev_args, SIZE, VDEV_IFACE, TX_STR, i,
-				pt->tx_dev) :
-				snprintf(vdev_args, SIZE, VDEV_PCAP, TX_STR, i,
-				pt->tx_dev);
-				if (rte_eth_dev_attach(vdev_args,
-							&portid) < 0) {
+				snprintf(vdev_name, sizeof(vdev_name),
+					 VDEV_NAME_FMT, TX_STR, i);
+				(pt->rx_vdev_stream_type == IFACE) ?
+				snprintf(vdev_args, sizeof(vdev_args),
+					 VDEV_IFACE_ARGS_FMT, pt->tx_dev) :
+				snprintf(vdev_args, sizeof(vdev_args),
+					 VDEV_PCAP_ARGS_FMT, pt->tx_dev);
+				if (rte_eal_hotplug_add("vdev", vdev_name,
+							vdev_args) < 0) {
 					cleanup_rings();
 					rte_exit(EXIT_FAILURE,
 						"vdev creation failed:"
 						"%s:%d\n", __func__, __LINE__);
+				}
+				if (rte_eth_dev_get_port_by_name(vdev_name,
+						&portid) != 0) {
+					rte_eal_hotplug_remove("vdev",
+							       vdev_name);
+					cleanup_rings();
+					rte_exit(EXIT_FAILURE,
+						"cannot find added vdev %s:%s:%d\n",
+						vdev_name, __func__, __LINE__);
 				}
 				pt->tx_vdev_id = portid;
 
@@ -694,16 +691,27 @@ create_mp_ring_vdev(void)
 					rte_strerror(rte_errno));
 			}
 
+			snprintf(vdev_name, sizeof(vdev_name),
+				 VDEV_NAME_FMT, RX_STR, i);
 			(pt->rx_vdev_stream_type == IFACE) ?
-			snprintf(vdev_args, SIZE, VDEV_IFACE, RX_STR, i,
-				pt->rx_dev) :
-			snprintf(vdev_args, SIZE, VDEV_PCAP, RX_STR, i,
-				pt->rx_dev);
-			if (rte_eth_dev_attach(vdev_args, &portid) < 0) {
+			snprintf(vdev_args, sizeof(vdev_args),
+				 VDEV_IFACE_ARGS_FMT, pt->rx_dev) :
+			snprintf(vdev_args, sizeof(vdev_args),
+				 VDEV_PCAP_ARGS_FMT, pt->rx_dev);
+			if (rte_eal_hotplug_add("vdev", vdev_name,
+						vdev_args) < 0) {
 				cleanup_rings();
 				rte_exit(EXIT_FAILURE,
 					"vdev creation failed:%s:%d\n",
 					__func__, __LINE__);
+			}
+			if (rte_eth_dev_get_port_by_name(vdev_name,
+							 &portid) != 0) {
+				rte_eal_hotplug_remove("vdev", vdev_name);
+				cleanup_rings();
+				rte_exit(EXIT_FAILURE,
+					"cannot find added vdev %s:%s:%d\n",
+					vdev_name, __func__, __LINE__);
 			}
 			pt->rx_vdev_id = portid;
 			/* configure vdev */
@@ -720,15 +728,26 @@ create_mp_ring_vdev(void)
 					rte_strerror(rte_errno));
 			}
 
+			snprintf(vdev_name, sizeof(vdev_name),
+				 VDEV_NAME_FMT, TX_STR, i);
 			(pt->tx_vdev_stream_type == IFACE) ?
-			snprintf(vdev_args, SIZE, VDEV_IFACE, TX_STR, i,
-				pt->tx_dev) :
-			snprintf(vdev_args, SIZE, VDEV_PCAP, TX_STR, i,
-				pt->tx_dev);
-			if (rte_eth_dev_attach(vdev_args, &portid) < 0) {
+			snprintf(vdev_args, sizeof(vdev_args),
+				 VDEV_IFACE_ARGS_FMT, pt->tx_dev) :
+			snprintf(vdev_args, sizeof(vdev_args),
+				 VDEV_PCAP_ARGS_FMT, pt->tx_dev);
+			if (rte_eal_hotplug_add("vdev", vdev_name,
+						vdev_args) < 0) {
 				cleanup_rings();
 				rte_exit(EXIT_FAILURE,
 					"vdev creation failed\n");
+			}
+			if (rte_eth_dev_get_port_by_name(vdev_name,
+							 &portid) != 0) {
+				rte_eal_hotplug_remove("vdev", vdev_name);
+				cleanup_rings();
+				rte_exit(EXIT_FAILURE,
+					"cannot find added vdev %s:%s:%d\n",
+					vdev_name, __func__, __LINE__);
 			}
 			pt->tx_vdev_id = portid;
 
@@ -744,22 +763,6 @@ enable_pdump(void)
 	int i;
 	struct pdump_tuples *pt;
 	int ret = 0, ret1 = 0;
-
-	if (server_socket_path[0] != 0)
-		ret = rte_pdump_set_socket_dir(server_socket_path,
-				RTE_PDUMP_SOCKET_SERVER);
-	if (ret == 0 && client_socket_path[0] != 0) {
-		ret = rte_pdump_set_socket_dir(client_socket_path,
-				RTE_PDUMP_SOCKET_CLIENT);
-	}
-	if (ret < 0) {
-		cleanup_pdump_resources();
-		rte_exit(EXIT_FAILURE,
-				"failed to set socket paths of server:%s, "
-				"client:%s\n",
-				server_socket_path,
-				client_socket_path);
-	}
 
 	for (i = 0; i < num_tuples; i++) {
 		pt = &pdump_t[i];
@@ -862,6 +865,9 @@ main(int argc, char **argv)
 	diag = rte_eal_init(argc, argp);
 	if (diag < 0)
 		rte_panic("Cannot init EAL\n");
+
+	if (rte_eth_dev_count_avail() == 0)
+		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
 
 	argc -= diag;
 	argv += (diag - 3);

@@ -15,7 +15,6 @@
 #include <rte_memcpy.h>
 #include <rte_vfio.h>
 
-#include "eal_private.h"
 #include "eal_filesystem.h"
 
 #include "private.h"
@@ -33,7 +32,8 @@
 extern struct rte_pci_bus rte_pci_bus;
 
 static int
-pci_get_kernel_driver_by_path(const char *filename, char *dri_name)
+pci_get_kernel_driver_by_path(const char *filename, char *dri_name,
+			      size_t len)
 {
 	int count;
 	char path[PATH_MAX];
@@ -54,7 +54,7 @@ pci_get_kernel_driver_by_path(const char *filename, char *dri_name)
 
 	name = strrchr(path, '/');
 	if (name) {
-		strncpy(dri_name, name + 1, strlen(name + 1) + 1);
+		strlcpy(dri_name, name + 1, len);
 		return 0;
 	}
 
@@ -116,23 +116,27 @@ rte_pci_unmap_device(struct rte_pci_device *dev)
 	}
 }
 
+static int
+find_max_end_va(const struct rte_memseg_list *msl, void *arg)
+{
+	size_t sz = msl->memseg_arr.len * msl->page_sz;
+	void *end_va = RTE_PTR_ADD(msl->base_va, sz);
+	void **max_va = arg;
+
+	if (*max_va < end_va)
+		*max_va = end_va;
+	return 0;
+}
+
 void *
 pci_find_max_end_va(void)
 {
-	const struct rte_memseg *seg = rte_eal_get_physmem_layout();
-	const struct rte_memseg *last = seg;
-	unsigned i = 0;
+	void *va = NULL;
 
-	for (i = 0; i < RTE_MAX_MEMSEG; i++, seg++) {
-		if (seg->addr == NULL)
-			break;
-
-		if (seg->addr > last->addr)
-			last = seg;
-
-	}
-	return RTE_PTR_ADD(last->addr, last->len);
+	rte_memseg_list_walk(find_max_end_va, &va);
+	return va;
 }
+
 
 /* parse one line of the "resource" sysfs file (note that the 'line'
  * string is modified)
@@ -310,7 +314,7 @@ pci_scan_one(const char *dirname, const struct rte_pci_addr *addr)
 
 	/* parse driver */
 	snprintf(filename, sizeof(filename), "%s/driver", dirname);
-	ret = pci_get_kernel_driver_by_path(filename, driver);
+	ret = pci_get_kernel_driver_by_path(filename, driver, sizeof(driver));
 	if (ret < 0) {
 		RTE_LOG(ERR, EAL, "Fail to get kernel driver\n");
 		free(dev);

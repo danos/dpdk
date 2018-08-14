@@ -44,6 +44,7 @@ Sample Applications User Guides
     vmdq_dcb_forwarding
     vhost
     vhost_scsi
+    vhost_crypto
     netmap_compatibility
     ip_pipeline
     test_pipeline
@@ -81,10 +82,6 @@ Sample Applications User Guides
 :numref:`figure_sym_multi_proc_app` :ref:`figure_sym_multi_proc_app`
 
 :numref:`figure_client_svr_sym_multi_proc_app` :ref:`figure_client_svr_sym_multi_proc_app`
-
-:numref:`figure_master_slave_proc` :ref:`figure_master_slave_proc`
-
-:numref:`figure_slave_proc_recov` :ref:`figure_slave_proc_recov`
 
 :numref:`figure_qos_sched_app_arch` :ref:`figure_qos_sched_app_arch`
 

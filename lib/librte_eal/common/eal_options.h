@@ -45,8 +45,12 @@ enum {
 	OPT_NO_PCI_NUM,
 #define OPT_NO_SHCONF         "no-shconf"
 	OPT_NO_SHCONF_NUM,
+#define OPT_IN_MEMORY         "in-memory"
+	OPT_IN_MEMORY_NUM,
 #define OPT_SOCKET_MEM        "socket-mem"
 	OPT_SOCKET_MEM_NUM,
+#define OPT_SOCKET_LIMIT        "socket-limit"
+	OPT_SOCKET_LIMIT_NUM,
 #define OPT_SYSLOG            "syslog"
 	OPT_SYSLOG_NUM,
 #define OPT_VDEV              "vdev"
@@ -55,6 +59,10 @@ enum {
 	OPT_VFIO_INTR_NUM,
 #define OPT_VMWARE_TSC_MAP    "vmware-tsc-map"
 	OPT_VMWARE_TSC_MAP_NUM,
+#define OPT_LEGACY_MEM    "legacy-mem"
+	OPT_LEGACY_MEM_NUM,
+#define OPT_SINGLE_FILE_SEGMENTS    "single-file-segments"
+	OPT_SINGLE_FILE_SEGMENTS_NUM,
 	OPT_LONG_MAX_NUM
 };
 

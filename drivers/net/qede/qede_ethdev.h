@@ -1,9 +1,7 @@
-/*
- * Copyright (c) 2016 QLogic Corporation.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2016 - 2018 Cavium Inc.
  * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.qede_pmd for copyright and licensing details.
+ * www.cavium.com
  */
 
 
@@ -34,6 +32,7 @@
 #include "base/nvm_cfg.h"
 #include "base/ecore_sp_commands.h"
 #include "base/ecore_l2.h"
+#include "base/ecore_vf.h"
 
 #include "qede_logs.h"
 #include "qede_if.h"
@@ -45,7 +44,7 @@
 /* Driver versions */
 #define QEDE_PMD_VER_PREFIX		"QEDE PMD"
 #define QEDE_PMD_VERSION_MAJOR		2
-#define QEDE_PMD_VERSION_MINOR	        7
+#define QEDE_PMD_VERSION_MINOR	        9
 #define QEDE_PMD_VERSION_REVISION       0
 #define QEDE_PMD_VERSION_PATCH	        1
 
@@ -170,7 +169,7 @@ struct qede_fdir_info {
 #define QEDE_VXLAN_DEF_PORT			(4789)
 #define QEDE_GENEVE_DEF_PORT			(6081)
 
-struct qede_udp_tunn {
+struct qede_tunn_params {
 	bool enable;
 	uint16_t num_filters;
 	uint16_t filter_type;
@@ -205,8 +204,9 @@ struct qede_dev {
 	SLIST_HEAD(uc_list_head, qede_ucast_entry) uc_list_head;
 	uint16_t num_uc_addr;
 	bool handle_hw_err;
-	struct qede_udp_tunn vxlan;
-	struct qede_udp_tunn geneve;
+	struct qede_tunn_params vxlan;
+	struct qede_tunn_params geneve;
+	struct qede_tunn_params ipgre;
 	struct qede_fdir_info fdir_info;
 	bool vlan_strip_flg;
 	char drv_ver[QEDE_PMD_DRV_VER_STR_SIZE];

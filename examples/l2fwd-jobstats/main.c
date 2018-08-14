@@ -90,7 +90,6 @@ struct rte_eth_dev_tx_buffer *tx_buffer[RTE_MAX_ETHPORTS];
 static struct rte_eth_conf port_conf = {
 	.rxmode = {
 		.split_hdr_size = 0,
-		.ignore_offload_bitfield = 1,
 		.offloads = DEV_RX_OFFLOAD_CRC_STRIP,
 	},
 	.txmode = {
@@ -680,7 +679,7 @@ l2fwd_parse_args(int argc, char **argv)
 
 /* Check the link status of all ports in up to 9s, and print them finally */
 static void
-check_all_ports_link_status(uint16_t port_num, uint32_t port_mask)
+check_all_ports_link_status(uint32_t port_mask)
 {
 #define CHECK_INTERVAL 100 /* 100ms */
 #define MAX_CHECK_TIME 90 /* 9s (90 * 100ms) in total */
@@ -692,7 +691,7 @@ check_all_ports_link_status(uint16_t port_num, uint32_t port_mask)
 	fflush(stdout);
 	for (count = 0; count <= MAX_CHECK_TIME; count++) {
 		all_ports_up = 1;
-		for (portid = 0; portid < port_num; portid++) {
+		RTE_ETH_FOREACH_DEV(portid) {
 			if ((port_mask & (1 << portid)) == 0)
 				continue;
 			memset(&link, 0, sizeof(link));
@@ -742,7 +741,7 @@ main(int argc, char **argv)
 	int ret;
 	char name[RTE_JOBSTATS_NAMESIZE];
 	uint16_t nb_ports;
-	uint16_t nb_ports_available;
+	uint16_t nb_ports_available = 0;
 	uint16_t portid, last_port;
 	uint8_t i;
 
@@ -770,7 +769,7 @@ main(int argc, char **argv)
 	if (l2fwd_pktmbuf_pool == NULL)
 		rte_exit(EXIT_FAILURE, "Cannot init mbuf pool\n");
 
-	nb_ports = rte_eth_dev_count();
+	nb_ports = rte_eth_dev_count_avail();
 	if (nb_ports == 0)
 		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
 
@@ -782,7 +781,7 @@ main(int argc, char **argv)
 	/*
 	 * Each logical core is assigned a dedicated TX queue on each port.
 	 */
-	for (portid = 0; portid < nb_ports; portid++) {
+	RTE_ETH_FOREACH_DEV(portid) {
 		/* skip ports that are not enabled */
 		if ((l2fwd_enabled_port_mask & (1 << portid)) == 0)
 			continue;
@@ -804,7 +803,7 @@ main(int argc, char **argv)
 	qconf = NULL;
 
 	/* Initialize the port/queue configuration of each logical core */
-	for (portid = 0; portid < nb_ports; portid++) {
+	RTE_ETH_FOREACH_DEV(portid) {
 		/* skip ports that are not enabled */
 		if ((l2fwd_enabled_port_mask & (1 << portid)) == 0)
 			continue;
@@ -827,10 +826,8 @@ main(int argc, char **argv)
 		printf("Lcore %u: RX port %u\n", rx_lcore_id, portid);
 	}
 
-	nb_ports_available = nb_ports;
-
 	/* Initialise each port */
-	for (portid = 0; portid < nb_ports; portid++) {
+	RTE_ETH_FOREACH_DEV(portid) {
 		struct rte_eth_dev_info dev_info;
 		struct rte_eth_rxconf rxq_conf;
 		struct rte_eth_txconf txq_conf;
@@ -839,9 +836,10 @@ main(int argc, char **argv)
 		/* skip ports that are not enabled */
 		if ((l2fwd_enabled_port_mask & (1 << portid)) == 0) {
 			printf("Skipping disabled port %u\n", portid);
-			nb_ports_available--;
 			continue;
 		}
+		nb_ports_available++;
+
 		/* init port */
 		printf("Initializing port %u... ", portid);
 		fflush(stdout);
@@ -877,7 +875,6 @@ main(int argc, char **argv)
 
 		/* init one TX queue on each port */
 		txq_conf = dev_info.default_txconf;
-		txq_conf.txq_flags = ETH_TXQ_FLAGS_IGNORE;
 		txq_conf.offloads = local_port_conf.txmode.offloads;
 		fflush(stdout);
 		ret = rte_eth_tx_queue_setup(portid, 0, nb_txd,
@@ -934,7 +931,7 @@ main(int argc, char **argv)
 			"All available ports are disabled. Please set portmask.\n");
 	}
 
-	check_all_ports_link_status(nb_ports, l2fwd_enabled_port_mask);
+	check_all_ports_link_status(l2fwd_enabled_port_mask);
 
 	drain_tsc = (hz + US_PER_S - 1) / US_PER_S * BURST_TX_DRAIN_US;
 

@@ -51,6 +51,10 @@
 /*Maximum number of slots available in TX ring*/
 #define DPAA_TX_BURST_SIZE	7
 
+/* Optimal burst size for RX and TX as default */
+#define DPAA_DEF_RX_BURST_SIZE 7
+#define DPAA_DEF_TX_BURST_SIZE DPAA_TX_BURST_SIZE
+
 #ifndef VLAN_TAG_SIZE
 #define VLAN_TAG_SIZE   4 /** < Vlan Header Length */
 #endif
@@ -74,14 +78,10 @@
 #define DPAA_DEBUG_FQ_TX_ERROR   1
 
 #define DPAA_RSS_OFFLOAD_ALL ( \
-	ETH_RSS_FRAG_IPV4 | \
-	ETH_RSS_NONFRAG_IPV4_TCP | \
-	ETH_RSS_NONFRAG_IPV4_UDP | \
-	ETH_RSS_NONFRAG_IPV4_SCTP | \
-	ETH_RSS_FRAG_IPV6 | \
-	ETH_RSS_NONFRAG_IPV6_TCP | \
-	ETH_RSS_NONFRAG_IPV6_UDP | \
-	ETH_RSS_NONFRAG_IPV6_SCTP)
+	ETH_RSS_IP | \
+	ETH_RSS_UDP | \
+	ETH_RSS_TCP | \
+	ETH_RSS_SCTP)
 
 #define DPAA_TX_CKSUM_OFFLOAD_MASK (             \
 		PKT_TX_IP_CKSUM |                \
@@ -160,12 +160,14 @@ struct dpaa_if_stats {
 	uint64_t tund;		/**<Tx Undersized */
 };
 
-int __rte_experimental dpaa_eth_eventq_attach(const struct rte_eth_dev *dev,
-			   int eth_rx_queue_id,
+int
+dpaa_eth_eventq_attach(const struct rte_eth_dev *dev,
+		int eth_rx_queue_id,
 		u16 ch_id,
 		const struct rte_event_eth_rx_adapter_queue_conf *queue_conf);
 
-int __rte_experimental dpaa_eth_eventq_detach(const struct rte_eth_dev *dev,
+int
+dpaa_eth_eventq_detach(const struct rte_eth_dev *dev,
 			   int eth_rx_queue_id);
 
 enum qman_cb_dqrr_result

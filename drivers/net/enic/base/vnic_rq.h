@@ -6,6 +6,7 @@
 #ifndef _VNIC_RQ_H_
 #define _VNIC_RQ_H_
 
+#include <stdbool.h>
 
 #include "vnic_dev.h"
 #include "vnic_cq.h"
@@ -51,6 +52,8 @@ struct vnic_rq {
 	struct vnic_dev *vdev;
 	struct vnic_rq_ctrl __iomem *ctrl;	/* memory-mapped */
 	struct vnic_dev_ring ring;
+	struct rte_mbuf **free_mbufs;		/* reserve of free mbufs */
+	int num_free_mbufs;
 	struct rte_mbuf **mbuf_ring;		/* array of allocated mbufs */
 	unsigned int mbuf_next_idx;		/* next mb to consume */
 	void *os_buf_head;
@@ -69,6 +72,7 @@ struct vnic_rq {
 	struct rte_mbuf *pkt_last_seg;
 	unsigned int max_mbufs_per_pkt;
 	uint16_t tot_nb_desc;
+	bool need_initial_post;
 };
 
 static inline unsigned int vnic_rq_desc_avail(struct vnic_rq *rq)

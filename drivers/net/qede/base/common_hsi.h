@@ -1,9 +1,7 @@
-/*
- * Copyright (c) 2016 QLogic Corporation.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2016 - 2018 Cavium Inc.
  * All rights reserved.
- * www.qlogic.com
- *
- * See LICENSE.qede_pmd for copyright and licensing details.
+ * www.cavium.com
  */
 
 #ifndef __COMMON_HSI__
@@ -96,10 +94,10 @@
 /****************************************************************************/
 
 
-#define FW_MAJOR_VERSION		8
-#define FW_MINOR_VERSION		30
-#define FW_REVISION_VERSION		12
-#define FW_ENGINEERING_VERSION	0
+#define FW_MAJOR_VERSION        8
+#define FW_MINOR_VERSION        33
+#define FW_REVISION_VERSION     12
+#define FW_ENGINEERING_VERSION  0
 
 /***********************/
 /* COMMON HW CONSTANTS */

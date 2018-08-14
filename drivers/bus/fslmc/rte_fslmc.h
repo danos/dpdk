@@ -31,6 +31,7 @@ extern "C" {
 #include <rte_dev.h>
 #include <rte_bus.h>
 #include <rte_tailq.h>
+#include <rte_devargs.h>
 
 #include <fslmc_vfio.h>
 
@@ -49,6 +50,9 @@ struct rte_dpaa2_driver;
 TAILQ_HEAD(rte_fslmc_device_list, rte_dpaa2_device);
 TAILQ_HEAD(rte_fslmc_driver_list, rte_dpaa2_driver);
 
+#define RTE_DEV_TO_FSLMC_CONST(ptr) \
+	container_of(ptr, const struct rte_dpaa2_device, device)
+
 extern struct rte_fslmc_bus rte_fslmc_bus;
 
 enum rte_dpaa2_dev_type {
@@ -61,6 +65,7 @@ enum rte_dpaa2_dev_type {
 	DPAA2_IO,	/**< DPIO type device */
 	DPAA2_CI,	/**< DPCI type device */
 	DPAA2_MPORTAL,  /**< DPMCP type device */
+	DPAA2_QDMA,     /**< DPDMAI type device */
 	/* Unknown device placeholder */
 	DPAA2_UNKNOWN,
 	DPAA2_DEVTYPE_MAX,
@@ -91,6 +96,7 @@ struct rte_dpaa2_device {
 	union {
 		struct rte_eth_dev *eth_dev;        /**< ethernet device */
 		struct rte_cryptodev *cryptodev;    /**< Crypto Device */
+		struct rte_rawdev *rawdev;          /**< Raw Device */
 	};
 	enum rte_dpaa2_dev_type dev_type;   /**< Device Type */
 	uint16_t object_id;                 /**< DPAA2 Object ID */
@@ -167,8 +173,7 @@ void rte_fslmc_driver_unregister(struct rte_dpaa2_driver *driver);
 
 /** Helper for DPAA2 device registration from driver (eth, crypto) instance */
 #define RTE_PMD_REGISTER_DPAA2(nm, dpaa2_drv) \
-RTE_INIT(dpaa2initfn_ ##nm); \
-static void dpaa2initfn_ ##nm(void) \
+RTE_INIT(dpaa2initfn_ ##nm) \
 {\
 	(dpaa2_drv).driver.name = RTE_STR(nm);\
 	rte_fslmc_driver_register(&dpaa2_drv); \
@@ -197,8 +202,7 @@ uint32_t rte_fslmc_get_device_count(enum rte_dpaa2_dev_type device_type);
 
 /** Helper for DPAA2 object registration */
 #define RTE_PMD_REGISTER_DPAA2_OBJECT(nm, dpaa2_obj) \
-RTE_INIT(dpaa2objinitfn_ ##nm); \
-static void dpaa2objinitfn_ ##nm(void) \
+RTE_INIT(dpaa2objinitfn_ ##nm) \
 {\
 	(dpaa2_obj).name = RTE_STR(nm);\
 	rte_fslmc_object_register(&dpaa2_obj); \

@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 /** Maximum number of multi-core worker cores */
-#define RTE_CRYPTODEV_SCHEDULER_MAX_NB_WORKER_CORES	(64)
+#define RTE_CRYPTODEV_SCHEDULER_MAX_NB_WORKER_CORES	(RTE_MAX_LCORE - 1)
 
 /** Round-robin scheduling mode string */
 #define SCHEDULER_MODE_NAME_ROUND_ROBIN		round-robin
@@ -76,6 +76,7 @@ enum rte_cryptodev_schedule_option_type {
 /**
  * Threshold option structure
  */
+#define RTE_CRYPTODEV_SCHEDULER_PARAM_THRES	"threshold"
 struct rte_cryptodev_scheduler_threshold_option {
 	uint32_t threshold;	/**< Threshold for packet-size mode */
 };

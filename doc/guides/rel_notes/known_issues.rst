@@ -714,3 +714,48 @@ igb_uio can not be used when running l3fwd-power
 
 **Driver/Module**:
    ``igb_uio`` module.
+
+
+Linux kernel 4.10.0 iommu attribute read error
+----------------------------------------------
+
+**Description**:
+   When VT-d is enabled (``iommu=pt intel_iommu=on``), reading IOMMU attributes from
+   /sys/devices/virtual/iommu/dmarXXX/intel-iommu/cap on Linux kernel 4.10.0 error.
+   This bug is fixed in `Linux commmit a7fdb6e648fb
+   <https://patchwork.kernel.org/patch/9595727/>`_,
+   This bug is introduced in `Linux commmit 39ab9555c241
+   <https://patchwork.kernel.org/patch/9554403/>`_,
+
+**Implication**:
+   When binding devices to VFIO and attempting to run testpmd application,
+   testpmd (and other DPDK applications) will not initialize.
+
+**Resolution/Workaround**:
+   Use other linux kernel version. It only happens in linux kernel 4.10.0.
+
+**Affected Environment/Platform**:
+   ALL OS of linux kernel 4.10.0.
+
+**Driver/Module**:
+   ``vfio-pci`` module.
+
+Netvsc driver and application restart
+-------------------------------------
+
+**Description**:
+   The Linux kernel uio_hv_generic driver does not completely shutdown and clean up
+   resources properly if application using Netvsc PMD exits.
+
+**Implication**:
+   When application using Netvsc PMD is restarted it can not complete initialization
+   handshake sequence with the host.
+
+**Resolution/Workaround**:
+   Either reboot the guest or remove and reinsert the hv_uio_generic module.
+
+**Affected Environment/Platform**:
+   Linux Hyper-V.
+
+**Driver/Module**:
+   ``uio_hv_generic`` module.

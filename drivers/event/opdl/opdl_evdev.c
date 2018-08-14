@@ -607,7 +607,7 @@ set_do_test(const char *key __rte_unused, const char *value, void *opaque)
 static int
 opdl_probe(struct rte_vdev_device *vdev)
 {
-	static const struct rte_eventdev_ops evdev_opdl_ops = {
+	static struct rte_eventdev_ops evdev_opdl_ops = {
 		.dev_configure = opdl_dev_configure,
 		.dev_infos_get = opdl_info_get,
 		.dev_close = opdl_close,
@@ -753,10 +753,7 @@ static struct rte_vdev_driver evdev_opdl_pmd_drv = {
 	.remove = opdl_remove
 };
 
-RTE_INIT(opdl_init_log);
-
-static void
-opdl_init_log(void)
+RTE_INIT(opdl_init_log)
 {
 	opdl_logtype_driver = rte_log_register("pmd.event.opdl.driver");
 	if (opdl_logtype_driver >= 0)

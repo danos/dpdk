@@ -50,7 +50,6 @@ static uint8_t ptp_enabled_ports[RTE_MAX_ETHPORTS];
 static const struct rte_eth_conf port_conf_default = {
 	.rxmode = {
 		.max_rx_pkt_len = ETHER_MAX_LEN,
-		.ignore_offload_bitfield = 1,
 	},
 };
 
@@ -187,7 +186,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 	uint16_t nb_rxd = RX_RING_SIZE;
 	uint16_t nb_txd = TX_RING_SIZE;
 
-	if (port >= rte_eth_dev_count())
+	if (!rte_eth_dev_is_valid_port(port))
 		return -1;
 
 	rte_eth_dev_info_get(port, &dev_info);
@@ -217,11 +216,9 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 
 	/* Allocate and set up 1 TX queue per Ethernet port. */
 	for (q = 0; q < tx_rings; q++) {
-		/* Setup txq_flags */
 		struct rte_eth_txconf *txconf;
 
 		txconf = &dev_info.default_txconf;
-		txconf->txq_flags = ETH_TXQ_FLAGS_IGNORE;
 		txconf->offloads = port_conf.txmode.offloads;
 
 		retval = rte_eth_tx_queue_setup(port, q, nb_txd,
@@ -727,7 +724,7 @@ main(int argc, char *argv[])
 		rte_exit(EXIT_FAILURE, "Error with PTP initialization\n");
 
 	/* Check that there is an even number of ports to send/receive on. */
-	nb_ports = rte_eth_dev_count();
+	nb_ports = rte_eth_dev_count_avail();
 
 	/* Creates a new mempool in memory to hold the mbufs. */
 	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS * nb_ports,
@@ -737,7 +734,7 @@ main(int argc, char *argv[])
 		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
 	/* Initialize all ports. */
-	for (portid = 0; portid < nb_ports; portid++) {
+	RTE_ETH_FOREACH_DEV(portid) {
 		if ((ptp_enabled_port_mask & (1 << portid)) != 0) {
 			if (port_init(portid, mbuf_pool) == 0) {
 				ptp_enabled_ports[ptp_enabled_port_nb] = portid;

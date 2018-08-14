@@ -39,8 +39,6 @@ struct sfc_dp_tx_qcreate_info {
 	unsigned int		max_fill_level;
 	/** Minimum number of unused Tx descriptors to do reap */
 	unsigned int		free_thresh;
-	/** Transmit queue configuration flags */
-	unsigned int		flags;
 	/** Offloads enabled on the transmit queue */
 	uint64_t		offloads;
 	/** Tx queue size */
@@ -57,6 +55,8 @@ struct sfc_dp_tx_qcreate_info {
 	unsigned int		hw_index;
 	/** Virtual address of the memory-mapped BAR to push Tx doorbell */
 	volatile void		*mem_bar;
+	/** VI window size shift */
+	unsigned int		vi_window_shift;
 };
 
 /**

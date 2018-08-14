@@ -510,7 +510,7 @@ kni_config_mac_address(uint16_t port_id, uint8_t mac_addr[])
 {
 	int ret = 0;
 
-	if (port_id >= rte_eth_dev_count() || port_id >= RTE_MAX_ETHPORTS) {
+	if (!rte_eth_dev_is_valid_port(port_id)) {
 		RTE_LOG(ERR, KNI, "Invalid port id %d\n", port_id);
 		return -EINVAL;
 	}
@@ -530,7 +530,7 @@ kni_config_mac_address(uint16_t port_id, uint8_t mac_addr[])
 static int
 kni_config_promiscusity(uint16_t port_id, uint8_t to_on)
 {
-	if (port_id >= rte_eth_dev_count() || port_id >= RTE_MAX_ETHPORTS) {
+	if (!rte_eth_dev_is_valid_port(port_id)) {
 		RTE_LOG(ERR, KNI, "Invalid port id %d\n", port_id);
 		return -EINVAL;
 	}
@@ -714,6 +714,9 @@ rte_kni_get(const char *name)
 	uint32_t i;
 	struct rte_kni_memzone_slot *it;
 	struct rte_kni *kni;
+
+	if (name == NULL || name[0] == '\0')
+		return NULL;
 
 	/* Note: could be improved perf-wise if necessary */
 	for (i = 0; i < kni_memzone_pool.max_ifaces; i++) {

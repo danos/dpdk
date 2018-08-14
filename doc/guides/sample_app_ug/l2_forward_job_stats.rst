@@ -178,11 +178,6 @@ in the *DPDK Programmer's Guide* and the *DPDK API Reference*.
 
 .. code-block:: c
 
-    nb_ports = rte_eth_dev_count();
-
-    if (nb_ports == 0)
-        rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
-
     /* reset l2fwd_dst_ports */
 
     for (portid = 0; portid < RTE_MAX_ETHPORTS; portid++)
@@ -193,7 +188,7 @@ in the *DPDK Programmer's Guide* and the *DPDK API Reference*.
     /*
      * Each logical core is assigned a dedicated TX queue on each port.
      */
-    for (portid = 0; portid < nb_ports; portid++) {
+    RTE_ETH_FOREACH_DEV(portid) {
         /* skip ports that are not enabled */
         if ((l2fwd_enabled_port_mask & (1 << portid)) == 0)
            continue;
@@ -222,25 +217,6 @@ The rte_eth_dev_configure() function is used to configure the number of queues f
         rte_exit(EXIT_FAILURE, "Cannot configure device: "
             "err=%d, port=%u\n",
             ret, portid);
-
-The global configuration is stored in a static structure:
-
-.. code-block:: c
-
-    static const struct rte_eth_conf port_conf = {
-        .rxmode = {
-            .split_hdr_size = 0,
-            .header_split = 0,   /**< Header Split disabled */
-            .hw_ip_checksum = 0, /**< IP checksum offload disabled */
-            .hw_vlan_filter = 0, /**< VLAN filtering disabled */
-            .jumbo_frame = 0,    /**< Jumbo Frame Support disabled */
-            .hw_strip_crc= 0,    /**< CRC stripped by hardware */
-        },
-
-        .txmode = {
-            .mq_mode = ETH_DCB_NONE
-        },
-    };
 
 RX Queue Initialization
 ~~~~~~~~~~~~~~~~~~~~~~~

@@ -56,7 +56,6 @@ static struct rte_eth_conf port_conf = {
 		.mq_mode	= ETH_MQ_RX_RSS,
 		.max_rx_pkt_len = ETHER_MAX_LEN,
 		.split_hdr_size = 0,
-		.ignore_offload_bitfield = 1,
 		.offloads = (DEV_RX_OFFLOAD_CHECKSUM |
 			     DEV_RX_OFFLOAD_CRC_STRIP),
 	},
@@ -90,13 +89,22 @@ static uint16_t port_tx;
 static struct rte_mbuf *pkts_rx[PKT_RX_BURST_MAX];
 struct rte_eth_dev_tx_buffer *tx_buffer;
 
-struct rte_meter_srtcm_params app_srtcm_params[] = {
-	{.cir = 1000000 * 46,  .cbs = 2048, .ebs = 2048},
+struct rte_meter_srtcm_params app_srtcm_params = {
+	.cir = 1000000 * 46,
+	.cbs = 2048,
+	.ebs = 2048
 };
 
-struct rte_meter_trtcm_params app_trtcm_params[] = {
-	{.cir = 1000000 * 46,  .pir = 1500000 * 46,  .cbs = 2048, .pbs = 2048},
+struct rte_meter_srtcm_profile app_srtcm_profile;
+
+struct rte_meter_trtcm_params app_trtcm_params = {
+	.cir = 1000000 * 46,
+	.pir = 1500000 * 46,
+	.cbs = 2048,
+	.pbs = 2048
 };
+
+struct rte_meter_trtcm_profile app_trtcm_profile;
 
 #define APP_FLOWS_MAX  256
 
@@ -105,12 +113,21 @@ FLOW_METER app_flows[APP_FLOWS_MAX];
 static int
 app_configure_flow_table(void)
 {
-	uint32_t i, j;
+	uint32_t i;
 	int ret;
 
-	for (i = 0, j = 0; i < APP_FLOWS_MAX;
-			i ++, j = (j + 1) % RTE_DIM(PARAMS)) {
-		ret = FUNC_CONFIG(&app_flows[i], &PARAMS[j]);
+	ret = rte_meter_srtcm_profile_config(&app_srtcm_profile,
+		&app_srtcm_params);
+	if (ret)
+		return ret;
+
+	ret = rte_meter_trtcm_profile_config(&app_trtcm_profile,
+		&app_trtcm_params);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < APP_FLOWS_MAX; i++) {
+		ret = FUNC_CONFIG(&app_flows[i], &PROFILE);
 		if (ret)
 			return ret;
 	}
@@ -135,7 +152,10 @@ app_pkt_handle(struct rte_mbuf *pkt, uint64_t time)
 	enum policer_action action;
 
 	/* color input is not used for blind modes */
-	output_color = (uint8_t) FUNC_METER(&app_flows[flow_id], time, pkt_len,
+	output_color = (uint8_t) FUNC_METER(&app_flows[flow_id],
+		&PROFILE,
+		time,
+		pkt_len,
 		(enum rte_meter_color) input_color);
 
 	/* Apply policing and set the output color */
@@ -312,6 +332,17 @@ main(int argc, char **argv)
 	rte_eth_dev_info_get(port_rx, &dev_info);
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
 		conf.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+
+	conf.rx_adv_conf.rss_conf.rss_hf &= dev_info.flow_type_rss_offloads;
+	if (conf.rx_adv_conf.rss_conf.rss_hf !=
+			port_conf.rx_adv_conf.rss_conf.rss_hf) {
+		printf("Port %u modified RSS hash function based on hardware support,"
+			"requested:%#"PRIx64" configured:%#"PRIx64"\n",
+			port_rx,
+			port_conf.rx_adv_conf.rss_conf.rss_hf,
+			conf.rx_adv_conf.rss_conf.rss_hf);
+	}
+
 	ret = rte_eth_dev_configure(port_rx, 1, 1, &conf);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Port %d configuration error (%d)\n", port_rx, ret);
@@ -330,7 +361,6 @@ main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Port %d RX queue setup error (%d)\n", port_rx, ret);
 
 	txq_conf = dev_info.default_txconf;
-	txq_conf.txq_flags = ETH_TXQ_FLAGS_IGNORE;
 	txq_conf.offloads = conf.txmode.offloads;
 	ret = rte_eth_tx_queue_setup(port_rx, NIC_TX_QUEUE, nb_txd,
 				rte_eth_dev_socket_id(port_rx),
@@ -342,6 +372,17 @@ main(int argc, char **argv)
 	rte_eth_dev_info_get(port_tx, &dev_info);
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
 		conf.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+
+	conf.rx_adv_conf.rss_conf.rss_hf &= dev_info.flow_type_rss_offloads;
+	if (conf.rx_adv_conf.rss_conf.rss_hf !=
+			port_conf.rx_adv_conf.rss_conf.rss_hf) {
+		printf("Port %u modified RSS hash function based on hardware support,"
+			"requested:%#"PRIx64" configured:%#"PRIx64"\n",
+			port_tx,
+			port_conf.rx_adv_conf.rss_conf.rss_hf,
+			conf.rx_adv_conf.rss_conf.rss_hf);
+	}
+
 	ret = rte_eth_dev_configure(port_tx, 1, 1, &conf);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Port %d configuration error (%d)\n", port_tx, ret);
@@ -362,7 +403,6 @@ main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Port %d RX queue setup error (%d)\n", port_tx, ret);
 
 	txq_conf = dev_info.default_txconf;
-	txq_conf.txq_flags = ETH_TXQ_FLAGS_IGNORE;
 	txq_conf.offloads = conf.txmode.offloads;
 	ret = rte_eth_tx_queue_setup(port_tx, NIC_TX_QUEUE, nb_txd,
 				rte_eth_dev_socket_id(port_tx),

@@ -134,10 +134,20 @@ Supported DPAA2 SoCs
 * LS2088A/LS2048A
 * LS1088A/LS1048A
 
+Whitelisting & Blacklisting
+---------------------------
+
+For blacklisting a DPAA2 SEC device, following commands can be used.
+
+ .. code-block:: console
+
+    <dpdk app> <EAL args> -b "fslmc:dpseci.x" -- ...
+
+Where x is the device object id as configured in resource container.
+
 Limitations
 -----------
 
-* Chained mbufs are not supported.
 * Hash followed by Cipher mode is not supported
 * Only supports the session-oriented API implementation (session-less APIs are not supported).
 
@@ -189,20 +199,6 @@ Please note that enabling debugging options may affect system performance.
   By default it is only enabled in defconfig_arm64-dpaa2-* config.
   Toggle compilation of the ``librte_pmd_dpaa2_sec`` driver.
 
-* ``CONFIG_RTE_LIBRTE_DPAA2_SEC_DEBUG_INIT`` (default ``n``)
-  Toggle display of initialization related driver messages
-
-* ``CONFIG_RTE_LIBRTE_DPAA2_SEC_DEBUG_DRIVER`` (default ``n``)
-  Toggle display of driver runtime messages
-
-* ``CONFIG_RTE_LIBRTE_DPAA2_SEC_DEBUG_RX`` (default ``n``)
-  Toggle display of receive fast path run-time message
-
-* ``CONFIG_RTE_DPAA2_SEC_PMD_MAX_NB_SESSIONS``
-  By default it is set as 2048 in defconfig_arm64-dpaa2-* config.
-  It indicates Number of sessions to create in the session memory pool
-  on a single DPAA2 SEC device.
-
 Installations
 -------------
 To compile the DPAA2_SEC PMD for Linux arm64 gcc target, run the
@@ -212,3 +208,15 @@ following ``make`` command:
 
    cd <DPDK-source-directory>
    make config T=arm64-dpaa2-linuxapp-gcc install
+
+Enabling logs
+-------------
+
+For enabling logs, use the following EAL parameter:
+
+.. code-block:: console
+
+   ./your_crypto_application <EAL args> --log-level=pmd.crypto.dpaa2:<level>
+
+Using ``crypto.dpaa2`` as log matching criteria, all Crypto PMD logs can be
+enabled which are lower than logging ``level``.

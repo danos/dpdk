@@ -314,9 +314,9 @@ loop:
 		if (!msg)
 			return 0;
 	}
-	if ((msg->verb & QM_MR_VERB_TYPE_MASK) != QM_MR_VERB_FQRNI) {
+	if ((msg->ern.verb & QM_MR_VERB_TYPE_MASK) != QM_MR_VERB_FQRNI) {
 		/* We aren't draining anything but FQRNIs */
-		pr_err("Found verb 0x%x in MR\n", msg->verb);
+		pr_err("Found verb 0x%x in MR\n", msg->ern.verb);
 		return -1;
 	}
 	qm_mr_next(p);
@@ -483,7 +483,7 @@ static inline void qm_mr_pvb_update(struct qm_portal *portal)
 	/* when accessing 'verb', use __raw_readb() to ensure that compiler
 	 * inlining doesn't try to optimise out "excess reads".
 	 */
-	if ((__raw_readb(&res->verb) & QM_MR_VERB_VBIT) == mr->vbit) {
+	if ((__raw_readb(&res->ern.verb) & QM_MR_VERB_VBIT) == mr->vbit) {
 		mr->pi = (mr->pi + 1) & (QM_MR_SIZE - 1);
 		if (!mr->pi)
 			mr->vbit ^= QM_MR_VERB_VBIT;
@@ -625,7 +625,7 @@ fail_eqcr:
 
 #define MAX_GLOBAL_PORTALS 8
 static struct qman_portal global_portals[MAX_GLOBAL_PORTALS];
-rte_atomic16_t global_portals_used[MAX_GLOBAL_PORTALS];
+static rte_atomic16_t global_portals_used[MAX_GLOBAL_PORTALS];
 
 static struct qman_portal *
 qman_alloc_global_portal(void)
@@ -832,7 +832,7 @@ mr_loop:
 			goto mr_done;
 		swapped_msg = *msg;
 		hw_fd_to_cpu(&swapped_msg.ern.fd);
-		verb = msg->verb & QM_MR_VERB_TYPE_MASK;
+		verb = msg->ern.verb & QM_MR_VERB_TYPE_MASK;
 		/* The message is a software ERN iff the 0x20 bit is set */
 		if (verb & 0x20) {
 			switch (verb) {
@@ -1058,7 +1058,7 @@ unsigned int qman_portal_poll_rx(unsigned int poll_limit,
 	struct qm_portal *portal = &p->p;
 	register struct qm_dqrr *dqrr = &portal->dqrr;
 	struct qm_dqrr_entry *dq[QM_DQRR_SIZE], *shadow[QM_DQRR_SIZE];
-	struct qman_fq *fq[QM_DQRR_SIZE];
+	struct qman_fq *fq;
 	unsigned int limit = 0, rx_number = 0;
 	uint32_t consume = 0;
 
@@ -1087,18 +1087,18 @@ unsigned int qman_portal_poll_rx(unsigned int poll_limit,
 		shadow[rx_number]->fd.opaque =
 			be32_to_cpu(dq[rx_number]->fd.opaque);
 #else
-		shadow = dq;
+		shadow[rx_number] = dq[rx_number];
 #endif
 
 		/* SDQCR: context_b points to the FQ */
 #ifdef CONFIG_FSL_QMAN_FQ_LOOKUP
-		fq[rx_number] = qman_fq_lookup_table[be32_to_cpu(
-						dq[rx_number]->contextB)];
+		fq = qman_fq_lookup_table[be32_to_cpu(dq[rx_number]->contextB)];
 #else
-		fq[rx_number] = (void *)(uintptr_t)be32_to_cpu(dq->contextB);
+		fq = (void *)be32_to_cpu(dq[rx_number]->contextB);
 #endif
-		fq[rx_number]->cb.dqrr_prepare(shadow[rx_number],
-						 &bufs[rx_number]);
+		if (fq->cb.dqrr_prepare)
+			fq->cb.dqrr_prepare(shadow[rx_number],
+					    &bufs[rx_number]);
 
 		consume |= (1 << (31 - DQRR_PTR2IDX(shadow[rx_number])));
 		rx_number++;
@@ -1106,7 +1106,7 @@ unsigned int qman_portal_poll_rx(unsigned int poll_limit,
 	} while (++limit < poll_limit);
 
 	if (rx_number)
-		fq[0]->cb.dqrr_dpdk_pull_cb(fq, shadow, bufs, rx_number);
+		fq->cb.dqrr_dpdk_pull_cb(&fq, shadow, bufs, rx_number);
 
 	/* Consume all the DQRR enries together */
 	qm_out(DQRR_DCAP, (1 << 8) | consume);
@@ -1665,7 +1665,7 @@ int qman_retire_fq(struct qman_fq *fq, u32 *flags)
 			 */
 			struct qm_mr_entry msg;
 
-			msg.verb = QM_MR_VERB_FQRNI;
+			msg.ern.verb = QM_MR_VERB_FQRNI;
 			msg.fq.fqs = mcr->alterfq.fqs;
 			msg.fq.fqid = fq->fqid;
 #ifdef CONFIG_FSL_QMAN_FQ_LOOKUP
@@ -2002,13 +2002,13 @@ int qman_query_congestion(struct qm_mcr_querycongestion *congestion)
 	return 0;
 }
 
-int qman_set_vdq(struct qman_fq *fq, u16 num)
+int qman_set_vdq(struct qman_fq *fq, u16 num, uint32_t vdqcr_flags)
 {
 	struct qman_portal *p = get_affine_portal();
 	uint32_t vdqcr;
 	int ret = -EBUSY;
 
-	vdqcr = QM_VDQCR_EXACT;
+	vdqcr = vdqcr_flags;
 	vdqcr |= QM_VDQCR_NUMFRAMES_SET(num);
 
 	if ((fq->state != qman_fq_state_parked) &&
@@ -2642,7 +2642,7 @@ int qman_shutdown_fq(u32 fqid)
 				qm_mr_pvb_update(low_p);
 				msg = qm_mr_current(low_p);
 				while (msg) {
-					if ((msg->verb &
+					if ((msg->ern.verb &
 					     QM_MR_VERB_TYPE_MASK)
 					    == QM_MR_VERB_FQRN)
 						found_fqrn = 1;
@@ -2710,7 +2710,7 @@ int qman_shutdown_fq(u32 fqid)
 			qm_mr_pvb_update(low_p);
 			msg = qm_mr_current(low_p);
 			while (msg) {
-				if ((msg->verb & QM_MR_VERB_TYPE_MASK) ==
+				if ((msg->ern.verb & QM_MR_VERB_TYPE_MASK) ==
 				    QM_MR_VERB_FQRL)
 					orl_empty = 1;
 				qm_mr_next(low_p);

@@ -26,6 +26,7 @@
 #define ETH_PCAP_RX_PCAP_ARG  "rx_pcap"
 #define ETH_PCAP_TX_PCAP_ARG  "tx_pcap"
 #define ETH_PCAP_RX_IFACE_ARG "rx_iface"
+#define ETH_PCAP_RX_IFACE_IN_ARG "rx_iface_in"
 #define ETH_PCAP_TX_IFACE_ARG "tx_iface"
 #define ETH_PCAP_IFACE_ARG    "iface"
 
@@ -83,6 +84,7 @@ static const char *valid_arguments[] = {
 	ETH_PCAP_RX_PCAP_ARG,
 	ETH_PCAP_TX_PCAP_ARG,
 	ETH_PCAP_RX_IFACE_ARG,
+	ETH_PCAP_RX_IFACE_IN_ARG,
 	ETH_PCAP_TX_IFACE_ARG,
 	ETH_PCAP_IFACE_ARG,
 	NULL
@@ -96,8 +98,14 @@ static struct rte_eth_link pmd_link = {
 		.link_speed = ETH_SPEED_NUM_10G,
 		.link_duplex = ETH_LINK_FULL_DUPLEX,
 		.link_status = ETH_LINK_DOWN,
-		.link_autoneg = ETH_LINK_AUTONEG,
+		.link_autoneg = ETH_LINK_FIXED,
 };
+
+static int eth_pcap_logtype;
+
+#define PMD_LOG(level, fmt, args...) \
+	rte_log(RTE_LOG_ ## level, eth_pcap_logtype, \
+		"%s(): " fmt "\n", __func__, ##args)
 
 static int
 eth_pcap_rx_jumbo(struct rte_mempool *mb_pool, struct rte_mbuf *mbuf,
@@ -256,8 +264,8 @@ eth_pcap_tx_dumper(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 				pcap_dump((u_char *)dumper_q->dumper, &header,
 					  tx_pcap_data);
 			} else {
-				RTE_LOG(ERR, PMD,
-					"Dropping PCAP packet. Size (%d) > max jumbo size (%d).\n",
+				PMD_LOG(ERR,
+					"Dropping PCAP packet. Size (%d) > max jumbo size (%d).",
 					mbuf->pkt_len,
 					ETHER_MAX_JUMBO_FRAME_LEN);
 
@@ -313,8 +321,8 @@ eth_pcap_tx(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 				ret = pcap_sendpacket(tx_queue->pcap,
 						tx_pcap_data, mbuf->pkt_len);
 			} else {
-				RTE_LOG(ERR, PMD,
-					"Dropping PCAP packet. Size (%d) > max jumbo size (%d).\n",
+				PMD_LOG(ERR,
+					"Dropping PCAP packet. Size (%d) > max jumbo size (%d).",
 					mbuf->pkt_len,
 					ETHER_MAX_JUMBO_FRAME_LEN);
 
@@ -346,7 +354,7 @@ open_iface_live(const char *iface, pcap_t **pcap) {
 			RTE_ETH_PCAP_PROMISC, RTE_ETH_PCAP_TIMEOUT, errbuf);
 
 	if (*pcap == NULL) {
-		RTE_LOG(ERR, PMD, "Couldn't open %s: %s\n", iface, errbuf);
+		PMD_LOG(ERR, "Couldn't open %s: %s", iface, errbuf);
 		return -1;
 	}
 
@@ -357,7 +365,7 @@ static int
 open_single_iface(const char *iface, pcap_t **pcap)
 {
 	if (open_iface_live(iface, pcap) < 0) {
-		RTE_LOG(ERR, PMD, "Couldn't open interface %s\n", iface);
+		PMD_LOG(ERR, "Couldn't open interface %s", iface);
 		return -1;
 	}
 
@@ -376,7 +384,7 @@ open_single_tx_pcap(const char *pcap_filename, pcap_dumper_t **dumper)
 	 */
 	tx_pcap = pcap_open_dead(DLT_EN10MB, RTE_ETH_PCAP_SNAPSHOT_LEN);
 	if (tx_pcap == NULL) {
-		RTE_LOG(ERR, PMD, "Couldn't create dead pcap\n");
+		PMD_LOG(ERR, "Couldn't create dead pcap");
 		return -1;
 	}
 
@@ -384,7 +392,7 @@ open_single_tx_pcap(const char *pcap_filename, pcap_dumper_t **dumper)
 	*dumper = pcap_dump_open(tx_pcap, pcap_filename);
 	if (*dumper == NULL) {
 		pcap_close(tx_pcap);
-		RTE_LOG(ERR, PMD, "Couldn't open %s for writing.\n",
+		PMD_LOG(ERR, "Couldn't open %s for writing.",
 			pcap_filename);
 		return -1;
 	}
@@ -398,7 +406,7 @@ open_single_rx_pcap(const char *pcap_filename, pcap_t **pcap)
 {
 	*pcap = pcap_open_offline(pcap_filename, errbuf);
 	if (*pcap == NULL) {
-		RTE_LOG(ERR, PMD, "Couldn't open %s: %s\n", pcap_filename,
+		PMD_LOG(ERR, "Couldn't open %s: %s", pcap_filename,
 			errbuf);
 		return -1;
 	}
@@ -424,6 +432,7 @@ eth_dev_start(struct rte_eth_dev *dev)
 				return -1;
 			rx->pcap = tx->pcap;
 		}
+
 		goto status_up;
 	}
 
@@ -459,6 +468,12 @@ eth_dev_start(struct rte_eth_dev *dev)
 	}
 
 status_up:
+	for (i = 0; i < dev->data->nb_rx_queues; i++)
+		dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
+
+	for (i = 0; i < dev->data->nb_tx_queues; i++)
+		dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
+
 	dev->data->dev_link.link_status = ETH_LINK_UP;
 
 	return 0;
@@ -511,6 +526,12 @@ eth_dev_stop(struct rte_eth_dev *dev)
 	}
 
 status_down:
+	for (i = 0; i < dev->data->nb_rx_queues; i++)
+		dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
+
+	for (i = 0; i < dev->data->nb_tx_queues; i++)
+		dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
+
 	dev->data->dev_link.link_status = ETH_LINK_DOWN;
 }
 
@@ -532,6 +553,7 @@ eth_dev_info(struct rte_eth_dev *dev,
 	dev_info->max_rx_queues = dev->data->nb_rx_queues;
 	dev_info->max_tx_queues = dev->data->nb_tx_queues;
 	dev_info->min_rx_bufsize = 0;
+	dev_info->rx_offload_capa = DEV_RX_OFFLOAD_CRC_STRIP;
 }
 
 static int
@@ -637,6 +659,38 @@ eth_tx_queue_setup(struct rte_eth_dev *dev,
 	return 0;
 }
 
+static int
+eth_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id)
+{
+	dev->data->rx_queue_state[rx_queue_id] = RTE_ETH_QUEUE_STATE_STARTED;
+
+	return 0;
+}
+
+static int
+eth_tx_queue_start(struct rte_eth_dev *dev, uint16_t tx_queue_id)
+{
+	dev->data->tx_queue_state[tx_queue_id] = RTE_ETH_QUEUE_STATE_STARTED;
+
+	return 0;
+}
+
+static int
+eth_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id)
+{
+	dev->data->rx_queue_state[rx_queue_id] = RTE_ETH_QUEUE_STATE_STOPPED;
+
+	return 0;
+}
+
+static int
+eth_tx_queue_stop(struct rte_eth_dev *dev, uint16_t tx_queue_id)
+{
+	dev->data->tx_queue_state[tx_queue_id] = RTE_ETH_QUEUE_STATE_STOPPED;
+
+	return 0;
+}
+
 static const struct eth_dev_ops ops = {
 	.dev_start = eth_dev_start,
 	.dev_stop = eth_dev_stop,
@@ -645,12 +699,32 @@ static const struct eth_dev_ops ops = {
 	.dev_infos_get = eth_dev_info,
 	.rx_queue_setup = eth_rx_queue_setup,
 	.tx_queue_setup = eth_tx_queue_setup,
+	.rx_queue_start = eth_rx_queue_start,
+	.tx_queue_start = eth_tx_queue_start,
+	.rx_queue_stop = eth_rx_queue_stop,
+	.tx_queue_stop = eth_tx_queue_stop,
 	.rx_queue_release = eth_queue_release,
 	.tx_queue_release = eth_queue_release,
 	.link_update = eth_link_update,
 	.stats_get = eth_stats_get,
 	.stats_reset = eth_stats_reset,
 };
+
+static int
+add_queue(struct pmd_devargs *pmd, const char *name, const char *type,
+		pcap_t *pcap, pcap_dumper_t *dumper)
+{
+	if (pmd->num_of_queue >= RTE_PMD_PCAP_MAX_QUEUES)
+		return -1;
+	if (pcap)
+		pmd->queue[pmd->num_of_queue].pcap = pcap;
+	if (dumper)
+		pmd->queue[pmd->num_of_queue].dumper = dumper;
+	pmd->queue[pmd->num_of_queue].name = name;
+	pmd->queue[pmd->num_of_queue].type = type;
+	pmd->num_of_queue++;
+	return 0;
+}
 
 /*
  * Function handler that opens the pcap file for reading a stores a
@@ -659,18 +733,16 @@ static const struct eth_dev_ops ops = {
 static int
 open_rx_pcap(const char *key, const char *value, void *extra_args)
 {
-	unsigned int i;
 	const char *pcap_filename = value;
 	struct pmd_devargs *rx = extra_args;
 	pcap_t *pcap = NULL;
 
-	for (i = 0; i < rx->num_of_queue; i++) {
-		if (open_single_rx_pcap(pcap_filename, &pcap) < 0)
-			return -1;
+	if (open_single_rx_pcap(pcap_filename, &pcap) < 0)
+		return -1;
 
-		rx->queue[i].pcap = pcap;
-		rx->queue[i].name = pcap_filename;
-		rx->queue[i].type = key;
+	if (add_queue(rx, pcap_filename, key, pcap, NULL) < 0) {
+		pcap_close(pcap);
+		return -1;
 	}
 
 	return 0;
@@ -683,18 +755,16 @@ open_rx_pcap(const char *key, const char *value, void *extra_args)
 static int
 open_tx_pcap(const char *key, const char *value, void *extra_args)
 {
-	unsigned int i;
 	const char *pcap_filename = value;
 	struct pmd_devargs *dumpers = extra_args;
 	pcap_dumper_t *dumper;
 
-	for (i = 0; i < dumpers->num_of_queue; i++) {
-		if (open_single_tx_pcap(pcap_filename, &dumper) < 0)
-			return -1;
+	if (open_single_tx_pcap(pcap_filename, &dumper) < 0)
+		return -1;
 
-		dumpers->queue[i].dumper = dumper;
-		dumpers->queue[i].name = pcap_filename;
-		dumpers->queue[i].type = key;
+	if (add_queue(dumpers, pcap_filename, key, NULL, dumper) < 0) {
+		pcap_dump_close(dumper);
+		return -1;
 	}
 
 	return 0;
@@ -720,24 +790,65 @@ open_rx_tx_iface(const char *key, const char *value, void *extra_args)
 	return 0;
 }
 
+static inline int
+set_iface_direction(const char *iface, pcap_t *pcap,
+		pcap_direction_t direction)
+{
+	const char *direction_str = (direction == PCAP_D_IN) ? "IN" : "OUT";
+	if (pcap_setdirection(pcap, direction) < 0) {
+		PMD_LOG(ERR, "Setting %s pcap direction %s failed - %s\n",
+				iface, direction_str, pcap_geterr(pcap));
+		return -1;
+	}
+	PMD_LOG(INFO, "Setting %s pcap direction %s\n",
+			iface, direction_str);
+	return 0;
+}
+
+static inline int
+open_iface(const char *key, const char *value, void *extra_args)
+{
+	const char *iface = value;
+	struct pmd_devargs *pmd = extra_args;
+	pcap_t *pcap = NULL;
+
+	if (open_single_iface(iface, &pcap) < 0)
+		return -1;
+	if (add_queue(pmd, iface, key, pcap, NULL) < 0) {
+		pcap_close(pcap);
+		return -1;
+	}
+
+	return 0;
+}
+
 /*
  * Opens a NIC for reading packets from it
  */
 static inline int
 open_rx_iface(const char *key, const char *value, void *extra_args)
 {
-	unsigned int i;
-	const char *iface = value;
-	struct pmd_devargs *rx = extra_args;
-	pcap_t *pcap = NULL;
+	int ret = open_iface(key, value, extra_args);
+	if (ret < 0)
+		return ret;
+	if (strcmp(key, ETH_PCAP_RX_IFACE_IN_ARG) == 0) {
+		struct pmd_devargs *pmd = extra_args;
+		unsigned int qid = pmd->num_of_queue - 1;
 
-	for (i = 0; i < rx->num_of_queue; i++) {
-		if (open_single_iface(iface, &pcap) < 0)
-			return -1;
-		rx->queue[i].pcap = pcap;
-		rx->queue[i].name = iface;
-		rx->queue[i].type = key;
+		set_iface_direction(pmd->queue[qid].name,
+				pmd->queue[qid].pcap,
+				PCAP_D_IN);
 	}
+
+	return 0;
+}
+
+static inline int
+rx_iface_args_process(const char *key, const char *value, void *extra_args)
+{
+	if (strcmp(key, ETH_PCAP_RX_IFACE_ARG) == 0 ||
+			strcmp(key, ETH_PCAP_RX_IFACE_IN_ARG) == 0)
+		return open_rx_iface(key, value, extra_args);
 
 	return 0;
 }
@@ -748,20 +859,7 @@ open_rx_iface(const char *key, const char *value, void *extra_args)
 static int
 open_tx_iface(const char *key, const char *value, void *extra_args)
 {
-	unsigned int i;
-	const char *iface = value;
-	struct pmd_devargs *tx = extra_args;
-	pcap_t *pcap;
-
-	for (i = 0; i < tx->num_of_queue; i++) {
-		if (open_single_iface(iface, &pcap) < 0)
-			return -1;
-		tx->queue[i].pcap = pcap;
-		tx->queue[i].name = iface;
-		tx->queue[i].type = key;
-	}
-
-	return 0;
+	return open_iface(key, value, extra_args);
 }
 
 static struct rte_vdev_driver pmd_pcap_drv;
@@ -773,27 +871,16 @@ pmd_init_internals(struct rte_vdev_device *vdev,
 		struct pmd_internals **internals,
 		struct rte_eth_dev **eth_dev)
 {
-	struct rte_eth_dev_data *data = NULL;
+	struct rte_eth_dev_data *data;
 	unsigned int numa_node = vdev->device.numa_node;
-	const char *name;
 
-	name = rte_vdev_device_name(vdev);
-	RTE_LOG(INFO, PMD, "Creating pcap-backed ethdev on numa socket %d\n",
+	PMD_LOG(INFO, "Creating pcap-backed ethdev on numa socket %d",
 		numa_node);
-
-	/* now do all data allocation - for eth_dev structure
-	 * and internal (private) data
-	 */
-	data = rte_zmalloc_socket(name, sizeof(*data), 0, numa_node);
-	if (data == NULL)
-		return -1;
 
 	/* reserve an ethdev entry */
 	*eth_dev = rte_eth_vdev_allocate(vdev, sizeof(**internals));
-	if (*eth_dev == NULL) {
-		rte_free(data);
+	if (!(*eth_dev))
 		return -1;
-	}
 
 	/* now put it all together
 	 * - store queue data in internals,
@@ -802,7 +889,7 @@ pmd_init_internals(struct rte_vdev_device *vdev,
 	 * - and point eth_dev structure to new eth_dev_data structure
 	 */
 	*internals = (*eth_dev)->data->dev_private;
-	rte_memcpy(data, (*eth_dev)->data, sizeof(*data));
+	data = (*eth_dev)->data;
 	data->nb_rx_queues = (uint16_t)nb_rx_queues;
 	data->nb_tx_queues = (uint16_t)nb_tx_queues;
 	data->dev_link = pmd_link;
@@ -812,7 +899,6 @@ pmd_init_internals(struct rte_vdev_device *vdev,
 	 * NOTE: we'll replace the data element, of originally allocated
 	 * eth_dev so the rings are local per-process
 	 */
-	(*eth_dev)->data = data;
 	(*eth_dev)->dev_ops = &ops;
 
 	return 0;
@@ -899,6 +985,7 @@ eth_from_pcaps(struct rte_vdev_device *vdev,
 	else
 		eth_dev->tx_pkt_burst = eth_pcap_tx;
 
+	rte_eth_dev_probing_finish(eth_dev);
 	return 0;
 }
 
@@ -910,15 +997,30 @@ pmd_pcap_probe(struct rte_vdev_device *dev)
 	struct rte_kvargs *kvlist;
 	struct pmd_devargs pcaps = {0};
 	struct pmd_devargs dumpers = {0};
+	struct rte_eth_dev *eth_dev;
 	int single_iface = 0;
 	int ret;
 
 	name = rte_vdev_device_name(dev);
-	RTE_LOG(INFO, PMD, "Initializing pmd_pcap for %s\n", name);
+	PMD_LOG(INFO, "Initializing pmd_pcap for %s", name);
 
 	gettimeofday(&start_time, NULL);
 	start_cycles = rte_get_timer_cycles();
 	hz = rte_get_timer_hz();
+
+	if (rte_eal_process_type() == RTE_PROC_SECONDARY &&
+	    strlen(rte_vdev_device_args(dev)) == 0) {
+		eth_dev = rte_eth_dev_attach_secondary(name);
+		if (!eth_dev) {
+			PMD_LOG(ERR, "Failed to probe %s", name);
+			return -1;
+		}
+		/* TODO: request info from primary to set up Rx and Tx */
+		eth_dev->dev_ops = &ops;
+		eth_dev->device = &dev->device;
+		rte_eth_dev_probing_finish(eth_dev);
+		return 0;
+	}
 
 	kvlist = rte_kvargs_parse(rte_vdev_device_args(dev), valid_arguments);
 	if (kvlist == NULL)
@@ -949,22 +1051,16 @@ pmd_pcap_probe(struct rte_vdev_device *dev)
 	 * We check whether we want to open a RX stream from a real NIC or a
 	 * pcap file
 	 */
-	pcaps.num_of_queue = rte_kvargs_count(kvlist, ETH_PCAP_RX_PCAP_ARG);
-	if (pcaps.num_of_queue)
-		is_rx_pcap = 1;
-	else
-		pcaps.num_of_queue = rte_kvargs_count(kvlist,
-				ETH_PCAP_RX_IFACE_ARG);
+	is_rx_pcap = rte_kvargs_count(kvlist, ETH_PCAP_RX_PCAP_ARG) ? 1 : 0;
+	pcaps.num_of_queue = 0;
 
-	if (pcaps.num_of_queue > RTE_PMD_PCAP_MAX_QUEUES)
-		pcaps.num_of_queue = RTE_PMD_PCAP_MAX_QUEUES;
-
-	if (is_rx_pcap)
+	if (is_rx_pcap) {
 		ret = rte_kvargs_process(kvlist, ETH_PCAP_RX_PCAP_ARG,
 				&open_rx_pcap, &pcaps);
-	else
-		ret = rte_kvargs_process(kvlist, ETH_PCAP_RX_IFACE_ARG,
-				&open_rx_iface, &pcaps);
+	} else {
+		ret = rte_kvargs_process(kvlist, NULL,
+				&rx_iface_args_process, &pcaps);
+	}
 
 	if (ret < 0)
 		goto free_kvlist;
@@ -973,15 +1069,8 @@ pmd_pcap_probe(struct rte_vdev_device *dev)
 	 * We check whether we want to open a TX stream to a real NIC or a
 	 * pcap file
 	 */
-	dumpers.num_of_queue = rte_kvargs_count(kvlist, ETH_PCAP_TX_PCAP_ARG);
-	if (dumpers.num_of_queue)
-		is_tx_pcap = 1;
-	else
-		dumpers.num_of_queue = rte_kvargs_count(kvlist,
-				ETH_PCAP_TX_IFACE_ARG);
-
-	if (dumpers.num_of_queue > RTE_PMD_PCAP_MAX_QUEUES)
-		dumpers.num_of_queue = RTE_PMD_PCAP_MAX_QUEUES;
+	is_tx_pcap = rte_kvargs_count(kvlist, ETH_PCAP_TX_PCAP_ARG) ? 1 : 0;
+	dumpers.num_of_queue = 0;
 
 	if (is_tx_pcap)
 		ret = rte_kvargs_process(kvlist, ETH_PCAP_TX_PCAP_ARG,
@@ -1008,7 +1097,7 @@ pmd_pcap_remove(struct rte_vdev_device *dev)
 {
 	struct rte_eth_dev *eth_dev = NULL;
 
-	RTE_LOG(INFO, PMD, "Closing pcap ethdev on numa socket %d\n",
+	PMD_LOG(INFO, "Closing pcap ethdev on numa socket %d",
 			rte_socket_id());
 
 	if (!dev)
@@ -1020,7 +1109,6 @@ pmd_pcap_remove(struct rte_vdev_device *dev)
 		return -1;
 
 	rte_free(eth_dev->data->dev_private);
-	rte_free(eth_dev->data);
 
 	rte_eth_dev_release_port(eth_dev);
 
@@ -1038,5 +1126,13 @@ RTE_PMD_REGISTER_PARAM_STRING(net_pcap,
 	ETH_PCAP_RX_PCAP_ARG "=<string> "
 	ETH_PCAP_TX_PCAP_ARG "=<string> "
 	ETH_PCAP_RX_IFACE_ARG "=<ifc> "
+	ETH_PCAP_RX_IFACE_IN_ARG "=<ifc> "
 	ETH_PCAP_TX_IFACE_ARG "=<ifc> "
 	ETH_PCAP_IFACE_ARG "=<ifc>");
+
+RTE_INIT(eth_pcap_init_log)
+{
+	eth_pcap_logtype = rte_log_register("pmd.net.pcap");
+	if (eth_pcap_logtype >= 0)
+		rte_log_set_level(eth_pcap_logtype, RTE_LOG_NOTICE);
+}

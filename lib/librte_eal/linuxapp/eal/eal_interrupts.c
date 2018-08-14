@@ -30,7 +30,6 @@
 #include <rte_branch_prediction.h>
 #include <rte_debug.h>
 #include <rte_log.h>
-#include <rte_malloc.h>
 #include <rte_errno.h>
 #include <rte_spinlock.h>
 #include <rte_pause.h>
@@ -405,8 +404,7 @@ rte_intr_callback_register(const struct rte_intr_handle *intr_handle,
 	}
 
 	/* allocate a new interrupt callback entity */
-	callback = rte_zmalloc("interrupt callback list",
-				sizeof(*callback), 0);
+	callback = calloc(1, sizeof(*callback));
 	if (callback == NULL) {
 		RTE_LOG(ERR, EAL, "Can not allocate memory\n");
 		return -ENOMEM;
@@ -420,7 +418,7 @@ rte_intr_callback_register(const struct rte_intr_handle *intr_handle,
 	TAILQ_FOREACH(src, &intr_sources, next) {
 		if (src->intr_handle.fd == intr_handle->fd) {
 			/* we had no interrupts for this */
-			if TAILQ_EMPTY(&src->callbacks)
+			if (TAILQ_EMPTY(&src->callbacks))
 				wake_thread = 1;
 
 			TAILQ_INSERT_TAIL(&(src->callbacks), callback, next);
@@ -431,10 +429,10 @@ rte_intr_callback_register(const struct rte_intr_handle *intr_handle,
 
 	/* no existing callbacks for this - add new source */
 	if (src == NULL) {
-		if ((src = rte_zmalloc("interrupt source list",
-				sizeof(*src), 0)) == NULL) {
+		src = calloc(1, sizeof(*src));
+		if (src == NULL) {
 			RTE_LOG(ERR, EAL, "Can not allocate memory\n");
-			rte_free(callback);
+			free(callback);
 			ret = -ENOMEM;
 		} else {
 			src->intr_handle = *intr_handle;
@@ -501,7 +499,7 @@ rte_intr_callback_unregister(const struct rte_intr_handle *intr_handle,
 			if (cb->cb_fn == cb_fn && (cb_arg == (void *)-1 ||
 					cb->cb_arg == cb_arg)) {
 				TAILQ_REMOVE(&src->callbacks, cb, next);
-				rte_free(cb);
+				free(cb);
 				ret++;
 			}
 		}
@@ -509,7 +507,7 @@ rte_intr_callback_unregister(const struct rte_intr_handle *intr_handle,
 		/* all callbacks for that source are removed. */
 		if (TAILQ_EMPTY(&src->callbacks)) {
 			TAILQ_REMOVE(&intr_sources, src, next);
-			rte_free(src);
+			free(src);
 		}
 	}
 
@@ -559,6 +557,9 @@ rte_intr_enable(const struct rte_intr_handle *intr_handle)
 			return -1;
 		break;
 #endif
+	/* not used at this moment */
+	case RTE_INTR_HANDLE_DEV_EVENT:
+		return -1;
 	/* unknown handle type */
 	default:
 		RTE_LOG(ERR, EAL,
@@ -606,6 +607,9 @@ rte_intr_disable(const struct rte_intr_handle *intr_handle)
 			return -1;
 		break;
 #endif
+	/* not used at this moment */
+	case RTE_INTR_HANDLE_DEV_EVENT:
+		return -1;
 	/* unknown handle type */
 	default:
 		RTE_LOG(ERR, EAL,
@@ -674,7 +678,10 @@ eal_intr_process_interrupts(struct epoll_event *events, int nfds)
 			bytes_read = 0;
 			call = true;
 			break;
-
+		case RTE_INTR_HANDLE_DEV_EVENT:
+			bytes_read = 0;
+			call = true;
+			break;
 		default:
 			bytes_read = 1;
 			break;
@@ -844,8 +851,7 @@ eal_intr_thread_main(__rte_unused void *arg)
 int
 rte_eal_intr_init(void)
 {
-	int ret = 0, ret_1 = 0;
-	char thread_name[RTE_MAX_THREAD_NAME_LEN];
+	int ret = 0;
 
 	/* init the global interrupt source head */
 	TAILQ_INIT(&intr_sources);
@@ -860,23 +866,15 @@ rte_eal_intr_init(void)
 	}
 
 	/* create the host thread to wait/handle the interrupt */
-	ret = pthread_create(&intr_thread, NULL,
+	ret = rte_ctrl_thread_create(&intr_thread, "eal-intr-thread", NULL,
 			eal_intr_thread_main, NULL);
 	if (ret != 0) {
-		rte_errno = ret;
+		rte_errno = -ret;
 		RTE_LOG(ERR, EAL,
 			"Failed to create thread for interrupt handling\n");
-	} else {
-		/* Set thread_name for aid in debugging. */
-		snprintf(thread_name, RTE_MAX_THREAD_NAME_LEN,
-			"eal-intr-thread");
-		ret_1 = rte_thread_setname(intr_thread, thread_name);
-		if (ret_1 != 0)
-			RTE_LOG(DEBUG, EAL,
-			"Failed to set thread name for interrupt handling\n");
 	}
 
-	return -ret;
+	return ret;
 }
 
 static void

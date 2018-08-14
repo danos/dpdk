@@ -15,7 +15,6 @@
 #include <sys/queue.h>
 
 #include <rte_alarm.h>
-#include <rte_atomic.h>
 #include <rte_branch_prediction.h>
 #include <rte_byteorder.h>
 #include <rte_common.h>
@@ -35,6 +34,8 @@
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
 #include <rte_tailq.h>
+#include <rte_devargs.h>
+#include <rte_kvargs.h>
 
 #include "base/nicvf_plat.h"
 
@@ -51,10 +52,10 @@ static void nicvf_dev_stop(struct rte_eth_dev *dev);
 static void nicvf_dev_stop_cleanup(struct rte_eth_dev *dev, bool cleanup);
 static void nicvf_vf_stop(struct rte_eth_dev *dev, struct nicvf *nic,
 			  bool cleanup);
+static int nicvf_vlan_offload_config(struct rte_eth_dev *dev, int mask);
+static int nicvf_vlan_offload_set(struct rte_eth_dev *dev, int mask);
 
-RTE_INIT(nicvf_init_log);
-static void
-nicvf_init_log(void)
+RTE_INIT(nicvf_init_log)
 {
 	nicvf_logtype_mbox = rte_log_register("pmd.net.thunderx.mbox");
 	if (nicvf_logtype_mbox >= 0)
@@ -69,25 +70,14 @@ nicvf_init_log(void)
 		rte_log_set_level(nicvf_logtype_driver, RTE_LOG_NOTICE);
 }
 
-static inline int
-nicvf_atomic_write_link_status(struct rte_eth_dev *dev,
-			       struct rte_eth_link *link)
+static void
+nicvf_link_status_update(struct nicvf *nic,
+			 struct rte_eth_link *link)
 {
-	struct rte_eth_link *dst = &dev->data->dev_link;
-	struct rte_eth_link *src = link;
+	memset(link, 0, sizeof(*link));
 
-	if (rte_atomic64_cmpset((uint64_t *)dst, *(uint64_t *)dst,
-		*(uint64_t *)src) == 0)
-		return -1;
+	link->link_status = nic->link_up ? ETH_LINK_UP : ETH_LINK_DOWN;
 
-	return 0;
-}
-
-static inline void
-nicvf_set_eth_link_status(struct nicvf *nic, struct rte_eth_link *link)
-{
-	link->link_status = nic->link_up;
-	link->link_duplex = ETH_LINK_AUTONEG;
 	if (nic->duplex == NICVF_HALF_DUPLEX)
 		link->link_duplex = ETH_LINK_HALF_DUPLEX;
 	else if (nic->duplex == NICVF_FULL_DUPLEX)
@@ -101,12 +91,17 @@ nicvf_interrupt(void *arg)
 {
 	struct rte_eth_dev *dev = arg;
 	struct nicvf *nic = nicvf_pmd_priv(dev);
+	struct rte_eth_link link;
 
 	if (nicvf_reg_poll_interrupts(nic) == NIC_MBOX_MSG_BGX_LINK_CHANGE) {
-		if (dev->data->dev_conf.intr_conf.lsc)
-			nicvf_set_eth_link_status(nic, &dev->data->dev_link);
-		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC,
-					      NULL);
+		if (dev->data->dev_conf.intr_conf.lsc) {
+			nicvf_link_status_update(nic, &link);
+			rte_eth_linkstatus_set(dev, &link);
+
+			_rte_eth_dev_callback_process(dev,
+						      RTE_ETH_EVENT_INTR_LSC,
+						      NULL);
+		}
 	}
 
 	rte_eal_alarm_set(NICVF_INTR_POLL_INTERVAL_MS * 1000,
@@ -153,24 +148,23 @@ nicvf_dev_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 	if (wait_to_complete) {
 		/* rte_eth_link_get() might need to wait up to 9 seconds */
 		for (i = 0; i < MAX_CHECK_TIME; i++) {
-			memset(&link, 0, sizeof(link));
-			nicvf_set_eth_link_status(nic, &link);
-			if (link.link_status)
+			nicvf_link_status_update(nic, &link);
+			if (link.link_status == ETH_LINK_UP)
 				break;
 			rte_delay_ms(CHECK_INTERVAL);
 		}
 	} else {
-		memset(&link, 0, sizeof(link));
-		nicvf_set_eth_link_status(nic, &link);
+		nicvf_link_status_update(nic, &link);
 	}
-	return nicvf_atomic_write_link_status(dev, &link);
+
+	return rte_eth_linkstatus_set(dev, &link);
 }
 
 static int
 nicvf_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 {
 	struct nicvf *nic = nicvf_pmd_priv(dev);
-	uint32_t buffsz, frame_size = mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
+	uint32_t buffsz, frame_size = mtu + NIC_HW_L2_OVERHEAD;
 	size_t i;
 	struct rte_eth_rxmode *rxmode = &dev->data->dev_conf.rxmode;
 
@@ -188,7 +182,7 @@ nicvf_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	 * Refuse mtu that requires the support of scattered packets
 	 * when this feature has not been enabled before.
 	 */
-	if (!dev->data->scattered_rx &&
+	if (dev->data->dev_started && !dev->data->scattered_rx &&
 		(frame_size + 2 * VLAN_TAG_SIZE > buffsz))
 		return -EINVAL;
 
@@ -202,11 +196,11 @@ nicvf_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	else
 		rxmode->offloads &= ~DEV_RX_OFFLOAD_JUMBO_FRAME;
 
-	if (nicvf_mbox_update_hw_max_frs(nic, frame_size))
+	if (nicvf_mbox_update_hw_max_frs(nic, mtu))
 		return -EINVAL;
 
-	/* Update max frame size */
-	rxmode->max_rx_pkt_len = (uint32_t)frame_size;
+	/* Update max_rx_pkt_len */
+	rxmode->max_rx_pkt_len = mtu + ETHER_HDR_LEN;
 	nic->mtu = mtu;
 
 	for (i = 0; i < nic->sqs_count; i++)
@@ -363,11 +357,9 @@ nicvf_dev_supported_ptypes_get(struct rte_eth_dev *dev)
 	}
 
 	memcpy((char *)ptypes + copied, &ptypes_end, sizeof(ptypes_end));
-	if (dev->rx_pkt_burst == nicvf_recv_pkts ||
-		dev->rx_pkt_burst == nicvf_recv_pkts_multiseg)
-		return ptypes;
 
-	return NULL;
+	/* All Ptypes are supported in all Rx functions. */
+	return ptypes;
 }
 
 static void
@@ -891,7 +883,7 @@ nicvf_dev_tx_queue_release(void *sq)
 static void
 nicvf_set_tx_function(struct rte_eth_dev *dev)
 {
-	struct nicvf_txq *txq;
+	struct nicvf_txq *txq = NULL;
 	size_t i;
 	bool multiseg = false;
 
@@ -912,6 +904,9 @@ nicvf_set_tx_function(struct rte_eth_dev *dev)
 		dev->tx_pkt_burst = nicvf_xmit_pkts;
 	}
 
+	if (!txq)
+		return;
+
 	if (txq->pool_free == nicvf_single_pool_free_xmited_buffers)
 		PMD_DRV_LOG(DEBUG, "Using single-mempool tx free method");
 	else
@@ -921,13 +916,23 @@ nicvf_set_tx_function(struct rte_eth_dev *dev)
 static void
 nicvf_set_rx_function(struct rte_eth_dev *dev)
 {
-	if (dev->data->scattered_rx) {
-		PMD_DRV_LOG(DEBUG, "Using multi-segment rx callback");
-		dev->rx_pkt_burst = nicvf_recv_pkts_multiseg;
-	} else {
-		PMD_DRV_LOG(DEBUG, "Using single-segment rx callback");
-		dev->rx_pkt_burst = nicvf_recv_pkts;
-	}
+	struct nicvf *nic = nicvf_pmd_priv(dev);
+
+	const eth_rx_burst_t rx_burst_func[2][2][2] = {
+	/* [NORMAL/SCATTER] [CKSUM/NO_CKSUM] [VLAN_STRIP/NO_VLAN_STRIP] */
+		[0][0][0] = nicvf_recv_pkts_no_offload,
+		[0][0][1] = nicvf_recv_pkts_vlan_strip,
+		[0][1][0] = nicvf_recv_pkts_cksum,
+		[0][1][1] = nicvf_recv_pkts_cksum_vlan_strip,
+		[1][0][0] = nicvf_recv_pkts_multiseg_no_offload,
+		[1][0][1] = nicvf_recv_pkts_multiseg_vlan_strip,
+		[1][1][0] = nicvf_recv_pkts_multiseg_cksum,
+		[1][1][1] = nicvf_recv_pkts_multiseg_cksum_vlan_strip,
+	};
+
+	dev->rx_pkt_burst =
+		rx_burst_func[dev->data->scattered_rx]
+			[nic->offload_cksum][nic->vlan_strip];
 }
 
 static int
@@ -939,7 +944,7 @@ nicvf_dev_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 	bool is_single_pool;
 	struct nicvf_txq *txq;
 	struct nicvf *nic = nicvf_pmd_priv(dev);
-	uint64_t conf_offloads, offload_capa, unsupported_offloads;
+	uint64_t offloads;
 
 	PMD_INIT_FUNC_TRACE();
 
@@ -952,17 +957,6 @@ nicvf_dev_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 	if (socket_id != (unsigned int)SOCKET_ID_ANY && socket_id != nic->node)
 		PMD_DRV_LOG(WARNING, "socket_id expected %d, configured %d",
 		socket_id, nic->node);
-
-	conf_offloads = tx_conf->offloads;
-	offload_capa = NICVF_TX_OFFLOAD_CAPA;
-
-	unsupported_offloads = conf_offloads & ~offload_capa;
-	if (unsupported_offloads) {
-		PMD_INIT_LOG(ERR, "Tx offloads 0x%" PRIx64 " are not supported."
-		      "Requested 0x%" PRIx64 " supported 0x%" PRIx64 ".\n",
-		      unsupported_offloads, conf_offloads, offload_capa);
-		return -ENOTSUP;
-	}
 
 	/* Tx deferred start is not supported */
 	if (tx_conf->tx_deferred_start) {
@@ -1015,9 +1009,10 @@ nicvf_dev_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 	txq->tx_free_thresh = tx_free_thresh;
 	txq->sq_head = nicvf_qset_base(nic, qidx) + NIC_QSET_SQ_0_7_HEAD;
 	txq->sq_door = nicvf_qset_base(nic, qidx) + NIC_QSET_SQ_0_7_DOOR;
-	txq->offloads = conf_offloads;
+	offloads = tx_conf->offloads | dev->data->dev_conf.txmode.offloads;
+	txq->offloads = offloads;
 
-	is_single_pool = !!(conf_offloads & DEV_TX_OFFLOAD_MBUF_FAST_FREE);
+	is_single_pool = !!(offloads & DEV_TX_OFFLOAD_MBUF_FAST_FREE);
 
 	/* Choose optimum free threshold value for multipool case */
 	if (!is_single_pool) {
@@ -1248,6 +1243,7 @@ nicvf_rxq_mbuf_setup(struct nicvf_rxq *rxq)
 {
 	uintptr_t p;
 	struct rte_mbuf mb_def;
+	struct nicvf *nic = rxq->nic;
 
 	RTE_BUILD_BUG_ON(sizeof(union mbuf_initializer) != 8);
 	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, data_off) % 8 != 0);
@@ -1257,8 +1253,11 @@ nicvf_rxq_mbuf_setup(struct nicvf_rxq *rxq)
 				offsetof(struct rte_mbuf, data_off) != 4);
 	RTE_BUILD_BUG_ON(offsetof(struct rte_mbuf, port) -
 				offsetof(struct rte_mbuf, data_off) != 6);
+	RTE_BUILD_BUG_ON(offsetof(struct nicvf_rxq, rxq_fastpath_data_end) -
+				offsetof(struct nicvf_rxq,
+					rxq_fastpath_data_start) > 128);
 	mb_def.nb_segs = 1;
-	mb_def.data_off = RTE_PKTMBUF_HEADROOM;
+	mb_def.data_off = RTE_PKTMBUF_HEADROOM + (nic->skip_bytes);
 	mb_def.port = rxq->port_id;
 	rte_mbuf_refcnt_set(&mb_def, 1);
 
@@ -1277,9 +1276,19 @@ nicvf_dev_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 	uint16_t rx_free_thresh;
 	struct nicvf_rxq *rxq;
 	struct nicvf *nic = nicvf_pmd_priv(dev);
-	uint64_t conf_offloads, offload_capa, unsupported_offloads;
+	uint64_t offloads;
+	uint32_t buffsz;
+	struct rte_pktmbuf_pool_private *mbp_priv;
 
 	PMD_INIT_FUNC_TRACE();
+
+	/* First skip check */
+	mbp_priv = rte_mempool_get_priv(mp);
+	buffsz = mbp_priv->mbuf_data_room_size - RTE_PKTMBUF_HEADROOM;
+	if (buffsz < (uint32_t)(nic->skip_bytes)) {
+		PMD_INIT_LOG(ERR, "First skip is more than configured buffer size");
+		return -EINVAL;
+	}
 
 	if (qidx >= MAX_RCV_QUEUES_PER_QS)
 		nic = nic->snicvf[qidx / MAX_RCV_QUEUES_PER_QS - 1];
@@ -1291,24 +1300,6 @@ nicvf_dev_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 		PMD_DRV_LOG(WARNING, "socket_id expected %d, configured %d",
 		socket_id, nic->node);
 
-
-	conf_offloads = rx_conf->offloads;
-
-	if (conf_offloads & DEV_RX_OFFLOAD_CHECKSUM) {
-		PMD_INIT_LOG(NOTICE, "Rx checksum not supported");
-		conf_offloads &= ~DEV_RX_OFFLOAD_CHECKSUM;
-	}
-
-	offload_capa = NICVF_RX_OFFLOAD_CAPA;
-	unsupported_offloads = conf_offloads & ~offload_capa;
-
-	if (unsupported_offloads) {
-		PMD_INIT_LOG(ERR, "Rx offloads 0x%" PRIx64 " are not supported. "
-		      "Requested 0x%" PRIx64 " supported 0x%" PRIx64 "\n",
-		      unsupported_offloads, conf_offloads, offload_capa);
-		return -ENOTSUP;
-	}
-
 	/* Mempool memory must be contiguous, so must be one memory segment*/
 	if (mp->nb_mem_chunks != 1) {
 		PMD_INIT_LOG(ERR, "Non-contiguous mempool, add more huge pages");
@@ -1316,7 +1307,7 @@ nicvf_dev_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 	}
 
 	/* Mempool memory must be physically contiguous */
-	if (mp->flags & MEMPOOL_F_NO_PHYS_CONTIG) {
+	if (mp->flags & MEMPOOL_F_NO_IOVA_CONTIG) {
 		PMD_INIT_LOG(ERR, "Mempool memory must be physically contiguous");
 		return -EINVAL;
 	}
@@ -1333,6 +1324,7 @@ nicvf_dev_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 		PMD_INIT_LOG(ERR, "Value nb_desc beyond available hw cq qsize");
 		return -EINVAL;
 	}
+
 
 	/* Check rx_free_thresh upper bound */
 	rx_free_thresh = (uint16_t)((rx_conf->rx_free_thresh) ?
@@ -1389,10 +1381,11 @@ nicvf_dev_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 
 	nicvf_rx_queue_reset(rxq);
 
+	offloads = rx_conf->offloads | dev->data->dev_conf.rxmode.offloads;
 	PMD_INIT_LOG(DEBUG, "[%d] rxq=%p pool=%s nb_desc=(%d/%d)"
 			" phy=0x%" PRIx64 " offloads=0x%" PRIx64,
 			nicvf_netdev_qidx(nic, qidx), rxq, mp->name, nb_desc,
-			rte_mempool_avail_count(mp), rxq->phys, conf_offloads);
+			rte_mempool_avail_count(mp), rxq->phys, offloads);
 
 	dev->data->rx_queues[nicvf_netdev_qidx(nic, qidx)] = rxq;
 	dev->data->rx_queue_state[nicvf_netdev_qidx(nic, qidx)] =
@@ -1408,8 +1401,6 @@ nicvf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 
 	PMD_INIT_FUNC_TRACE();
 
-	dev_info->pci_dev = RTE_ETH_DEV_TO_PCI(dev);
-
 	/* Autonegotiation may be disabled */
 	dev_info->speed_capa = ETH_LINK_SPEED_FIXED;
 	dev_info->speed_capa |= ETH_LINK_SPEED_10M | ETH_LINK_SPEED_100M |
@@ -1418,7 +1409,7 @@ nicvf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 		dev_info->speed_capa |= ETH_LINK_SPEED_40G;
 
 	dev_info->min_rx_bufsize = ETHER_MIN_MTU;
-	dev_info->max_rx_pktlen = NIC_HW_MAX_FRS;
+	dev_info->max_rx_pktlen = NIC_HW_MAX_MTU + ETHER_HDR_LEN;
 	dev_info->max_rx_queues =
 			(uint16_t)MAX_RCV_QUEUES_PER_QS * (MAX_SQS_PER_VF + 1);
 	dev_info->max_tx_queues =
@@ -1445,12 +1436,6 @@ nicvf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 
 	dev_info->default_txconf = (struct rte_eth_txconf) {
 		.tx_free_thresh = NICVF_DEFAULT_TX_FREE_THRESH,
-		.txq_flags =
-			ETH_TXQ_FLAGS_NOMULTSEGS  |
-			ETH_TXQ_FLAGS_NOREFCOUNT  |
-			ETH_TXQ_FLAGS_NOMULTMEMP  |
-			ETH_TXQ_FLAGS_NOVLANOFFL  |
-			ETH_TXQ_FLAGS_NOXSUMSCTP,
 		.offloads = DEV_TX_OFFLOAD_MBUF_FAST_FREE |
 			DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM   |
 			DEV_TX_OFFLOAD_UDP_CKSUM          |
@@ -1495,7 +1480,7 @@ nicvf_vf_start(struct rte_eth_dev *dev, struct nicvf *nic, uint32_t rbdrsz)
 	struct rte_mbuf *mbuf;
 	uint16_t rx_start, rx_end;
 	uint16_t tx_start, tx_end;
-	bool vlan_strip;
+	int mask;
 
 	PMD_INIT_FUNC_TRACE();
 
@@ -1541,6 +1526,7 @@ nicvf_vf_start(struct rte_eth_dev *dev, struct nicvf *nic, uint32_t rbdrsz)
 			return -EINVAL;
 		}
 		rxq->mbuf_phys_off -= data_off;
+		rxq->mbuf_phys_off -= nic->skip_bytes;
 
 		if (mbuf_phys_off == 0)
 			mbuf_phys_off = rxq->mbuf_phys_off;
@@ -1615,9 +1601,9 @@ nicvf_vf_start(struct rte_eth_dev *dev, struct nicvf *nic, uint32_t rbdrsz)
 		     nic->rbdr->tail, nb_rbdr_desc, nic->vf_id);
 
 	/* Configure VLAN Strip */
-	vlan_strip = !!(dev->data->dev_conf.rxmode.offloads &
-			DEV_RX_OFFLOAD_VLAN_STRIP);
-	nicvf_vlan_hw_strip(nic, vlan_strip);
+	mask = ETH_VLAN_STRIP_MASK | ETH_VLAN_FILTER_MASK |
+		ETH_VLAN_EXTEND_MASK;
+	ret = nicvf_vlan_offload_config(dev, mask);
 
 	/* Based on the packet type(IPv4 or IPv6), the nicvf HW aligns L3 data
 	 * to the 64bit memory address.
@@ -1751,8 +1737,7 @@ nicvf_dev_start(struct rte_eth_dev *dev)
 	/* Setup MTU based on max_rx_pkt_len or default */
 	mtu = dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_JUMBO_FRAME ?
 		dev->data->dev_conf.rxmode.max_rx_pkt_len
-			-  ETHER_HDR_LEN - ETHER_CRC_LEN
-		: ETHER_MTU;
+			-  ETHER_HDR_LEN : ETHER_MTU;
 
 	if (nicvf_dev_set_mtu(dev, mtu)) {
 		PMD_INIT_LOG(ERR, "Failed to set default mtu size");
@@ -1771,7 +1756,7 @@ nicvf_dev_start(struct rte_eth_dev *dev)
 			return ret;
 	}
 
-	/* Configure callbacks based on scatter mode */
+	/* Configure callbacks based on offloads */
 	nicvf_set_tx_function(dev);
 	nicvf_set_rx_function(dev);
 
@@ -1923,8 +1908,6 @@ nicvf_dev_configure(struct rte_eth_dev *dev)
 	struct rte_eth_txmode *txmode = &conf->txmode;
 	struct nicvf *nic = nicvf_pmd_priv(dev);
 	uint8_t cqcount;
-	uint64_t conf_rx_offloads, rx_offload_capa;
-	uint64_t conf_tx_offloads, tx_offload_capa;
 
 	PMD_INIT_FUNC_TRACE();
 
@@ -1933,32 +1916,10 @@ nicvf_dev_configure(struct rte_eth_dev *dev)
 		return -EINVAL;
 	}
 
-	conf_tx_offloads = dev->data->dev_conf.txmode.offloads;
-	tx_offload_capa = NICVF_TX_OFFLOAD_CAPA;
-
-	if ((conf_tx_offloads & tx_offload_capa) != conf_tx_offloads) {
-		PMD_INIT_LOG(ERR, "Some Tx offloads are not supported "
-		      "requested 0x%" PRIx64 " supported 0x%" PRIx64 "\n",
-		      conf_tx_offloads, tx_offload_capa);
-		return -ENOTSUP;
-	}
-
-	if (rxmode->offloads & DEV_RX_OFFLOAD_CHECKSUM) {
-		PMD_INIT_LOG(NOTICE, "Rx checksum not supported");
-		rxmode->offloads &= ~DEV_RX_OFFLOAD_CHECKSUM;
-	}
-
-	conf_rx_offloads = rxmode->offloads;
-	rx_offload_capa = NICVF_RX_OFFLOAD_CAPA;
-
-	if ((conf_rx_offloads & rx_offload_capa) != conf_rx_offloads) {
-		PMD_INIT_LOG(ERR, "Some Rx offloads are not supported "
-		      "requested 0x%" PRIx64 " supported 0x%" PRIx64 "\n",
-		      conf_rx_offloads, rx_offload_capa);
-		return -ENOTSUP;
-	}
-
-	if ((conf_rx_offloads & DEV_RX_OFFLOAD_CRC_STRIP) == 0) {
+	/* KEEP_CRC offload flag is not supported by PMD
+	 * can remove the below block when DEV_RX_OFFLOAD_CRC_STRIP removed
+	 */
+	if (rte_eth_dev_must_keep_crc(rxmode->offloads)) {
 		PMD_INIT_LOG(NOTICE, "Can't disable hw crc strip");
 		rxmode->offloads |= DEV_RX_OFFLOAD_CRC_STRIP;
 	}
@@ -2014,6 +1975,9 @@ nicvf_dev_configure(struct rte_eth_dev *dev)
 		}
 	}
 
+	if (rxmode->offloads & DEV_RX_OFFLOAD_CHECKSUM)
+		nic->offload_cksum = 1;
+
 	PMD_INIT_LOG(DEBUG, "Configured ethdev port%d hwcap=0x%" PRIx64,
 		dev->data->port_id, nicvf_hw_cap(nic));
 
@@ -2033,6 +1997,7 @@ static const struct eth_dev_ops nicvf_eth_dev_ops = {
 	.dev_infos_get            = nicvf_dev_info_get,
 	.dev_supported_ptypes_get = nicvf_dev_supported_ptypes_get,
 	.mtu_set                  = nicvf_dev_set_mtu,
+	.vlan_offload_set         = nicvf_vlan_offload_set,
 	.reta_update              = nicvf_dev_reta_update,
 	.reta_query               = nicvf_dev_reta_query,
 	.rss_hash_update          = nicvf_dev_rss_hash_update,
@@ -2049,6 +2014,83 @@ static const struct eth_dev_ops nicvf_eth_dev_ops = {
 	.get_reg                  = nicvf_dev_get_regs,
 };
 
+static int
+nicvf_vlan_offload_config(struct rte_eth_dev *dev, int mask)
+{
+	struct rte_eth_rxmode *rxmode;
+	struct nicvf *nic = nicvf_pmd_priv(dev);
+	rxmode = &dev->data->dev_conf.rxmode;
+	if (mask & ETH_VLAN_STRIP_MASK) {
+		if (rxmode->offloads & DEV_RX_OFFLOAD_VLAN_STRIP)
+			nicvf_vlan_hw_strip(nic, true);
+		else
+			nicvf_vlan_hw_strip(nic, false);
+	}
+
+	return 0;
+}
+
+static int
+nicvf_vlan_offload_set(struct rte_eth_dev *dev, int mask)
+{
+	nicvf_vlan_offload_config(dev, mask);
+
+	return 0;
+}
+
+static inline int
+nicvf_set_first_skip(struct rte_eth_dev *dev)
+{
+	int bytes_to_skip = 0;
+	int ret = 0;
+	unsigned int i;
+	struct rte_kvargs *kvlist;
+	static const char *const skip[] = {
+		SKIP_DATA_BYTES,
+		NULL};
+	struct nicvf *nic = nicvf_pmd_priv(dev);
+
+	if (!dev->device->devargs) {
+		nicvf_first_skip_config(nic, 0);
+		return ret;
+	}
+
+	kvlist = rte_kvargs_parse(dev->device->devargs->args, skip);
+	if (!kvlist)
+		return -EINVAL;
+
+	if (kvlist->count == 0)
+		goto exit;
+
+	for (i = 0; i != kvlist->count; ++i) {
+		const struct rte_kvargs_pair *pair = &kvlist->pairs[i];
+
+		if (!strcmp(pair->key, SKIP_DATA_BYTES))
+			bytes_to_skip = atoi(pair->value);
+	}
+
+	/*128 bytes amounts to one cache line*/
+	if (bytes_to_skip >= 0 && bytes_to_skip < 128) {
+		if (!(bytes_to_skip % 8)) {
+			nicvf_first_skip_config(nic, (bytes_to_skip / 8));
+			nic->skip_bytes = bytes_to_skip;
+			goto kvlist_free;
+		} else {
+			PMD_INIT_LOG(ERR, "skip_data_bytes should be multiple of 8");
+			ret = -EINVAL;
+			goto exit;
+		}
+	} else {
+		PMD_INIT_LOG(ERR, "skip_data_bytes should be less than 128");
+		ret = -EINVAL;
+		goto exit;
+	}
+exit:
+	nicvf_first_skip_config(nic, 0);
+kvlist_free:
+	rte_kvargs_free(kvlist);
+	return ret;
+}
 static int
 nicvf_eth_dev_init(struct rte_eth_dev *eth_dev)
 {
@@ -2158,6 +2200,11 @@ nicvf_eth_dev_init(struct rte_eth_dev *eth_dev)
 		goto malloc_fail;
 	}
 
+	ret = nicvf_set_first_skip(eth_dev);
+	if (ret) {
+		PMD_INIT_LOG(ERR, "Failed to configure first skip");
+		goto malloc_fail;
+	}
 	PMD_INIT_LOG(INFO, "Port %d (%x:%x) mac=%02x:%02x:%02x:%02x:%02x:%02x",
 		eth_dev->data->port_id, nic->vendor_id, nic->device_id,
 		nic->mac_addr[0], nic->mac_addr[1], nic->mac_addr[2],
@@ -2230,3 +2277,4 @@ static struct rte_pci_driver rte_nicvf_pmd = {
 RTE_PMD_REGISTER_PCI(net_thunderx, rte_nicvf_pmd);
 RTE_PMD_REGISTER_PCI_TABLE(net_thunderx, pci_id_nicvf_map);
 RTE_PMD_REGISTER_KMOD_DEP(net_thunderx, "* igb_uio | uio_pci_generic | vfio-pci");
+RTE_PMD_REGISTER_PARAM_STRING(net_thunderx, SKIP_DATA_BYTES "=<int>");

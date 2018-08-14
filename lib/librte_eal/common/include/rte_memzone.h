@@ -23,6 +23,7 @@
  */
 
 #include <stdio.h>
+#include <rte_compat.h>
 #include <rte_memory.h>
 #include <rte_common.h>
 
@@ -39,6 +40,7 @@ extern "C" {
 #define RTE_MEMZONE_512MB          0x00040000   /**< Use 512MB pages. */
 #define RTE_MEMZONE_4GB            0x00080000   /**< Use 4GB pages. */
 #define RTE_MEMZONE_SIZE_HINT_ONLY 0x00000004   /**< Use available page size */
+#define RTE_MEMZONE_IOVA_CONTIG    0x00100000   /**< Ask for IOVA-contiguous memzone. */
 
 /**
  * A structure describing a memzone, which is a contiguous portion of
@@ -66,7 +68,6 @@ struct rte_memzone {
 	int32_t socket_id;                /**< NUMA socket ID. */
 
 	uint32_t flags;                   /**< Characteristics of this memzone. */
-	uint32_t memseg_id;               /**< Memseg it belongs. */
 } __attribute__((__packed__));
 
 /**
@@ -75,6 +76,17 @@ struct rte_memzone {
  * This function reserves some memory and returns a pointer to a
  * correctly filled memzone descriptor. If the allocation cannot be
  * done, return NULL.
+ *
+ * @note Reserving memzones with len set to 0 will only attempt to allocate
+ *   memzones from memory that is already available. It will not trigger any
+ *   new allocations.
+ *
+ * @note: When reserving memzones with len set to 0, it is preferable to also
+ *   set a valid socket_id. Setting socket_id to SOCKET_ID_ANY is supported, but
+ *   will likely not yield expected results. Specifically, the resulting memzone
+ *   may not necessarily be the biggest memzone available, but rather biggest
+ *   memzone available on socket id corresponding to an lcore from which
+ *   reservation was called.
  *
  * @param name
  *   The name of the memzone. If it already exists, the function will
@@ -102,6 +114,9 @@ struct rte_memzone {
  *                                  If this flag is not set, the function
  *                                  will return error on an unavailable size
  *                                  request.
+ *   - RTE_MEMZONE_IOVA_CONTIG - Ensure reserved memzone is IOVA-contiguous.
+ *                               This option should be used when allocating
+ *                               memory intended for hardware rings etc.
  * @return
  *   A pointer to a correctly-filled read-only memzone descriptor, or NULL
  *   on error.
@@ -126,6 +141,17 @@ const struct rte_memzone *rte_memzone_reserve(const char *name,
  * descriptor. If the allocation cannot be done or if the alignment
  * is not a power of 2, returns NULL.
  *
+ * @note Reserving memzones with len set to 0 will only attempt to allocate
+ *   memzones from memory that is already available. It will not trigger any
+ *   new allocations.
+ *
+ * @note: When reserving memzones with len set to 0, it is preferable to also
+ *   set a valid socket_id. Setting socket_id to SOCKET_ID_ANY is supported, but
+ *   will likely not yield expected results. Specifically, the resulting memzone
+ *   may not necessarily be the biggest memzone available, but rather biggest
+ *   memzone available on socket id corresponding to an lcore from which
+ *   reservation was called.
+ *
  * @param name
  *   The name of the memzone. If it already exists, the function will
  *   fail and return NULL.
@@ -152,6 +178,9 @@ const struct rte_memzone *rte_memzone_reserve(const char *name,
  *                                  If this flag is not set, the function
  *                                  will return error on an unavailable size
  *                                  request.
+ *   - RTE_MEMZONE_IOVA_CONTIG - Ensure reserved memzone is IOVA-contiguous.
+ *                               This option should be used when allocating
+ *                               memory intended for hardware rings etc.
  * @param align
  *   Alignment for resulting memzone. Must be a power of 2.
  * @return
@@ -181,6 +210,17 @@ const struct rte_memzone *rte_memzone_reserve_aligned(const char *name,
  * boundary. That implies that requested length should be less or equal
  * then boundary.
  *
+ * @note Reserving memzones with len set to 0 will only attempt to allocate
+ *   memzones from memory that is already available. It will not trigger any
+ *   new allocations.
+ *
+ * @note: When reserving memzones with len set to 0, it is preferable to also
+ *   set a valid socket_id. Setting socket_id to SOCKET_ID_ANY is supported, but
+ *   will likely not yield expected results. Specifically, the resulting memzone
+ *   may not necessarily be the biggest memzone available, but rather biggest
+ *   memzone available on socket id corresponding to an lcore from which
+ *   reservation was called.
+ *
  * @param name
  *   The name of the memzone. If it already exists, the function will
  *   fail and return NULL.
@@ -207,6 +247,9 @@ const struct rte_memzone *rte_memzone_reserve_aligned(const char *name,
  *                                  If this flag is not set, the function
  *                                  will return error on an unavailable size
  *                                  request.
+ *   - RTE_MEMZONE_IOVA_CONTIG - Ensure reserved memzone is IOVA-contiguous.
+ *                               This option should be used when allocating
+ *                               memory intended for hardware rings etc.
  * @param align
  *   Alignment for resulting memzone. Must be a power of 2.
  * @param bound
