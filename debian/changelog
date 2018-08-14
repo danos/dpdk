@@ -1,3 +1,10 @@
+dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
+
+  * New upstream release 18.08; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_08.html
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 14 Aug 2018 18:58:11 +0100
+
 dpdk (18.05-1~git1) UNRELEASED; urgency=medium
 
   [ Christian Ehrhardt ]
