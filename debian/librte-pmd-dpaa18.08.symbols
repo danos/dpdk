@@ -1,0 +1,14 @@
+librte_pmd_dpaa.so.18.08 librte-pmd-dpaa18.08 #MINVER#
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.
+#
+# This one has some experimental symbols
+ DPDK_17.11@DPDK_17.11 18.05
+ DPDK_18.08@DPDK_18.08 18.08
+#MISSING: 18.08# EXPERIMENTAL@EXPERIMENTAL 18.05
+ dpaa_eth_eventq_attach@DPDK_18.08 18.08
+#MISSING: 18.08# dpaa_eth_eventq_attach@EXPERIMENTAL 18.05
+ dpaa_eth_eventq_detach@DPDK_18.08 18.08
+#MISSING: 18.08# dpaa_eth_eventq_detach@EXPERIMENTAL 18.05
+ rte_pmd_dpaa_set_tx_loopback@DPDK_18.08 18.08
+#MISSING: 18.08# rte_pmd_dpaa_set_tx_loopback@EXPERIMENTAL 18.05

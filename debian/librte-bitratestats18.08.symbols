@@ -1,0 +1,5 @@
+librte_bitratestats.so.18.08 librte-bitratestats18.08 #MINVER#
+ DPDK_17.05@DPDK_17.05 17.05
+ rte_stats_bitrate_calc@DPDK_17.05 17.05
+ rte_stats_bitrate_create@DPDK_17.05 17.05
+ rte_stats_bitrate_reg@DPDK_17.05 17.05

@@ -1,4 +1,0 @@
-librte_ifcvf_vdpa.so.18.05 librte-ifcvf-vdpa18.05 #MINVER#
- DPDK_18.05@DPDK_18.05 18.05
-# INFO: this library exports no symbols, it is like a PMD relying
-# on callbacks once registered

@@ -1,7 +1,0 @@
-librte_mempool_octeontx.so.18.05 librte-mempool-octeontx18.05 #MINVER#
- DPDK_17.11@DPDK_17.11 17.11
-#MISSING: 18.05# octeontx_ssovf_bar@DPDK_17.11 17.11
-#MISSING: 18.05# octeontx_ssovf_info@DPDK_17.11 17.11
-#MISSING: 18.05# octeontx_ssovf_mbox_send@DPDK_17.11 17.11
-# This is odd, as it exports no symbols anymore, but it is still built
-# so keep the empty symbols for now

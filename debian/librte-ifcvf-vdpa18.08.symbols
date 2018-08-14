@@ -1,0 +1,2 @@
+# INFO: this library exports no symbols, it is like a PMD relying
+# on callbacks once registered

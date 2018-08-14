@@ -1,4 +1,0 @@
-librte_pmd_axgbe.so.18.05 librte-pmd-axgbe18.05 #MINVER#
- DPDK_18.05@DPDK_18.05 18.05
-# INFO: this library exports no symbols, essentially it is a driver that
-# registers itself on load and is then only driven by callbacks.
