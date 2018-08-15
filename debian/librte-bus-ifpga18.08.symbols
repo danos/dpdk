@@ -1,0 +1,6 @@
+librte_bus_ifpga.so.18.08 librte-bus-ifpga18.08 #MINVER#
+ DPDK_18.05@DPDK_18.05 18.05
+ rte_ifpga_driver_register@DPDK_18.05 18.05
+ rte_ifpga_driver_unregister@DPDK_18.05 18.05
+ rte_ifpga_get_integer32_arg@DPDK_18.05 18.05
+ rte_ifpga_get_string_arg@DPDK_18.05 18.05

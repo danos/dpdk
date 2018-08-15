@@ -1,4 +1,0 @@
-librte_pmd_vdev_netvsc.so.18.05 librte-pmd-vdev-netvsc18.05 #MINVER#
- DPDK_18.02@DPDK_18.02 18.02
-# INFO: this library exports no symbols, essentially it is a driver that
-# registers itself on load and is then only driven by callbacks.

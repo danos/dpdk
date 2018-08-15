@@ -1,0 +1,4 @@
+librte_pmd_ifc.so.18.08 librte-pmd-ifc18.08 #MINVER#
+ DPDK_18.05@DPDK_18.05 18.08
+# INFO: this library exports no symbols, it is like a PMD relying
+# on callbacks once registered

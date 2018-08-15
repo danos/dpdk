@@ -1,0 +1,9 @@
+librte_pmd_dpaa2.so.18.08 librte-pmd-dpaa2-18.08 #MINVER#
+ DPDK_17.05@DPDK_17.05 18.05
+ DPDK_17.11@DPDK_17.11 18.05
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.
+#
+# This one has some experimental symbols
+ dpaa2_eth_eventq_attach@DPDK_17.11 18.05
+ dpaa2_eth_eventq_detach@DPDK_17.11 18.05

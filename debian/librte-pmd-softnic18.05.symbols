@@ -1,3 +1,0 @@
-librte_pmd_softnic.so.18.05 librte-pmd-softnic18.05 #MINVER#
- DPDK_17.11@DPDK_17.11 17.11
- rte_pmd_softnic_run@DPDK_17.11 17.11

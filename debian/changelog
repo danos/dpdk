@@ -1,3 +1,20 @@
+dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
+
+  * New upstream release 18.08; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_08.html
+    - refresh d/p/fix-vhost-user-socket-permission.patch for 18.08
+    - add build-dependency on libmnl-dev, needed by MLX PMD
+    - d/control: bump ABI version on packages
+    - bump d/*.symbols for new ABI
+    - Rename librte-ifcvf-vdpa to librte-pmd-ifc following upstream change
+  * Enable librte-pmd-avf on arm64, i386 and ppc64el since it's available.
+    (Closes: #905041)
+  * Enable AESNI-MB/AESNI-GCM crypto drivers PMDs and packages with build
+    dependency on libipsec-mb-dev (amd64-only).
+    (Closes: #905580)
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 14 Aug 2018 18:58:11 +0100
+
 dpdk (18.05-1) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
@@ -27,7 +44,7 @@ dpdk (18.05-1) experimental; urgency=medium
     - d/rules: adapt to move of kernel modules directories in 18.05
     - d/control: dpaa drivers build on non arm64 as well now
     - d/rules: handle IFCVF as callback driver
-  * Droped changes that are upstream in 18.05:
+  * Dropped changes that are upstream in 18.05:
     - Backport dpdk-dev-app-testpmd-fix-DPAA-shared-library-dependency.patch
       and dpdk-dev-mk-fix-dependencies-of-dpaaX-drivers.patch from upstream to
     - d/p/dpdk-dev-eal-ppc-fix-rte_smp_mb-for-a-compilation-error-with-else-

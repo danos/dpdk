@@ -1,0 +1,5 @@
+librte_pmd_softnic.so.18.08 librte-pmd-softnic18.08 #MINVER#
+ DPDK_17.11@DPDK_17.11 17.11
+ EXPERIMENTAL@EXPERIMENTAL 18.08
+ rte_pmd_softnic_manage@EXPERIMENTAL 18.08
+ rte_pmd_softnic_run@DPDK_17.11 17.11

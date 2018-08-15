@@ -72,7 +72,7 @@ Last-Update: 2017-08-23
  ----------------------------
 --- a/lib/librte_eal/common/eal_common_options.c
 +++ b/lib/librte_eal/common/eal_common_options.c
-@@ -76,6 +76,8 @@ eal_long_options[] = {
+@@ -78,6 +78,8 @@ eal_long_options[] = {
  	{OPT_VMWARE_TSC_MAP,    0, NULL, OPT_VMWARE_TSC_MAP_NUM   },
  	{OPT_LEGACY_MEM,        0, NULL, OPT_LEGACY_MEM_NUM       },
  	{OPT_SINGLE_FILE_SEGMENTS, 0, NULL, OPT_SINGLE_FILE_SEGMENTS_NUM},
@@ -83,7 +83,7 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_eal/common/eal_options.h
 +++ b/lib/librte_eal/common/eal_options.h
-@@ -59,6 +59,10 @@ enum {
+@@ -63,6 +63,10 @@ enum {
  	OPT_LEGACY_MEM_NUM,
  #define OPT_SINGLE_FILE_SEGMENTS    "single-file-segments"
  	OPT_SINGLE_FILE_SEGMENTS_NUM,
@@ -96,9 +96,9 @@ Last-Update: 2017-08-23
  
 --- a/lib/librte_eal/common/include/rte_eal.h
 +++ b/lib/librte_eal/common/include/rte_eal.h
-@@ -512,6 +512,11 @@ __rte_deprecated
+@@ -498,6 +498,11 @@ enum rte_iova_mode rte_eal_iova_mode(voi
  const char *
- rte_eal_mbuf_default_mempool_ops(void);
+ rte_eal_mbuf_user_pool_ops(void);
  
 +/**
 + * Set owner/permissions on sockets if requested on EAL commandline
@@ -133,7 +133,7 @@ Last-Update: 2017-08-23
  /* used by rte_rdtsc() */
  int rte_cycles_vmware_tsc_map;
  
-@@ -412,6 +421,8 @@ eal_usage(const char *prgname)
+@@ -408,6 +417,8 @@ eal_usage(const char *prgname)
  	       "  --"OPT_VFIO_INTR"         Interrupt mode for VFIO (legacy|msi|msix)\n"
  	       "  --"OPT_LEGACY_MEM"        Legacy memory mode (no dynamic allocation, contiguous segments)\n"
  	       "  --"OPT_SINGLE_FILE_SEGMENTS" Put all hugepage memory in single files\n"
@@ -142,7 +142,7 @@ Last-Update: 2017-08-23
  	       "\n");
  	/* Allow the application to print its usage message too if hook is set */
  	if ( rte_application_usage_hook ) {
-@@ -571,6 +582,121 @@ eal_log_level_parse(int argc, char **arg
+@@ -566,6 +577,121 @@ eal_log_level_parse(int argc, char **arg
  	optarg = old_optarg;
  }
  
@@ -264,7 +264,7 @@ Last-Update: 2017-08-23
  /* Parse the argument given in the command line of the application */
  static int
  eal_parse_args(int argc, char **argv)
-@@ -659,6 +785,26 @@ eal_parse_args(int argc, char **argv)
+@@ -668,6 +794,26 @@ eal_parse_args(int argc, char **argv)
  			    strdup(optarg);
  			break;
  
@@ -291,7 +291,7 @@ Last-Update: 2017-08-23
  		default:
  			if (opt < OPT_LONG_MIN_NUM && isprint(opt)) {
  				RTE_LOG(ERR, EAL, "Option %c is not supported "
-@@ -1118,3 +1264,47 @@ rte_eal_check_module(const char *module_
+@@ -1145,3 +1291,47 @@ rte_eal_check_module(const char *module_
  	/* Module has been found */
  	return 1;
  }
