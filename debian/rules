@@ -56,6 +56,12 @@ RTE_MACHINE ?= "armv8a"
 RTE_TARGET ?= "arm64-armv8a-linuxapp-gcc"
 INCLUDE_ARCH := arm
 else
+ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
+DPDK_CONFIG ?= "arm-armv7a-linuxapp-gcc"
+RTE_MACHINE ?= "armv7a"
+RTE_TARGET ?= "arm-armv7a-linuxapp-gcc"
+INCLUDE_ARCH := arm
+else
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
 DPDK_CONFIG ?= "ppc_64-power8-linuxapp-gcc"
 RTE_MACHINE ?= "power8"
@@ -66,6 +72,7 @@ DPDK_CONFIG ?= "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
 RTE_MACHINE ?= "default"
 RTE_TARGET ?= "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
 INCLUDE_ARCH := x86
+endif
 endif
 endif
 DPDK_STATIC_DIR = "debian/build/static-root"
@@ -182,11 +189,14 @@ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
 		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
 		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
-		-e 's,(CONFIG_RTE_LIBRTE_MLX4_PMD=).*,\1y,' \
-		-e 's,(CONFIG_RTE_LIBRTE_MLX5_PMD=).*,\1y,' \
 		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/$(DPDK_DRIVER_DIR)/",' \
+		$(DPDK_STATIC_DIR)/.config
+ifeq (,$(filter $(DEB_HOST_ARCH), armhf))
+	sed -ri -e 's,(CONFIG_RTE_LIBRTE_MLX4_PMD=).*,\1y,' \
+		-e 's,(CONFIG_RTE_LIBRTE_MLX5_PMD=).*,\1y,' \
 		-e 's,(LIBRTE_PMD_OPENSSL=).*,\1y,' \
 		$(DPDK_STATIC_DIR)/.config
+endif
 endif
 	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
 		$(DPDK_STATIC_DIR)/.config
