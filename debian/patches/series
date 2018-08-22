@@ -1,1 +1,2 @@
 fix-vhost-user-socket-permission.patch
+tmpfix-ppc-build-error.patch
