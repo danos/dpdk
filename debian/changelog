@@ -1,5 +1,6 @@
 dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
 
+  [ Luca Boccassi ]
   * New upstream release 18.08; for a full list of changes see:
     https://dpdk.org/doc/guides/rel_notes/release_18_08.html
     - refresh d/p/fix-vhost-user-socket-permission.patch for 18.08
@@ -7,6 +8,10 @@ dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
     - d/control: bump ABI version on packages
     - bump d/*.symbols for new ABI
     - Rename librte-ifcvf-vdpa to librte-pmd-ifc following upstream change
+
+  [ Christian Ehrhardt ]
+  * d/p/tmpfix-ppc-build-error.patch: fix ppc64el build issue due to a
+    conflict of stdbool and altivec.
 
  -- Luca Boccassi <bluca@debian.org>  Tue, 14 Aug 2018 18:58:11 +0100
 
