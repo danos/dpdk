@@ -8,6 +8,7 @@ dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
     - d/control: bump ABI version on packages
     - bump d/*.symbols for new ABI
     - Rename librte-ifcvf-vdpa to librte-pmd-ifc following upstream change
+  * Enable armhf build. (Closes: #906931)
 
   [ Christian Ehrhardt ]
   * d/p/tmpfix-ppc-build-error.patch: fix ppc64el build issue due to a
