@@ -11,6 +11,11 @@ dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
   * Enable armhf build. (Closes: #906931)
   * Add libibverbs-dev dependency in libdpdk-dev, for static linking.
     (Closes: #907365)
+  * Add missing packages for new PMDs and libraries built by default:
+    - librte-bus-vmbus18.08
+    - librte-pmd-netvsc18.08
+    - librte-pmd-qat18.08
+    - librte-pmd-octeontx-zip18.08
 
   [ Christian Ehrhardt ]
   * d/p/tmpfix-ppc-build-error.patch: fix ppc64el build issue due to a
