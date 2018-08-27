@@ -9,6 +9,8 @@ dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
     - bump d/*.symbols for new ABI
     - Rename librte-ifcvf-vdpa to librte-pmd-ifc following upstream change
   * Enable armhf build. (Closes: #906931)
+  * Add libibverbs-dev dependency in libdpdk-dev, for static linking.
+    (Closes: #907365)
 
   [ Christian Ehrhardt ]
   * d/p/tmpfix-ppc-build-error.patch: fix ppc64el build issue due to a
