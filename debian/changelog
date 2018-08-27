@@ -18,6 +18,7 @@ dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
     - librte-pmd-octeontx-zip18.08
   * Add "terse" DEB_BUILD_OPTIONS to reduce build log verbosity.
   * Set Rules-Requires-Root to no.
+  * Bump Standards-Version to 4.2.1.
 
   [ Christian Ehrhardt ]
   * d/p/tmpfix-ppc-build-error.patch: fix ppc64el build issue due to a
