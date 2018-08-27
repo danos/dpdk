@@ -1,3 +1,19 @@
+dpdk (18.08-3) UNRELEASED; urgency=medium
+
+  * Enable armhf build. (Closes: #906931)
+  * Add libibverbs-dev dependency in libdpdk-dev, for static linking.
+    (Closes: #907365)
+  * Add missing packages for new PMDs and libraries built by default:
+    - librte-bus-vmbus18.08
+    - librte-pmd-netvsc18.08
+    - librte-pmd-qat18.08
+    - librte-pmd-octeontx-zip18.08
+  * Add "terse" DEB_BUILD_OPTIONS to reduce build log verbosity.
+  * Set Rules-Requires-Root to no.
+  * Bump Standards-Version to 4.2.1.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 27 Aug 2018 16:50:04 +0100
+
 dpdk (18.08-2) experimental; urgency=medium
 
   [ Christian Ehrhardt ]

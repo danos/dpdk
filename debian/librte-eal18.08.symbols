@@ -199,7 +199,7 @@ librte_eal.so.18.08 librte-eal18.08 #MINVER#
  rte_realloc@DPDK_2.0 16.04
  rte_reciprocal_value@DPDK_18.02 18.02
  rte_reciprocal_value_u64@DPDK_18.02 18.02
- (arch=!arm64 !ppc64el)rte_rtm_supported@DPDK_16.07 16.07~rc3
+ (arch=!arm64 !armhf !ppc64el)rte_rtm_supported@DPDK_16.07 16.07~rc3
  rte_service_attr_get@DPDK_18.05 18.05
  rte_service_attr_reset_all@DPDK_18.05 18.05
  rte_service_component_register@DPDK_18.05 18.05
