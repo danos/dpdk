@@ -1,4 +1,4 @@
-dpdk (18.08-3) UNRELEASED; urgency=medium
+dpdk (18.08-3) experimental; urgency=medium
 
   * Enable armhf build. (Closes: #906931)
   * Add libibverbs-dev dependency in libdpdk-dev, for static linking.
@@ -12,7 +12,7 @@ dpdk (18.08-3) UNRELEASED; urgency=medium
   * Set Rules-Requires-Root to no.
   * Bump Standards-Version to 4.2.1.
 
- -- Luca Boccassi <bluca@debian.org>  Mon, 27 Aug 2018 16:50:04 +0100
+ -- Luca Boccassi <bluca@debian.org>  Mon, 27 Aug 2018 17:13:24 +0100
 
 dpdk (18.08-2) experimental; urgency=medium
 
