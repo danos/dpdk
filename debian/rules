@@ -1,8 +1,4 @@
 #!/usr/bin/make -f
-# See debhelper(7) (uncomment to enable)
-# output every command that modifies files on the build system.
-export DH_VERBOSE=1
-export DH_OPTIONS=-v
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
 include /usr/share/dpkg/default.mk
@@ -16,6 +12,11 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
 # see ENVIRONMENT in dpkg-buildflags(1)
 DPKG_EXPORT_BUILDFLAGS = 1
 include /usr/share/dpkg/buildflags.mk
+
+ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
+	export DH_VERBOSE=1
+	export DH_OPTIONS=-v
+endif
 
 # Support backporting to jessie
 dpkg_version_lt = $(shell dpkg --compare-versions $$(dpkg --status dpkg-dev | grep Version | cut -d' ' -f2) lt-nl "1.18.11" && echo yes)
