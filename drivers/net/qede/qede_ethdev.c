@@ -441,7 +441,10 @@ qede_mac_int_ops(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
 		if (rc == 0)
 			rc = ecore_filter_ucast_cmd(edev, ucast,
 						    ECORE_SPQ_MODE_CB, NULL);
-		if (rc != ECORE_SUCCESS) {
+		/* Indicate error only for add filter operation.
+		 * Delete filter operations are not severe.
+		 */
+		if ((rc != ECORE_SUCCESS) && add) {
 			DP_ERR(edev, "MAC filter failed, rc = %d, op = %d\n",
 			       rc, add);
 		}
@@ -797,8 +800,7 @@ static int qede_dev_configure(struct rte_eth_dev *eth_dev)
 
 	/* Enable VLAN offloads by default */
 	qede_vlan_offload_set(eth_dev, ETH_VLAN_STRIP_MASK  |
-				       ETH_VLAN_FILTER_MASK |
-				       ETH_VLAN_EXTEND_MASK);
+				       ETH_VLAN_FILTER_MASK);
 
 	qdev->state = QEDE_DEV_CONFIG;
 

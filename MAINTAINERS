@@ -140,13 +140,13 @@ F: doc/guides/sample_app_ug/multi_process.rst
 
 ARM v7
 M: Jan Viktorin <viktorin@rehivetech.com>
-M: Jianbo Liu <jianbo.liu@linaro.org>
+M: Gavin Hu <gavin.hu@arm.com>
 F: lib/librte_eal/common/arch/arm/
 F: lib/librte_eal/common/include/arch/arm/
 
 ARM v8
 M: Jerin Jacob <jerin.jacob@caviumnetworks.com>
-M: Jianbo Liu <jianbo.liu@linaro.org>
+M: Gavin Hu <gavin.hu@arm.com>
 F: lib/librte_eal/common/include/arch/arm/*_64.h
 F: lib/librte_acl/acl_run_neon.*
 F: lib/librte_lpm/rte_lpm_neon.h
@@ -335,12 +335,14 @@ M: Jing Chen <jing.d.chen@intel.com>
 F: drivers/net/fm10k/
 
 Mellanox mlx4
-M: Adrien Mazarguil <adrien.mazarguil@6wind.com>
+M: Matan Azrad <matan@mellanox.com>
+M: Shahaf Shuler <shahafs@mellanox.com>
 F: drivers/net/mlx4/
 F: doc/guides/nics/mlx4.rst
 
 Mellanox mlx5
-M: Adrien Mazarguil <adrien.mazarguil@6wind.com>
+M: Shahaf Shuler <shahafs@mellanox.com>
+M: Yongseok Koh <yskoh@mellanox.com>
 F: drivers/net/mlx5/
 F: doc/guides/nics/mlx5.rst
 

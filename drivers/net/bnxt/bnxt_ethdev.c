@@ -137,6 +137,7 @@ static struct rte_pci_id bnxt_pci_id_map[] = {
 	ETH_RSS_NONFRAG_IPV6_UDP)
 
 static void bnxt_print_link_info(struct rte_eth_dev *eth_dev);
+static int bnxt_dev_uninit(struct rte_eth_dev *eth_dev);
 
 /***********************/
 
@@ -222,6 +223,17 @@ static int bnxt_init_chip(struct bnxt *bp)
 	/* VNIC configuration */
 	for (i = 0; i < bp->nr_vnics; i++) {
 		struct bnxt_vnic_info *vnic = &bp->vnic_info[i];
+		uint32_t size = sizeof(*vnic->fw_grp_ids) * bp->max_ring_grps;
+
+		vnic->fw_grp_ids = rte_zmalloc("vnic_fw_grp_ids", size, 0);
+		if (!vnic->fw_grp_ids) {
+			RTE_LOG(ERR, PMD,
+				    "Failed to alloc %d bytes for group ids\n",
+				    size);
+			rc = -ENOMEM;
+			goto err_out;
+		}
+		memset(vnic->fw_grp_ids, -1, size);
 
 		rc = bnxt_hwrm_vnic_alloc(bp, vnic);
 		if (rc) {
@@ -347,12 +359,12 @@ static void bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 		dev_info->max_rx_queues = bp->pf.max_rx_rings;
 		dev_info->max_tx_queues = bp->pf.max_tx_rings;
 		dev_info->max_vfs = bp->pf.active_vfs;
-		dev_info->reta_size = bp->pf.max_rsscos_ctx;
+		dev_info->reta_size = HW_HASH_INDEX_SIZE;
 		max_vnics = bp->pf.max_vnics;
 	} else {
 		dev_info->max_rx_queues = bp->vf.max_rx_rings;
 		dev_info->max_tx_queues = bp->vf.max_tx_rings;
-		dev_info->reta_size = bp->vf.max_rsscos_ctx;
+		dev_info->reta_size = HW_HASH_INDEX_SIZE;
 		max_vnics = bp->vf.max_vnics;
 	}
 
@@ -575,6 +587,8 @@ static void bnxt_dev_close_op(struct rte_eth_dev *eth_dev)
 		rte_free(bp->grp_info);
 		bp->grp_info = NULL;
 	}
+
+	bnxt_dev_uninit(eth_dev);
 }
 
 static void bnxt_mac_addr_remove_op(struct rte_eth_dev *eth_dev,
