@@ -1,7 +1,12 @@
-dpdk (16.11.7-1+deb9u1) stretch; urgency=medium
+dpdk (16.11.8-1+deb9u1) stretch; urgency=medium
 
+  * Merge stable update to 16.11.8; For a list of changes see
+    https://mails.dpdk.org/archives/announce/2018-August/000221.html
   * Merge stable update to 16.11.7; For a list of changes see
     http://mails.dpdk.org/archives/announce/2018-June/000209.html
+  * Update librte-pmd-bond1.symbols with new symbol.
+    This API was already present and public, but it was mistakenly left out
+    of the symbols map in the original release.
 
  -- Luca Boccassi <bluca@debian.org>  Tue, 24 Jul 2018 16:56:46 +0100
 
