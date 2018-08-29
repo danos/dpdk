@@ -134,11 +134,19 @@ static int bnxt_hwrm_send_message(struct bnxt *bp, void *msg, uint32_t msg_len)
 		if (rc) { \
 			RTE_LOG(ERR, PMD, "%s failed rc:%d\n", \
 				__func__, rc); \
+			if (rc == HWRM_ERR_CODE_RESOURCE_ACCESS_DENIED) \
+				rc = -EACCES; \
+			else if (rc > 0) \
+				rc = -EINVAL; \
 			return rc; \
 		} \
 		if (resp->error_code) { \
 			rc = rte_le_to_cpu_16(resp->error_code); \
 			RTE_LOG(ERR, PMD, "%s error %d\n", __func__, rc); \
+			if (rc == HWRM_ERR_CODE_RESOURCE_ACCESS_DENIED) \
+				rc = -EACCES; \
+			else if (rc > 0) \
+				rc = -EINVAL; \
 			return rc; \
 		} \
 	}
@@ -837,7 +845,7 @@ int bnxt_hwrm_vnic_alloc(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	struct hwrm_vnic_alloc_output *resp = bp->hwrm_cmd_resp_addr;
 
 	/* map ring groups to this vnic */
-	for (i = vnic->start_grp_id, j = 0; i <= vnic->end_grp_id; i++, j++) {
+	for (i = vnic->start_grp_id, j = 0; i < vnic->end_grp_id; i++, j++) {
 		if (bp->grp_info[i].fw_grp_id == (uint16_t)HWRM_NA_SIGNATURE) {
 			RTE_LOG(ERR, PMD,
 				"Not enough ring groups avail:%x req:%x\n", j,
@@ -1271,6 +1279,8 @@ void bnxt_free_all_hwrm_resources(struct bnxt *bp)
 
 		bnxt_hwrm_vnic_ctx_free(bp, vnic);
 		bnxt_hwrm_vnic_free(bp, vnic);
+
+		rte_free(vnic->fw_grp_ids);
 	}
 	/* Ring resources */
 	bnxt_free_all_hwrm_rings(bp);
