@@ -1,11 +1,11 @@
-dpdk (17.11.4-1) UNRELEASED; urgency=medium
+dpdk (17.11.4-1) unstable; urgency=medium
 
   * New upstream release 17.11.4; for a full list of changes see:
     https://dpdk.org/doc/guides-17.11/rel_notes/release_17_11.html
   * drop net-mlx5-fix-build-with-rdma-core-v19.patch, merged in 17.11.4.
   * Add new rte_eal_check_dma_mask symbol to d/librte-eal17.11.symbols
 
- -- Luca Boccassi <bluca@debian.org>  Mon, 03 Sep 2018 16:04:09 +0100
+ -- Luca Boccassi <bluca@debian.org>  Mon, 03 Sep 2018 16:05:21 +0100
 
 dpdk (17.11.3-3) unstable; urgency=medium
 
