@@ -740,6 +740,8 @@ next_wqe:
 	/* Check whether completion threshold has been reached. */
 	comp = txq->elts_comp + i + j + k;
 	if (comp >= MLX5_TX_COMP_THRESH) {
+		/* A CQE slot must always be available. */
+		assert((1u << txq->cqe_n) - (txq->cq_pi++ - txq->cq_ci));
 		/* Request completion on last WQE. */
 		last_wqe->ctrl2 = rte_cpu_to_be_32(8);
 		/* Save elts_head in unused "immediate" field of WQE. */
@@ -951,6 +953,8 @@ mlx5_tx_burst_mpw(void *dpdk_txq, struct rte_mbuf **pkts, uint16_t pkts_n)
 	if (comp >= MLX5_TX_COMP_THRESH) {
 		volatile struct mlx5_wqe *wqe = mpw.wqe;
 
+		/* A CQE slot must always be available. */
+		assert((1u << txq->cqe_n) - (txq->cq_pi++ - txq->cq_ci));
 		/* Request completion on last WQE. */
 		wqe->ctrl[2] = rte_cpu_to_be_32(8);
 		/* Save elts_head in unused "immediate" field of WQE. */
@@ -1243,6 +1247,8 @@ mlx5_tx_burst_mpw_inline(void *dpdk_txq, struct rte_mbuf **pkts,
 	if (comp >= MLX5_TX_COMP_THRESH) {
 		volatile struct mlx5_wqe *wqe = mpw.wqe;
 
+		/* A CQE slot must always be available. */
+		assert((1u << txq->cqe_n) - (txq->cq_pi++ - txq->cq_ci));
 		/* Request completion on last WQE. */
 		wqe->ctrl[2] = rte_cpu_to_be_32(8);
 		/* Save elts_head in unused "immediate" field of WQE. */
@@ -1370,8 +1376,6 @@ mlx5_tx_burst_empw(void *dpdk_txq, struct rte_mbuf **pkts, uint16_t pkts_n)
 	/* Start processing. */
 	mlx5_tx_complete(txq);
 	max_elts = (elts_n - (elts_head - txq->elts_tail));
-	/* A CQE slot must always be available. */
-	assert((1u << txq->cqe_n) - (txq->cq_pi - txq->cq_ci));
 	max_wqe = (1u << txq->wqe_n) - (txq->wqe_ci - txq->wqe_pi);
 	if (unlikely(!max_wqe))
 		return 0;
@@ -1584,13 +1588,14 @@ mlx5_tx_burst_empw(void *dpdk_txq, struct rte_mbuf **pkts, uint16_t pkts_n)
 			 (1 << txq->wqe_n) / MLX5_TX_COMP_THRESH_INLINE_DIV) {
 		volatile struct mlx5_wqe *wqe = mpw.wqe;
 
+		/* A CQE slot must always be available. */
+		assert((1u << txq->cqe_n) - (txq->cq_pi++ - txq->cq_ci));
 		/* Request completion on last WQE. */
 		wqe->ctrl[2] = rte_cpu_to_be_32(8);
 		/* Save elts_head in unused "immediate" field of WQE. */
 		wqe->ctrl[3] = elts_head;
 		txq->elts_comp = 0;
 		txq->mpw_comp = txq->wqe_ci;
-		txq->cq_pi++;
 	} else {
 		txq->elts_comp += j;
 	}
