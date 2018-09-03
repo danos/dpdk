@@ -1211,6 +1211,13 @@ eth_i40e_dev_init(struct rte_eth_dev *dev)
 	hw->bus.func = pci_dev->addr.function;
 	hw->adapter_stopped = 0;
 
+	/*
+	 * Switch Tag value should not be identical to either the First Tag
+	 * or Second Tag values. So set something other than common Ethertype
+	 * for internal switching.
+	 */
+	hw->switch_tag = 0xffff;
+
 	/* Check if need to support multi-driver */
 	i40e_support_multi_driver(dev);
 
@@ -1976,27 +1983,40 @@ i40e_phy_conf_link(struct i40e_hw *hw,
 	struct i40e_aq_get_phy_abilities_resp phy_ab;
 	struct i40e_aq_set_phy_config phy_conf;
 	enum i40e_aq_phy_type cnt;
+	uint8_t avail_speed;
 	uint32_t phy_type_mask = 0;
 
 	const uint8_t mask = I40E_AQ_PHY_FLAG_PAUSE_TX |
 			I40E_AQ_PHY_FLAG_PAUSE_RX |
 			I40E_AQ_PHY_FLAG_PAUSE_RX |
 			I40E_AQ_PHY_FLAG_LOW_POWER;
-	const uint8_t advt = I40E_LINK_SPEED_40GB |
-			I40E_LINK_SPEED_25GB |
-			I40E_LINK_SPEED_10GB |
-			I40E_LINK_SPEED_1GB |
-			I40E_LINK_SPEED_100MB;
 	int ret = -ENOTSUP;
 
+	/* To get phy capabilities of available speeds. */
+	status = i40e_aq_get_phy_capabilities(hw, false, true, &phy_ab,
+					      NULL);
+	if (status) {
+		PMD_DRV_LOG(ERR, "Failed to get PHY capabilities: %d\n",
+				status);
+		return ret;
+	}
+	avail_speed = phy_ab.link_speed;
 
+	/* To get the current phy config. */
 	status = i40e_aq_get_phy_capabilities(hw, false, false, &phy_ab,
 					      NULL);
-	if (status)
+	if (status) {
+		PMD_DRV_LOG(ERR, "Failed to get the current PHY config: %d\n",
+				status);
 		return ret;
+	}
 
-	/* If link already up, no need to set up again */
-	if (is_up && phy_ab.phy_type != 0)
+	/* If link needs to go up and it is in autoneg mode the speed is OK,
+	 * no need to set up again.
+	 */
+	if (is_up && phy_ab.phy_type != 0 &&
+		     abilities & I40E_AQ_PHY_AN_ENABLED &&
+		     phy_ab.link_speed != 0)
 		return I40E_SUCCESS;
 
 	memset(&phy_conf, 0, sizeof(phy_conf));
@@ -2005,18 +2025,20 @@ i40e_phy_conf_link(struct i40e_hw *hw,
 	abilities &= ~mask;
 	abilities |= phy_ab.abilities & mask;
 
-	/* update ablities and speed */
-	if (abilities & I40E_AQ_PHY_AN_ENABLED)
-		phy_conf.link_speed = advt;
-	else
-		phy_conf.link_speed = is_up ? force_speed : phy_ab.link_speed;
-
 	phy_conf.abilities = abilities;
 
+	/* If link needs to go up, but the force speed is not supported,
+	 * Warn users and config the default available speeds.
+	 */
+	if (is_up && !(force_speed & avail_speed)) {
+		PMD_DRV_LOG(WARNING, "Invalid speed setting, set to default!\n");
+		phy_conf.link_speed = avail_speed;
+	} else {
+		phy_conf.link_speed = is_up ? force_speed : avail_speed;
+	}
 
-
-	/* To enable link, phy_type mask needs to include each type */
-	for (cnt = I40E_PHY_TYPE_SGMII; cnt < I40E_PHY_TYPE_MAX; cnt++)
+	/* PHY type mask needs to include each type except PHY type extension */
+	for (cnt = I40E_PHY_TYPE_SGMII; cnt < I40E_PHY_TYPE_25GBASE_KR; cnt++)
 		phy_type_mask |= 1 << cnt;
 
 	/* use get_phy_abilities_resp value for the rest */
@@ -2049,11 +2071,18 @@ i40e_apply_link_speed(struct rte_eth_dev *dev)
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	struct rte_eth_conf *conf = &dev->data->dev_conf;
 
+	if (conf->link_speeds == ETH_LINK_SPEED_AUTONEG) {
+		conf->link_speeds = ETH_LINK_SPEED_40G |
+				    ETH_LINK_SPEED_25G |
+				    ETH_LINK_SPEED_20G |
+				    ETH_LINK_SPEED_10G |
+				    ETH_LINK_SPEED_1G |
+				    ETH_LINK_SPEED_100M;
+	}
 	speed = i40e_parse_link_speeds(conf->link_speeds);
-	abilities |= I40E_AQ_PHY_ENABLE_ATOMIC_LINK;
-	if (!(conf->link_speeds & ETH_LINK_SPEED_FIXED))
-		abilities |= I40E_AQ_PHY_AN_ENABLED;
-	abilities |= I40E_AQ_PHY_LINK_ENABLED;
+	abilities |= I40E_AQ_PHY_ENABLE_ATOMIC_LINK |
+		     I40E_AQ_PHY_AN_ENABLED |
+		     I40E_AQ_PHY_LINK_ENABLED;
 
 	return i40e_phy_conf_link(hw, abilities, speed, true);
 }
@@ -2160,13 +2189,6 @@ i40e_dev_start(struct rte_eth_dev *dev)
 	}
 
 	/* Apply link configure */
-	if (dev->data->dev_conf.link_speeds & ~(ETH_LINK_SPEED_100M |
-				ETH_LINK_SPEED_1G | ETH_LINK_SPEED_10G |
-				ETH_LINK_SPEED_20G | ETH_LINK_SPEED_25G |
-				ETH_LINK_SPEED_40G)) {
-		PMD_DRV_LOG(ERR, "Invalid link setting");
-		goto err_up;
-	}
 	ret = i40e_apply_link_speed(dev);
 	if (I40E_SUCCESS != ret) {
 		PMD_DRV_LOG(ERR, "Fail to apply link setting");
@@ -9768,6 +9790,60 @@ i40e_pctype_to_flowtype(const struct i40e_adapter *adapter,
 #define I40E_GL_SWR_PM_UP_THR_SF_VALUE   0x06060606
 #define I40E_GL_SWR_PM_UP_THR            0x269FBC
 
+/*
+ * GL_SWR_PM_UP_THR:
+ * The value is not impacted from the link speed, its value is set according
+ * to the total number of ports for a better pipe-monitor configuration.
+ */
+static bool
+i40e_get_swr_pm_cfg(struct i40e_hw *hw, uint32_t *value)
+{
+#define I40E_GL_SWR_PM_EF_DEVICE(dev) \
+		.device_id = (dev),   \
+		.val = I40E_GL_SWR_PM_UP_THR_EF_VALUE
+
+#define I40E_GL_SWR_PM_SF_DEVICE(dev) \
+		.device_id = (dev),   \
+		.val = I40E_GL_SWR_PM_UP_THR_SF_VALUE
+
+	static const struct {
+		uint16_t device_id;
+		uint32_t val;
+	} swr_pm_table[] = {
+		{ I40E_GL_SWR_PM_EF_DEVICE(I40E_DEV_ID_SFP_XL710) },
+		{ I40E_GL_SWR_PM_EF_DEVICE(I40E_DEV_ID_KX_C) },
+		{ I40E_GL_SWR_PM_EF_DEVICE(I40E_DEV_ID_10G_BASE_T) },
+		{ I40E_GL_SWR_PM_EF_DEVICE(I40E_DEV_ID_10G_BASE_T4) },
+
+		{ I40E_GL_SWR_PM_SF_DEVICE(I40E_DEV_ID_KX_B) },
+		{ I40E_GL_SWR_PM_SF_DEVICE(I40E_DEV_ID_QSFP_A) },
+		{ I40E_GL_SWR_PM_SF_DEVICE(I40E_DEV_ID_QSFP_B) },
+		{ I40E_GL_SWR_PM_SF_DEVICE(I40E_DEV_ID_20G_KR2) },
+		{ I40E_GL_SWR_PM_SF_DEVICE(I40E_DEV_ID_20G_KR2_A) },
+		{ I40E_GL_SWR_PM_SF_DEVICE(I40E_DEV_ID_25G_B) },
+		{ I40E_GL_SWR_PM_SF_DEVICE(I40E_DEV_ID_25G_SFP28) },
+	};
+	uint32_t i;
+
+	if (value == NULL) {
+		PMD_DRV_LOG(ERR, "value is NULL");
+		return false;
+	}
+
+	for (i = 0; i < RTE_DIM(swr_pm_table); i++) {
+		if (hw->device_id == swr_pm_table[i].device_id) {
+			*value = swr_pm_table[i].val;
+
+			PMD_DRV_LOG(DEBUG, "Device 0x%x with GL_SWR_PM_UP_THR "
+				    "value - 0x%08x",
+				    hw->device_id, *value);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static int
 i40e_dev_sync_phy_type(struct i40e_hw *hw)
 {
@@ -9832,13 +9908,16 @@ i40e_configure_registers(struct i40e_hw *hw)
 		}
 
 		if (reg_table[i].addr == I40E_GL_SWR_PM_UP_THR) {
-			if (I40E_PHY_TYPE_SUPPORT_40G(hw->phy.phy_types) || /* For XL710 */
-			    I40E_PHY_TYPE_SUPPORT_25G(hw->phy.phy_types)) /* For XXV710 */
-				reg_table[i].val =
-					I40E_GL_SWR_PM_UP_THR_SF_VALUE;
-			else /* For X710 */
-				reg_table[i].val =
-					I40E_GL_SWR_PM_UP_THR_EF_VALUE;
+			uint32_t cfg_val;
+
+			if (!i40e_get_swr_pm_cfg(hw, &cfg_val)) {
+				PMD_DRV_LOG(DEBUG, "Device 0x%x skips "
+					    "GL_SWR_PM_UP_THR value fixup",
+					    hw->device_id);
+				continue;
+			}
+
+			reg_table[i].val = cfg_val;
 		}
 
 		ret = i40e_aq_debug_read_register(hw, reg_table[i].addr,
