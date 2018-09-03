@@ -345,6 +345,10 @@ const struct eth_dev_ops mlx5_dev_ops_isolate = {
 	.dev_set_link_down = mlx5_set_link_down,
 	.dev_set_link_up = mlx5_set_link_up,
 	.dev_close = mlx5_dev_close,
+	.promiscuous_enable = mlx5_promiscuous_enable,
+	.promiscuous_disable = mlx5_promiscuous_disable,
+	.allmulticast_enable = mlx5_allmulticast_enable,
+	.allmulticast_disable = mlx5_allmulticast_disable,
 	.link_update = mlx5_link_update,
 	.stats_get = mlx5_stats_get,
 	.stats_reset = mlx5_stats_reset,
@@ -680,7 +684,7 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 	int i;
 	struct mlx5dv_context attrs_out;
 #ifdef HAVE_IBV_DEVICE_COUNTERS_SET_SUPPORT
-	struct ibv_counter_set_description cs_desc;
+	struct ibv_counter_set_description cs_desc = { .counter_type = 0 };
 #endif
 
 	assert(pci_drv == &mlx5_driver);

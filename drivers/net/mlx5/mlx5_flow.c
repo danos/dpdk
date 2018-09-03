@@ -63,12 +63,6 @@
 #define MLX5_IPV6 6
 
 #ifndef HAVE_IBV_DEVICE_COUNTERS_SET_SUPPORT
-struct ibv_counter_set_init_attr {
-	int dummy;
-};
-struct ibv_flow_spec_counter_action {
-	int dummy;
-};
 struct ibv_counter_set {
 	int dummy;
 };
@@ -885,10 +879,17 @@ mlx5_flow_convert_items_validate(const struct rte_flow_item items[],
 				sizeof(struct ibv_flow_spec_action_tag);
 	}
 	if (parser->count) {
+#ifdef HAVE_IBV_DEVICE_COUNTERS_SET_SUPPORT
 		unsigned int size = sizeof(struct ibv_flow_spec_counter_action);
 
 		for (i = 0; i != hash_rxq_init_n; ++i)
 			parser->queue[i].offset += size;
+#else
+		rte_flow_error_set(error, ENOTSUP, RTE_FLOW_ERROR_TYPE_ACTION,
+				   items,
+				   "Count action supported only on "
+				   "MLNX_OFED_4.2 and above");
+#endif
 	}
 	return 0;
 exit_item_not_supported:
@@ -2959,10 +2960,21 @@ mlx5_fdir_filter_delete(struct rte_eth_dev *dev,
 		struct ibv_spec_header *flow_h;
 		void *flow_spec;
 		unsigned int specs_n;
-		unsigned int queue_id = parser.drop ? HASH_RXQ_ETH :
-						      parser.layer;
+		unsigned int queue_id;
 
-		attr = parser.queue[queue_id].ibv_attr;
+		/*
+		 * Search for a non-empty ibv_attr. There should be only one
+		 * because no RSS action is allowed for FDIR. This should have
+		 * been referenced directly by parser.layer but due to a bug in
+		 * mlx5_flow_convert() as of v17.11.4, parser.layer isn't
+		 * correct. This bug will have to be addressed later.
+		 */
+		for (queue_id = 0; queue_id != hash_rxq_init_n; ++queue_id) {
+			attr = parser.queue[queue_id].ibv_attr;
+			if (attr)
+				break;
+		}
+		assert(!parser.drop || queue_id == HASH_RXQ_ETH);
 		flow_attr = flow->frxq[queue_id].ibv_attr;
 		/* Compare first the attributes. */
 		if (!flow_attr ||
@@ -2991,16 +3003,20 @@ wrong_flow:
 		/* The flow does not match. */
 		continue;
 	}
-	ret = rte_errno; /* Save rte_errno before cleanup. */
 	if (flow)
 		mlx5_flow_list_destroy(dev, &priv->flows, flow);
 exit:
+	if (ret)
+		ret = rte_errno; /* Save rte_errno before cleanup. */
 	for (i = 0; i != hash_rxq_init_n; ++i) {
 		if (parser.queue[i].ibv_attr)
 			rte_free(parser.queue[i].ibv_attr);
 	}
-	rte_errno = ret; /* Restore rte_errno. */
-	return -rte_errno;
+	if (ret) {
+		rte_errno = ret; /* Restore rte_errno. */
+		return -rte_errno;
+	}
+	return 0;
 }
 
 /**
