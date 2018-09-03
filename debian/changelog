@@ -1,4 +1,4 @@
-dpdk (17.11.3-1~git1) UNRELEASED; urgency=medium
+dpdk (17.11.4-1~git1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 17.11; for a full list of changes see:
@@ -8,6 +8,8 @@ dpdk (17.11.3-1~git1) UNRELEASED; urgency=medium
   * New upstream release 17.11.2; for a full list of changes see:
     https://dpdk.org/doc/guides-17.11/rel_notes/release_17_11.html
     * Fixes CVE-2018-1059
+  * New upstream release 17.11.4; for a full list of changes see:
+    https://dpdk.org/doc/guides-17.11/rel_notes/release_17_11.html
   * Bump ABI version of packages from 17.08 to 17.11.
   * Fix upstream version parsing in d/rules to account for -rcX.
   * Add packages for new libraries/PMDs: librte-bus-pci17.11,
