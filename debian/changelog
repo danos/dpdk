@@ -50,6 +50,7 @@ dpdk (17.11.4-1~git1) UNRELEASED; urgency=medium
   * autopkgtest: use libdpdk pkg-config to set all the required compiler
     flags.
   * autopkgtest: add pkg-config dependency to really fix linkate test.
+  * drop net-mlx5-fix-build-with-rdma-core-v19.patch, merged in 17.11.4.
 
   [ Christian Ehrhardt ]
   * New upstream release 17.11.3; for a full list of changes see:
