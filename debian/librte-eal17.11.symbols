@@ -42,6 +42,7 @@ librte_eal.so.17.11 librte-eal17.11 #MINVER#
  rte_dump_tailq@DPDK_2.0 16.04
  rte_eal_alarm_cancel@DPDK_2.0 16.04
  rte_eal_alarm_set@DPDK_2.0 16.04
+ rte_eal_check_dma_mask@DPDK_17.11 17.11.4
  rte_eal_create_uio_dev@DPDK_17.11 17.11
  rte_eal_dev_attach@DPDK_16.11 16.11
  rte_eal_dev_detach@DPDK_16.11 16.11

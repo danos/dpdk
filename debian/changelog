@@ -1,3 +1,39 @@
+dpdk (17.11.4-1) unstable; urgency=medium
+
+  * New upstream release 17.11.4; for a full list of changes see:
+    https://dpdk.org/doc/guides-17.11/rel_notes/release_17_11.html
+  * drop net-mlx5-fix-build-with-rdma-core-v19.patch, merged in 17.11.4.
+  * Add new rte_eal_check_dma_mask symbol to d/librte-eal17.11.symbols
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 03 Sep 2018 16:05:21 +0100
+
+dpdk (17.11.3-3) unstable; urgency=medium
+
+  * d/p/net-mlx5-fix-build-with-rdma-core-v19.patch: fix Build against
+    rdma-core v19 which is in Debian unstable now. (This will most likely be
+    in 17.11.4 and can then be dropped)
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 30 Jul 2018 10:34:20 +0100
+
+dpdk (17.11.3-2) unstable; urgency=medium
+
+  * Temporarily disable ML4 and MLX5 again to fix FTBS due to
+    incompatibility with rdma-core 19.0.
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 03 Jul 2018 11:14:22 +0100
+
+dpdk (17.11.3-1) unstable; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * New upstream release 17.11.3; for a full list of changes see:
+    https://dpdk.org/doc/guides-17.11/rel_notes/release_17_11.html
+  * d/control: binary package and build-dependency for MLX4 and MLX5 PMDs.
+    - d/librte-pmd-mlx*.symbols: symbol files for mlx PMDs
+    - d/p/app-testpmd-add-ethernet-peer-command.patch: ensure MLX PMDs are
+      well testable
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 20 Jun 2018 13:42:27 +0100
+
 dpdk (17.11.2-1~bpo9+1) stretch-backports; urgency=medium
 
   * Rebuild for stretch-backports.

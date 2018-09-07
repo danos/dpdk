@@ -2,6 +2,7 @@ librte_vhost.so.17.11 librte-vhost17.11 #MINVER#
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_17.08@DPDK_17.08 17.08
+ DPDK_17.11.2@DPDK_17.11.2 17.11.2
  DPDK_2.0@DPDK_2.0 16.07~rc1
  DPDK_2.1@DPDK_2.1 16.07~rc1
  rte_vhost_avail_entries@DPDK_16.07 16.07~rc1

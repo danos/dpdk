@@ -15,6 +15,7 @@ librte_pmd_bond.so.17.11 librte-pmd-bond17.11 #MINVER#
  rte_eth_bond_8023ad_ext_distrib_get@DPDK_16.07 16.07~rc1
  rte_eth_bond_8023ad_ext_slowtx@DPDK_16.07 16.07~rc1
  rte_eth_bond_8023ad_setup@DPDK_17.08 17.08
+ rte_eth_bond_8023ad_slave_info@DPDK_2.0 17.11.3
  rte_eth_bond_active_slaves_get@DPDK_2.0 16.04
  rte_eth_bond_create@DPDK_2.0 16.04
  rte_eth_bond_free@DPDK_2.1 16.04
