@@ -1,3 +1,11 @@
+dpdk (17.11.4-1~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+  * Disable MLX4 and MLX5 PMDs, as the required libibverbs build
+    dependency is not available in Stretch.
+
+ -- Luca Boccassi <bluca@debian.org>  Fri, 07 Sep 2018 11:48:28 +0100
+
 dpdk (17.11.4-1) unstable; urgency=medium
 
   * New upstream release 17.11.4; for a full list of changes see:
