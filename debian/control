@@ -12,7 +12,6 @@ Build-Depends: debhelper (>= 9),
                graphviz <!nodoc>,
                inkscape <!nodoc>,
                libcap-dev,
-               libibverbs-dev,
                libpcap-dev,
                libnuma-dev,
                python3,
@@ -1081,28 +1080,3 @@ Description: Data Plane Development Kit (librte_pmd_thunderx_nicvf runtime libra
  .
  This package contains the runtime libraries for librte_pmd_thunderx_nicvf.
 
-Package: librte-pmd-mlx4-17.11
-Architecture: amd64 arm64 i386 ppc64el
-Multi-Arch: same
-Homepage: https://dpdk.org/doc/guides/nics/mlx4.html
-Pre-Depends: ${misc:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}
-Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte-pmd-mlx4 runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the runtime libraries for librte-pmd-mlx4.
-
-Package: librte-pmd-mlx5-17.11
-Architecture: amd64 arm64 i386 ppc64el
-Multi-Arch: same
-Homepage: https://dpdk.org/doc/guides/nics/mlx5.html
-Pre-Depends: ${misc:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}
-Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte-pmd-mlx5 runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the runtime libraries for librte-pmd-mlx5.
