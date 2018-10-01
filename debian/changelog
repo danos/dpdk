@@ -68,6 +68,7 @@ dpdk (17.11.1-1~git1) UNRELEASED; urgency=medium
 
   [ Ondřej Nový ]
   * d/tests: Use AUTOPKGTEST_ARTIFACTS instead of ADT_ARTIFACTS
+  * d/control: Set Vcs-* to salsa.debian.org
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 16 Nov 2017 14:17:03 +0100
 
