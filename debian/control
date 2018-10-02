@@ -603,6 +603,7 @@ Description: Data Plane Development Kit (librte-pmd-bnx2x runtime library)
 Package: librte-pmd-bnxt18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/bnxt.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
