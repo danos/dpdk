@@ -1,2 +1,4 @@
+debian/interfaces	etc/dpdk/
 debian/dpdk-init	lib/dpdk/
 debian/dpdk.conf	etc/dpdk/
+usr/bin

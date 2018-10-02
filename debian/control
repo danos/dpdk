@@ -17,6 +17,8 @@ Build-Depends: debhelper (>= 10),
                libmnl-dev,
                libnuma-dev [!armhf],
                libssl-dev,
+               meson (>= 0.41~),
+               pkg-config,
                python3,
                python3-sphinx <!nodoc>,
                python3-sphinx-rtd-theme <!nodoc>,
@@ -931,18 +933,18 @@ Description: Data Plane Development Kit (librte-pmd-virtio runtime library)
  .
  This package contains the runtime libraries for librte_pmd_virtio.
 
-Package: librte-pmd-vmxnet3-uio18.08
+Package: librte-pmd-vmxnet3-18.08
 Architecture: amd64 arm64 i386
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/vmxnet3.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte-pmd-vmxnet3-uio runtime library)
+Description: Data Plane Development Kit (librte-pmd-vmxnet3 runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for librte_pmd_vmxnet3_uio.
+ This package contains the runtime libraries for librte_pmd_vmxnet3.
 
 Package: librte-pmd-qat18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1307,17 +1309,17 @@ Description: Data Plane Development Kit (librte_pmd_kni runtime library)
  .
  This package contains the runtime libraries for librte_pmd_kni.
 
-Package: librte-pmd-lio18.08
+Package: librte-pmd-liquidio18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte_pmd_lio runtime library)
+Description: Data Plane Development Kit (librte_pmd_liquidio runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for librte_pmd_lio.
+ This package contains the runtime libraries for librte_pmd_liquidio.
 
 Package: librte-pmd-nfp18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1343,28 +1345,28 @@ Description: Data Plane Development Kit (librte_mempool_octeontx runtime library
  .
  This package contains the runtime libraries for librte_common_octeontx.
 
-Package: librte-pmd-octeontx-ssovf18.08
+Package: librte-pmd-octeontx-event18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte_pmd_octeontx_ssovf runtime library)
+Description: Data Plane Development Kit (librte_pmd_octeontx_event runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for librte_pmd_octeontx_ssovf.
+ This package contains the runtime libraries for librte_pmd_octeontx_event.
 
-Package: librte-pmd-octeontx-zip18.08
+Package: librte-pmd-octeontx-compress18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Description: Data Plane Development Kit (librte_pmd_octeontx_zip runtime library)
+Description: Data Plane Development Kit (librte_pmd_octeontx_compress runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for librte_pmd_octeontx_zip.
+ This package contains the runtime libraries for librte_pmd_octeontx_compress.
 
 Package: librte-pmd-octeontx18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1390,17 +1392,17 @@ Description: Data Plane Development Kit (librte_pmd_opdl_event runtime library)
  .
  This package contains the runtime libraries for librte_pmd_opdl_event.
 
-Package: librte-pmd-sfc-efx18.08
+Package: librte-pmd-sfc18.08
 Architecture: amd64
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte_pmd_sfc_efx runtime library)
+Description: Data Plane Development Kit (librte_pmd_sfc runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for librte_pmd_sfc_efx.
+ This package contains the runtime libraries for librte_pmd_sfc.
 
 Package: librte-pmd-skeleton-event18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1438,17 +1440,17 @@ Description: Data Plane Development Kit (librte_pmd_tap runtime library)
  .
  This package contains the runtime libraries for librte_pmd_tap.
 
-Package: librte-pmd-thunderx-nicvf18.08
+Package: librte-pmd-thunderx18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
-Description: Data Plane Development Kit (librte_pmd_thunderx_nicvf runtime library)
+Description: Data Plane Development Kit (librte_pmd_thunderx runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for librte_pmd_thunderx_nicvf.
+ This package contains the runtime libraries for librte_pmd_thunderx.
 
 Package: librte-pmd-mlx4-18.08
 Architecture: amd64 arm64 i386 ppc64el

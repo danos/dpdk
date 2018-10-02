@@ -5,6 +5,15 @@ librte_pmd_ixgbe.so.18.08 librte-pmd-ixgbe18.08 #MINVER#
  DPDK_17.08@DPDK_17.08 17.08
  DPDK_2.0@DPDK_2.0 16.04
  EXPERIMENTAL@EXPERIMENTAL 18.05
+ rte_pmd_ixgbe_bypass_event_show@DPDK_17.08 18.08
+ rte_pmd_ixgbe_bypass_event_store@DPDK_17.08 18.08
+ rte_pmd_ixgbe_bypass_init@DPDK_17.08 18.08
+ rte_pmd_ixgbe_bypass_state_set@DPDK_17.08 18.08
+ rte_pmd_ixgbe_bypass_state_show@DPDK_17.08 18.08
+ rte_pmd_ixgbe_bypass_ver_show@DPDK_17.08 18.08
+ rte_pmd_ixgbe_bypass_wd_reset@DPDK_17.08 18.08
+ rte_pmd_ixgbe_bypass_wd_timeout_show@DPDK_17.08 18.08
+ rte_pmd_ixgbe_bypass_wd_timeout_store@DPDK_17.08 18.08
  rte_pmd_ixgbe_macsec_config_rxsc@DPDK_17.02 17.05
  rte_pmd_ixgbe_macsec_config_txsc@DPDK_17.02 17.05
  rte_pmd_ixgbe_macsec_disable@DPDK_17.02 17.05
