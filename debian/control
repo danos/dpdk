@@ -4,8 +4,7 @@ Maintainer: deb_dpdk Packagers <deb-dpdk@lists.fd.io>
 Uploaders: Luca Boccassi <bluca@debian.org>,
            Christian Ehrhardt <christian.ehrhardt@canonical.com>,
            Santiago Ruano Rincón <santiagorr@riseup.net>
-Build-Depends: debhelper (>= 9),
-               debhelper (>= 9.20160709) | dh-systemd (>= 1.5),
+Build-Depends: debhelper (>= 10),
                dh-python,
                dkms,
                doxygen <!nodoc>,
