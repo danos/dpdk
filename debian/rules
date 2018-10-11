@@ -104,7 +104,6 @@ override_dh_auto_clean:
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	rm -f debian/dpdk-igb-uio-dkms.dkms debian/dpdk-rte-kni-dkms.dkms
-	rm -f debian/dpdk-dev.preinst
 	dh_auto_clean
 
 override_dh_auto_configure:
@@ -129,8 +128,6 @@ override_dh_auto_install-indep:
 
 override_dh_auto_install-arch:
 	dh_auto_install
-	# generate the preinst to deal with the symlink -> directory transition smoothly
-	sed "s/@@RTE_TARGET@@/$(RTE_TARGET)/g" debian/dpdk-dev.preinst.in > debian/dpdk-dev.preinst
 	# have the DKMS build include the correct per-arch directory
 	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
 	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-rte-kni-dkms.dkms.in > debian/dpdk-rte-kni-dkms.dkms

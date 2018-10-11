@@ -56,15 +56,14 @@ Description: Data Plane Development Kit (runtime)
  This package contains the runtime environment to run DPDK applications.
 
 Package: dpdk-dev
-Section: devel
-Architecture: amd64 arm64 armhf i386 ppc64el
-Depends: libdpdk-dev (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
-Description: Data Plane Development Kit (development files)
+Section: oldlibs
+Architecture: all
+Depends: libdpdk-dev (>= ${source:Version}), ${misc:Depends},
+Description: transitional package
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains examples and the upstream build environment. It is
- not strictly required in order to build external applications.
+ This is a transitional package. It can safely be removed.
 
 Package: dpdk-doc
 Section: doc
@@ -84,7 +83,6 @@ Package: dpdk-igb-uio-dkms
 Section: kernel
 Architecture: amd64 arm64 i386 ppc64el
 Depends: dkms,
-         dpdk-dev (= ${binary:Version}),
          libdpdk-dev (= ${binary:Version}),
          make,
          ${misc:Depends}
@@ -98,7 +96,6 @@ Package: dpdk-rte-kni-dkms
 Section: kernel
 Architecture: amd64 arm64 i386 ppc64el
 Depends: dkms,
-         dpdk-dev (= ${binary:Version}),
          libdpdk-dev (= ${binary:Version}),
          make,
          ${misc:Depends}
