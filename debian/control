@@ -781,6 +781,19 @@ Description: Data Plane Development Kit (librte-pmd-e1000 runtime library)
  .
  This package contains the runtime libraries for librte_pmd_e1000.
 
+Package: librte-pmd-enetc18.08
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/nics/enetc.html
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Conflicts: libdpdk0
+Description: Data Plane Development Kit (librte-pmd-enetc runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_enetc.
+
 Package: librte-pmd-ena18.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
