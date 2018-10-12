@@ -49,6 +49,8 @@ Suggests: dpdk-doc,
           dpdk-igb-uio-dkms (= ${binary:Version}),
           dpdk-rte-kni-dkms (= ${binary:Version}),
           linux-image-generic,
+Breaks: dpdk-dev (<< 18.11)
+Replaces: dpdk-dev (<< 18.11)
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
