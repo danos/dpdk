@@ -47,6 +47,18 @@ librte_eventdev.so.18.11 librte-eventdev18.11 #MINVER#
  rte_event_eth_rx_adapter_stats_get@DPDK_17.11 17.11
  rte_event_eth_rx_adapter_stats_reset@DPDK_17.11 17.11
  rte_event_eth_rx_adapter_stop@DPDK_17.11 17.11
+ rte_event_eth_tx_adapter_caps_get@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_create@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_create_ext@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_event_port_get@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_free@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_queue_add@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_queue_del@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_service_id_get@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_start@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_stats_get@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_stats_reset@EXPERIMENTAL 18.11
+ rte_event_eth_tx_adapter_stop@EXPERIMENTAL 18.11
  rte_event_pmd_allocate@DPDK_17.05 17.05
  rte_event_pmd_release@DPDK_17.05 17.05
  rte_event_port_attr_get@DPDK_17.11 17.11
@@ -55,6 +67,7 @@ librte_eventdev.so.18.11 librte-eventdev18.11 #MINVER#
  rte_event_port_links_get@DPDK_17.05 17.05
  rte_event_port_setup@DPDK_17.05 17.05
  rte_event_port_unlink@DPDK_17.05 17.05
+ rte_event_port_unlinks_in_progress@EXPERIMENTAL 18.11
  rte_event_queue_attr_get@DPDK_17.11 17.11
  rte_event_queue_default_conf_get@DPDK_17.05 17.05
  rte_event_queue_setup@DPDK_17.05 17.05

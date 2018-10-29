@@ -8,6 +8,7 @@ librte_vhost.so.18.11 librte-vhost18.11 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 18.05
  rte_vdpa_find_device_id@EXPERIMENTAL 18.05
  rte_vdpa_get_device@EXPERIMENTAL 18.05
+ rte_vdpa_get_device_num@EXPERIMENTAL 18.11
  rte_vdpa_register_device@EXPERIMENTAL 18.05
  rte_vdpa_unregister_device@EXPERIMENTAL 18.05
  rte_vhost_avail_entries@DPDK_16.07 16.07~rc1

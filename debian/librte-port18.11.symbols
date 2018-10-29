@@ -1,6 +1,7 @@
 librte_port.so.18.11 librte-port18.11 #MINVER#
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_16.11@DPDK_16.11 16.11
+ DPDK_18.11@DPDK_18.11 18.11
  DPDK_2.0@DPDK_2.0 16.07~rc1
  DPDK_2.1@DPDK_2.1 16.07~rc1
  DPDK_2.2@DPDK_2.2 16.07~rc1
@@ -27,3 +28,6 @@ librte_port.so.18.11 librte-port18.11 #MINVER#
  rte_port_sched_writer_ops@DPDK_2.0 16.07~rc1
  rte_port_sink_ops@DPDK_2.0 16.07~rc1
  rte_port_source_ops@DPDK_2.0 16.07~rc1
+ rte_port_sym_crypto_reader_ops@DPDK_18.11 18.11
+ rte_port_sym_crypto_writer_nodrop_ops@DPDK_18.11 18.11
+ rte_port_sym_crypto_writer_ops@DPDK_18.11 18.11

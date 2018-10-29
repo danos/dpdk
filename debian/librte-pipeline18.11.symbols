@@ -37,6 +37,7 @@ librte_pipeline.so.18.11 librte-pipeline18.11 #MINVER#
  rte_port_in_action_profile_freeze@EXPERIMENTAL 18.05
  rte_table_action_apply@EXPERIMENTAL 18.05
  rte_table_action_create@EXPERIMENTAL 18.05
+ rte_table_action_crypto_sym_session_get@EXPERIMENTAL 18.11
  rte_table_action_dscp_table_update@EXPERIMENTAL 18.05
  rte_table_action_free@EXPERIMENTAL 18.05
  rte_table_action_meter_profile_add@EXPERIMENTAL 18.05

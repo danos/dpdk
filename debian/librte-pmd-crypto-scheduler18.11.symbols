@@ -1,14 +1,20 @@
 librte_pmd_crypto_scheduler.so.18.11 librte-pmd-crypto-scheduler18.11 #MINVER#
  DPDK_17.02@DPDK_17.02 17.05
  DPDK_17.05@DPDK_17.05 17.05
- cryptodev_driver_id@Base 17.08
- failover_scheduler@Base 17.05
- fo_scheduler@Base 17.05
- mc_scheduler@Base 17.08
- multicore_scheduler@Base 17.08
- pkt_size_based_distr_scheduler@Base 17.05
- psd_scheduler@Base 17.05
- roundrobin_scheduler@Base 17.05
+ crypto_scheduler_failover@Base 18.11
+ crypto_scheduler_multicore@Base 18.11
+ crypto_scheduler_pkt_size_based_distr@Base 18.11
+ crypto_scheduler_pmd_info@Base 18.11
+ crypto_scheduler_roundrobin@Base 18.11
+#MISSING: 18.11# cryptodev_driver_id@Base 17.08
+ cryptodev_scheduler_driver_id@Base 18.11
+#MISSING: 18.11# failover_scheduler@Base 17.05
+#MISSING: 18.11# fo_scheduler@Base 17.05
+#MISSING: 18.11# mc_scheduler@Base 17.08
+#MISSING: 18.11# multicore_scheduler@Base 17.08
+#MISSING: 18.11# pkt_size_based_distr_scheduler@Base 17.05
+#MISSING: 18.11# psd_scheduler@Base 17.05
+#MISSING: 18.11# roundrobin_scheduler@Base 17.05
  rte_crypto_scheduler_pmd_ops@Base 17.05
  rte_cryptodev_scheduler_load_user_scheduler@DPDK_17.02 17.05
  rte_cryptodev_scheduler_mode_get@DPDK_17.05 17.05
@@ -20,13 +26,13 @@ librte_pmd_crypto_scheduler.so.18.11 librte-pmd-crypto-scheduler18.11 #MINVER#
  rte_cryptodev_scheduler_slave_attach@DPDK_17.02 17.05
  rte_cryptodev_scheduler_slave_detach@DPDK_17.02 17.05
  rte_cryptodev_scheduler_slaves_get@DPDK_17.05 17.05
- scheduler@Base 17.05
- scheduler_fo_ops@Base 17.05
+#MISSING: 18.11# scheduler@Base 17.05
+#MISSING: 18.11# scheduler_fo_ops@Base 17.05
  scheduler_logtype_driver@Base 18.08
- scheduler_mc_ops@Base 17.08
+#MISSING: 18.11# scheduler_mc_ops@Base 17.08
  scheduler_mode_map@Base 17.05
  scheduler_ordering_map@Base 17.05
- scheduler_pmd_ops@Base 17.05
- scheduler_ps_ops@Base 17.05
- scheduler_rr_ops@Base 17.05
- scheduler_valid_params@Base 17.05
+#MISSING: 18.11# scheduler_pmd_ops@Base 17.05
+#MISSING: 18.11# scheduler_ps_ops@Base 17.05
+#MISSING: 18.11# scheduler_rr_ops@Base 17.05
+#MISSING: 18.11# scheduler_valid_params@Base 17.05

@@ -8,6 +8,7 @@ librte_ethdev.so.18.11 librte-ethdev18.11 #MINVER#
  DPDK_18.02@DPDK_18.02 18.02
  DPDK_18.05@DPDK_18.05 18.05
  DPDK_18.08@DPDK_18.08 18.08
+ DPDK_18.11@DPDK_18.11 18.11
  DPDK_2.2@DPDK_2.2 16.07~rc1
  EXPERIMENTAL@EXPERIMENTAL 17.11
  _rte_eth_dev_callback_process@DPDK_17.08 17.08
@@ -21,7 +22,7 @@ librte_ethdev.so.18.11 librte-ethdev18.11 #MINVER#
  rte_eth_dev_adjust_nb_rx_tx_desc@DPDK_17.08 17.08
  rte_eth_dev_allocate@DPDK_2.2 16.07~rc1
  rte_eth_dev_allocated@DPDK_2.2 16.07~rc1
- rte_eth_dev_attach@DPDK_2.2 16.07~rc1
+#MISSING: 18.11# rte_eth_dev_attach@DPDK_2.2 16.07~rc1
  rte_eth_dev_attach_secondary@DPDK_17.05 17.05
  rte_eth_dev_callback_register@DPDK_2.2 16.07~rc1
  rte_eth_dev_callback_unregister@DPDK_2.2 16.07~rc1
@@ -33,7 +34,7 @@ librte_ethdev.so.18.11 librte-ethdev18.11 #MINVER#
  rte_eth_dev_create@EXPERIMENTAL 18.05
  rte_eth_dev_default_mac_addr_set@DPDK_2.2 16.07~rc1
  rte_eth_dev_destroy@EXPERIMENTAL 18.05
- rte_eth_dev_detach@DPDK_2.2 16.07~rc1
+#MISSING: 18.11# rte_eth_dev_detach@DPDK_2.2 16.07~rc1
  rte_eth_dev_filter_ctrl@DPDK_18.02 18.02
  rte_eth_dev_filter_supported@DPDK_2.2 16.07~rc1
  rte_eth_dev_flow_ctrl_get@DPDK_2.2 16.07~rc1
@@ -75,9 +76,11 @@ librte_ethdev.so.18.11 librte-ethdev18.11 #MINVER#
  rte_eth_dev_rss_reta_update@DPDK_2.2 16.07~rc1
  rte_eth_dev_rx_intr_ctl@DPDK_2.2 16.07~rc1
  rte_eth_dev_rx_intr_ctl_q@DPDK_2.2 16.07~rc1
+ rte_eth_dev_rx_intr_ctl_q_get_fd@EXPERIMENTAL 18.11
  rte_eth_dev_rx_intr_disable@DPDK_2.2 16.07~rc1
  rte_eth_dev_rx_intr_enable@DPDK_2.2 16.07~rc1
- rte_eth_dev_rx_offload_name@EXPERIMENTAL 18.02
+ rte_eth_dev_rx_offload_name@DPDK_18.11 18.11
+#MISSING: 18.11# rte_eth_dev_rx_offload_name@EXPERIMENTAL 18.02
  rte_eth_dev_rx_queue_start@DPDK_2.2 16.07~rc1
  rte_eth_dev_rx_queue_stop@DPDK_2.2 16.07~rc1
  rte_eth_dev_set_eeprom@DPDK_2.2 16.07~rc1
@@ -94,7 +97,8 @@ librte_ethdev.so.18.11 librte-ethdev18.11 #MINVER#
  rte_eth_dev_socket_id@DPDK_2.2 16.07~rc1
  rte_eth_dev_start@DPDK_2.2 16.07~rc1
  rte_eth_dev_stop@DPDK_2.2 16.07~rc1
- rte_eth_dev_tx_offload_name@EXPERIMENTAL 18.02
+ rte_eth_dev_tx_offload_name@DPDK_18.11 18.11
+#MISSING: 18.11# rte_eth_dev_tx_offload_name@EXPERIMENTAL 18.02
  rte_eth_dev_tx_queue_start@DPDK_2.2 16.07~rc1
  rte_eth_dev_tx_queue_stop@DPDK_2.2 16.07~rc1
  rte_eth_dev_uc_all_hash_table_set@DPDK_2.2 16.07~rc1
@@ -107,6 +111,9 @@ librte_ethdev.so.18.11 librte-ethdev18.11 #MINVER#
  rte_eth_dma_zone_reserve@DPDK_2.2 16.07~rc1
  rte_eth_find_next@DPDK_17.05 17.05
  rte_eth_find_next_owned_by@DPDK_18.05 18.05
+ rte_eth_iterator_cleanup@DPDK_18.11 18.11
+ rte_eth_iterator_init@DPDK_18.11 18.11
+ rte_eth_iterator_next@DPDK_18.11 18.11
  rte_eth_led_off@DPDK_2.2 16.07~rc1
  rte_eth_led_on@DPDK_2.2 16.07~rc1
  rte_eth_link_get@DPDK_2.2 16.07~rc1
@@ -147,6 +154,7 @@ librte_ethdev.so.18.11 librte-ethdev18.11 #MINVER#
  rte_eth_xstats_get_names@DPDK_16.07 16.07~rc1
  rte_eth_xstats_get_names_by_id@DPDK_17.05 17.05
  rte_eth_xstats_reset@DPDK_2.2 16.07~rc1
+ rte_flow_conv@EXPERIMENTAL 18.11
  rte_flow_copy@DPDK_18.05 18.05
  rte_flow_create@DPDK_18.05 18.05
  rte_flow_destroy@DPDK_18.05 18.05

@@ -4,11 +4,14 @@ librte_bus_fslmc.so.18.11 librte-bus-fslmc18.11 #MINVER#
  DPDK_17.11@DPDK_17.11 17.11
  DPDK_18.02@DPDK_18.02 18.02
  DPDK_18.05@DPDK_18.05 18.05
+ DPDK_18.11@DPDK_18.11 18.11
  dpaa2_affine_qbman_ethrx_swp@DPDK_18.05 18.05
  dpaa2_affine_qbman_swp@DPDK_17.05 18.02
  dpaa2_alloc_dpbp_dev@DPDK_17.05 18.02
  dpaa2_alloc_dq_storage@DPDK_17.05 18.02
  dpaa2_dpbp_supported@DPDK_17.11 18.02
+ dpaa2_dqrr_size@DPDK_18.11 18.11
+ dpaa2_eqcr_size@DPDK_18.11 18.11
  dpaa2_free_dpbp_dev@DPDK_17.05 18.02
  dpaa2_free_dq_storage@DPDK_17.05 18.02
  dpaa2_get_qbman_swp@DPDK_17.08 18.02
@@ -21,6 +24,10 @@ librte_bus_fslmc.so.18.11 librte-bus-fslmc18.11 #MINVER#
  dpbp_get_num_free_bufs@DPDK_17.05 18.02
  dpbp_open@DPDK_17.05 18.02
  dpbp_reset@DPDK_17.05 18.02
+ dpci_get_link_state@DPDK_18.11 18.11
+ dpci_get_opr@DPDK_18.11 18.11
+ dpci_get_peer_attributes@DPDK_18.11 18.11
+ dpci_set_opr@DPDK_18.11 18.11
  dpci_set_rx_queue@DPDK_17.08 18.02
  dpcon_get_attributes@DPDK_17.08 18.02
  dpcon_open@DPDK_17.08 18.02
@@ -84,6 +91,7 @@ librte_bus_fslmc.so.18.11 librte-bus-fslmc18.11 #MINVER#
  rte_dpaa2_free_dpci_dev@DPDK_18.05 18.05
  rte_dpaa2_intr_disable@DPDK_17.11 18.02
  rte_dpaa2_intr_enable@DPDK_17.11 18.02
+ rte_dpaa2_memsegs@DPDK_18.05 18.11
  rte_fslmc_driver_register@DPDK_17.05 18.02
  rte_fslmc_driver_unregister@DPDK_17.05 18.02
  rte_fslmc_get_device_count@DPDK_18.02 18.02

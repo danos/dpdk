@@ -9,6 +9,7 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  DPDK_18.02@DPDK_18.02 18.02
  DPDK_18.05@DPDK_18.05 18.05
  DPDK_18.08@DPDK_18.08 18.08
+ DPDK_18.11@DPDK_18.11 18.11
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
  DPDK_2.2@DPDK_2.2 16.04
@@ -43,12 +44,19 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  rte_delay_us@DPDK_2.0 16.04
  rte_delay_us_block@DPDK_16.11 16.11
  rte_delay_us_callback_register@DPDK_16.11 16.11
+ rte_delay_us_sleep@EXPERIMENTAL 18.11
+ rte_dev_event_callback_process@EXPERIMENTAL 18.11
  rte_dev_event_callback_register@EXPERIMENTAL 18.05
  rte_dev_event_callback_unregister@EXPERIMENTAL 18.05
  rte_dev_event_monitor_start@EXPERIMENTAL 18.05
  rte_dev_event_monitor_stop@EXPERIMENTAL 18.05
+ rte_dev_hotplug_handle_disable@EXPERIMENTAL 18.11
+ rte_dev_hotplug_handle_enable@EXPERIMENTAL 18.11
+ rte_dev_is_probed@EXPERIMENTAL 18.11
  rte_dev_iterator_init@EXPERIMENTAL 18.08
  rte_dev_iterator_next@EXPERIMENTAL 18.08
+ rte_dev_probe@DPDK_18.11 18.11
+ rte_dev_remove@DPDK_18.11 18.11
  rte_devargs_add@EXPERIMENTAL 18.05
  rte_devargs_dump@EXPERIMENTAL 18.05
  rte_devargs_insert@EXPERIMENTAL 18.05
@@ -65,15 +73,18 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  rte_eal_alarm_set@DPDK_2.0 16.04
  rte_eal_cleanup@EXPERIMENTAL 18.02
  rte_eal_create_uio_dev@DPDK_17.11 17.11
- rte_eal_dev_attach@DPDK_16.11 16.11
- rte_eal_dev_detach@DPDK_16.11 16.11
+#MISSING: 18.11# rte_eal_dev_attach@DPDK_16.11 16.11
+#MISSING: 18.11# rte_eal_dev_detach@DPDK_16.11 16.11
  rte_eal_get_configuration@DPDK_2.0 16.04
  rte_eal_get_lcore_state@DPDK_2.0 16.04
  rte_eal_get_physmem_size@DPDK_2.0 16.04
+ rte_eal_get_runtime_dir@DPDK_18.11 18.11
  rte_eal_has_hugepages@DPDK_2.0 16.04
  rte_eal_has_pci@DPDK_17.11 17.11
- rte_eal_hotplug_add@EXPERIMENTAL 17.08
- rte_eal_hotplug_remove@EXPERIMENTAL 17.08
+ rte_eal_hotplug_add@DPDK_18.11 18.11
+#MISSING: 18.11# rte_eal_hotplug_add@EXPERIMENTAL 17.08
+ rte_eal_hotplug_remove@DPDK_18.11 18.11
+#MISSING: 18.11# rte_eal_hotplug_remove@EXPERIMENTAL 17.08
  rte_eal_iova_mode@DPDK_17.11 17.11
  rte_eal_init@DPDK_2.0 16.04
  rte_eal_iopl_init@DPDK_2.0 16.04
@@ -83,11 +94,11 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
 #MISSING: 18.08# rte_eal_mbuf_user_pool_ops@EXPERIMENTAL 18.02
  rte_eal_mp_remote_launch@DPDK_2.0 16.04
  rte_eal_mp_wait_lcore@DPDK_2.0 16.04
- rte_eal_parse_devargs_str@DPDK_2.0 16.04
+#MISSING: 18.11# rte_eal_parse_devargs_str@DPDK_2.0 16.04
  rte_eal_primary_proc_alive@DPDK_16.04 16.04
  rte_eal_process_type@DPDK_2.0 16.04
  rte_eal_remote_launch@DPDK_2.0 16.04
- rte_eal_set_socket_permissions@DPDK_16.04 17.11
+#MISSING: 18.11# rte_eal_set_socket_permissions@DPDK_16.04 17.11
  rte_eal_tailq_lookup@DPDK_2.0 16.04
  rte_eal_tailq_register@DPDK_2.0 16.04
  rte_eal_using_phys_addrs@DPDK_17.11 17.11
@@ -159,16 +170,27 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  rte_malloc_dump_heaps@EXPERIMENTAL 18.05
  rte_malloc_dump_stats@DPDK_2.0 16.04
  rte_malloc_get_socket_stats@DPDK_2.0 16.04
+ rte_malloc_heap_create@EXPERIMENTAL 18.11
+ rte_malloc_heap_destroy@EXPERIMENTAL 18.11
+ rte_malloc_heap_get_socket@EXPERIMENTAL 18.11
+ rte_malloc_heap_memory_add@EXPERIMENTAL 18.11
+ rte_malloc_heap_memory_attach@EXPERIMENTAL 18.11
+ rte_malloc_heap_memory_detach@EXPERIMENTAL 18.11
+ rte_malloc_heap_memory_remove@EXPERIMENTAL 18.11
+ rte_malloc_heap_socket_is_external@EXPERIMENTAL 18.11
  rte_malloc_set_limit@DPDK_2.0 16.04
  rte_malloc_socket@DPDK_2.0 16.04
  rte_malloc_validate@DPDK_2.0 16.04
  rte_malloc_virt2iova@DPDK_17.11 17.11
  rte_mem_alloc_validator_register@EXPERIMENTAL 18.05
  rte_mem_alloc_validator_unregister@EXPERIMENTAL 18.05
+ rte_mem_check_dma_mask@EXPERIMENTAL 18.11
+ rte_mem_check_dma_mask_thread_unsafe@EXPERIMENTAL 18.11
  rte_mem_event_callback_register@EXPERIMENTAL 18.05
  rte_mem_event_callback_unregister@EXPERIMENTAL 18.05
  rte_mem_iova2virt@EXPERIMENTAL 18.05
  rte_mem_lock_page@DPDK_2.0 16.04
+ rte_mem_set_dma_mask@EXPERIMENTAL 18.11
  rte_mem_virt2iova@DPDK_17.11 17.11
  rte_mem_virt2memseg@EXPERIMENTAL 18.05
  rte_mem_virt2memseg_list@EXPERIMENTAL 18.05
@@ -178,6 +200,10 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  rte_memory_get_nrank@DPDK_2.0 16.04
  rte_memseg_contig_walk@EXPERIMENTAL 18.05
  rte_memseg_contig_walk_thread_unsafe@EXPERIMENTAL 18.08
+ rte_memseg_get_fd@EXPERIMENTAL 18.11
+ rte_memseg_get_fd_offset@EXPERIMENTAL 18.11
+ rte_memseg_get_fd_offset_thread_unsafe@EXPERIMENTAL 18.11
+ rte_memseg_get_fd_thread_unsafe@EXPERIMENTAL 18.11
  rte_memseg_list_walk@EXPERIMENTAL 18.05
  rte_memseg_list_walk_thread_unsafe@EXPERIMENTAL 18.08
  rte_memseg_walk@EXPERIMENTAL 18.05
@@ -196,6 +222,7 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  rte_mp_request_sync@EXPERIMENTAL 18.05
  rte_mp_sendmsg@EXPERIMENTAL 18.02
  rte_openlog_stream@DPDK_2.0 16.04
+ rte_option_register@EXPERIMENTAL 18.11
  rte_realloc@DPDK_2.0 16.04
  rte_reciprocal_value@DPDK_18.02 18.02
  rte_reciprocal_value_u64@DPDK_18.02 18.02
@@ -235,6 +262,7 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  rte_socket_id@DPDK_2.0 16.04
  rte_socket_id_by_idx@EXPERIMENTAL 18.05
  rte_strerror@DPDK_2.0 16.04
+ rte_strscpy@DPDK_18.11 18.11
  rte_strsplit@DPDK_2.0 16.04
  rte_sys_gettid@DPDK_2.0 16.04
  rte_thread_get_affinity@DPDK_2.0 16.04

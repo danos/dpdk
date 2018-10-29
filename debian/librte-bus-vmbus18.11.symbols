@@ -1,5 +1,6 @@
 librte_bus_vmbus.so.18.11 librte-bus-vmbus18.11 #MINVER#
  DPDK_18.08@DPDK_18.08 18.08
+ DPDK_18.11@DPDK_18.11 18.11
  rte_vmbus_chan_close@DPDK_18.08 18.08
  rte_vmbus_chan_open@DPDK_18.08 18.08
  rte_vmbus_chan_recv@DPDK_18.08 18.08
@@ -17,6 +18,7 @@ librte_bus_vmbus.so.18.11 librte-bus-vmbus18.11 #MINVER#
  rte_vmbus_probe@DPDK_18.08 18.08
  rte_vmbus_register@DPDK_18.08 18.08
  rte_vmbus_scan@DPDK_18.08 18.08
+ rte_vmbus_set_latency@DPDK_18.11 18.11
  rte_vmbus_sub_channel_index@DPDK_18.08 18.08
  rte_vmbus_subchan_open@DPDK_18.08 18.08
  rte_vmbus_unmap_device@DPDK_18.08 18.08
