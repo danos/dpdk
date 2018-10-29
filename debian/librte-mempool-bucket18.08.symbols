@@ -1,3 +1,0 @@
-librte_mempool_bucket.so.18.08 librte-mempool-bucket18.08 #MINVER#
- DPDK_18.05@DPDK_18.05 18.05
-# INFO: this library exports no symbols, it is one of the drivers for mempool

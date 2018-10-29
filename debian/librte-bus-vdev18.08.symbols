@@ -1,9 +1,0 @@
-librte_bus_vdev.so.18.08 librte-bus-vdev18.08 #MINVER#
- DPDK_17.11@DPDK_17.11 17.11
- DPDK_18.02@DPDK_18.02 18.02
- rte_vdev_add_custom_scan@DPDK_18.02 18.02
- rte_vdev_init@DPDK_17.11 17.11
- rte_vdev_register@DPDK_17.11 17.11
- rte_vdev_remove_custom_scan@DPDK_18.02 18.02
- rte_vdev_uninit@DPDK_17.11 17.11
- rte_vdev_unregister@DPDK_17.11 17.11

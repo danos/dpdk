@@ -1,0 +1,13 @@
+librte_bpf.so.18.11 librte-bpf18.11 #MINVER#
+# Only experimental symbols for now
+ EXPERIMENTAL@EXPERIMENTAL 18.05
+ rte_bpf_destroy@EXPERIMENTAL 18.05
+ rte_bpf_elf_load@EXPERIMENTAL 18.05
+ rte_bpf_eth_rx_elf_load@EXPERIMENTAL 18.05
+ rte_bpf_eth_rx_unload@EXPERIMENTAL 18.05
+ rte_bpf_eth_tx_elf_load@EXPERIMENTAL 18.05
+ rte_bpf_eth_tx_unload@EXPERIMENTAL 18.05
+ rte_bpf_exec@EXPERIMENTAL 18.05
+ rte_bpf_exec_burst@EXPERIMENTAL 18.05
+ rte_bpf_get_jit@EXPERIMENTAL 18.05
+ rte_bpf_load@EXPERIMENTAL 18.05

@@ -1,0 +1,5 @@
+librte_pmd_mlx5.so.18.11 librte-pmd-mlx5-18.11 #MINVER#
+# Built since 18.02 due to rdma-core being available
+ DPDK_2.2@DPDK_2.2 18.02
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

@@ -1,4 +1,0 @@
-librte_pmd_octeontx.so.18.08 librte-pmd-octeontx18.08 #MINVER#
- DPDK_17.11@DPDK_17.11 17.11
- DPDK_18.02@DPDK_18.02 18.02
- rte_octeontx_pchan_map@DPDK_18.02 18.02
