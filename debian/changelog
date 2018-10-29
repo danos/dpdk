@@ -1,3 +1,17 @@
+dpdk (18.11-rc2-1~git1.1) UNRELEASED; urgency=medium
+
+  * New upstream release 18.11; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_11.html
+  * Add new 18.11 PMDs and libraries:
+    - librte-common-cpt18.11
+    - librte-common-dpaax18.11
+    - librte-pmd-atlantic18.11
+    - librte-pmd-caam-jr18.11
+    - librte-pmd-octeontx-crypto18.11
+    - librte-telemetry18.11
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
+
 dpdk (18.08-1~git1.1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
