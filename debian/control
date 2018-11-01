@@ -259,6 +259,7 @@ Description: Data Plane Development Kit (librte-cfgfile runtime library)
 Package: librte-cmdline18.11
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://dpdk.org/doc/api/cmdline_8h.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
@@ -1371,6 +1372,7 @@ Description: Data Plane Development Kit (librte_pmd_avf runtime library)
 Package: librte-pmd-avp18.11
 Architecture: amd64
 Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/nics/avp.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: libdpdk0
