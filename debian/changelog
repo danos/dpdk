@@ -9,6 +9,31 @@ dpdk (18.11-rc2-1~git1.1) UNRELEASED; urgency=medium
     - librte-pmd-caam-jr18.11
     - librte-pmd-octeontx-crypto18.11
     - librte-telemetry18.11
+  * Bump debhelper compat to 10.
+  * Switch to Meson. Rename PMD packages to follow the shared library names:
+    - librte-pmd-vmxnet3-uio18.11 -> librte-pmd-vmxnet3-18.11
+    - librte-pmd-lio18.11 -> librte-pmd-liquidio18.11
+    - librte-pmd-octeontx-ssovf18.11 -> librte-pmd-octeontx-event18.11
+    - librte-pmd-octeontx-zip18.11 -> librte-pmd-octeontx-compress18.11
+    - librte-pmd-sfc-efx18.11 -> librte-pmd-sfc18.11
+    - librte-pmd-thunderx-nicvf18.11 -> librte-pmd-thunderx18.11
+    Switch PMD installation directory from /usr/lib/*/dpdk-18.11-drivers to
+    /usr/lib/*/dpdk/pmds-18.11.
+    Remove backward-compatibility symlink for arch-dependent headers. Users
+    now should use the libdpdk.pc pkg-config file to get the appropriate
+    CFLAGS, or specify -I/usr/include/<ARCH>/dpdk manually.
+    Drop the dpdk-dev SDK package, users should just use pkg-config now.
+    Rename all binaries and scripts to have a dpdk- prefix.
+  * Don't build dpdk-doc when using the nodoc profile.
+  * Build-depend on libbsd-dev and libelf-dev.
+  * Package libraries built by default:
+    - librte-pmd-bnx2x18.11
+    - librte-pmd-ccp18.11
+    - librte-pmd-dsw-event18.11
+  * Use dh-missing.
+  * Package zlib PMD:
+    - librte-pmd-zlib18.11
+  * Add missing BNX URL metadata.
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
