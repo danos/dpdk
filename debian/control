@@ -222,7 +222,7 @@ Description: Data Plane Development Kit (librte_bus_vmbus runtime library)
 Package: librte-bus-ifpga18.11
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: http://dpdk.org/doc/guides/rawdevs/ifpga_rawdev.html
+Homepage: https://dpdk.org/doc/guides/rawdevs/ifpga_rawdev.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: Data Plane Development Kit (librte_bus_ifpga runtime library)
@@ -234,7 +234,7 @@ Description: Data Plane Development Kit (librte_bus_ifpga runtime library)
 Package: librte-pmd-ifc18.11
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: http://dpdk.org/doc/guides/nics/ifc.html
+Homepage: https://dpdk.org/doc/guides/nics/ifc.html
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: Data Plane Development Kit (librte_pmd_ifc runtime library)
