@@ -53,7 +53,7 @@ flags_cavium = [
 	['RTE_MAX_NUMA_NODES', 2],
 	['RTE_MAX_LCORE', 96],
 	['RTE_MAX_VFIO_GROUPS', 128],
-	['RTE_RING_USE_C11_MEM_MODEL', false]]
+	['RTE_USE_C11_MEM_MODEL', false]]
 flags_dpaa = [
 	['RTE_MACHINE', '"dpaa"'],
 	['RTE_CACHE_LINE_SIZE', 64],
@@ -157,7 +157,8 @@ else
 endif
 message(machine_args)
 
-if cc.get_define('__ARM_NEON', args: machine_args) != ''
+if (cc.get_define('__ARM_NEON', args: machine_args) != '' or
+    cc.get_define('__aarch64__', args: machine_args) != '')
 	dpdk_conf.set('RTE_MACHINE_CPUFLAG_NEON', 1)
 	compile_time_cpuflags += ['RTE_CPUFLAG_NEON']
 endif

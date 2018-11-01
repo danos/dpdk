@@ -284,6 +284,16 @@ struct guest_page {
 	uint64_t size;
 };
 
+/* The possible results of a message handling function */
+enum vh_result {
+	/* Message handling failed */
+	VH_RESULT_ERR   = -1,
+	/* Message handling successful */
+	VH_RESULT_OK    =  0,
+	/* Message handling successful and reply prepared */
+	VH_RESULT_REPLY =  1,
+};
+
 /**
  * function prototype for the vhost backend to handler specific vhost user
  * messages prior to the master message handling
@@ -292,17 +302,15 @@ struct guest_page {
  *  vhost device id
  * @param msg
  *  Message pointer.
- * @param require_reply
- *  If the handler requires sending a reply, this varaible shall be written 1,
- *  otherwise 0.
  * @param skip_master
  *  If the handler requires skipping the master message handling, this variable
  *  shall be written 1, otherwise 0.
  * @return
- *  0 on success, -1 on failure
+ *  VH_RESULT_OK on success, VH_RESULT_REPLY on success with reply,
+ *  VH_RESULT_ERR on failure
  */
-typedef int (*vhost_msg_pre_handle)(int vid, void *msg,
-		uint32_t *require_reply, uint32_t *skip_master);
+typedef enum vh_result (*vhost_msg_pre_handle)(int vid, void *msg,
+		uint32_t *skip_master);
 
 /**
  * function prototype for the vhost backend to handler specific vhost user
@@ -312,14 +320,11 @@ typedef int (*vhost_msg_pre_handle)(int vid, void *msg,
  *  vhost device id
  * @param msg
  *  Message pointer.
- * @param require_reply
- *  If the handler requires sending a reply, this varaible shall be written 1,
- *  otherwise 0.
  * @return
- *  0 on success, -1 on failure
+ *  VH_RESULT_OK on success, VH_RESULT_REPLY on success with reply,
+ *  VH_RESULT_ERR on failure
  */
-typedef int (*vhost_msg_post_handle)(int vid, void *msg,
-		uint32_t *require_reply);
+typedef enum vh_result (*vhost_msg_post_handle)(int vid, void *msg);
 
 /**
  * pre and post vhost user message handlers
@@ -362,6 +367,9 @@ struct virtio_net {
 
 	int			slave_req_fd;
 	rte_spinlock_t		slave_req_lock;
+
+	int			postcopy_ufd;
+	int			postcopy_listening;
 
 	/*
 	 * Device id to identify a specific backend device.
@@ -648,6 +656,8 @@ vhost_iova_to_vva(struct virtio_net *dev, struct vhost_virtqueue *vq,
 	return __vhost_iova_to_vva(dev, vq, iova, len, perm);
 }
 
+#define vhost_avail_event(vr) \
+	(*(volatile uint16_t*)&(vr)->used->ring[(vr)->size])
 #define vhost_used_event(vr) \
 	(*(volatile uint16_t*)&(vr)->avail->ring[(vr)->size])
 

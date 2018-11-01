@@ -2244,29 +2244,37 @@ match_convert(struct table_rule_match *mh,
 				ml->acl_add.field_value[0].mask_range.u8 =
 					mh->match.acl.proto_mask;
 
-				ml->acl_add.field_value[1].value.u32 = sa32[0];
+				ml->acl_add.field_value[1].value.u32 =
+					rte_be_to_cpu_32(sa32[0]);
 				ml->acl_add.field_value[1].mask_range.u32 =
 					sa32_depth[0];
-				ml->acl_add.field_value[2].value.u32 = sa32[1];
+				ml->acl_add.field_value[2].value.u32 =
+					rte_be_to_cpu_32(sa32[1]);
 				ml->acl_add.field_value[2].mask_range.u32 =
 					sa32_depth[1];
-				ml->acl_add.field_value[3].value.u32 = sa32[2];
+				ml->acl_add.field_value[3].value.u32 =
+					rte_be_to_cpu_32(sa32[2]);
 				ml->acl_add.field_value[3].mask_range.u32 =
 					sa32_depth[2];
-				ml->acl_add.field_value[4].value.u32 = sa32[3];
+				ml->acl_add.field_value[4].value.u32 =
+					rte_be_to_cpu_32(sa32[3]);
 				ml->acl_add.field_value[4].mask_range.u32 =
 					sa32_depth[3];
 
-				ml->acl_add.field_value[5].value.u32 = da32[0];
+				ml->acl_add.field_value[5].value.u32 =
+					rte_be_to_cpu_32(da32[0]);
 				ml->acl_add.field_value[5].mask_range.u32 =
 					da32_depth[0];
-				ml->acl_add.field_value[6].value.u32 = da32[1];
+				ml->acl_add.field_value[6].value.u32 =
+					rte_be_to_cpu_32(da32[1]);
 				ml->acl_add.field_value[6].mask_range.u32 =
 					da32_depth[1];
-				ml->acl_add.field_value[7].value.u32 = da32[2];
+				ml->acl_add.field_value[7].value.u32 =
+					rte_be_to_cpu_32(da32[2]);
 				ml->acl_add.field_value[7].mask_range.u32 =
 					da32_depth[2];
-				ml->acl_add.field_value[8].value.u32 = da32[3];
+				ml->acl_add.field_value[8].value.u32 =
+					rte_be_to_cpu_32(da32[3]);
 				ml->acl_add.field_value[8].mask_range.u32 =
 					da32_depth[3];
 
@@ -2308,36 +2316,36 @@ match_convert(struct table_rule_match *mh,
 					mh->match.acl.proto_mask;
 
 				ml->acl_delete.field_value[1].value.u32 =
-					sa32[0];
+					rte_be_to_cpu_32(sa32[0]);
 				ml->acl_delete.field_value[1].mask_range.u32 =
 					sa32_depth[0];
 				ml->acl_delete.field_value[2].value.u32 =
-					sa32[1];
+					rte_be_to_cpu_32(sa32[1]);
 				ml->acl_delete.field_value[2].mask_range.u32 =
 					sa32_depth[1];
 				ml->acl_delete.field_value[3].value.u32 =
-					sa32[2];
+					rte_be_to_cpu_32(sa32[2]);
 				ml->acl_delete.field_value[3].mask_range.u32 =
 					sa32_depth[2];
 				ml->acl_delete.field_value[4].value.u32 =
-					sa32[3];
+					rte_be_to_cpu_32(sa32[3]);
 				ml->acl_delete.field_value[4].mask_range.u32 =
 					sa32_depth[3];
 
 				ml->acl_delete.field_value[5].value.u32 =
-					da32[0];
+					rte_be_to_cpu_32(da32[0]);
 				ml->acl_delete.field_value[5].mask_range.u32 =
 					da32_depth[0];
 				ml->acl_delete.field_value[6].value.u32 =
-					da32[1];
+					rte_be_to_cpu_32(da32[1]);
 				ml->acl_delete.field_value[6].mask_range.u32 =
 					da32_depth[1];
 				ml->acl_delete.field_value[7].value.u32 =
-					da32[2];
+					rte_be_to_cpu_32(da32[2]);
 				ml->acl_delete.field_value[7].mask_range.u32 =
 					da32_depth[2];
 				ml->acl_delete.field_value[8].value.u32 =
-					da32[3];
+					rte_be_to_cpu_32(da32[3]);
 				ml->acl_delete.field_value[8].mask_range.u32 =
 					da32_depth[3];
 
@@ -2471,6 +2479,36 @@ action_convert(struct rte_table_action *a,
 			data,
 			RTE_TABLE_ACTION_TIME,
 			&action->time);
+
+		if (status)
+			return status;
+	}
+
+	if (action->action_mask & (1LLU << RTE_TABLE_ACTION_SYM_CRYPTO)) {
+		status = rte_table_action_apply(a,
+			data,
+			RTE_TABLE_ACTION_SYM_CRYPTO,
+			&action->sym_crypto);
+
+		if (status)
+			return status;
+	}
+
+	if (action->action_mask & (1LLU << RTE_TABLE_ACTION_TAG)) {
+		status = rte_table_action_apply(a,
+			data,
+			RTE_TABLE_ACTION_TAG,
+			&action->tag);
+
+		if (status)
+			return status;
+	}
+
+	if (action->action_mask & (1LLU << RTE_TABLE_ACTION_DECAP)) {
+		status = rte_table_action_apply(a,
+			data,
+			RTE_TABLE_ACTION_DECAP,
+			&action->decap);
 
 		if (status)
 			return status;

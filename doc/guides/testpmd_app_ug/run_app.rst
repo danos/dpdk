@@ -133,6 +133,10 @@ See the DPDK Getting Started Guides for more information on these options.
 
     Use malloc instead of hugetlbfs.
 
+*   ``--iova-mode <pa|va>``
+
+    Force IOVA mode to a specific value.
+
 
 Testpmd Command-line Options
 ----------------------------
@@ -332,7 +336,7 @@ The commandline options are:
 
        io (the default)
        mac
-       mac_swap
+       macswap
        flowgen
        rxonly
        txonly
@@ -340,6 +344,7 @@ The commandline options are:
        icmpecho
        ieee1588
        tm
+       noisy
 
 *   ``--rss-ip``
 
@@ -498,3 +503,47 @@ The commandline options are:
 *   ``--no-mlockall``
 
     Disable locking all memory.
+
+*   ``--mp-alloc <native|anon|xmem|xmemhuge>``
+
+    Select mempool allocation mode:
+
+    * native: create and populate mempool using native DPDK memory
+    * anon: create mempool using native DPDK memory, but populate using
+      anonymous memory
+    * xmem: create and populate mempool using externally and anonymously
+      allocated area
+    * xmemhuge: create and populate mempool using externally and anonymously
+      allocated hugepage area
+
+*   ``--noisy-tx-sw-buffer-size``
+
+    Set the number of maximum elements  of the FIFO queue to be created
+    for buffering packets. Only available with the noisy forwarding mode.
+    The default value is 0.
+
+*   ``--noisy-tx-sw-buffer-flushtime=N``
+
+    Set the time before packets in the FIFO queue is flushed.
+    Only available with the noisy forwarding mode. The default value is 0.
+
+*   ``--noisy-lkup-memory=N``
+
+    Set the size of the noisy neighbour simulation memory buffer in MB to N.
+    Only available with the noisy forwarding mode. The default value is 0.
+
+
+*   ``--noisy-lkup-num-reads=N``
+
+    Set the number of reads to be done in noisy neighbour simulation memory buffer to N.
+    Only available with the noisy forwarding mode. The default value is 0.
+
+*   ``--noisy-lkup-num-writes=N``
+
+    Set the number of writes to be done in noisy neighbour simulation memory buffer to N.
+    Only available with the noisy forwarding mode. The default value is 0.
+
+*   ``--noisy-lkup-num-reads-writes=N``
+
+    Set the number of r/w accesses to be done in noisy neighbour simulation memory buffer to N.
+    Only available with the noisy forwarding mode. The default value is 0.

@@ -339,7 +339,12 @@ Run-time configuration
   When those offloads are requested the MPS send function will not be used.
 
   It is currently only supported on the ConnectX-4 Lx, ConnectX-5 and Bluefield
-  families of adapters. Enabled by default.
+  families of adapters.
+  On ConnectX-4 Lx the MPW is considered un-secure hence disabled by default.
+  Users which enable the MPW should be aware that application which provides incorrect
+  mbuf descriptors in the Tx burst can lead to serious errors in the host including, on some cases,
+  NIC to get stuck.
+  On ConnectX-5 and Bluefield the MPW is secure and enabled by default.
 
 - ``txq_mpw_hdr_dseg_en`` parameter [int]
 
@@ -389,6 +394,13 @@ Run-time configuration
   A nonzero value allows L3 VXLAN and VXLAN-GPE flow creation. To enable
   L3 VXLAN or VXLAN-GPE, users has to configure firmware and enable this
   parameter. This is a prerequisite to receive this kind of traffic.
+
+  Disabled by default.
+
+- ``dv_flow_en`` parameter [int]
+
+  A nonzero value enables the DV flow steering assuming it is supported
+  by the driver.
 
   Disabled by default.
 

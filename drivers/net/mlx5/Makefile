@@ -8,7 +8,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 LIB = librte_pmd_mlx5.a
 LIB_GLUE = $(LIB_GLUE_BASE).$(LIB_GLUE_VERSION)
 LIB_GLUE_BASE = librte_pmd_mlx5_glue.so
-LIB_GLUE_VERSION = 18.05.0
+LIB_GLUE_VERSION = 18.11.0
 
 # Sources.
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5.c
@@ -31,9 +31,11 @@ SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_stats.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rss.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_mr.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow.c
+SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow_dv.c
+SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow_tcf.c
+SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow_verbs.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_socket.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_nl.c
-SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_nl_flow.c
 
 ifeq ($(CONFIG_RTE_LIBRTE_MLX5_DLOPEN_DEPS),y)
 INSTALL-$(CONFIG_RTE_LIBRTE_MLX5_PMD)-lib += $(LIB_GLUE)
@@ -135,6 +137,11 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		enum MLX5DV_CONTEXT_FLAGS_CQE_128B_COMP \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
+		HAVE_IBV_FLOW_DV_SUPPORT \
+		infiniband/mlx5dv.h \
+		enum MLX5DV_FLOW_ACTION_TAG \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
 		HAVE_ETHTOOL_LINK_MODE_25G \
 		/usr/include/linux/ethtool.h \
 		enum ETHTOOL_LINK_MODE_25000baseCR_Full_BIT \
@@ -150,9 +157,14 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		enum ETHTOOL_LINK_MODE_100000baseKR4_Full_BIT \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
-		HAVE_IBV_DEVICE_COUNTERS_SET_SUPPORT \
+		HAVE_IBV_DEVICE_COUNTERS_SET_V42 \
 		infiniband/verbs.h \
 		type 'struct ibv_counter_set_init_attr' \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_IBV_DEVICE_COUNTERS_SET_V45 \
+		infiniband/verbs.h \
+		type 'struct ibv_counters_init_attr' \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
 		HAVE_RDMA_NL_NLDEV \
@@ -198,6 +210,11 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		HAVE_IFLA_PHYS_PORT_NAME \
 		linux/if_link.h \
 		enum IFLA_PHYS_PORT_NAME \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_CHAIN \
+		linux/rtnetlink.h \
+		enum TCA_CHAIN \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
 		HAVE_TCA_FLOWER_ACT \
@@ -335,9 +352,29 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		enum TCA_FLOWER_KEY_VLAN_ETH_TYPE \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_TCP_FLAGS \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_TCP_FLAGS \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_TCP_FLAGS_MASK \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_TCP_FLAGS_MASK \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TC_ACT_GOTO_CHAIN \
+		linux/pkt_cls.h \
+		define TC_ACT_GOTO_CHAIN \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
 		HAVE_TC_ACT_VLAN \
 		linux/tc_act/tc_vlan.h \
 		enum TCA_VLAN_PUSH_VLAN_PRIORITY \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TC_ACT_PEDIT \
+		linux/tc_act/tc_pedit.h \
+		enum TCA_PEDIT_KEY_EX_HDR_TYPE_UDP \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
 		HAVE_SUPPORTED_40000baseKR4_Full \

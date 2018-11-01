@@ -18,10 +18,12 @@
 #include <rte_port_source_sink.h>
 #include <rte_port_fd.h>
 #include <rte_port_sched.h>
+#include <rte_port_sym_crypto.h>
 
 #include <rte_table_acl.h>
 #include <rte_table_array.h>
 #include <rte_table_hash.h>
+#include <rte_table_hash_func.h>
 #include <rte_table_lpm.h>
 #include <rte_table_lpm_ipv6.h>
 #include <rte_table_stub.h>
@@ -35,8 +37,7 @@
 #include "tap.h"
 #include "tmgr.h"
 #include "swq.h"
-
-#include "hash_func.h"
+#include "cryptodev.h"
 
 #ifndef PIPELINE_MSGQ_SIZE
 #define PIPELINE_MSGQ_SIZE                                 64
@@ -163,6 +164,7 @@ pipeline_port_in_create(const char *pipeline_name,
 		struct rte_port_kni_reader_params kni;
 #endif
 		struct rte_port_source_params source;
+		struct rte_port_sym_crypto_reader_params sym_crypto;
 	} pp;
 
 	struct pipeline *pipeline;
@@ -296,6 +298,27 @@ pipeline_port_in_create(const char *pipeline_name,
 		break;
 	}
 
+	case PORT_IN_CRYPTODEV:
+	{
+		struct cryptodev *cryptodev;
+
+		cryptodev = cryptodev_find(params->dev_name);
+		if (cryptodev == NULL)
+			return -1;
+
+		if (params->rxq.queue_id > cryptodev->n_queues - 1)
+			return -1;
+
+		pp.sym_crypto.cryptodev_id = cryptodev->dev_id;
+		pp.sym_crypto.queue_id = params->cryptodev.queue_id;
+		pp.sym_crypto.f_callback = params->cryptodev.f_callback;
+		pp.sym_crypto.arg_callback = params->cryptodev.arg_callback;
+		p.ops = &rte_port_sym_crypto_reader_ops;
+		p.arg_create = &pp.sym_crypto;
+
+		break;
+	}
+
 	default:
 		return -1;
 	}
@@ -385,6 +408,7 @@ pipeline_port_out_create(const char *pipeline_name,
 		struct rte_port_kni_writer_params kni;
 #endif
 		struct rte_port_sink_params sink;
+		struct rte_port_sym_crypto_writer_params sym_crypto;
 	} pp;
 
 	union {
@@ -394,6 +418,7 @@ pipeline_port_out_create(const char *pipeline_name,
 #ifdef RTE_LIBRTE_KNI
 		struct rte_port_kni_writer_nodrop_params kni;
 #endif
+		struct rte_port_sym_crypto_writer_nodrop_params sym_crypto;
 	} pp_nodrop;
 
 	struct pipeline *pipeline;
@@ -546,6 +571,40 @@ pipeline_port_out_create(const char *pipeline_name,
 
 		p.ops = &rte_port_sink_ops;
 		p.arg_create = &pp.sink;
+		break;
+	}
+
+	case PORT_OUT_CRYPTODEV:
+	{
+		struct cryptodev *cryptodev;
+
+		cryptodev = cryptodev_find(params->dev_name);
+		if (cryptodev == NULL)
+			return -1;
+
+		if (params->cryptodev.queue_id >= cryptodev->n_queues)
+			return -1;
+
+		pp.sym_crypto.cryptodev_id = cryptodev->dev_id;
+		pp.sym_crypto.queue_id = params->cryptodev.queue_id;
+		pp.sym_crypto.tx_burst_sz = params->burst_size;
+		pp.sym_crypto.crypto_op_offset = params->cryptodev.op_offset;
+
+		pp_nodrop.sym_crypto.cryptodev_id = cryptodev->dev_id;
+		pp_nodrop.sym_crypto.queue_id = params->cryptodev.queue_id;
+		pp_nodrop.sym_crypto.tx_burst_sz = params->burst_size;
+		pp_nodrop.sym_crypto.n_retries = params->retry;
+		pp_nodrop.sym_crypto.crypto_op_offset =
+				params->cryptodev.op_offset;
+
+		if (params->retry == 0) {
+			p.ops = &rte_port_sym_crypto_writer_ops;
+			p.arg_create = &pp.sym_crypto;
+		} else {
+			p.ops = &rte_port_sym_crypto_writer_nodrop_ops;
+			p.arg_create = &pp_nodrop.sym_crypto;
+		}
+
 		break;
 	}
 
@@ -818,28 +877,28 @@ pipeline_table_create(const char *pipeline_name,
 
 		switch (params->match.hash.key_size) {
 		case  8:
-			f_hash = hash_default_key8;
+			f_hash = rte_table_hash_crc_key8;
 			break;
 		case 16:
-			f_hash = hash_default_key16;
+			f_hash = rte_table_hash_crc_key16;
 			break;
 		case 24:
-			f_hash = hash_default_key24;
+			f_hash = rte_table_hash_crc_key24;
 			break;
 		case 32:
-			f_hash = hash_default_key32;
+			f_hash = rte_table_hash_crc_key32;
 			break;
 		case 40:
-			f_hash = hash_default_key40;
+			f_hash = rte_table_hash_crc_key40;
 			break;
 		case 48:
-			f_hash = hash_default_key48;
+			f_hash = rte_table_hash_crc_key48;
 			break;
 		case 56:
-			f_hash = hash_default_key56;
+			f_hash = rte_table_hash_crc_key56;
 			break;
 		case 64:
-			f_hash = hash_default_key64;
+			f_hash = rte_table_hash_crc_key64;
 			break;
 		default:
 			return -1;

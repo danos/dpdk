@@ -25,9 +25,15 @@ static const struct rte_cryptodev_capabilities aesni_mb_pmd_capabilities[] = {
 					.increment = 1
 				},
 				.digest_size = {
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.min = 1,
+					.max = 16,
+					.increment = 1
+#else
 					.min = 12,
 					.max = 12,
 					.increment = 0
+#endif
 				},
 				.iv_size = { 0 }
 			}, }
@@ -42,13 +48,23 @@ static const struct rte_cryptodev_capabilities aesni_mb_pmd_capabilities[] = {
 				.block_size = 64,
 				.key_size = {
 					.min = 1,
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.max = 65535,
+#else
 					.max = 64,
+#endif
 					.increment = 1
 				},
 				.digest_size = {
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.min = 1,
+					.max = 20,
+					.increment = 1
+#else
 					.min = 12,
 					.max = 12,
 					.increment = 0
+#endif
 				},
 				.iv_size = { 0 }
 			}, }
@@ -63,13 +79,23 @@ static const struct rte_cryptodev_capabilities aesni_mb_pmd_capabilities[] = {
 				.block_size = 64,
 				.key_size = {
 					.min = 1,
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.max = 65535,
+#else
 					.max = 64,
+#endif
 					.increment = 1
 				},
 				.digest_size = {
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.min = 1,
+					.max = 28,
+					.increment = 1
+#else
 					.min = 14,
 					.max = 14,
 					.increment = 0
+#endif
 				},
 				.iv_size = { 0 }
 			}, }
@@ -84,13 +110,23 @@ static const struct rte_cryptodev_capabilities aesni_mb_pmd_capabilities[] = {
 				.block_size = 64,
 				.key_size = {
 					.min = 1,
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.max = 65535,
+#else
 					.max = 64,
+#endif
 					.increment = 1
 				},
 				.digest_size = {
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.min = 1,
+					.max = 32,
+					.increment = 1
+#else
 					.min = 16,
 					.max = 16,
 					.increment = 0
+#endif
 				},
 				.iv_size = { 0 }
 			}, }
@@ -105,13 +141,23 @@ static const struct rte_cryptodev_capabilities aesni_mb_pmd_capabilities[] = {
 				.block_size = 128,
 				.key_size = {
 					.min = 1,
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.max = 65535,
+#else
 					.max = 128,
+#endif
 					.increment = 1
 				},
 				.digest_size = {
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.min = 1,
+					.max = 48,
+					.increment = 1
+#else
 					.min = 24,
 					.max = 24,
 					.increment = 0
+#endif
 				},
 				.iv_size = { 0 }
 			}, }
@@ -126,13 +172,23 @@ static const struct rte_cryptodev_capabilities aesni_mb_pmd_capabilities[] = {
 				.block_size = 128,
 				.key_size = {
 					.min = 1,
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.max = 65535,
+#else
 					.max = 128,
+#endif
 					.increment = 1
 				},
 				.digest_size = {
+#if IMB_VERSION_NUM >= IMB_VERSION(0, 50, 0)
+					.min = 1,
+					.max = 64,
+					.increment = 1
+#else
 					.min = 32,
 					.max = 32,
 					.increment = 0
+#endif
 				},
 				.iv_size = { 0 }
 			}, }
@@ -322,11 +378,41 @@ static const struct rte_cryptodev_capabilities aesni_mb_pmd_capabilities[] = {
 					.increment = 0
 				},
 				.digest_size = {
-					.min = 12,
+					.min = 1,
+					.max = 16,
+					.increment = 1
+				},
+				.iv_size = { 0 }
+			}, }
+		}, }
+	},
+	{	/* AES GCM */
+		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
+		{.sym = {
+			.xform_type = RTE_CRYPTO_SYM_XFORM_AEAD,
+			{.aead = {
+				.algo = RTE_CRYPTO_AEAD_AES_GCM,
+				.block_size = 16,
+				.key_size = {
+					.min = 16,
+					.max = 32,
+					.increment = 8
+				},
+				.digest_size = {
+					.min = 8,
 					.max = 16,
 					.increment = 4
 				},
-				.iv_size = { 0 }
+				.aad_size = {
+					.min = 0,
+					.max = 65535,
+					.increment = 1
+				},
+				.iv_size = {
+					.min = 12,
+					.max = 12,
+					.increment = 0
+				}
 			}, }
 		}, }
 	},

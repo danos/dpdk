@@ -44,6 +44,7 @@ Programmer's Guide
     thread_safety_dpdk_functions
     eventdev
     event_ethernet_rx_adapter
+    event_ethernet_tx_adapter
     event_timer_adapter
     event_crypto_adapter
     qos_framework
@@ -52,7 +53,6 @@ Programmer's Guide
     packet_framework
     vhost_lib
     metrics_lib
-    port_hotplug_framework
     bpf_lib
     source_org
     dev_kit_build_system

@@ -14,6 +14,7 @@
 #include <rte_errno.h>
 #include <rte_ring.h>
 #include <rte_tm_driver.h>
+#include <rte_mtr_driver.h>
 
 #include "rte_eth_softnic.h"
 #include "rte_eth_softnic_internals.h"
@@ -27,7 +28,7 @@
 #define PMD_PARAM_TM_QSIZE2                                "tm_qsize2"
 #define PMD_PARAM_TM_QSIZE3                                "tm_qsize3"
 
-static const char *pmd_valid_args[] = {
+static const char * const pmd_valid_args[] = {
 	PMD_PARAM_FIRMWARE,
 	PMD_PARAM_CONN_PORT,
 	PMD_PARAM_CPU_ID,
@@ -46,7 +47,7 @@ static const char welcome[] =
 
 static const char prompt[] = "softnic> ";
 
-struct softnic_conn_params conn_params_default = {
+static const struct softnic_conn_params conn_params_default = {
 	.welcome = welcome,
 	.prompt = prompt,
 	.addr = "0.0.0.0",
@@ -73,7 +74,6 @@ static const struct rte_eth_dev_info pmd_dev_info = {
 		.nb_min = 0,
 		.nb_align = 1,
 	},
-	.rx_offload_capa = DEV_RX_OFFLOAD_CRC_STRIP,
 };
 
 static int pmd_softnic_logtype;
@@ -190,6 +190,7 @@ pmd_dev_stop(struct rte_eth_dev *dev)
 	softnic_mempool_free(p);
 
 	tm_hierarchy_free(p);
+	softnic_mtr_free(p);
 }
 
 static void
@@ -206,9 +207,32 @@ pmd_link_update(struct rte_eth_dev *dev __rte_unused,
 }
 
 static int
+pmd_filter_ctrl(struct rte_eth_dev *dev __rte_unused,
+		enum rte_filter_type filter_type,
+		enum rte_filter_op filter_op,
+		void *arg)
+{
+	if (filter_type == RTE_ETH_FILTER_GENERIC &&
+			filter_op == RTE_ETH_FILTER_GET) {
+		*(const void **)arg = &pmd_flow_ops;
+		return 0;
+	}
+
+	return -ENOTSUP;
+}
+
+static int
 pmd_tm_ops_get(struct rte_eth_dev *dev __rte_unused, void *arg)
 {
 	*(const struct rte_tm_ops **)arg = &pmd_tm_ops;
+
+	return 0;
+}
+
+static int
+pmd_mtr_ops_get(struct rte_eth_dev *dev __rte_unused, void *arg)
+{
+	*(const struct rte_mtr_ops **)arg = &pmd_mtr_ops;
 
 	return 0;
 }
@@ -222,7 +246,9 @@ static const struct eth_dev_ops pmd_ops = {
 	.dev_infos_get = pmd_dev_infos_get,
 	.rx_queue_setup = pmd_rx_queue_setup,
 	.tx_queue_setup = pmd_tx_queue_setup,
+	.filter_ctrl = pmd_filter_ctrl,
 	.tm_ops_get = pmd_tm_ops_get,
+	.mtr_ops_get = pmd_mtr_ops_get,
 };
 
 static uint16_t
@@ -265,12 +291,14 @@ pmd_init(struct pmd_params *params)
 
 	/* Resources */
 	tm_hierarchy_init(p);
+	softnic_mtr_init(p);
 
 	softnic_mempool_init(p);
 	softnic_swq_init(p);
 	softnic_link_init(p);
 	softnic_tmgr_init(p);
 	softnic_tap_init(p);
+	softnic_cryptodev_init(p);
 	softnic_port_in_action_profile_init(p);
 	softnic_table_action_profile_init(p);
 	softnic_pipeline_init(p);
@@ -319,6 +347,7 @@ pmd_free(struct pmd_internals *p)
 	softnic_mempool_free(p);
 
 	tm_hierarchy_free(p);
+	softnic_mtr_free(p);
 
 	rte_free(p);
 }
@@ -528,7 +557,6 @@ static int
 pmd_remove(struct rte_vdev_device *vdev)
 {
 	struct rte_eth_dev *dev = NULL;
-	struct pmd_internals *p;
 
 	if (!vdev)
 		return -EINVAL;
@@ -539,12 +567,12 @@ pmd_remove(struct rte_vdev_device *vdev)
 	dev = rte_eth_dev_allocated(rte_vdev_device_name(vdev));
 	if (dev == NULL)
 		return -ENODEV;
-	p = dev->data->dev_private;
 
 	/* Free device data structures*/
-	rte_free(dev->data);
+	pmd_free(dev->data->dev_private);
+	dev->data->dev_private = NULL; /* already freed */
+	dev->data->mac_addrs = NULL; /* statically allocated */
 	rte_eth_dev_release_port(dev);
-	pmd_free(p);
 
 	return 0;
 }

@@ -25,6 +25,12 @@
 #define IPv6_KEY_BYTES_FMT \
 	"%08" PRIx64 "%08" PRIx64 "%08" PRIx64 "%08" PRIx64
 
+#ifdef RTE_LIBRTE_IP_FRAG_TBL_STAT
+#define	IP_FRAG_TBL_STAT_UPDATE(s, f, v)	((s)->f += (v))
+#else
+#define	IP_FRAG_TBL_STAT_UPDATE(s, f, v)	do {} while (0)
+#endif /* IP_FRAG_TBL_STAT */
+
 /* internal functions declarations */
 struct rte_mbuf * ip_frag_process(struct ip_frag_pkt *fp,
 		struct rte_ip_frag_death_row *dr, struct rte_mbuf *mb,
@@ -69,10 +75,11 @@ ip_frag_key_invalidate(struct ip_frag_key * key)
 }
 
 /* compare two keys */
-static inline int
+static inline uint64_t
 ip_frag_key_cmp(const struct ip_frag_key * k1, const struct ip_frag_key * k2)
 {
-	uint32_t i, val;
+	uint32_t i;
+	uint64_t val;
 	val = k1->id ^ k2->id;
 	for (i = 0; i < k1->key_len; i++)
 		val |= k1->src_dst[i] ^ k2->src_dst[i];
@@ -147,6 +154,18 @@ ip_frag_reset(struct ip_frag_pkt *fp, uint64_t tms)
 	fp->last_idx = IP_MIN_FRAG_NUM;
 	fp->frags[IP_LAST_FRAG_IDX] = zero_frag;
 	fp->frags[IP_FIRST_FRAG_IDX] = zero_frag;
+}
+
+/* local frag table helper functions */
+static inline void
+ip_frag_tbl_del(struct rte_ip_frag_tbl *tbl, struct rte_ip_frag_death_row *dr,
+	struct ip_frag_pkt *fp)
+{
+	ip_frag_free(fp, dr);
+	ip_frag_key_invalidate(&fp->key);
+	TAILQ_REMOVE(&tbl->lru, fp, lru);
+	tbl->use_entries--;
+	IP_FRAG_TBL_STAT_UPDATE(&tbl->stat, del_num, 1);
 }
 
 #endif /* _IP_FRAG_COMMON_H_ */
