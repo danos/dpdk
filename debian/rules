@@ -72,7 +72,7 @@ endif
 override_dh_gencontrol:
 	dh_gencontrol
 	# debian/files will not exist until dh_gencontrol has ran at least once,
-	# so we need to run gencontrol for libdpdk-dev and libdpdk-dbgsym after.
+	# so we need to run gencontrol for libdpdk-dev after.
 	# The list of libraries and PMDs is everchanging, so generate the dependency
 	# list for libdpdk-dev to avoid having to maintain it manually.
 	# Same for the recommends list for dpdk, were we want the PMDs and the mempools.
@@ -82,21 +82,6 @@ ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
 	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
 		-v`cat debian/VERSION` \
 		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
-endif
-ifneq (,$(findstring dbgsym_meta,$(DEB_BUILD_OPTIONS)))
-	./debian/dh-dbgsym-metapkg libdpdk$(DPDK_ABI)-dbgsym
-endif
-
-# dbgsym_meta can be passed via DEB_BUILD_OPTIONS to enable building the
-# optional dbgsym meta package libdpdk<ABI>-dbgsym.
-# This is not built by default as it would go in main but depend on
-# packages in the debian-debug archive.
-# Debian Developers and FTP masters strongly discourage this.
-# We provide this optional flag as a convenience for rebuilders.
-ifneq (,$(findstring dbgsym_meta,$(DEB_BUILD_OPTIONS)))
-override_dh_builddeb:
-	dh_builddeb
-	dh_builddeb -plibdpdk$(DPDK_ABI)-dbgsym
 endif
 
 override_dh_auto_clean:
