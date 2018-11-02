@@ -113,7 +113,8 @@ Section: libdevel
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
-Depends: libpcap-dev,
+Depends: libbsd-dev,
+         libpcap-dev,
          libibverbs-dev,
          libssl-dev,
          zlib1g-dev,
