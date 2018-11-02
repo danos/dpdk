@@ -25,7 +25,7 @@ dpdk (18.11-rc2-1~git1.1) UNRELEASED; urgency=medium
     Drop the dpdk-dev SDK package, users should just use pkg-config now.
     Rename all binaries and scripts to have a dpdk- prefix.
   * Don't build dpdk-doc when using the nodoc profile.
-  * Build-depend on libbsd-dev and libelf-dev.
+  * Build-depend on libjansson-dev, libbsd-dev and libelf-dev.
   * Package libraries built by default:
     - librte-pmd-bnx2x18.11
     - librte-pmd-ccp18.11
@@ -34,6 +34,12 @@ dpdk (18.11-rc2-1~git1.1) UNRELEASED; urgency=medium
   * Package zlib PMD:
     - librte-pmd-zlib18.11
   * Add missing BNX URL metadata.
+  * Drop libdpdk-dbgsym - not really used and broken in sid.
+  * Override -march pkg-config Lintian error.
+  * Enable PIE hardening.
+  * Override lintian warning about scripts with extension in bin.
+  * Add libssl-dev dependency on libdpdk-dev for libcrypto.pc.
+  * Add libbsd-dev dependency on libdpdk-dev for bsd/string.h.
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
