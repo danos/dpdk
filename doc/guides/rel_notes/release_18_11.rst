@@ -63,11 +63,21 @@ New Features
 * **Added check for ensuring allocated memory addressable by devices.**
 
   Some devices can have addressing limitations so a new function,
-  ``rte_eal_check_dma_mask``, has been added for checking allocated memory is
+  ``rte_mem_check_dma_mask``, has been added for checking allocated memory is
   not out of the device range. Because now memory can be dynamically allocated
   after initialization, a dma mask is kept and any new allocated memory will be
   checked out against that dma mask and rejected if out of range. If more than
   one device has addressing limitations, the dma mask is the more restricted one.
+
+* **Updated the C11 memory model version of ring library.**
+
+  The latency is decreased for architectures using the C11 memory model
+  version of the ring library.
+
+  On Cavium ThunderX2 platform, the changes decreased latency by 27~29%
+  and 3~15% for MPMC and SPSC cases respectively (with 2 lcores). The
+  real improvements may vary with the number of contending lcores and
+  the size of ring.
 
 * **Added hot-unplug handle mechanism.**
 
@@ -284,6 +294,20 @@ New Features
   datapath acceleration. As vDPA driver can help to set up vhost datapath,
   this application doesn't need to launch dedicated worker threads for vhost
   enqueue/dequeue operations.
+
+* **Added cryptodev FIPS validation example application.**
+
+  Added an example application to parse and perform symmetric cryptography
+  computation to the NIST Cryptographic Algorithm Validation Program (CAVP)
+  test vectors.
+
+* **Allow unit test binary to take parameters from the environment**
+
+  The unit test "test", or "dpdk-test", binary is often called from scripts,
+  which can make passing additional parameters, such as a coremask, to it more
+  awkward. Support has been added to the application to allow it to take
+  additional command-line parameter values from the "DPDK_TEST_PARAMS"
+  environment variable to make this application easier to use.
 
 
 API Changes

@@ -349,11 +349,36 @@ pci_scan_one(const char *dirname, const struct rte_pci_addr *addr)
 			if (ret < 0) {
 				rte_pci_insert_device(dev2, dev);
 			} else { /* already registered */
-				dev2->kdrv = dev->kdrv;
-				dev2->max_vfs = dev->max_vfs;
-				pci_name_set(dev2);
-				memmove(dev2->mem_resource, dev->mem_resource,
-					sizeof(dev->mem_resource));
+				if (!rte_dev_is_probed(&dev2->device)) {
+					dev2->kdrv = dev->kdrv;
+					dev2->max_vfs = dev->max_vfs;
+					pci_name_set(dev2);
+					memmove(dev2->mem_resource,
+						dev->mem_resource,
+						sizeof(dev->mem_resource));
+				} else {
+					/**
+					 * If device is plugged and driver is
+					 * probed already, (This happens when
+					 * we call rte_dev_probe which will
+					 * scan all device on the bus) we don't
+					 * need to do anything here unless...
+					 **/
+					if (dev2->kdrv != dev->kdrv ||
+						dev2->max_vfs != dev->max_vfs)
+						/*
+						 * This should not happens.
+						 * But it is still possible if
+						 * we unbind a device from
+						 * vfio or uio before hotplug
+						 * remove and rebind it with
+						 * a different configure.
+						 * So we just print out the
+						 * error as an alarm.
+						 */
+						RTE_LOG(ERR, EAL, "Unexpected device scan at %s!\n",
+							filename);
+				}
 				free(dev);
 			}
 			return 0;
@@ -590,7 +615,16 @@ pci_one_device_iommu_support_va(struct rte_pci_device *dev)
 
 	mgaw = ((vtd_cap_reg & VTD_CAP_MGAW_MASK) >> VTD_CAP_MGAW_SHIFT) + 1;
 
-	return rte_eal_check_dma_mask(mgaw) == 0 ? true : false;
+	/*
+	 * Assuming there is no limitation by now. We can not know at this point
+	 * because the memory has not been initialized yet. Setting the dma mask
+	 * will force a check once memory initialization is done. We can not do
+	 * a fallback to IOVA PA now, but if the dma check fails, the error
+	 * message should advice for using '--iova-mode pa' if IOVA VA is the
+	 * current mode.
+	 */
+	rte_mem_set_dma_mask(mgaw);
+	return true;
 }
 #elif defined(RTE_ARCH_PPC_64)
 static bool
@@ -679,6 +713,7 @@ int rte_pci_read_config(const struct rte_pci_device *device,
 
 	switch (device->kdrv) {
 	case RTE_KDRV_IGB_UIO:
+	case RTE_KDRV_UIO_GENERIC:
 		return pci_uio_read_config(intr_handle, buf, len, offset);
 #ifdef VFIO_PRESENT
 	case RTE_KDRV_VFIO:
@@ -702,6 +737,7 @@ int rte_pci_write_config(const struct rte_pci_device *device,
 
 	switch (device->kdrv) {
 	case RTE_KDRV_IGB_UIO:
+	case RTE_KDRV_UIO_GENERIC:
 		return pci_uio_write_config(intr_handle, buf, len, offset);
 #ifdef VFIO_PRESENT
 	case RTE_KDRV_VFIO:

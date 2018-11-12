@@ -69,7 +69,7 @@
 		I40E_TX_IEEE1588_TMST)
 
 #define I40E_TX_OFFLOAD_NOTSUP_MASK \
-		(PKT_TX_OFFLOAD_MASK ^ I40E_TX_OFFLOAD_MASK)
+		~(PKT_TX_OFFLOAD_MASK & I40E_TX_OFFLOAD_MASK)
 
 static inline void
 i40e_rxd_to_vlan_tci(struct rte_mbuf *mb, volatile union i40e_rx_desc *rxdp)
@@ -1741,6 +1741,11 @@ i40e_dev_rx_queue_setup_runtime(struct rte_eth_dev *dev,
 			ad->rx_bulk_alloc_allowed = false;
 		i40e_set_rx_function(dev);
 		return 0;
+	} else if (ad->rx_vec_allowed && !rte_is_power_of_2(rxq->nb_rx_desc)) {
+		PMD_DRV_LOG(ERR, "Vector mode is allowed, but descriptor"
+			    " number %d of queue %d isn't power of 2",
+			    rxq->nb_rx_desc, rxq->queue_id);
+		return -EINVAL;
 	}
 
 	/* check bulk alloc conflict */

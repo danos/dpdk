@@ -51,6 +51,7 @@ CFLAGS += -D_DEFAULT_SOURCE
 CFLAGS += -D_XOPEN_SOURCE=600
 CFLAGS += $(WERROR_FLAGS)
 CFLAGS += -Wno-strict-prototypes
+CFLAGS += $(shell pkg-config --cflags libmnl)
 ifeq ($(CONFIG_RTE_LIBRTE_MLX5_DLOPEN_DEPS),y)
 CFLAGS += -DMLX5_GLUE='"$(LIB_GLUE)"'
 CFLAGS += -DMLX5_GLUE_VERSION='"$(LIB_GLUE_VERSION)"'
@@ -59,7 +60,7 @@ LDLIBS += -ldl
 else
 LDLIBS += -libverbs -lmlx5
 endif
-LDLIBS += -lmnl
+LDLIBS += $(shell pkg-config --libs libmnl)
 LDLIBS += -lrte_eal -lrte_mbuf -lrte_mempool -lrte_ring
 LDLIBS += -lrte_ethdev -lrte_net -lrte_kvargs
 LDLIBS += -lrte_bus_pci
@@ -137,9 +138,14 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		enum MLX5DV_CONTEXT_FLAGS_CQE_128B_COMP \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
+		HAVE_IBV_MLX5_MOD_CQE_128B_PAD \
+		infiniband/mlx5dv.h \
+		enum MLX5DV_CQ_INIT_ATTR_FLAGS_CQE_PAD \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
 		HAVE_IBV_FLOW_DV_SUPPORT \
 		infiniband/mlx5dv.h \
-		enum MLX5DV_FLOW_ACTION_TAG \
+		func mlx5dv_create_flow_action_packet_reformat \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
 		HAVE_ETHTOOL_LINK_MODE_25G \
@@ -210,6 +216,11 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		HAVE_IFLA_PHYS_PORT_NAME \
 		linux/if_link.h \
 		enum IFLA_PHYS_PORT_NAME \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_IFLA_VXLAN_COLLECT_METADATA \
+		linux/if_link.h \
+		enum IFLA_VXLAN_COLLECT_METADATA \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
 		HAVE_TCA_CHAIN \
@@ -370,6 +381,86 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		HAVE_TC_ACT_VLAN \
 		linux/tc_act/tc_vlan.h \
 		enum TCA_VLAN_PUSH_VLAN_PRIORITY \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_KEY_ID \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_KEY_ID \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_IPV4_SRC \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_IPV4_SRC \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_IPV4_SRC_MASK \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_IPV4_SRC_MASK \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_IPV4_DST \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_IPV4_DST \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_IPV4_DST_MASK \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_IPV4_DST_MASK \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_IPV6_SRC \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_IPV6_SRC \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_IPV6_SRC_MASK \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_IPV6_SRC_MASK \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_IPV6_DST \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_IPV6_DST \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_IPV6_DST_MASK \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_IPV6_DST_MASK \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_UDP_SRC_PORT \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_UDP_SRC_PORT \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_UDP_SRC_PORT_MASK \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_UDP_SRC_PORT_MASK \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_UDP_DST_PORT \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_UDP_DST_PORT \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_FLOWER_KEY_ENC_UDP_DST_PORT_MASK \
+		linux/pkt_cls.h \
+		enum TCA_FLOWER_KEY_ENC_UDP_DST_PORT_MASK \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TC_ACT_TUNNEL_KEY \
+		linux/tc_act/tc_tunnel_key.h \
+		define TCA_ACT_TUNNEL_KEY \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_TUNNEL_KEY_ENC_DST_PORT \
+		linux/tc_act/tc_tunnel_key.h \
+		enum TCA_TUNNEL_KEY_ENC_DST_PORT \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_TCA_TUNNEL_KEY_NO_CSUM \
+		linux/tc_act/tc_tunnel_key.h \
+		enum TCA_TUNNEL_KEY_NO_CSUM \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
 		HAVE_TC_ACT_PEDIT \

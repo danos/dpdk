@@ -259,6 +259,8 @@ DPDK_18.08 {
 DPDK_18.11 {
 	global:
 
+	rte_dev_probe;
+	rte_dev_remove;
 	rte_eal_get_runtime_dir;
 	rte_eal_hotplug_add;
 	rte_eal_hotplug_remove;
@@ -285,8 +287,6 @@ EXPERIMENTAL {
 	rte_dev_is_probed;
 	rte_dev_iterator_init;
 	rte_dev_iterator_next;
-	rte_dev_probe;
-	rte_dev_remove;
 	rte_devargs_add;
 	rte_devargs_dump;
 	rte_devargs_insert;
@@ -295,7 +295,6 @@ EXPERIMENTAL {
 	rte_devargs_parsef;
 	rte_devargs_remove;
 	rte_devargs_type_count;
-	rte_eal_check_dma_mask;
 	rte_eal_cleanup;
 	rte_fbarray_attach;
 	rte_fbarray_destroy;
@@ -331,9 +330,12 @@ EXPERIMENTAL {
 	rte_malloc_heap_socket_is_external;
 	rte_mem_alloc_validator_register;
 	rte_mem_alloc_validator_unregister;
+	rte_mem_check_dma_mask;
+	rte_mem_check_dma_mask_thread_unsafe;
 	rte_mem_event_callback_register;
 	rte_mem_event_callback_unregister;
 	rte_mem_iova2virt;
+	rte_mem_set_dma_mask;
 	rte_mem_virt2memseg;
 	rte_mem_virt2memseg_list;
 	rte_memseg_contig_walk;

@@ -134,9 +134,6 @@ virtio_user_start_device(struct virtio_user_dev *dev)
 	if (is_vhost_user_by_type(dev->path) && dev->vhostfd < 0)
 		goto error;
 
-	/* Do not check return as already done in init, or reset in stop */
-	dev->ops->send_request(dev, VHOST_USER_SET_OWNER, NULL);
-
 	/* Step 0: tell vhost to create queues */
 	if (virtio_user_queue_setup(dev, virtio_user_create_queue) < 0)
 		goto error;
@@ -181,21 +178,34 @@ error:
 
 int virtio_user_stop_device(struct virtio_user_dev *dev)
 {
+	struct vhost_vring_state state;
 	uint32_t i;
+	int error = 0;
 
 	pthread_mutex_lock(&dev->mutex);
+	if (!dev->started)
+		goto out;
+
 	for (i = 0; i < dev->max_queue_pairs; ++i)
 		dev->ops->enable_qp(dev, i, 0);
 
-	if (dev->ops->send_request(dev, VHOST_USER_RESET_OWNER, NULL) < 0) {
-		PMD_DRV_LOG(INFO, "Failed to reset the device\n");
-		pthread_mutex_unlock(&dev->mutex);
-		return -1;
+	/* Stop the backend. */
+	for (i = 0; i < dev->max_queue_pairs * 2; ++i) {
+		state.index = i;
+		if (dev->ops->send_request(dev, VHOST_USER_GET_VRING_BASE,
+					   &state) < 0) {
+			PMD_DRV_LOG(ERR, "get_vring_base failed, index=%u\n",
+				    i);
+			error = -1;
+			goto out;
+		}
 	}
+
 	dev->started = false;
+out:
 	pthread_mutex_unlock(&dev->mutex);
 
-	return 0;
+	return error;
 }
 
 static inline void
@@ -411,7 +421,8 @@ virtio_user_dev_init(struct virtio_user_dev *dev, char *path, int queues,
 	dev->queue_pairs = 1; /* mq disabled by default */
 	dev->queue_size = queue_size;
 	dev->mac_specified = 0;
-	dev->unsupported_features = 0;
+	dev->frontend_features = 0;
+	dev->unsupported_features = ~VIRTIO_USER_SUPPORTED_FEATURES;
 	parse_mac(dev, mac);
 
 	if (*ifname) {
@@ -447,37 +458,25 @@ virtio_user_dev_init(struct virtio_user_dev *dev, char *path, int queues,
 		dev->device_features = VIRTIO_USER_SUPPORTED_FEATURES;
 	}
 
-	if (!mrg_rxbuf) {
-		dev->device_features &= ~(1ull << VIRTIO_NET_F_MRG_RXBUF);
+	if (!mrg_rxbuf)
 		dev->unsupported_features |= (1ull << VIRTIO_NET_F_MRG_RXBUF);
-	}
 
-	if (!in_order) {
-		dev->device_features &= ~(1ull << VIRTIO_F_IN_ORDER);
+	if (!in_order)
 		dev->unsupported_features |= (1ull << VIRTIO_F_IN_ORDER);
-	}
 
-	if (dev->mac_specified) {
-		dev->device_features |= (1ull << VIRTIO_NET_F_MAC);
-	} else {
-		dev->device_features &= ~(1ull << VIRTIO_NET_F_MAC);
+	if (dev->mac_specified)
+		dev->frontend_features |= (1ull << VIRTIO_NET_F_MAC);
+	else
 		dev->unsupported_features |= (1ull << VIRTIO_NET_F_MAC);
-	}
 
 	if (cq) {
 		/* device does not really need to know anything about CQ,
 		 * so if necessary, we just claim to support CQ
 		 */
-		dev->device_features |= (1ull << VIRTIO_NET_F_CTRL_VQ);
+		dev->frontend_features |= (1ull << VIRTIO_NET_F_CTRL_VQ);
 	} else {
-		dev->device_features &= ~(1ull << VIRTIO_NET_F_CTRL_VQ);
-		/* Also disable features depends on VIRTIO_NET_F_CTRL_VQ */
-		dev->device_features &= ~(1ull << VIRTIO_NET_F_CTRL_RX);
-		dev->device_features &= ~(1ull << VIRTIO_NET_F_CTRL_VLAN);
-		dev->device_features &= ~(1ull << VIRTIO_NET_F_GUEST_ANNOUNCE);
-		dev->device_features &= ~(1ull << VIRTIO_NET_F_MQ);
-		dev->device_features &= ~(1ull << VIRTIO_NET_F_CTRL_MAC_ADDR);
 		dev->unsupported_features |= (1ull << VIRTIO_NET_F_CTRL_VQ);
+		/* Also disable features that depend on VIRTIO_NET_F_CTRL_VQ */
 		dev->unsupported_features |= (1ull << VIRTIO_NET_F_CTRL_RX);
 		dev->unsupported_features |= (1ull << VIRTIO_NET_F_CTRL_VLAN);
 		dev->unsupported_features |=
@@ -489,10 +488,14 @@ virtio_user_dev_init(struct virtio_user_dev *dev, char *path, int queues,
 
 	/* The backend will not report this feature, we add it explicitly */
 	if (is_vhost_user_by_type(dev->path))
-		dev->device_features |= (1ull << VIRTIO_NET_F_STATUS);
+		dev->frontend_features |= (1ull << VIRTIO_NET_F_STATUS);
 
-	dev->device_features &= VIRTIO_USER_SUPPORTED_FEATURES;
-	dev->unsupported_features |= ~VIRTIO_USER_SUPPORTED_FEATURES;
+	/*
+	 * Device features =
+	 *     (frontend_features | backend_features) & ~unsupported_features;
+	 */
+	dev->device_features |= dev->frontend_features;
+	dev->device_features &= ~dev->unsupported_features;
 
 	if (rte_mem_event_callback_register(VIRTIO_USER_MEM_EVENT_CLB_NAME,
 				virtio_user_mem_event_cb, dev)) {

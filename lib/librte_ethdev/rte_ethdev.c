@@ -187,7 +187,7 @@ enum {
 	STAT_QMAP_RX
 };
 
-int __rte_experimental
+int
 rte_eth_iterator_init(struct rte_dev_iterator *iter, const char *devargs_str)
 {
 	int ret;
@@ -288,7 +288,7 @@ error:
 	return ret;
 }
 
-uint16_t __rte_experimental
+uint16_t
 rte_eth_iterator_next(struct rte_dev_iterator *iter)
 {
 	if (iter->cls == NULL) /* invalid ethdev iterator */
@@ -317,7 +317,7 @@ rte_eth_iterator_next(struct rte_dev_iterator *iter)
 	return RTE_MAX_ETHPORTS;
 }
 
-void __rte_experimental
+void
 rte_eth_iterator_cleanup(struct rte_dev_iterator *iter)
 {
 	if (iter->bus_str == NULL)
@@ -3647,11 +3647,10 @@ rte_eth_dev_destroy(struct rte_eth_dev *ethdev,
 		return -ENODEV;
 
 	RTE_FUNC_PTR_OR_ERR_RET(*ethdev_uninit, -EINVAL);
-	if (ethdev_uninit) {
-		ret = ethdev_uninit(ethdev);
-		if (ret)
-			return ret;
-	}
+
+	ret = ethdev_uninit(ethdev);
+	if (ret)
+		return ret;
 
 	return rte_eth_dev_release_port(ethdev);
 }

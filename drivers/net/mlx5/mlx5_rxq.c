@@ -841,6 +841,12 @@ mlx5_rxq_ibv_new(struct rte_eth_dev *dev, uint16_t idx)
 			" timestamp",
 			dev->data->port_id);
 	}
+#ifdef HAVE_IBV_MLX5_MOD_CQE_128B_PAD
+	if (config->cqe_pad) {
+		attr.cq.mlx5.comp_mask |= MLX5DV_CQ_INIT_ATTR_MASK_FLAGS;
+		attr.cq.mlx5.flags |= MLX5DV_CQ_INIT_ATTR_FLAGS_CQE_PAD;
+	}
+#endif
 	tmpl->cq = mlx5_glue->cq_ex_to_cq
 		(mlx5_glue->dv_create_cq(priv->ctx, &attr.cq.ibv,
 					 &attr.cq.mlx5));
@@ -1758,6 +1764,8 @@ mlx5_ind_table_ibv_verify(struct rte_eth_dev *dev)
  *   first queue index will be taken for the indirection table.
  * @param queues_n
  *   Number of queues.
+ * @param tunnel
+ *   Tunnel type.
  *
  * @return
  *   The Verbs object initialised, NULL otherwise and rte_errno is set.
@@ -1773,6 +1781,9 @@ mlx5_hrxq_new(struct rte_eth_dev *dev,
 	struct mlx5_hrxq *hrxq;
 	struct mlx5_ind_table_ibv *ind_tbl;
 	struct ibv_qp *qp;
+#ifdef HAVE_IBV_DEVICE_TUNNEL_SUPPORT
+	struct mlx5dv_qp_init_attr qp_init_attr = {0};
+#endif
 	int err;
 
 	queues_n = hash_fields ? queues_n : 1;
@@ -1783,11 +1794,21 @@ mlx5_hrxq_new(struct rte_eth_dev *dev,
 		rte_errno = ENOMEM;
 		return NULL;
 	}
-	if (!rss_key_len) {
-		rss_key_len = MLX5_RSS_HASH_KEY_LEN;
-		rss_key = rss_hash_default_key;
-	}
 #ifdef HAVE_IBV_DEVICE_TUNNEL_SUPPORT
+	if (tunnel) {
+		qp_init_attr.comp_mask =
+				MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+		qp_init_attr.create_flags = MLX5DV_QP_CREATE_TUNNEL_OFFLOADS;
+	}
+#ifdef HAVE_IBV_FLOW_DV_SUPPORT
+	if (dev->data->dev_conf.lpbk_mode) {
+		/* Allow packet sent from NIC loop back w/o source MAC check. */
+		qp_init_attr.comp_mask |=
+				MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+		qp_init_attr.create_flags |=
+				MLX5DV_QP_CREATE_TIR_ALLOW_SELF_LOOPBACK_UC;
+	}
+#endif
 	qp = mlx5_glue->dv_create_qp
 		(priv->ctx,
 		 &(struct ibv_qp_init_attr_ex){
@@ -1798,21 +1819,14 @@ mlx5_hrxq_new(struct rte_eth_dev *dev,
 				IBV_QP_INIT_ATTR_RX_HASH,
 			.rx_hash_conf = (struct ibv_rx_hash_conf){
 				.rx_hash_function = IBV_RX_HASH_FUNC_TOEPLITZ,
-				.rx_hash_key_len = rss_key_len ? rss_key_len :
-						   MLX5_RSS_HASH_KEY_LEN,
-				.rx_hash_key = rss_key ?
-					       (void *)(uintptr_t)rss_key :
-					       rss_hash_default_key,
+				.rx_hash_key_len = rss_key_len,
+				.rx_hash_key = (void *)(uintptr_t)rss_key,
 				.rx_hash_fields_mask = hash_fields,
 			},
 			.rwq_ind_tbl = ind_tbl->ind_table,
 			.pd = priv->pd,
 		 },
-		 &(struct mlx5dv_qp_init_attr){
-			.comp_mask = tunnel ?
-				MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS : 0,
-			.create_flags = MLX5DV_QP_CREATE_TUNNEL_OFFLOADS,
-		 });
+		 &qp_init_attr);
 #else
 	qp = mlx5_glue->create_qp_ex
 		(priv->ctx,
@@ -1824,11 +1838,8 @@ mlx5_hrxq_new(struct rte_eth_dev *dev,
 				IBV_QP_INIT_ATTR_RX_HASH,
 			.rx_hash_conf = (struct ibv_rx_hash_conf){
 				.rx_hash_function = IBV_RX_HASH_FUNC_TOEPLITZ,
-				.rx_hash_key_len = rss_key_len ? rss_key_len :
-						   MLX5_RSS_HASH_KEY_LEN,
-				.rx_hash_key = rss_key ?
-					       (void *)(uintptr_t)rss_key :
-					       rss_hash_default_key,
+				.rx_hash_key_len = rss_key_len,
+				.rx_hash_key = (void *)(uintptr_t)rss_key,
 				.rx_hash_fields_mask = hash_fields,
 			},
 			.rwq_ind_tbl = ind_tbl->ind_table,

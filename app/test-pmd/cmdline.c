@@ -728,7 +728,8 @@ static void cmd_help_long_parsed(void *parsed_result,
 			"    show all queue region related configuration info\n\n"
 
 			"add port tm node shaper profile (port_id) (shaper_profile_id)"
-			" (tb_rate) (tb_size) (packet_length_adjust)\n"
+			" (cmit_tb_rate) (cmit_tb_size) (peak_tb_rate) (peak_tb_size)"
+			" (packet_length_adjust)\n"
 			"	Add port tm node private shaper profile.\n\n"
 
 			"del port tm node shaper profile (port_id) (shaper_profile_id)\n"
@@ -5976,6 +5977,8 @@ static void cmd_create_bonded_device_parsed(void *parsed_result,
 		nb_ports = rte_eth_dev_count_avail();
 		reconfig(port_id, res->socket);
 		rte_eth_promiscuous_enable(port_id);
+		ports[port_id].need_setup = 0;
+		ports[port_id].port_status = RTE_PORT_STOPPED;
 	}
 
 }

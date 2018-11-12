@@ -51,6 +51,9 @@
 /* Device parameter to enable RX completion queue compression. */
 #define MLX5_RXQ_CQE_COMP_EN "rxq_cqe_comp_en"
 
+/* Device parameter to enable RX completion entry padding to 128B. */
+#define MLX5_RXQ_CQE_PAD_EN "rxq_cqe_pad_en"
+
 /* Device parameter to enable Multi-Packet Rx queue. */
 #define MLX5_RX_MPRQ_EN "mprq_en"
 
@@ -71,6 +74,12 @@
  * enabling inline send.
  */
 #define MLX5_TXQS_MIN_INLINE "txqs_min_inline"
+
+/*
+ * Device parameter to configure the number of TX queues threshold for
+ * enabling vectorized Tx.
+ */
+#define MLX5_TXQS_MAX_VEC "txqs_max_vec"
 
 /* Device parameter to enable multi-packet send WQEs. */
 #define MLX5_TXQ_MPW_EN "txq_mpw_en"
@@ -390,6 +399,7 @@ const struct eth_dev_ops mlx5_dev_ops = {
 	.filter_ctrl = mlx5_dev_filter_ctrl,
 	.rx_descriptor_status = mlx5_rx_descriptor_status,
 	.tx_descriptor_status = mlx5_tx_descriptor_status,
+	.rx_queue_count = mlx5_rx_queue_count,
 	.rx_queue_intr_enable = mlx5_rx_intr_enable,
 	.rx_queue_intr_disable = mlx5_rx_intr_disable,
 	.is_removed = mlx5_is_removed,
@@ -479,6 +489,8 @@ mlx5_args_check(const char *key, const char *val, void *opaque)
 	}
 	if (strcmp(MLX5_RXQ_CQE_COMP_EN, key) == 0) {
 		config->cqe_comp = !!tmp;
+	} else if (strcmp(MLX5_RXQ_CQE_PAD_EN, key) == 0) {
+		config->cqe_pad = !!tmp;
 	} else if (strcmp(MLX5_RX_MPRQ_EN, key) == 0) {
 		config->mprq.enabled = !!tmp;
 	} else if (strcmp(MLX5_RX_MPRQ_LOG_STRIDE_NUM, key) == 0) {
@@ -491,6 +503,8 @@ mlx5_args_check(const char *key, const char *val, void *opaque)
 		config->txq_inline = tmp;
 	} else if (strcmp(MLX5_TXQS_MIN_INLINE, key) == 0) {
 		config->txqs_inline = tmp;
+	} else if (strcmp(MLX5_TXQS_MAX_VEC, key) == 0) {
+		config->txqs_vec = tmp;
 	} else if (strcmp(MLX5_TXQ_MPW_EN, key) == 0) {
 		config->mps = !!tmp;
 	} else if (strcmp(MLX5_TXQ_MPW_HDR_DSEG_EN, key) == 0) {
@@ -531,12 +545,14 @@ mlx5_args(struct mlx5_dev_config *config, struct rte_devargs *devargs)
 {
 	const char **params = (const char *[]){
 		MLX5_RXQ_CQE_COMP_EN,
+		MLX5_RXQ_CQE_PAD_EN,
 		MLX5_RX_MPRQ_EN,
 		MLX5_RX_MPRQ_LOG_STRIDE_NUM,
 		MLX5_RX_MPRQ_MAX_MEMCPY_LEN,
 		MLX5_RXQS_MIN_MPRQ,
 		MLX5_TXQ_INLINE,
 		MLX5_TXQS_MIN_INLINE,
+		MLX5_TXQS_MAX_VEC,
 		MLX5_TXQ_MPW_EN,
 		MLX5_TXQ_MPW_HDR_DSEG_EN,
 		MLX5_TXQ_MAX_INLINE_LEN,
@@ -698,8 +714,8 @@ mlx5_uar_init_secondary(struct rte_eth_dev *dev)
  *   Backing DPDK device.
  * @param ibv_dev
  *   Verbs device.
- * @param vf
- *   If nonzero, enable VF-specific features.
+ * @param config
+ *   Device configuration parameters.
  * @param[in] switch_info
  *   Switch properties of Ethernet device.
  *
@@ -713,7 +729,7 @@ mlx5_uar_init_secondary(struct rte_eth_dev *dev)
 static struct rte_eth_dev *
 mlx5_dev_spawn(struct rte_device *dpdk_dev,
 	       struct ibv_device *ibv_dev,
-	       int vf,
+	       struct mlx5_dev_config config,
 	       const struct mlx5_switch_info *switch_info)
 {
 	struct ibv_context *ctx;
@@ -721,28 +737,12 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 	struct ibv_port_attr port_attr;
 	struct ibv_pd *pd = NULL;
 	struct mlx5dv_context dv_attr = { .comp_mask = 0 };
-	struct mlx5_dev_config config = {
-		.vf = !!vf,
-		.mps = MLX5_ARG_UNSET,
-		.tx_vec_en = 1,
-		.rx_vec_en = 1,
-		.mpw_hdr_dseg = 0,
-		.txq_inline = MLX5_ARG_UNSET,
-		.txqs_inline = MLX5_ARG_UNSET,
-		.inline_max_packet_sz = MLX5_ARG_UNSET,
-		.vf_nl_en = 1,
-		.mprq = {
-			.enabled = 0,
-			.stride_num_n = MLX5_MPRQ_STRIDE_NUM_N,
-			.max_memcpy_len = MLX5_MPRQ_MEMCPY_DEFAULT_LEN,
-			.min_rxqs_num = MLX5_MPRQ_MIN_RXQS,
-		},
-	};
 	struct rte_eth_dev *eth_dev = NULL;
 	struct priv *priv = NULL;
 	int err = 0;
 	unsigned int mps;
 	unsigned int cqe_comp;
+	unsigned int cqe_pad = 0;
 	unsigned int tunnel_en = 0;
 	unsigned int mpls_en = 0;
 	unsigned int swp = 0;
@@ -863,6 +863,11 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 	else
 		cqe_comp = 1;
 	config.cqe_comp = cqe_comp;
+#ifdef HAVE_IBV_MLX5_MOD_CQE_128B_PAD
+	/* Whether device supports 128B Rx CQE padding. */
+	cqe_pad = RTE_CACHE_LINE_SIZE == 128 &&
+		  (dv_attr.flags & MLX5DV_CONTEXT_FLAGS_CQE_128B_PAD);
+#endif
 #ifdef HAVE_IBV_DEVICE_TUNNEL_SUPPORT
 	if (dv_attr.comp_mask & MLX5DV_CONTEXT_MASK_TUNNEL_OFFLOADS) {
 		tunnel_en = ((dv_attr.tunnel_offloads_caps &
@@ -1079,6 +1084,12 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 		DRV_LOG(WARNING, "Rx CQE compression isn't supported");
 		config.cqe_comp = 0;
 	}
+	if (config.cqe_pad && !cqe_pad) {
+		DRV_LOG(WARNING, "Rx CQE padding isn't supported");
+		config.cqe_pad = 0;
+	} else if (config.cqe_pad) {
+		DRV_LOG(INFO, "Rx CQE padding is enabled");
+	}
 	if (config.mprq.enabled && mprq) {
 		if (config.mprq.stride_num_n > mprq_max_stride_num_n ||
 		    config.mprq.stride_num_n < mprq_min_stride_num_n) {
@@ -1157,7 +1168,7 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 	eth_dev->dev_ops = &mlx5_dev_ops;
 	/* Register MAC address. */
 	claim_zero(mlx5_mac_addr_add(eth_dev, &mac, 0, 0));
-	if (vf && config.vf_nl_en)
+	if (config.vf && config.vf_nl_en)
 		mlx5_nl_mac_addr_sync(eth_dev);
 	priv->tcf_context = mlx5_flow_tcf_context_create();
 	if (!priv->tcf_context) {
@@ -1326,7 +1337,7 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 {
 	struct ibv_device **ibv_list;
 	unsigned int n = 0;
-	int vf;
+	struct mlx5_dev_config dev_config;
 	int ret;
 
 	assert(pci_drv == &mlx5_driver);
@@ -1424,21 +1435,46 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 	 */
 	if (n)
 		qsort(list, n, sizeof(*list), mlx5_dev_spawn_data_cmp);
+	/* Default configuration. */
+	dev_config = (struct mlx5_dev_config){
+		.mps = MLX5_ARG_UNSET,
+		.tx_vec_en = 1,
+		.rx_vec_en = 1,
+		.txq_inline = MLX5_ARG_UNSET,
+		.txqs_inline = MLX5_ARG_UNSET,
+		.txqs_vec = MLX5_ARG_UNSET,
+		.inline_max_packet_sz = MLX5_ARG_UNSET,
+		.vf_nl_en = 1,
+		.mprq = {
+			.enabled = 0, /* Disabled by default. */
+			.stride_num_n = MLX5_MPRQ_STRIDE_NUM_N,
+			.max_memcpy_len = MLX5_MPRQ_MEMCPY_DEFAULT_LEN,
+			.min_rxqs_num = MLX5_MPRQ_MIN_RXQS,
+		},
+	};
+	/* Device speicific configuration. */
 	switch (pci_dev->id.device_id) {
+	case PCI_DEVICE_ID_MELLANOX_CONNECTX5BF:
+		dev_config.txqs_vec = MLX5_VPMD_MAX_TXQS_BLUEFIELD;
+		break;
 	case PCI_DEVICE_ID_MELLANOX_CONNECTX4VF:
 	case PCI_DEVICE_ID_MELLANOX_CONNECTX4LXVF:
 	case PCI_DEVICE_ID_MELLANOX_CONNECTX5VF:
 	case PCI_DEVICE_ID_MELLANOX_CONNECTX5EXVF:
-		vf = 1;
+		dev_config.vf = 1;
 		break;
 	default:
-		vf = 0;
+		break;
 	}
+	/* Set architecture-dependent default value if unset. */
+	if (dev_config.txqs_vec == MLX5_ARG_UNSET)
+		dev_config.txqs_vec = MLX5_VPMD_MAX_TXQS;
 	for (i = 0; i != n; ++i) {
 		uint32_t restore;
 
-		list[i].eth_dev = mlx5_dev_spawn
-			(&pci_dev->device, list[i].ibv_dev, vf, &list[i].info);
+		list[i].eth_dev = mlx5_dev_spawn(&pci_dev->device,
+						 list[i].ibv_dev, dev_config,
+						 &list[i].info);
 		if (!list[i].eth_dev) {
 			if (rte_errno != EBUSY && rte_errno != EEXIST)
 				break;

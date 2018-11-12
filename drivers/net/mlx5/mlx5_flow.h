@@ -92,9 +92,23 @@
 #define MLX5_FLOW_ACTION_DEC_TTL (1u << 19)
 #define MLX5_FLOW_ACTION_SET_MAC_SRC (1u << 20)
 #define MLX5_FLOW_ACTION_SET_MAC_DST (1u << 21)
+#define MLX5_FLOW_ACTION_VXLAN_ENCAP (1u << 22)
+#define MLX5_FLOW_ACTION_VXLAN_DECAP (1u << 23)
+#define MLX5_FLOW_ACTION_NVGRE_ENCAP (1u << 24)
+#define MLX5_FLOW_ACTION_NVGRE_DECAP (1u << 25)
+#define MLX5_FLOW_ACTION_RAW_ENCAP (1u << 26)
+#define MLX5_FLOW_ACTION_RAW_DECAP (1u << 27)
 
 #define MLX5_FLOW_FATE_ACTIONS \
 	(MLX5_FLOW_ACTION_DROP | MLX5_FLOW_ACTION_QUEUE | MLX5_FLOW_ACTION_RSS)
+
+#define MLX5_FLOW_ENCAP_ACTIONS	(MLX5_FLOW_ACTION_VXLAN_ENCAP | \
+				 MLX5_FLOW_ACTION_NVGRE_ENCAP | \
+				 MLX5_FLOW_ACTION_RAW_ENCAP)
+
+#define MLX5_FLOW_DECAP_ACTIONS	(MLX5_FLOW_ACTION_VXLAN_DECAP | \
+				 MLX5_FLOW_ACTION_NVGRE_DECAP | \
+				 MLX5_FLOW_ACTION_RAW_DECAP)
 
 #ifndef IPPROTO_MPLS
 #define IPPROTO_MPLS 137
@@ -156,6 +170,7 @@ struct mlx5_flow_dv_match_params {
 };
 
 #define MLX5_DV_MAX_NUMBER_OF_ACTIONS 8
+#define MLX5_ENCAP_MAX_LEN 132
 
 /* Matcher structure. */
 struct mlx5_flow_dv_matcher {
@@ -169,6 +184,19 @@ struct mlx5_flow_dv_matcher {
 	struct mlx5_flow_dv_match_params mask; /**< Matcher mask. */
 };
 
+/* Encap/decap resource structure. */
+struct mlx5_flow_dv_encap_decap_resource {
+	LIST_ENTRY(mlx5_flow_dv_encap_decap_resource) next;
+	/* Pointer to next element. */
+	rte_atomic32_t refcnt; /**< Reference counter. */
+	struct ibv_flow_action *verbs_action;
+	/**< Verbs encap/decap action object. */
+	uint8_t buf[MLX5_ENCAP_MAX_LEN];
+	size_t size;
+	uint8_t reformat_type;
+	uint8_t ft_type;
+};
+
 /* DV flows structure. */
 struct mlx5_flow_dv {
 	uint64_t hash_fields; /**< Fields that participate in the hash. */
@@ -177,6 +205,8 @@ struct mlx5_flow_dv {
 	struct mlx5_flow_dv_matcher *matcher; /**< Cache to matcher. */
 	struct mlx5_flow_dv_match_params value;
 	/**< Holds the value that the packet is compared to. */
+	struct mlx5_flow_dv_encap_decap_resource *encap_decap;
+	/**< Pointer to encap/decap resource in cache. */
 	struct ibv_flow *flow; /**< Installed flow. */
 #ifdef HAVE_IBV_FLOW_DV_SUPPORT
 	struct mlx5dv_flow_action_attr actions[MLX5_DV_MAX_NUMBER_OF_ACTIONS];
@@ -189,6 +219,15 @@ struct mlx5_flow_dv {
 struct mlx5_flow_tcf {
 	struct nlmsghdr *nlh;
 	struct tcmsg *tcm;
+	union { /**< Tunnel encap/decap descriptor. */
+		struct flow_tcf_tunnel_hdr *tunnel;
+		struct flow_tcf_vxlan_decap *vxlan_decap;
+		struct flow_tcf_vxlan_encap *vxlan_encap;
+	};
+	uint32_t applied:1; /**< Whether rule is currently applied. */
+#ifndef NDEBUG
+	uint32_t nlsize; /**< Size of NL message buffer for debug check. */
+#endif
 };
 
 /* Verbs specification header. */
@@ -253,7 +292,9 @@ struct rte_flow {
 	/**< Device flows that are part of the flow. */
 	uint64_t actions;
 	/**< Bit-fields of detected actions, see MLX5_FLOW_ACTION_*. */
+	struct mlx5_fdir *fdir; /**< Pointer to associated FDIR if any. */
 };
+
 typedef int (*mlx5_flow_validate_t)(struct rte_eth_dev *dev,
 				    const struct rte_flow_attr *attr,
 				    const struct rte_flow_item items[],
@@ -261,8 +302,7 @@ typedef int (*mlx5_flow_validate_t)(struct rte_eth_dev *dev,
 				    struct rte_flow_error *error);
 typedef struct mlx5_flow *(*mlx5_flow_prepare_t)
 	(const struct rte_flow_attr *attr, const struct rte_flow_item items[],
-	 const struct rte_flow_action actions[], uint64_t *item_flags,
-	 uint64_t *action_flags, struct rte_flow_error *error);
+	 const struct rte_flow_action actions[], struct rte_flow_error *error);
 typedef int (*mlx5_flow_translate_t)(struct rte_eth_dev *dev,
 				     struct mlx5_flow *dev_flow,
 				     const struct rte_flow_attr *attr,
@@ -336,7 +376,7 @@ int mlx5_flow_validate_item_gre(const struct rte_flow_item *item,
 				uint8_t target_protocol,
 				struct rte_flow_error *error);
 int mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
-				 int64_t item_flags,
+				 uint64_t item_flags,
 				 struct rte_flow_error *error);
 int mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
 				 uint64_t item_flags,
@@ -355,7 +395,7 @@ int mlx5_flow_validate_item_udp(const struct rte_flow_item *item,
 				uint8_t target_protocol,
 				struct rte_flow_error *error);
 int mlx5_flow_validate_item_vlan(const struct rte_flow_item *item,
-				 int64_t item_flags,
+				 uint64_t item_flags,
 				 struct rte_flow_error *error);
 int mlx5_flow_validate_item_vxlan(const struct rte_flow_item *item,
 				  uint64_t item_flags,

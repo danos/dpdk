@@ -239,7 +239,6 @@ static const struct rte_flow_ops mlx5_flow_ops = {
 /* Convert FDIR request to Generic flow. */
 struct mlx5_fdir {
 	struct rte_flow_attr attr;
-	struct rte_flow_action actions[2];
 	struct rte_flow_item items[4];
 	struct rte_flow_item_eth l2;
 	struct rte_flow_item_eth l2_mask;
@@ -259,6 +258,7 @@ struct mlx5_fdir {
 		struct rte_flow_item_udp udp;
 		struct rte_flow_item_tcp tcp;
 	} l4_mask;
+	struct rte_flow_action actions[2];
 	struct rte_flow_action_queue queue;
 };
 
@@ -275,7 +275,7 @@ static const uint32_t priority_map_5[][MLX5_PRIORITY_MAP_MAX] = {
 
 /* Tunnel information. */
 struct mlx5_flow_tunnel_info {
-	uint32_t tunnel; /**< Tunnel bit (see MLX5_FLOW_*). */
+	uint64_t tunnel; /**< Tunnel bit (see MLX5_FLOW_*). */
 	uint32_t ptype; /**< Tunnel Ptype (see RTE_PTYPE_*). */
 };
 
@@ -912,7 +912,13 @@ mlx5_flow_validate_action_rss(const struct rte_flow_action *action,
 					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
 					  &rss->level,
 					  "tunnel RSS is not supported");
-	if (rss->key_len < MLX5_RSS_HASH_KEY_LEN)
+	/* allow RSS key_len 0 in case of NULL (default) RSS key. */
+	if (rss->key_len == 0 && rss->key != NULL)
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
+					  &rss->key_len,
+					  "RSS hash key length 0");
+	if (rss->key_len > 0 && rss->key_len < MLX5_RSS_HASH_KEY_LEN)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
 					  &rss->key_len,
@@ -1046,15 +1052,13 @@ mlx5_flow_validate_item_eth(const struct rte_flow_item *item,
 	};
 	int ret;
 	int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
+	const uint64_t ethm = tunnel ? MLX5_FLOW_LAYER_INNER_L2	:
+				       MLX5_FLOW_LAYER_OUTER_L2;
 
-	if (item_flags & MLX5_FLOW_LAYER_OUTER_L2)
+	if (item_flags & ethm)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "3 levels of l2 are not supported");
-	if ((item_flags & MLX5_FLOW_LAYER_INNER_L2) && !tunnel)
-		return rte_flow_error_set(error, ENOTSUP,
-					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "2 L2 without tunnel are not supported");
+					  "multiple L2 layers not supported");
 	if (!mask)
 		mask = &rte_flow_item_eth_mask;
 	ret = mlx5_flow_item_acceptable(item, (const uint8_t *)mask,
@@ -1079,7 +1083,7 @@ mlx5_flow_validate_item_eth(const struct rte_flow_item *item,
  */
 int
 mlx5_flow_validate_item_vlan(const struct rte_flow_item *item,
-			     int64_t item_flags,
+			     uint64_t item_flags,
 			     struct rte_flow_error *error)
 {
 	const struct rte_flow_item_vlan *spec = item->spec;
@@ -1091,17 +1095,17 @@ mlx5_flow_validate_item_vlan(const struct rte_flow_item *item,
 	uint16_t vlan_tag = 0;
 	const int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
 	int ret;
-	const uint32_t l34m = tunnel ? (MLX5_FLOW_LAYER_INNER_L3 |
+	const uint64_t l34m = tunnel ? (MLX5_FLOW_LAYER_INNER_L3 |
 					MLX5_FLOW_LAYER_INNER_L4) :
 				       (MLX5_FLOW_LAYER_OUTER_L3 |
 					MLX5_FLOW_LAYER_OUTER_L4);
-	const uint32_t vlanm = tunnel ? MLX5_FLOW_LAYER_INNER_VLAN :
+	const uint64_t vlanm = tunnel ? MLX5_FLOW_LAYER_INNER_VLAN :
 					MLX5_FLOW_LAYER_OUTER_VLAN;
 
 	if (item_flags & vlanm)
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "VLAN layer already configured");
+					  "multiple VLAN layers not supported");
 	else if ((item_flags & l34m) != 0)
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
@@ -1145,7 +1149,7 @@ mlx5_flow_validate_item_vlan(const struct rte_flow_item *item,
  */
 int
 mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
-			     int64_t item_flags,
+			     uint64_t item_flags,
 			     struct rte_flow_error *error)
 {
 	const struct rte_flow_item_ipv4 *mask = item->mask;
@@ -1158,15 +1162,17 @@ mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 		},
 	};
 	const int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
+	const uint64_t l3m = tunnel ? MLX5_FLOW_LAYER_INNER_L3 :
+				      MLX5_FLOW_LAYER_OUTER_L3;
+	const uint64_t l4m = tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
+				      MLX5_FLOW_LAYER_OUTER_L4;
 	int ret;
 
-	if (item_flags & (tunnel ? MLX5_FLOW_LAYER_INNER_L3 :
-				   MLX5_FLOW_LAYER_OUTER_L3))
+	if (item_flags & l3m)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "multiple L3 layers not supported");
-	else if (item_flags & (tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
-					MLX5_FLOW_LAYER_OUTER_L4))
+	else if (item_flags & l4m)
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "L3 cannot follow an L4 layer.");
@@ -1214,15 +1220,17 @@ mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
 		},
 	};
 	const int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
+	const uint64_t l3m = tunnel ? MLX5_FLOW_LAYER_INNER_L3 :
+				      MLX5_FLOW_LAYER_OUTER_L3;
+	const uint64_t l4m = tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
+				      MLX5_FLOW_LAYER_OUTER_L4;
 	int ret;
 
-	if (item_flags & (tunnel ? MLX5_FLOW_LAYER_INNER_L3 :
-				   MLX5_FLOW_LAYER_OUTER_L3))
+	if (item_flags & l3m)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "multiple L3 layers not supported");
-	else if (item_flags & (tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
-					MLX5_FLOW_LAYER_OUTER_L4))
+	else if (item_flags & l4m)
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "L3 cannot follow an L4 layer.");
@@ -1273,6 +1281,10 @@ mlx5_flow_validate_item_udp(const struct rte_flow_item *item,
 {
 	const struct rte_flow_item_udp *mask = item->mask;
 	const int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
+	const uint64_t l3m = tunnel ? MLX5_FLOW_LAYER_INNER_L3 :
+				      MLX5_FLOW_LAYER_OUTER_L3;
+	const uint64_t l4m = tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
+				      MLX5_FLOW_LAYER_OUTER_L4;
 	int ret;
 
 	if (target_protocol != 0xff && target_protocol != IPPROTO_UDP)
@@ -1280,16 +1292,14 @@ mlx5_flow_validate_item_udp(const struct rte_flow_item *item,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "protocol filtering not compatible"
 					  " with UDP layer");
-	if (!(item_flags & (tunnel ? MLX5_FLOW_LAYER_INNER_L3 :
-				     MLX5_FLOW_LAYER_OUTER_L3)))
+	if (!(item_flags & l3m))
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "L3 is mandatory to filter on L4");
-	if (item_flags & (tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
-				   MLX5_FLOW_LAYER_OUTER_L4))
+	if (item_flags & l4m)
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "L4 layer is already present");
+					  "multiple L4 layers not supported");
 	if (!mask)
 		mask = &rte_flow_item_udp_mask;
 	ret = mlx5_flow_item_acceptable
@@ -1325,6 +1335,10 @@ mlx5_flow_validate_item_tcp(const struct rte_flow_item *item,
 {
 	const struct rte_flow_item_tcp *mask = item->mask;
 	const int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
+	const uint64_t l3m = tunnel ? MLX5_FLOW_LAYER_INNER_L3 :
+				      MLX5_FLOW_LAYER_OUTER_L3;
+	const uint64_t l4m = tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
+				      MLX5_FLOW_LAYER_OUTER_L4;
 	int ret;
 
 	assert(flow_mask);
@@ -1333,16 +1347,14 @@ mlx5_flow_validate_item_tcp(const struct rte_flow_item *item,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "protocol filtering not compatible"
 					  " with TCP layer");
-	if (!(item_flags & (tunnel ? MLX5_FLOW_LAYER_INNER_L3 :
-				     MLX5_FLOW_LAYER_OUTER_L3)))
+	if (!(item_flags & l3m))
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "L3 is mandatory to filter on L4");
-	if (item_flags & (tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
-				   MLX5_FLOW_LAYER_OUTER_L4))
+	if (item_flags & l4m)
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "L4 layer is already present");
+					  "multiple L4 layers not supported");
 	if (!mask)
 		mask = &rte_flow_item_tcp_mask;
 	ret = mlx5_flow_item_acceptable
@@ -1387,7 +1399,8 @@ mlx5_flow_validate_item_vxlan(const struct rte_flow_item *item,
 	if (item_flags & MLX5_FLOW_LAYER_TUNNEL)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "a tunnel is already present");
+					  "multiple tunnel layers not"
+					  " supported");
 	/*
 	 * Verify only UDPv4 is present as defined in
 	 * https://tools.ietf.org/html/rfc7348
@@ -1473,7 +1486,8 @@ mlx5_flow_validate_item_vxlan_gpe(const struct rte_flow_item *item,
 	if (item_flags & MLX5_FLOW_LAYER_TUNNEL)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "a tunnel is already present");
+					  "multiple tunnel layers not"
+					  " supported");
 	/*
 	 * Verify only UDPv4 is present as defined in
 	 * https://tools.ietf.org/html/rfc7348
@@ -1556,7 +1570,8 @@ mlx5_flow_validate_item_gre(const struct rte_flow_item *item,
 	if (item_flags & MLX5_FLOW_LAYER_TUNNEL)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "a tunnel is already present");
+					  "multiple tunnel layers not"
+					  " supported");
 	if (!(item_flags & MLX5_FLOW_LAYER_OUTER_L3))
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
@@ -1610,11 +1625,13 @@ mlx5_flow_validate_item_mpls(const struct rte_flow_item *item __rte_unused,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "protocol filtering not compatible"
 					  " with MPLS layer");
-	if (item_flags & MLX5_FLOW_LAYER_TUNNEL)
+	/* Multi-tunnel isn't allowed but MPLS over GRE is an exception. */
+	if ((item_flags & MLX5_FLOW_LAYER_TUNNEL) &&
+	    !(item_flags & MLX5_FLOW_LAYER_GRE))
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "a tunnel is already"
-					  " present");
+					  "multiple tunnel layers not"
+					  " supported");
 	if (!mask)
 		mask = &rte_flow_item_mpls_mask;
 	ret = mlx5_flow_item_acceptable
@@ -1646,8 +1663,6 @@ static struct mlx5_flow *
 flow_null_prepare(const struct rte_flow_attr *attr __rte_unused,
 		  const struct rte_flow_item items[] __rte_unused,
 		  const struct rte_flow_action actions[] __rte_unused,
-		  uint64_t *item_flags __rte_unused,
-		  uint64_t *action_flags __rte_unused,
 		  struct rte_flow_error *error __rte_unused)
 {
 	rte_errno = ENOTSUP;
@@ -1775,16 +1790,19 @@ flow_drv_validate(struct rte_eth_dev *dev,
  * calculates the size of memory required for device flow, allocates the memory,
  * initializes the device flow and returns the pointer.
  *
+ * @note
+ *   This function initializes device flow structure such as dv, tcf or verbs in
+ *   struct mlx5_flow. However, it is caller's responsibility to initialize the
+ *   rest. For example, adding returning device flow to flow->dev_flow list and
+ *   setting backward reference to the flow should be done out of this function.
+ *   layers field is not filled either.
+ *
  * @param[in] attr
  *   Pointer to the flow attributes.
  * @param[in] items
  *   Pointer to the list of items.
  * @param[in] actions
  *   Pointer to the list of actions.
- * @param[out] item_flags
- *   Pointer to bit mask of all items detected.
- * @param[out] action_flags
- *   Pointer to bit mask of all actions detected.
  * @param[out] error
  *   Pointer to the error structure.
  *
@@ -1792,12 +1810,10 @@ flow_drv_validate(struct rte_eth_dev *dev,
  *   Pointer to device flow on success, otherwise NULL and rte_ernno is set.
  */
 static inline struct mlx5_flow *
-flow_drv_prepare(struct rte_flow *flow,
+flow_drv_prepare(const struct rte_flow *flow,
 		 const struct rte_flow_attr *attr,
 		 const struct rte_flow_item items[],
 		 const struct rte_flow_action actions[],
-		 uint64_t *item_flags,
-		 uint64_t *action_flags,
 		 struct rte_flow_error *error)
 {
 	const struct mlx5_flow_driver_ops *fops;
@@ -1805,8 +1821,7 @@ flow_drv_prepare(struct rte_flow *flow,
 
 	assert(type > MLX5_FLOW_TYPE_MIN && type < MLX5_FLOW_TYPE_MAX);
 	fops = flow_get_drv_ops(type);
-	return fops->prepare(attr, items, actions, item_flags, action_flags,
-			     error);
+	return fops->prepare(attr, items, actions, error);
 }
 
 /**
@@ -1815,6 +1830,12 @@ flow_drv_prepare(struct rte_flow *flow,
  * translates a generic flow into a driver flow. flow_drv_prepare() must
  * precede.
  *
+ * @note
+ *   dev_flow->layers could be filled as a result of parsing during translation
+ *   if needed by flow_drv_apply(). dev_flow->flow->actions can also be filled
+ *   if necessary. As a flow can have multiple dev_flows by RSS flow expansion,
+ *   flow->actions could be overwritten even though all the expanded dev_flows
+ *   have the same actions.
  *
  * @param[in] dev
  *   Pointer to the rte dev structure.
@@ -1878,7 +1899,7 @@ flow_drv_apply(struct rte_eth_dev *dev, struct rte_flow *flow,
  * Flow driver remove API. This abstracts calling driver specific functions.
  * Parent flow (rte_flow) should have driver type (drv_type). It removes a flow
  * on device. All the resources of the flow should be freed by calling
- * flow_dv_destroy().
+ * flow_drv_destroy().
  *
  * @param[in] dev
  *   Pointer to Ethernet device.
@@ -2009,8 +2030,6 @@ flow_list_create(struct rte_eth_dev *dev, struct mlx5_flows *list,
 {
 	struct rte_flow *flow = NULL;
 	struct mlx5_flow *dev_flow;
-	uint64_t action_flags = 0;
-	uint64_t item_flags = 0;
 	const struct rte_flow_action_rss *rss;
 	union {
 		struct rte_flow_expand_rss buf;
@@ -2053,16 +2072,10 @@ flow_list_create(struct rte_eth_dev *dev, struct mlx5_flows *list,
 	}
 	for (i = 0; i < buf->entries; ++i) {
 		dev_flow = flow_drv_prepare(flow, attr, buf->entry[i].pattern,
-					    actions, &item_flags, &action_flags,
-					    error);
+					    actions, error);
 		if (!dev_flow)
 			goto error;
 		dev_flow->flow = flow;
-		dev_flow->layers = item_flags;
-		/* Store actions once as expanded flows have same actions. */
-		if (i == 0)
-			flow->actions = action_flags;
-		assert(flow->actions == action_flags);
 		LIST_INSERT_HEAD(&flow->dev_flows, dev_flow, next);
 		ret = flow_drv_translate(dev, dev_flow, attr,
 					 buf->entry[i].pattern,
@@ -2127,6 +2140,7 @@ flow_list_destroy(struct rte_eth_dev *dev, struct mlx5_flows *list,
 	 */
 	if (dev->data->dev_started)
 		flow_rxq_flags_trim(dev, flow);
+	rte_free(flow->fdir);
 	rte_free(flow);
 }
 
@@ -2444,7 +2458,7 @@ mlx5_flow_query(struct rte_eth_dev *dev,
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 static int
-mlx5_fdir_filter_convert(struct rte_eth_dev *dev,
+flow_fdir_filter_convert(struct rte_eth_dev *dev,
 			 const struct rte_eth_fdir_filter *fdir_filter,
 			 struct mlx5_fdir *attributes)
 {
@@ -2616,6 +2630,69 @@ mlx5_fdir_filter_convert(struct rte_eth_dev *dev,
 	return 0;
 }
 
+#define FLOW_FDIR_CMP(f1, f2, fld) \
+	memcmp(&(f1)->fld, &(f2)->fld, sizeof(f1->fld))
+
+/**
+ * Compare two FDIR flows. If items and actions are identical, the two flows are
+ * regarded as same.
+ *
+ * @param dev
+ *   Pointer to Ethernet device.
+ * @param f1
+ *   FDIR flow to compare.
+ * @param f2
+ *   FDIR flow to compare.
+ *
+ * @return
+ *   Zero on match, 1 otherwise.
+ */
+static int
+flow_fdir_cmp(const struct mlx5_fdir *f1, const struct mlx5_fdir *f2)
+{
+	if (FLOW_FDIR_CMP(f1, f2, attr) ||
+	    FLOW_FDIR_CMP(f1, f2, l2) ||
+	    FLOW_FDIR_CMP(f1, f2, l2_mask) ||
+	    FLOW_FDIR_CMP(f1, f2, l3) ||
+	    FLOW_FDIR_CMP(f1, f2, l3_mask) ||
+	    FLOW_FDIR_CMP(f1, f2, l4) ||
+	    FLOW_FDIR_CMP(f1, f2, l4_mask) ||
+	    FLOW_FDIR_CMP(f1, f2, actions[0]))
+		return 1;
+	if (f1->actions[0].type == RTE_FLOW_ACTION_TYPE_QUEUE &&
+	    FLOW_FDIR_CMP(f1, f2, queue))
+		return 1;
+	return 0;
+}
+
+/**
+ * Search device flow list to find out a matched FDIR flow.
+ *
+ * @param dev
+ *   Pointer to Ethernet device.
+ * @param fdir_flow
+ *   FDIR flow to lookup.
+ *
+ * @return
+ *   Pointer of flow if found, NULL otherwise.
+ */
+static struct rte_flow *
+flow_fdir_filter_lookup(struct rte_eth_dev *dev, struct mlx5_fdir *fdir_flow)
+{
+	struct priv *priv = dev->data->dev_private;
+	struct rte_flow *flow = NULL;
+
+	assert(fdir_flow);
+	TAILQ_FOREACH(flow, &priv->flows, next) {
+		if (flow->fdir && !flow_fdir_cmp(flow->fdir, fdir_flow)) {
+			DRV_LOG(DEBUG, "port %u found FDIR flow %p",
+				dev->data->port_id, (void *)flow);
+			break;
+		}
+	}
+	return flow;
+}
+
 /**
  * Add new flow director filter and store it in list.
  *
@@ -2628,32 +2705,38 @@ mlx5_fdir_filter_convert(struct rte_eth_dev *dev,
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 static int
-mlx5_fdir_filter_add(struct rte_eth_dev *dev,
+flow_fdir_filter_add(struct rte_eth_dev *dev,
 		     const struct rte_eth_fdir_filter *fdir_filter)
 {
 	struct priv *priv = dev->data->dev_private;
-	struct mlx5_fdir attributes = {
-		.attr.group = 0,
-		.l2_mask = {
-			.dst.addr_bytes = "\x00\x00\x00\x00\x00\x00",
-			.src.addr_bytes = "\x00\x00\x00\x00\x00\x00",
-			.type = 0,
-		},
-	};
-	struct rte_flow_error error;
+	struct mlx5_fdir *fdir_flow;
 	struct rte_flow *flow;
 	int ret;
 
-	ret = mlx5_fdir_filter_convert(dev, fdir_filter, &attributes);
-	if (ret)
-		return ret;
-	flow = flow_list_create(dev, &priv->flows, &attributes.attr,
-				attributes.items, attributes.actions, &error);
-	if (flow) {
-		DRV_LOG(DEBUG, "port %u FDIR created %p", dev->data->port_id,
-			(void *)flow);
-		return 0;
+	fdir_flow = rte_zmalloc(__func__, sizeof(*fdir_flow), 0);
+	if (!fdir_flow) {
+		rte_errno = ENOMEM;
+		return -rte_errno;
 	}
+	ret = flow_fdir_filter_convert(dev, fdir_filter, fdir_flow);
+	if (ret)
+		goto error;
+	flow = flow_fdir_filter_lookup(dev, fdir_flow);
+	if (flow) {
+		rte_errno = EEXIST;
+		goto error;
+	}
+	flow = flow_list_create(dev, &priv->flows, &fdir_flow->attr,
+				fdir_flow->items, fdir_flow->actions, NULL);
+	if (!flow)
+		goto error;
+	assert(!flow->fdir);
+	flow->fdir = fdir_flow;
+	DRV_LOG(DEBUG, "port %u created FDIR flow %p",
+		dev->data->port_id, (void *)flow);
+	return 0;
+error:
+	rte_free(fdir_flow);
 	return -rte_errno;
 }
 
@@ -2669,12 +2752,28 @@ mlx5_fdir_filter_add(struct rte_eth_dev *dev,
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 static int
-mlx5_fdir_filter_delete(struct rte_eth_dev *dev __rte_unused,
-			const struct rte_eth_fdir_filter *fdir_filter
-			__rte_unused)
+flow_fdir_filter_delete(struct rte_eth_dev *dev,
+			const struct rte_eth_fdir_filter *fdir_filter)
 {
-	rte_errno = ENOTSUP;
-	return -rte_errno;
+	struct priv *priv = dev->data->dev_private;
+	struct rte_flow *flow;
+	struct mlx5_fdir fdir_flow = {
+		.attr.group = 0,
+	};
+	int ret;
+
+	ret = flow_fdir_filter_convert(dev, fdir_filter, &fdir_flow);
+	if (ret)
+		return -rte_errno;
+	flow = flow_fdir_filter_lookup(dev, &fdir_flow);
+	if (!flow) {
+		rte_errno = ENOENT;
+		return -rte_errno;
+	}
+	flow_list_destroy(dev, &priv->flows, flow);
+	DRV_LOG(DEBUG, "port %u deleted FDIR flow %p",
+		dev->data->port_id, (void *)flow);
+	return 0;
 }
 
 /**
@@ -2689,15 +2788,15 @@ mlx5_fdir_filter_delete(struct rte_eth_dev *dev __rte_unused,
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 static int
-mlx5_fdir_filter_update(struct rte_eth_dev *dev,
+flow_fdir_filter_update(struct rte_eth_dev *dev,
 			const struct rte_eth_fdir_filter *fdir_filter)
 {
 	int ret;
 
-	ret = mlx5_fdir_filter_delete(dev, fdir_filter);
+	ret = flow_fdir_filter_delete(dev, fdir_filter);
 	if (ret)
 		return ret;
-	return mlx5_fdir_filter_add(dev, fdir_filter);
+	return flow_fdir_filter_add(dev, fdir_filter);
 }
 
 /**
@@ -2707,7 +2806,7 @@ mlx5_fdir_filter_update(struct rte_eth_dev *dev,
  *   Pointer to Ethernet device.
  */
 static void
-mlx5_fdir_filter_flush(struct rte_eth_dev *dev)
+flow_fdir_filter_flush(struct rte_eth_dev *dev)
 {
 	struct priv *priv = dev->data->dev_private;
 
@@ -2723,7 +2822,7 @@ mlx5_fdir_filter_flush(struct rte_eth_dev *dev)
  *   Resulting flow director information.
  */
 static void
-mlx5_fdir_info_get(struct rte_eth_dev *dev, struct rte_eth_fdir_info *fdir_info)
+flow_fdir_info_get(struct rte_eth_dev *dev, struct rte_eth_fdir_info *fdir_info)
 {
 	struct rte_eth_fdir_masks *mask =
 		&dev->data->dev_conf.fdir_conf.mask;
@@ -2753,7 +2852,7 @@ mlx5_fdir_info_get(struct rte_eth_dev *dev, struct rte_eth_fdir_info *fdir_info)
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 static int
-mlx5_fdir_ctrl_func(struct rte_eth_dev *dev, enum rte_filter_op filter_op,
+flow_fdir_ctrl_func(struct rte_eth_dev *dev, enum rte_filter_op filter_op,
 		    void *arg)
 {
 	enum rte_fdir_mode fdir_mode =
@@ -2770,16 +2869,16 @@ mlx5_fdir_ctrl_func(struct rte_eth_dev *dev, enum rte_filter_op filter_op,
 	}
 	switch (filter_op) {
 	case RTE_ETH_FILTER_ADD:
-		return mlx5_fdir_filter_add(dev, arg);
+		return flow_fdir_filter_add(dev, arg);
 	case RTE_ETH_FILTER_UPDATE:
-		return mlx5_fdir_filter_update(dev, arg);
+		return flow_fdir_filter_update(dev, arg);
 	case RTE_ETH_FILTER_DELETE:
-		return mlx5_fdir_filter_delete(dev, arg);
+		return flow_fdir_filter_delete(dev, arg);
 	case RTE_ETH_FILTER_FLUSH:
-		mlx5_fdir_filter_flush(dev);
+		flow_fdir_filter_flush(dev);
 		break;
 	case RTE_ETH_FILTER_INFO:
-		mlx5_fdir_info_get(dev, arg);
+		flow_fdir_info_get(dev, arg);
 		break;
 	default:
 		DRV_LOG(DEBUG, "port %u unknown operation %u",
@@ -2820,7 +2919,7 @@ mlx5_dev_filter_ctrl(struct rte_eth_dev *dev,
 		*(const void **)arg = &mlx5_flow_ops;
 		return 0;
 	case RTE_ETH_FILTER_FDIR:
-		return mlx5_fdir_ctrl_func(dev, filter_op, arg);
+		return flow_fdir_ctrl_func(dev, filter_op, arg);
 	default:
 		DRV_LOG(ERR, "port %u filter type (%d) not supported",
 			dev->data->port_id, filter_type);

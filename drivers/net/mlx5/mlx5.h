@@ -115,6 +115,7 @@ struct mlx5_dev_config {
 	/* Whether tunnel stateless offloads are supported. */
 	unsigned int mpls_en:1; /* MPLS over GRE/UDP is enabled. */
 	unsigned int cqe_comp:1; /* CQE compression is enabled. */
+	unsigned int cqe_pad:1; /* CQE padding is enabled. */
 	unsigned int tso:1; /* Whether TSO is supported. */
 	unsigned int tx_vec_en:1; /* Tx vector is enabled. */
 	unsigned int rx_vec_en:1; /* Rx vector is enabled. */
@@ -139,6 +140,7 @@ struct mlx5_dev_config {
 	unsigned int ind_table_max_size; /* Maximum indirection table size. */
 	int txq_inline; /* Maximum packet size for inlining. */
 	int txqs_inline; /* Queue number threshold for inlining. */
+	int txqs_vec; /* Queue number threshold for vectorized Tx. */
 	int inline_max_packet_sz; /* Max packet size for inlining. */
 };
 
@@ -219,6 +221,7 @@ struct priv {
 	/* Verbs Indirection tables. */
 	LIST_HEAD(ind_tables, mlx5_ind_table_ibv) ind_tbls;
 	LIST_HEAD(matchers, mlx5_flow_dv_matcher) matchers;
+	LIST_HEAD(encap_decap, mlx5_flow_dv_encap_decap_resource) encaps_decaps;
 	uint32_t link_speed_capa; /* Link speed capabilities. */
 	struct mlx5_xstats_ctrl xstats_ctrl; /* Extended stats control. */
 	int primary_socket; /* Unix socket for primary process. */

@@ -25,6 +25,7 @@
 #include <rte_flow_driver.h>
 #include <rte_malloc.h>
 #include <rte_ip.h>
+#include <rte_gre.h>
 
 #include "mlx5.h"
 #include "mlx5_defs.h"
@@ -92,6 +93,613 @@ flow_dv_validate_item_meta(struct rte_eth_dev *dev,
 					  RTE_FLOW_ERROR_TYPE_ATTR_INGRESS,
 					  NULL,
 					  "pattern not supported for ingress");
+	return 0;
+}
+
+/**
+ * Validate the L2 encap action.
+ *
+ * @param[in] action_flags
+ *   Holds the actions detected until now.
+ * @param[in] action
+ *   Pointer to the encap action.
+ * @param[in] attr
+ *   Pointer to flow attributes
+ * @param[out] error
+ *   Pointer to error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+flow_dv_validate_action_l2_encap(uint64_t action_flags,
+				 const struct rte_flow_action *action,
+				 const struct rte_flow_attr *attr,
+				 struct rte_flow_error *error)
+{
+	if (!(action->conf))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, action,
+					  "configuration cannot be null");
+	if (action_flags & MLX5_FLOW_ACTION_DROP)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can't drop and encap in same flow");
+	if (action_flags & (MLX5_FLOW_ENCAP_ACTIONS | MLX5_FLOW_DECAP_ACTIONS))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can only have a single encap or"
+					  " decap action in a flow");
+	if (attr->ingress)
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ATTR_INGRESS,
+					  NULL,
+					  "encap action not supported for "
+					  "ingress");
+	return 0;
+}
+
+/**
+ * Validate the L2 decap action.
+ *
+ * @param[in] action_flags
+ *   Holds the actions detected until now.
+ * @param[in] attr
+ *   Pointer to flow attributes
+ * @param[out] error
+ *   Pointer to error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+flow_dv_validate_action_l2_decap(uint64_t action_flags,
+				 const struct rte_flow_attr *attr,
+				 struct rte_flow_error *error)
+{
+	if (action_flags & MLX5_FLOW_ACTION_DROP)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can't drop and decap in same flow");
+	if (action_flags & (MLX5_FLOW_ENCAP_ACTIONS | MLX5_FLOW_DECAP_ACTIONS))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can only have a single encap or"
+					  " decap action in a flow");
+	if (attr->egress)
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ATTR_EGRESS,
+					  NULL,
+					  "decap action not supported for "
+					  "egress");
+	return 0;
+}
+
+/**
+ * Validate the raw encap action.
+ *
+ * @param[in] action_flags
+ *   Holds the actions detected until now.
+ * @param[in] action
+ *   Pointer to the encap action.
+ * @param[in] attr
+ *   Pointer to flow attributes
+ * @param[out] error
+ *   Pointer to error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+flow_dv_validate_action_raw_encap(uint64_t action_flags,
+				  const struct rte_flow_action *action,
+				  const struct rte_flow_attr *attr,
+				  struct rte_flow_error *error)
+{
+	if (!(action->conf))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, action,
+					  "configuration cannot be null");
+	if (action_flags & MLX5_FLOW_ACTION_DROP)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can't drop and encap in same flow");
+	if (action_flags & MLX5_FLOW_ENCAP_ACTIONS)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can only have a single encap"
+					  " action in a flow");
+	/* encap without preceding decap is not supported for ingress */
+	if (attr->ingress && !(action_flags & MLX5_FLOW_ACTION_RAW_DECAP))
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ATTR_INGRESS,
+					  NULL,
+					  "encap action not supported for "
+					  "ingress");
+	return 0;
+}
+
+/**
+ * Validate the raw decap action.
+ *
+ * @param[in] action_flags
+ *   Holds the actions detected until now.
+ * @param[in] action
+ *   Pointer to the encap action.
+ * @param[in] attr
+ *   Pointer to flow attributes
+ * @param[out] error
+ *   Pointer to error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+flow_dv_validate_action_raw_decap(uint64_t action_flags,
+				  const struct rte_flow_action *action,
+				  const struct rte_flow_attr *attr,
+				  struct rte_flow_error *error)
+{
+	if (action_flags & MLX5_FLOW_ACTION_DROP)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can't drop and decap in same flow");
+	if (action_flags & MLX5_FLOW_ENCAP_ACTIONS)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can't have encap action before"
+					  " decap action");
+	if (action_flags & MLX5_FLOW_DECAP_ACTIONS)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "can only have a single decap"
+					  " action in a flow");
+	/* decap action is valid on egress only if it is followed by encap */
+	if (attr->egress) {
+		for (; action->type != RTE_FLOW_ACTION_TYPE_END &&
+		       action->type != RTE_FLOW_ACTION_TYPE_RAW_ENCAP;
+		       action++) {
+		}
+		if (action->type != RTE_FLOW_ACTION_TYPE_RAW_ENCAP)
+			return rte_flow_error_set
+					(error, ENOTSUP,
+					 RTE_FLOW_ERROR_TYPE_ATTR_EGRESS,
+					 NULL, "decap action not supported"
+					 " for egress");
+	}
+	return 0;
+}
+
+
+/**
+ * Find existing encap/decap resource or create and register a new one.
+ *
+ * @param dev[in, out]
+ *   Pointer to rte_eth_dev structure.
+ * @param[in, out] resource
+ *   Pointer to encap/decap resource.
+ * @parm[in, out] dev_flow
+ *   Pointer to the dev_flow.
+ * @param[out] error
+ *   pointer to error structure.
+ *
+ * @return
+ *   0 on success otherwise -errno and errno is set.
+ */
+static int
+flow_dv_encap_decap_resource_register
+			(struct rte_eth_dev *dev,
+			 struct mlx5_flow_dv_encap_decap_resource *resource,
+			 struct mlx5_flow *dev_flow,
+			 struct rte_flow_error *error)
+{
+	struct priv *priv = dev->data->dev_private;
+	struct mlx5_flow_dv_encap_decap_resource *cache_resource;
+
+	/* Lookup a matching resource from cache. */
+	LIST_FOREACH(cache_resource, &priv->encaps_decaps, next) {
+		if (resource->reformat_type == cache_resource->reformat_type &&
+		    resource->ft_type == cache_resource->ft_type &&
+		    resource->size == cache_resource->size &&
+		    !memcmp((const void *)resource->buf,
+			    (const void *)cache_resource->buf,
+			    resource->size)) {
+			DRV_LOG(DEBUG, "encap/decap resource %p: refcnt %d++",
+				(void *)cache_resource,
+				rte_atomic32_read(&cache_resource->refcnt));
+			rte_atomic32_inc(&cache_resource->refcnt);
+			dev_flow->dv.encap_decap = cache_resource;
+			return 0;
+		}
+	}
+	/* Register new encap/decap resource. */
+	cache_resource = rte_calloc(__func__, 1, sizeof(*cache_resource), 0);
+	if (!cache_resource)
+		return rte_flow_error_set(error, ENOMEM,
+					  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
+					  "cannot allocate resource memory");
+	*cache_resource = *resource;
+	cache_resource->verbs_action =
+		mlx5_glue->dv_create_flow_action_packet_reformat
+			(priv->ctx, cache_resource->size,
+			 (cache_resource->size ? cache_resource->buf : NULL),
+			 cache_resource->reformat_type,
+			 cache_resource->ft_type);
+	if (!cache_resource->verbs_action) {
+		rte_free(cache_resource);
+		return rte_flow_error_set(error, ENOMEM,
+					  RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
+					  NULL, "cannot create action");
+	}
+	rte_atomic32_init(&cache_resource->refcnt);
+	rte_atomic32_inc(&cache_resource->refcnt);
+	LIST_INSERT_HEAD(&priv->encaps_decaps, cache_resource, next);
+	dev_flow->dv.encap_decap = cache_resource;
+	DRV_LOG(DEBUG, "new encap/decap resource %p: refcnt %d++",
+		(void *)cache_resource,
+		rte_atomic32_read(&cache_resource->refcnt));
+	return 0;
+}
+
+/**
+ * Get the size of specific rte_flow_item_type
+ *
+ * @param[in] item_type
+ *   Tested rte_flow_item_type.
+ *
+ * @return
+ *   sizeof struct item_type, 0 if void or irrelevant.
+ */
+static size_t
+flow_dv_get_item_len(const enum rte_flow_item_type item_type)
+{
+	size_t retval;
+
+	switch (item_type) {
+	case RTE_FLOW_ITEM_TYPE_ETH:
+		retval = sizeof(struct rte_flow_item_eth);
+		break;
+	case RTE_FLOW_ITEM_TYPE_VLAN:
+		retval = sizeof(struct rte_flow_item_vlan);
+		break;
+	case RTE_FLOW_ITEM_TYPE_IPV4:
+		retval = sizeof(struct rte_flow_item_ipv4);
+		break;
+	case RTE_FLOW_ITEM_TYPE_IPV6:
+		retval = sizeof(struct rte_flow_item_ipv6);
+		break;
+	case RTE_FLOW_ITEM_TYPE_UDP:
+		retval = sizeof(struct rte_flow_item_udp);
+		break;
+	case RTE_FLOW_ITEM_TYPE_TCP:
+		retval = sizeof(struct rte_flow_item_tcp);
+		break;
+	case RTE_FLOW_ITEM_TYPE_VXLAN:
+		retval = sizeof(struct rte_flow_item_vxlan);
+		break;
+	case RTE_FLOW_ITEM_TYPE_GRE:
+		retval = sizeof(struct rte_flow_item_gre);
+		break;
+	case RTE_FLOW_ITEM_TYPE_NVGRE:
+		retval = sizeof(struct rte_flow_item_nvgre);
+		break;
+	case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
+		retval = sizeof(struct rte_flow_item_vxlan_gpe);
+		break;
+	case RTE_FLOW_ITEM_TYPE_MPLS:
+		retval = sizeof(struct rte_flow_item_mpls);
+		break;
+	case RTE_FLOW_ITEM_TYPE_VOID: /* Fall through. */
+	default:
+		retval = 0;
+		break;
+	}
+	return retval;
+}
+
+#define MLX5_ENCAP_IPV4_VERSION		0x40
+#define MLX5_ENCAP_IPV4_IHL_MIN		0x05
+#define MLX5_ENCAP_IPV4_TTL_DEF		0x40
+#define MLX5_ENCAP_IPV6_VTC_FLOW	0x60000000
+#define MLX5_ENCAP_IPV6_HOP_LIMIT	0xff
+#define MLX5_ENCAP_VXLAN_FLAGS		0x08000000
+#define MLX5_ENCAP_VXLAN_GPE_FLAGS	0x04
+
+/**
+ * Convert the encap action data from list of rte_flow_item to raw buffer
+ *
+ * @param[in] items
+ *   Pointer to rte_flow_item objects list.
+ * @param[out] buf
+ *   Pointer to the output buffer.
+ * @param[out] size
+ *   Pointer to the output buffer size.
+ * @param[out] error
+ *   Pointer to the error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+flow_dv_convert_encap_data(const struct rte_flow_item *items, uint8_t *buf,
+			   size_t *size, struct rte_flow_error *error)
+{
+	struct ether_hdr *eth = NULL;
+	struct vlan_hdr *vlan = NULL;
+	struct ipv4_hdr *ipv4 = NULL;
+	struct ipv6_hdr *ipv6 = NULL;
+	struct udp_hdr *udp = NULL;
+	struct vxlan_hdr *vxlan = NULL;
+	struct vxlan_gpe_hdr *vxlan_gpe = NULL;
+	struct gre_hdr *gre = NULL;
+	size_t len;
+	size_t temp_size = 0;
+
+	if (!items)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION,
+					  NULL, "invalid empty data");
+	for (; items->type != RTE_FLOW_ITEM_TYPE_END; items++) {
+		len = flow_dv_get_item_len(items->type);
+		if (len + temp_size > MLX5_ENCAP_MAX_LEN)
+			return rte_flow_error_set(error, EINVAL,
+						  RTE_FLOW_ERROR_TYPE_ACTION,
+						  (void *)items->type,
+						  "items total size is too big"
+						  " for encap action");
+		rte_memcpy((void *)&buf[temp_size], items->spec, len);
+		switch (items->type) {
+		case RTE_FLOW_ITEM_TYPE_ETH:
+			eth = (struct ether_hdr *)&buf[temp_size];
+			break;
+		case RTE_FLOW_ITEM_TYPE_VLAN:
+			vlan = (struct vlan_hdr *)&buf[temp_size];
+			if (!eth)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"eth header not found");
+			if (!eth->ether_type)
+				eth->ether_type = RTE_BE16(ETHER_TYPE_VLAN);
+			break;
+		case RTE_FLOW_ITEM_TYPE_IPV4:
+			ipv4 = (struct ipv4_hdr *)&buf[temp_size];
+			if (!vlan && !eth)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"neither eth nor vlan"
+						" header found");
+			if (vlan && !vlan->eth_proto)
+				vlan->eth_proto = RTE_BE16(ETHER_TYPE_IPv4);
+			else if (eth && !eth->ether_type)
+				eth->ether_type = RTE_BE16(ETHER_TYPE_IPv4);
+			if (!ipv4->version_ihl)
+				ipv4->version_ihl = MLX5_ENCAP_IPV4_VERSION |
+						    MLX5_ENCAP_IPV4_IHL_MIN;
+			if (!ipv4->time_to_live)
+				ipv4->time_to_live = MLX5_ENCAP_IPV4_TTL_DEF;
+			break;
+		case RTE_FLOW_ITEM_TYPE_IPV6:
+			ipv6 = (struct ipv6_hdr *)&buf[temp_size];
+			if (!vlan && !eth)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"neither eth nor vlan"
+						" header found");
+			if (vlan && !vlan->eth_proto)
+				vlan->eth_proto = RTE_BE16(ETHER_TYPE_IPv6);
+			else if (eth && !eth->ether_type)
+				eth->ether_type = RTE_BE16(ETHER_TYPE_IPv6);
+			if (!ipv6->vtc_flow)
+				ipv6->vtc_flow =
+					RTE_BE32(MLX5_ENCAP_IPV6_VTC_FLOW);
+			if (!ipv6->hop_limits)
+				ipv6->hop_limits = MLX5_ENCAP_IPV6_HOP_LIMIT;
+			break;
+		case RTE_FLOW_ITEM_TYPE_UDP:
+			udp = (struct udp_hdr *)&buf[temp_size];
+			if (!ipv4 && !ipv6)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"ip header not found");
+			if (ipv4 && !ipv4->next_proto_id)
+				ipv4->next_proto_id = IPPROTO_UDP;
+			else if (ipv6 && !ipv6->proto)
+				ipv6->proto = IPPROTO_UDP;
+			break;
+		case RTE_FLOW_ITEM_TYPE_VXLAN:
+			vxlan = (struct vxlan_hdr *)&buf[temp_size];
+			if (!udp)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"udp header not found");
+			if (!udp->dst_port)
+				udp->dst_port = RTE_BE16(MLX5_UDP_PORT_VXLAN);
+			if (!vxlan->vx_flags)
+				vxlan->vx_flags =
+					RTE_BE32(MLX5_ENCAP_VXLAN_FLAGS);
+			break;
+		case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
+			vxlan_gpe = (struct vxlan_gpe_hdr *)&buf[temp_size];
+			if (!udp)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"udp header not found");
+			if (!vxlan_gpe->proto)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"next protocol not found");
+			if (!udp->dst_port)
+				udp->dst_port =
+					RTE_BE16(MLX5_UDP_PORT_VXLAN_GPE);
+			if (!vxlan_gpe->vx_flags)
+				vxlan_gpe->vx_flags =
+						MLX5_ENCAP_VXLAN_GPE_FLAGS;
+			break;
+		case RTE_FLOW_ITEM_TYPE_GRE:
+		case RTE_FLOW_ITEM_TYPE_NVGRE:
+			gre = (struct gre_hdr *)&buf[temp_size];
+			if (!gre->proto)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"next protocol not found");
+			if (!ipv4 && !ipv6)
+				return rte_flow_error_set(error, EINVAL,
+						RTE_FLOW_ERROR_TYPE_ACTION,
+						(void *)items->type,
+						"ip header not found");
+			if (ipv4 && !ipv4->next_proto_id)
+				ipv4->next_proto_id = IPPROTO_GRE;
+			else if (ipv6 && !ipv6->proto)
+				ipv6->proto = IPPROTO_GRE;
+			break;
+		case RTE_FLOW_ITEM_TYPE_VOID:
+			break;
+		default:
+			return rte_flow_error_set(error, EINVAL,
+						  RTE_FLOW_ERROR_TYPE_ACTION,
+						  (void *)items->type,
+						  "unsupported item type");
+			break;
+		}
+		temp_size += len;
+	}
+	*size = temp_size;
+	return 0;
+}
+
+/**
+ * Convert L2 encap action to DV specification.
+ *
+ * @param[in] dev
+ *   Pointer to rte_eth_dev structure.
+ * @param[in] action
+ *   Pointer to action structure.
+ * @param[in, out] dev_flow
+ *   Pointer to the mlx5_flow.
+ * @param[out] error
+ *   Pointer to the error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+flow_dv_create_action_l2_encap(struct rte_eth_dev *dev,
+			       const struct rte_flow_action *action,
+			       struct mlx5_flow *dev_flow,
+			       struct rte_flow_error *error)
+{
+	const struct rte_flow_item *encap_data;
+	const struct rte_flow_action_raw_encap *raw_encap_data;
+	struct mlx5_flow_dv_encap_decap_resource res = {
+		.reformat_type =
+			MLX5DV_FLOW_ACTION_PACKET_REFORMAT_TYPE_L2_TO_L2_TUNNEL,
+		.ft_type = MLX5DV_FLOW_TABLE_TYPE_NIC_TX,
+	};
+
+	if (action->type == RTE_FLOW_ACTION_TYPE_RAW_ENCAP) {
+		raw_encap_data =
+			(const struct rte_flow_action_raw_encap *)action->conf;
+		res.size = raw_encap_data->size;
+		memcpy(res.buf, raw_encap_data->data, res.size);
+	} else {
+		if (action->type == RTE_FLOW_ACTION_TYPE_VXLAN_ENCAP)
+			encap_data =
+				((const struct rte_flow_action_vxlan_encap *)
+						action->conf)->definition;
+		else
+			encap_data =
+				((const struct rte_flow_action_nvgre_encap *)
+						action->conf)->definition;
+		if (flow_dv_convert_encap_data(encap_data, res.buf,
+					       &res.size, error))
+			return -rte_errno;
+	}
+	if (flow_dv_encap_decap_resource_register(dev, &res, dev_flow, error))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION,
+					  NULL, "can't create L2 encap action");
+	return 0;
+}
+
+/**
+ * Convert L2 decap action to DV specification.
+ *
+ * @param[in] dev
+ *   Pointer to rte_eth_dev structure.
+ * @param[in, out] dev_flow
+ *   Pointer to the mlx5_flow.
+ * @param[out] error
+ *   Pointer to the error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+flow_dv_create_action_l2_decap(struct rte_eth_dev *dev,
+			       struct mlx5_flow *dev_flow,
+			       struct rte_flow_error *error)
+{
+	struct mlx5_flow_dv_encap_decap_resource res = {
+		.size = 0,
+		.reformat_type =
+			MLX5DV_FLOW_ACTION_PACKET_REFORMAT_TYPE_L2_TUNNEL_TO_L2,
+		.ft_type = MLX5DV_FLOW_TABLE_TYPE_NIC_RX,
+	};
+
+	if (flow_dv_encap_decap_resource_register(dev, &res, dev_flow, error))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION,
+					  NULL, "can't create L2 decap action");
+	return 0;
+}
+
+/**
+ * Convert raw decap/encap (L3 tunnel) action to DV specification.
+ *
+ * @param[in] dev
+ *   Pointer to rte_eth_dev structure.
+ * @param[in] action
+ *   Pointer to action structure.
+ * @param[in, out] dev_flow
+ *   Pointer to the mlx5_flow.
+ * @param[in] attr
+ *   Pointer to the flow attributes.
+ * @param[out] error
+ *   Pointer to the error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+flow_dv_create_action_raw_encap(struct rte_eth_dev *dev,
+				const struct rte_flow_action *action,
+				struct mlx5_flow *dev_flow,
+				const struct rte_flow_attr *attr,
+				struct rte_flow_error *error)
+{
+	const struct rte_flow_action_raw_encap *encap_data;
+	struct mlx5_flow_dv_encap_decap_resource res;
+
+	encap_data = (const struct rte_flow_action_raw_encap *)action->conf;
+	res.size = encap_data->size;
+	memcpy(res.buf, encap_data->data, res.size);
+	res.reformat_type = attr->egress ?
+		MLX5DV_FLOW_ACTION_PACKET_REFORMAT_TYPE_L2_TO_L3_TUNNEL :
+		MLX5DV_FLOW_ACTION_PACKET_REFORMAT_TYPE_L3_TUNNEL_TO_L2;
+	res.ft_type = attr->egress ? MLX5DV_FLOW_TABLE_TYPE_NIC_TX :
+				     MLX5DV_FLOW_TABLE_TYPE_NIC_RX;
+	if (flow_dv_encap_decap_resource_register(dev, &res, dev_flow, error))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION,
+					  NULL, "can't create encap action");
 	return 0;
 }
 
@@ -339,6 +947,49 @@ flow_dv_validate(struct rte_eth_dev *dev, const struct rte_flow_attr *attr,
 			action_flags |= MLX5_FLOW_ACTION_COUNT;
 			++actions_n;
 			break;
+		case RTE_FLOW_ACTION_TYPE_VXLAN_ENCAP:
+		case RTE_FLOW_ACTION_TYPE_NVGRE_ENCAP:
+			ret = flow_dv_validate_action_l2_encap(action_flags,
+							       actions, attr,
+							       error);
+			if (ret < 0)
+				return ret;
+			action_flags |= actions->type ==
+					RTE_FLOW_ACTION_TYPE_VXLAN_ENCAP ?
+					MLX5_FLOW_ACTION_VXLAN_ENCAP :
+					MLX5_FLOW_ACTION_NVGRE_ENCAP;
+			++actions_n;
+			break;
+		case RTE_FLOW_ACTION_TYPE_VXLAN_DECAP:
+		case RTE_FLOW_ACTION_TYPE_NVGRE_DECAP:
+			ret = flow_dv_validate_action_l2_decap(action_flags,
+							       attr, error);
+			if (ret < 0)
+				return ret;
+			action_flags |= actions->type ==
+					RTE_FLOW_ACTION_TYPE_VXLAN_DECAP ?
+					MLX5_FLOW_ACTION_VXLAN_DECAP :
+					MLX5_FLOW_ACTION_NVGRE_DECAP;
+			++actions_n;
+			break;
+		case RTE_FLOW_ACTION_TYPE_RAW_ENCAP:
+			ret = flow_dv_validate_action_raw_encap(action_flags,
+								actions, attr,
+								error);
+			if (ret < 0)
+				return ret;
+			action_flags |= MLX5_FLOW_ACTION_RAW_ENCAP;
+			++actions_n;
+			break;
+		case RTE_FLOW_ACTION_TYPE_RAW_DECAP:
+			ret = flow_dv_validate_action_raw_decap(action_flags,
+								actions, attr,
+								error);
+			if (ret < 0)
+				return ret;
+			action_flags |= MLX5_FLOW_ACTION_RAW_DECAP;
+			++actions_n;
+			break;
 		default:
 			return rte_flow_error_set(error, ENOTSUP,
 						  RTE_FLOW_ERROR_TYPE_ACTION,
@@ -363,10 +1014,6 @@ flow_dv_validate(struct rte_eth_dev *dev, const struct rte_flow_attr *attr,
  *   Pointer to the list of items.
  * @param[in] actions
  *   Pointer to the list of actions.
- * @param[out] item_flags
- *   Pointer to bit mask of all items detected.
- * @param[out] action_flags
- *   Pointer to bit mask of all actions detected.
  * @param[out] error
  *   Pointer to the error structure.
  *
@@ -378,8 +1025,6 @@ static struct mlx5_flow *
 flow_dv_prepare(const struct rte_flow_attr *attr __rte_unused,
 		const struct rte_flow_item items[] __rte_unused,
 		const struct rte_flow_action actions[] __rte_unused,
-		uint64_t *item_flags __rte_unused,
-		uint64_t *action_flags __rte_unused,
 		struct rte_flow_error *error)
 {
 	uint32_t size = sizeof(struct mlx5_flow);
@@ -951,161 +1596,6 @@ flow_dv_translate_item_meta(void *matcher, void *key,
 	}
 }
 
-/**
- * Update the matcher and the value based the selected item.
- *
- * @param[in, out] matcher
- *   Flow matcher.
- * @param[in, out] key
- *   Flow matcher value.
- * @param[in] item
- *   Flow pattern to translate.
- * @param[in, out] dev_flow
- *   Pointer to the mlx5_flow.
- * @param[in] inner
- *   Item is inner pattern.
- */
-static void
-flow_dv_create_item(void *matcher, void *key,
-		    const struct rte_flow_item *item,
-		    struct mlx5_flow *dev_flow,
-		    int inner)
-{
-	struct mlx5_flow_dv_matcher *tmatcher = matcher;
-
-	switch (item->type) {
-	case RTE_FLOW_ITEM_TYPE_ETH:
-		flow_dv_translate_item_eth(tmatcher->mask.buf, key, item,
-					   inner);
-		tmatcher->priority = MLX5_PRIORITY_MAP_L2;
-		break;
-	case RTE_FLOW_ITEM_TYPE_VLAN:
-		flow_dv_translate_item_vlan(tmatcher->mask.buf, key, item,
-					    inner);
-		break;
-	case RTE_FLOW_ITEM_TYPE_IPV4:
-		flow_dv_translate_item_ipv4(tmatcher->mask.buf, key, item,
-					    inner);
-		tmatcher->priority = MLX5_PRIORITY_MAP_L3;
-		dev_flow->dv.hash_fields |=
-			mlx5_flow_hashfields_adjust(dev_flow, inner,
-						    MLX5_IPV4_LAYER_TYPES,
-						    MLX5_IPV4_IBV_RX_HASH);
-		break;
-	case RTE_FLOW_ITEM_TYPE_IPV6:
-		flow_dv_translate_item_ipv6(tmatcher->mask.buf, key, item,
-					    inner);
-		tmatcher->priority = MLX5_PRIORITY_MAP_L3;
-		dev_flow->dv.hash_fields |=
-			mlx5_flow_hashfields_adjust(dev_flow, inner,
-						    MLX5_IPV6_LAYER_TYPES,
-						    MLX5_IPV6_IBV_RX_HASH);
-		break;
-	case RTE_FLOW_ITEM_TYPE_TCP:
-		flow_dv_translate_item_tcp(tmatcher->mask.buf, key, item,
-					   inner);
-		tmatcher->priority = MLX5_PRIORITY_MAP_L4;
-		dev_flow->dv.hash_fields |=
-			mlx5_flow_hashfields_adjust(dev_flow, inner,
-						    ETH_RSS_TCP,
-						    (IBV_RX_HASH_SRC_PORT_TCP |
-						     IBV_RX_HASH_DST_PORT_TCP));
-		break;
-	case RTE_FLOW_ITEM_TYPE_UDP:
-		flow_dv_translate_item_udp(tmatcher->mask.buf, key, item,
-					   inner);
-		tmatcher->priority = MLX5_PRIORITY_MAP_L4;
-		dev_flow->verbs.hash_fields |=
-			mlx5_flow_hashfields_adjust(dev_flow, inner,
-						    ETH_RSS_UDP,
-						    (IBV_RX_HASH_SRC_PORT_UDP |
-						     IBV_RX_HASH_DST_PORT_UDP));
-		break;
-	case RTE_FLOW_ITEM_TYPE_GRE:
-		flow_dv_translate_item_gre(tmatcher->mask.buf, key, item,
-					   inner);
-		break;
-	case RTE_FLOW_ITEM_TYPE_NVGRE:
-		flow_dv_translate_item_nvgre(tmatcher->mask.buf, key, item,
-					     inner);
-		break;
-	case RTE_FLOW_ITEM_TYPE_VXLAN:
-	case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
-		flow_dv_translate_item_vxlan(tmatcher->mask.buf, key, item,
-					     inner);
-		break;
-	case RTE_FLOW_ITEM_TYPE_META:
-		flow_dv_translate_item_meta(tmatcher->mask.buf, key, item);
-		break;
-	default:
-		break;
-	}
-}
-
-/**
- * Store the requested actions in an array.
- *
- * @param[in] action
- *   Flow action to translate.
- * @param[in, out] dev_flow
- *   Pointer to the mlx5_flow.
- */
-static void
-flow_dv_create_action(const struct rte_flow_action *action,
-		      struct mlx5_flow *dev_flow)
-{
-	const struct rte_flow_action_queue *queue;
-	const struct rte_flow_action_rss *rss;
-	int actions_n = dev_flow->dv.actions_n;
-	struct rte_flow *flow = dev_flow->flow;
-
-	switch (action->type) {
-	case RTE_FLOW_ACTION_TYPE_VOID:
-		break;
-	case RTE_FLOW_ACTION_TYPE_FLAG:
-		dev_flow->dv.actions[actions_n].type = MLX5DV_FLOW_ACTION_TAG;
-		dev_flow->dv.actions[actions_n].tag_value =
-			mlx5_flow_mark_set(MLX5_FLOW_MARK_DEFAULT);
-		actions_n++;
-		flow->actions |= MLX5_FLOW_ACTION_FLAG;
-		break;
-	case RTE_FLOW_ACTION_TYPE_MARK:
-		dev_flow->dv.actions[actions_n].type = MLX5DV_FLOW_ACTION_TAG;
-		dev_flow->dv.actions[actions_n].tag_value =
-			mlx5_flow_mark_set
-			(((const struct rte_flow_action_mark *)
-			  (action->conf))->id);
-		flow->actions |= MLX5_FLOW_ACTION_MARK;
-		actions_n++;
-		break;
-	case RTE_FLOW_ACTION_TYPE_DROP:
-		dev_flow->dv.actions[actions_n].type = MLX5DV_FLOW_ACTION_DROP;
-		flow->actions |= MLX5_FLOW_ACTION_DROP;
-		break;
-	case RTE_FLOW_ACTION_TYPE_QUEUE:
-		queue = action->conf;
-		flow->rss.queue_num = 1;
-		(*flow->queue)[0] = queue->index;
-		flow->actions |= MLX5_FLOW_ACTION_QUEUE;
-		break;
-	case RTE_FLOW_ACTION_TYPE_RSS:
-		rss = action->conf;
-		if (flow->queue)
-			memcpy((*flow->queue), rss->queue,
-			       rss->queue_num * sizeof(uint16_t));
-		flow->rss.queue_num = rss->queue_num;
-		memcpy(flow->key, rss->key, MLX5_RSS_HASH_KEY_LEN);
-		flow->rss.types = rss->types;
-		flow->rss.level = rss->level;
-		/* Added to array only in apply since we need the QP */
-		flow->actions |= MLX5_FLOW_ACTION_RSS;
-		break;
-	default:
-		break;
-	}
-	dev_flow->dv.actions_n = actions_n;
-}
-
 static uint32_t matcher_zero[MLX5_ST_SZ_DW(fte_match_param)] = { 0 };
 
 #define HEADER_IS_ZERO(match_criteria, headers)				     \
@@ -1203,10 +1693,12 @@ flow_dv_matcher_register(struct rte_eth_dev *dev,
 		dv_attr.flags |= IBV_FLOW_ATTR_FLAGS_EGRESS;
 	cache_matcher->matcher_object =
 		mlx5_glue->dv_create_flow_matcher(priv->ctx, &dv_attr);
-	if (!cache_matcher->matcher_object)
+	if (!cache_matcher->matcher_object) {
+		rte_free(cache_matcher);
 		return rte_flow_error_set(error, ENOMEM,
 					  RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
 					  NULL, "cannot create matcher");
+	}
 	rte_atomic32_inc(&cache_matcher->refcnt);
 	LIST_INSERT_HEAD(&priv->matchers, cache_matcher, next);
 	dev_flow->dv.matcher = cache_matcher;
@@ -1216,7 +1708,6 @@ flow_dv_matcher_register(struct rte_eth_dev *dev,
 		rte_atomic32_read(&cache_matcher->refcnt));
 	return 0;
 }
-
 
 /**
  * Fill the flow with DV spec.
@@ -1242,37 +1733,264 @@ flow_dv_translate(struct rte_eth_dev *dev,
 		  struct mlx5_flow *dev_flow,
 		  const struct rte_flow_attr *attr,
 		  const struct rte_flow_item items[],
-		  const struct rte_flow_action actions[] __rte_unused,
+		  const struct rte_flow_action actions[],
 		  struct rte_flow_error *error)
 {
 	struct priv *priv = dev->data->dev_private;
+	struct rte_flow *flow = dev_flow->flow;
+	uint64_t item_flags = 0;
+	uint64_t action_flags = 0;
 	uint64_t priority = attr->priority;
 	struct mlx5_flow_dv_matcher matcher = {
 		.mask = {
 			.size = sizeof(matcher.mask.buf),
 		},
 	};
-	void *match_value = dev_flow->dv.value.buf;
-	int tunnel = 0;
+	int actions_n = 0;
 
 	if (priority == MLX5_FLOW_PRIO_RSVD)
 		priority = priv->config.flow_prio - 1;
 	for (; items->type != RTE_FLOW_ITEM_TYPE_END; items++) {
-		tunnel = !!(dev_flow->layers & MLX5_FLOW_LAYER_TUNNEL);
-		flow_dv_create_item(&matcher, match_value, items, dev_flow,
-				    tunnel);
+		int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
+		void *match_mask = matcher.mask.buf;
+		void *match_value = dev_flow->dv.value.buf;
+
+		switch (items->type) {
+		case RTE_FLOW_ITEM_TYPE_ETH:
+			flow_dv_translate_item_eth(match_mask, match_value,
+						   items, tunnel);
+			matcher.priority = MLX5_PRIORITY_MAP_L2;
+			item_flags |= tunnel ? MLX5_FLOW_LAYER_INNER_L2 :
+					       MLX5_FLOW_LAYER_OUTER_L2;
+			break;
+		case RTE_FLOW_ITEM_TYPE_VLAN:
+			flow_dv_translate_item_vlan(match_mask, match_value,
+						    items, tunnel);
+			matcher.priority = MLX5_PRIORITY_MAP_L2;
+			item_flags |= tunnel ? (MLX5_FLOW_LAYER_INNER_L2 |
+						MLX5_FLOW_LAYER_INNER_VLAN) :
+					       (MLX5_FLOW_LAYER_OUTER_L2 |
+						MLX5_FLOW_LAYER_OUTER_VLAN);
+			break;
+		case RTE_FLOW_ITEM_TYPE_IPV4:
+			flow_dv_translate_item_ipv4(match_mask, match_value,
+						    items, tunnel);
+			matcher.priority = MLX5_PRIORITY_MAP_L3;
+			dev_flow->dv.hash_fields |=
+				mlx5_flow_hashfields_adjust
+					(dev_flow, tunnel,
+					 MLX5_IPV4_LAYER_TYPES,
+					 MLX5_IPV4_IBV_RX_HASH);
+			item_flags |= tunnel ? MLX5_FLOW_LAYER_INNER_L3_IPV4 :
+					       MLX5_FLOW_LAYER_OUTER_L3_IPV4;
+			break;
+		case RTE_FLOW_ITEM_TYPE_IPV6:
+			flow_dv_translate_item_ipv6(match_mask, match_value,
+						    items, tunnel);
+			matcher.priority = MLX5_PRIORITY_MAP_L3;
+			dev_flow->dv.hash_fields |=
+				mlx5_flow_hashfields_adjust
+					(dev_flow, tunnel,
+					 MLX5_IPV6_LAYER_TYPES,
+					 MLX5_IPV6_IBV_RX_HASH);
+			item_flags |= tunnel ? MLX5_FLOW_LAYER_INNER_L3_IPV6 :
+					       MLX5_FLOW_LAYER_OUTER_L3_IPV6;
+			break;
+		case RTE_FLOW_ITEM_TYPE_TCP:
+			flow_dv_translate_item_tcp(match_mask, match_value,
+						   items, tunnel);
+			matcher.priority = MLX5_PRIORITY_MAP_L4;
+			dev_flow->dv.hash_fields |=
+				mlx5_flow_hashfields_adjust
+					(dev_flow, tunnel, ETH_RSS_TCP,
+					 IBV_RX_HASH_SRC_PORT_TCP |
+					 IBV_RX_HASH_DST_PORT_TCP);
+			item_flags |= tunnel ? MLX5_FLOW_LAYER_INNER_L4_TCP :
+					       MLX5_FLOW_LAYER_OUTER_L4_TCP;
+			break;
+		case RTE_FLOW_ITEM_TYPE_UDP:
+			flow_dv_translate_item_udp(match_mask, match_value,
+						   items, tunnel);
+			matcher.priority = MLX5_PRIORITY_MAP_L4;
+			dev_flow->verbs.hash_fields |=
+				mlx5_flow_hashfields_adjust
+					(dev_flow, tunnel, ETH_RSS_UDP,
+					 IBV_RX_HASH_SRC_PORT_UDP |
+					 IBV_RX_HASH_DST_PORT_UDP);
+			item_flags |= tunnel ? MLX5_FLOW_LAYER_INNER_L4_UDP :
+					       MLX5_FLOW_LAYER_OUTER_L4_UDP;
+			break;
+		case RTE_FLOW_ITEM_TYPE_GRE:
+			flow_dv_translate_item_gre(match_mask, match_value,
+						   items, tunnel);
+			item_flags |= MLX5_FLOW_LAYER_GRE;
+			break;
+		case RTE_FLOW_ITEM_TYPE_NVGRE:
+			flow_dv_translate_item_nvgre(match_mask, match_value,
+						     items, tunnel);
+			item_flags |= MLX5_FLOW_LAYER_GRE;
+			break;
+		case RTE_FLOW_ITEM_TYPE_VXLAN:
+			flow_dv_translate_item_vxlan(match_mask, match_value,
+						     items, tunnel);
+			item_flags |= MLX5_FLOW_LAYER_VXLAN;
+			break;
+		case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
+			flow_dv_translate_item_vxlan(match_mask, match_value,
+						     items, tunnel);
+			item_flags |= MLX5_FLOW_LAYER_VXLAN_GPE;
+			break;
+		case RTE_FLOW_ITEM_TYPE_META:
+			flow_dv_translate_item_meta(match_mask, match_value,
+						    items);
+			item_flags |= MLX5_FLOW_ITEM_METADATA;
+			break;
+		default:
+			break;
+		}
 	}
+	dev_flow->layers = item_flags;
+	/* Register matcher. */
 	matcher.crc = rte_raw_cksum((const void *)matcher.mask.buf,
-				     matcher.mask.size);
-	if (priority == MLX5_FLOW_PRIO_RSVD)
-		priority = priv->config.flow_prio - 1;
+				    matcher.mask.size);
 	matcher.priority = mlx5_flow_adjust_priority(dev, priority,
 						     matcher.priority);
 	matcher.egress = attr->egress;
 	if (flow_dv_matcher_register(dev, &matcher, dev_flow, error))
 		return -rte_errno;
-	for (; actions->type != RTE_FLOW_ACTION_TYPE_END; actions++)
-		flow_dv_create_action(actions, dev_flow);
+	for (; actions->type != RTE_FLOW_ACTION_TYPE_END; actions++) {
+		const struct rte_flow_action_queue *queue;
+		const struct rte_flow_action_rss *rss;
+		const struct rte_flow_action *action = actions;
+		const uint8_t *rss_key;
+
+		switch (actions->type) {
+		case RTE_FLOW_ACTION_TYPE_VOID:
+			break;
+		case RTE_FLOW_ACTION_TYPE_FLAG:
+			dev_flow->dv.actions[actions_n].type =
+				MLX5DV_FLOW_ACTION_TAG;
+			dev_flow->dv.actions[actions_n].tag_value =
+				mlx5_flow_mark_set(MLX5_FLOW_MARK_DEFAULT);
+			actions_n++;
+			action_flags |= MLX5_FLOW_ACTION_FLAG;
+			break;
+		case RTE_FLOW_ACTION_TYPE_MARK:
+			dev_flow->dv.actions[actions_n].type =
+				MLX5DV_FLOW_ACTION_TAG;
+			dev_flow->dv.actions[actions_n].tag_value =
+				mlx5_flow_mark_set
+				(((const struct rte_flow_action_mark *)
+				  (actions->conf))->id);
+			actions_n++;
+			action_flags |= MLX5_FLOW_ACTION_MARK;
+			break;
+		case RTE_FLOW_ACTION_TYPE_DROP:
+			dev_flow->dv.actions[actions_n].type =
+				MLX5DV_FLOW_ACTION_DROP;
+			action_flags |= MLX5_FLOW_ACTION_DROP;
+			break;
+		case RTE_FLOW_ACTION_TYPE_QUEUE:
+			queue = actions->conf;
+			flow->rss.queue_num = 1;
+			(*flow->queue)[0] = queue->index;
+			action_flags |= MLX5_FLOW_ACTION_QUEUE;
+			break;
+		case RTE_FLOW_ACTION_TYPE_RSS:
+			rss = actions->conf;
+			if (flow->queue)
+				memcpy((*flow->queue), rss->queue,
+				       rss->queue_num * sizeof(uint16_t));
+			flow->rss.queue_num = rss->queue_num;
+			/* NULL RSS key indicates default RSS key. */
+			rss_key = !rss->key ? rss_hash_default_key : rss->key;
+			memcpy(flow->key, rss_key, MLX5_RSS_HASH_KEY_LEN);
+			/* RSS type 0 indicates default RSS type ETH_RSS_IP. */
+			flow->rss.types = !rss->types ? ETH_RSS_IP : rss->types;
+			flow->rss.level = rss->level;
+			action_flags |= MLX5_FLOW_ACTION_RSS;
+			break;
+		case RTE_FLOW_ACTION_TYPE_VXLAN_ENCAP:
+		case RTE_FLOW_ACTION_TYPE_NVGRE_ENCAP:
+			if (flow_dv_create_action_l2_encap(dev, actions,
+							   dev_flow, error))
+				return -rte_errno;
+			dev_flow->dv.actions[actions_n].type =
+				MLX5DV_FLOW_ACTION_IBV_FLOW_ACTION;
+			dev_flow->dv.actions[actions_n].action =
+				dev_flow->dv.encap_decap->verbs_action;
+			actions_n++;
+			action_flags |= actions->type ==
+					RTE_FLOW_ACTION_TYPE_VXLAN_ENCAP ?
+					MLX5_FLOW_ACTION_VXLAN_ENCAP :
+					MLX5_FLOW_ACTION_NVGRE_ENCAP;
+			break;
+		case RTE_FLOW_ACTION_TYPE_VXLAN_DECAP:
+		case RTE_FLOW_ACTION_TYPE_NVGRE_DECAP:
+			if (flow_dv_create_action_l2_decap(dev, dev_flow,
+							   error))
+				return -rte_errno;
+			dev_flow->dv.actions[actions_n].type =
+				MLX5DV_FLOW_ACTION_IBV_FLOW_ACTION;
+			dev_flow->dv.actions[actions_n].action =
+				dev_flow->dv.encap_decap->verbs_action;
+			actions_n++;
+			action_flags |= actions->type ==
+					RTE_FLOW_ACTION_TYPE_VXLAN_DECAP ?
+					MLX5_FLOW_ACTION_VXLAN_DECAP :
+					MLX5_FLOW_ACTION_NVGRE_DECAP;
+			break;
+		case RTE_FLOW_ACTION_TYPE_RAW_ENCAP:
+			/* Handle encap with preceding decap. */
+			if (action_flags & MLX5_FLOW_ACTION_RAW_DECAP) {
+				if (flow_dv_create_action_raw_encap
+					(dev, actions, dev_flow, attr, error))
+					return -rte_errno;
+				dev_flow->dv.actions[actions_n].type =
+					MLX5DV_FLOW_ACTION_IBV_FLOW_ACTION;
+				dev_flow->dv.actions[actions_n].action =
+					dev_flow->dv.encap_decap->verbs_action;
+			} else {
+				/* Handle encap without preceding decap. */
+				if (flow_dv_create_action_l2_encap(dev, actions,
+								   dev_flow,
+								   error))
+					return -rte_errno;
+				dev_flow->dv.actions[actions_n].type =
+					MLX5DV_FLOW_ACTION_IBV_FLOW_ACTION;
+				dev_flow->dv.actions[actions_n].action =
+					dev_flow->dv.encap_decap->verbs_action;
+			}
+			actions_n++;
+			action_flags |= MLX5_FLOW_ACTION_RAW_ENCAP;
+			break;
+		case RTE_FLOW_ACTION_TYPE_RAW_DECAP:
+			/* Check if this decap is followed by encap. */
+			for (; action->type != RTE_FLOW_ACTION_TYPE_END &&
+			       action->type != RTE_FLOW_ACTION_TYPE_RAW_ENCAP;
+			       action++) {
+			}
+			/* Handle decap only if it isn't followed by encap. */
+			if (action->type != RTE_FLOW_ACTION_TYPE_RAW_ENCAP) {
+				if (flow_dv_create_action_l2_decap(dev,
+								   dev_flow,
+								   error))
+					return -rte_errno;
+				dev_flow->dv.actions[actions_n].type =
+					MLX5DV_FLOW_ACTION_IBV_FLOW_ACTION;
+				dev_flow->dv.actions[actions_n].action =
+					dev_flow->dv.encap_decap->verbs_action;
+				actions_n++;
+			}
+			/* If decap is followed by encap, handle it at encap. */
+			action_flags |= MLX5_FLOW_ACTION_RAW_DECAP;
+			break;
+		default:
+			break;
+		}
+	}
+	dev_flow->dv.actions_n = actions_n;
+	flow->actions = action_flags;
 	return 0;
 }
 
@@ -1403,6 +2121,37 @@ flow_dv_matcher_release(struct rte_eth_dev *dev,
 }
 
 /**
+ * Release an encap/decap resource.
+ *
+ * @param flow
+ *   Pointer to mlx5_flow.
+ *
+ * @return
+ *   1 while a reference on it exists, 0 when freed.
+ */
+static int
+flow_dv_encap_decap_resource_release(struct mlx5_flow *flow)
+{
+	struct mlx5_flow_dv_encap_decap_resource *cache_resource =
+						flow->dv.encap_decap;
+
+	assert(cache_resource->verbs_action);
+	DRV_LOG(DEBUG, "encap/decap resource %p: refcnt %d--",
+		(void *)cache_resource,
+		rte_atomic32_read(&cache_resource->refcnt));
+	if (rte_atomic32_dec_and_test(&cache_resource->refcnt)) {
+		claim_zero(mlx5_glue->destroy_flow_action
+				(cache_resource->verbs_action));
+		LIST_REMOVE(cache_resource, next);
+		rte_free(cache_resource);
+		DRV_LOG(DEBUG, "encap/decap resource %p: removed",
+			(void *)cache_resource);
+		return 0;
+	}
+	return 1;
+}
+
+/**
  * Remove the flow from the NIC but keeps it in memory.
  *
  * @param[in] dev
@@ -1457,6 +2206,8 @@ flow_dv_destroy(struct rte_eth_dev *dev, struct rte_flow *flow)
 		LIST_REMOVE(dev_flow, next);
 		if (dev_flow->dv.matcher)
 			flow_dv_matcher_release(dev, dev_flow);
+		if (dev_flow->dv.encap_decap)
+			flow_dv_encap_decap_resource_release(dev_flow);
 		rte_free(dev_flow);
 	}
 }

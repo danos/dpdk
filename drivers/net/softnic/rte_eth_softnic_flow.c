@@ -56,7 +56,7 @@ flow_attr_map_set(struct pmd_internals *softnic,
 
 	map = (ingress) ? &softnic->flow.ingress_map[group_id] :
 		&softnic->flow.egress_map[group_id];
-	strcpy(map->pipeline_name, pipeline_name);
+	strlcpy(map->pipeline_name, pipeline_name, sizeof(map->pipeline_name));
 	map->table_id = table_id;
 	map->valid = 1;
 
@@ -1624,11 +1624,11 @@ flow_rule_action_get(struct pmd_internals *softnic,
 			/* RTE_TABLE_ACTION_METER */
 			rule_action->mtr.mtr[0].meter_profile_id = meter_profile_id;
 			rule_action->mtr.mtr[0].policer[e_RTE_METER_GREEN] =
-				(enum rte_table_action_policer)m->params.action[RTE_MTR_GREEN];
+				softnic_table_action_policer(m->params.action[RTE_MTR_GREEN]);
 			rule_action->mtr.mtr[0].policer[e_RTE_METER_YELLOW] =
-				(enum rte_table_action_policer)m->params.action[RTE_MTR_YELLOW];
+				softnic_table_action_policer(m->params.action[RTE_MTR_YELLOW]);
 			rule_action->mtr.mtr[0].policer[e_RTE_METER_RED] =
-				(enum rte_table_action_policer)m->params.action[RTE_MTR_RED];
+				softnic_table_action_policer(m->params.action[RTE_MTR_RED]);
 			rule_action->mtr.tc_mask = 1;
 			rule_action->action_mask |= 1 << RTE_TABLE_ACTION_MTR;
 			break;

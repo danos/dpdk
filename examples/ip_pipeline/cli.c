@@ -4321,7 +4321,6 @@ cmd_pipeline_table_rule_add(char **tokens,
 	struct table_rule_match m;
 	struct table_rule_action a;
 	char *pipeline_name;
-	void *data;
 	uint32_t table_id, t0, n_tokens_parsed;
 	int status;
 
@@ -4379,8 +4378,7 @@ cmd_pipeline_table_rule_add(char **tokens,
 		return;
 	}
 
-	status = pipeline_table_rule_add(pipeline_name, table_id,
-		&m, &a, &data);
+	status = pipeline_table_rule_add(pipeline_name, table_id, &m, &a);
 	if (status) {
 		snprintf(out, out_size, MSG_CMD_FAIL, tokens[0]);
 		return;
@@ -4409,7 +4407,6 @@ cmd_pipeline_table_rule_add_default(char **tokens,
 	size_t out_size)
 {
 	struct table_rule_action action;
-	void *data;
 	char *pipeline_name;
 	uint32_t table_id;
 	int status;
@@ -4515,8 +4512,7 @@ cmd_pipeline_table_rule_add_default(char **tokens,
 
 	status = pipeline_table_rule_add_default(pipeline_name,
 		table_id,
-		&action,
-		&data);
+		&action);
 	if (status) {
 		snprintf(out, out_size, MSG_CMD_FAIL, tokens[0]);
 		return;
@@ -4525,7 +4521,7 @@ cmd_pipeline_table_rule_add_default(char **tokens,
 
 
 static const char cmd_pipeline_table_rule_add_bulk_help[] =
-"pipeline <pipeline_name> table <table_id> rule add bulk <file_name> <n_rules>\n"
+"pipeline <pipeline_name> table <table_id> rule add bulk <file_name>\n"
 "\n"
 "  File <file_name>:\n"
 "  - line format: match <match> action <action>\n";
@@ -4533,8 +4529,7 @@ static const char cmd_pipeline_table_rule_add_bulk_help[] =
 static int
 cli_rule_file_process(const char *file_name,
 	size_t line_len_max,
-	struct table_rule_match *m,
-	struct table_rule_action *a,
+	struct table_rule_list **rule_list,
 	uint32_t *n_rules,
 	uint32_t *line_number,
 	char *out,
@@ -4546,14 +4541,12 @@ cmd_pipeline_table_rule_add_bulk(char **tokens,
 	char *out,
 	size_t out_size)
 {
-	struct table_rule_match *match;
-	struct table_rule_action *action;
-	void **data;
+	struct table_rule_list *list = NULL;
 	char *pipeline_name, *file_name;
-	uint32_t table_id, n_rules, n_rules_parsed, line_number;
+	uint32_t table_id, n_rules, n_rules_added, n_rules_not_added, line_number;
 	int status;
 
-	if (n_tokens != 9) {
+	if (n_tokens != 8) {
 		snprintf(out, out_size, MSG_ARG_MISMATCH, tokens[0]);
 		return;
 	}
@@ -4587,68 +4580,33 @@ cmd_pipeline_table_rule_add_bulk(char **tokens,
 
 	file_name = tokens[7];
 
-	if ((parser_read_uint32(&n_rules, tokens[8]) != 0) ||
-		(n_rules == 0)) {
-		snprintf(out, out_size, MSG_ARG_INVALID, "n_rules");
-		return;
-	}
-
-	/* Memory allocation. */
-	match = calloc(n_rules, sizeof(struct table_rule_match));
-	action = calloc(n_rules, sizeof(struct table_rule_action));
-	data = calloc(n_rules, sizeof(void *));
-	if ((match == NULL) || (action == NULL) || (data == NULL)) {
-		snprintf(out, out_size, MSG_OUT_OF_MEMORY);
-		free(data);
-		free(action);
-		free(match);
-		return;
-	}
-
-	/* Load rule file */
-	n_rules_parsed = n_rules;
+	/* Load rules from file. */
 	status = cli_rule_file_process(file_name,
 		1024,
-		match,
-		action,
-		&n_rules_parsed,
+		&list,
+		&n_rules,
 		&line_number,
 		out,
 		out_size);
 	if (status) {
 		snprintf(out, out_size, MSG_FILE_ERR, file_name, line_number);
-		free(data);
-		free(action);
-		free(match);
-		return;
-	}
-	if (n_rules_parsed != n_rules) {
-		snprintf(out, out_size, MSG_FILE_NOT_ENOUGH, file_name);
-		free(data);
-		free(action);
-		free(match);
 		return;
 	}
 
 	/* Rule bulk add */
 	status = pipeline_table_rule_add_bulk(pipeline_name,
 		table_id,
-		match,
-		action,
-		data,
-		&n_rules);
+		list,
+		&n_rules_added,
+		&n_rules_not_added);
 	if (status) {
 		snprintf(out, out_size, MSG_CMD_FAIL, tokens[0]);
-		free(data);
-		free(action);
-		free(match);
 		return;
 	}
 
-	/* Memory free */
-	free(data);
-	free(action);
-	free(match);
+	snprintf(out, out_size, "Added %u rules out of %u.\n",
+		n_rules_added,
+		n_rules);
 }
 
 
@@ -4781,19 +4739,530 @@ cmd_pipeline_table_rule_delete_default(char **tokens,
 	}
 }
 
-
-static const char cmd_pipeline_table_rule_stats_read_help[] =
-"pipeline <pipeline_name> table <table_id> rule read stats [clear]\n";
+static void
+ether_addr_show(FILE *f, struct ether_addr *addr)
+{
+	fprintf(f, "%02x:%02x:%02x:%02x:%02x:%02x",
+		(uint32_t)addr->addr_bytes[0], (uint32_t)addr->addr_bytes[1],
+		(uint32_t)addr->addr_bytes[2], (uint32_t)addr->addr_bytes[3],
+		(uint32_t)addr->addr_bytes[4], (uint32_t)addr->addr_bytes[5]);
+}
 
 static void
-cmd_pipeline_table_rule_stats_read(char **tokens,
-	uint32_t n_tokens __rte_unused,
+ipv4_addr_show(FILE *f, uint32_t addr)
+{
+	fprintf(f, "%u.%u.%u.%u",
+		addr >> 24,
+		(addr >> 16) & 0xFF,
+		(addr >> 8) & 0xFF,
+		addr & 0xFF);
+}
+
+static void
+ipv6_addr_show(FILE *f, uint8_t *addr)
+{
+	fprintf(f, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:"
+		"%02x%02x:%02x%02x:%02x%02x:%02x%02x:",
+		(uint32_t)addr[0], (uint32_t)addr[1],
+		(uint32_t)addr[2], (uint32_t)addr[3],
+		(uint32_t)addr[4], (uint32_t)addr[5],
+		(uint32_t)addr[6], (uint32_t)addr[7],
+		(uint32_t)addr[8], (uint32_t)addr[9],
+		(uint32_t)addr[10], (uint32_t)addr[11],
+		(uint32_t)addr[12], (uint32_t)addr[13],
+		(uint32_t)addr[14], (uint32_t)addr[15]);
+}
+
+static const char *
+policer_action_string(enum rte_table_action_policer action) {
+	switch (action) {
+		case RTE_TABLE_ACTION_POLICER_COLOR_GREEN: return "G";
+		case RTE_TABLE_ACTION_POLICER_COLOR_YELLOW: return "Y";
+		case RTE_TABLE_ACTION_POLICER_COLOR_RED: return "R";
+		case RTE_TABLE_ACTION_POLICER_DROP: return "D";
+		default: return "?";
+	}
+}
+
+static int
+table_rule_show(const char *pipeline_name,
+	uint32_t table_id,
+	const char *file_name)
+{
+	struct pipeline *p;
+	struct table *table;
+	struct table_rule *rule;
+	FILE *f = NULL;
+	uint32_t i;
+
+	/* Check input params. */
+	if ((pipeline_name == NULL) ||
+		(file_name == NULL))
+		return -1;
+
+	p = pipeline_find(pipeline_name);
+	if ((p == NULL) ||
+		(table_id >= p->n_tables))
+		return -1;
+
+	table = &p->table[table_id];
+
+	/* Open file. */
+	f = fopen(file_name, "w");
+	if (f == NULL)
+		return -1;
+
+	/* Write table rules to file. */
+	TAILQ_FOREACH(rule, &table->rules, node) {
+		struct table_rule_match *m = &rule->match;
+		struct table_rule_action *a = &rule->action;
+
+		fprintf(f, "match ");
+		switch (m->match_type) {
+		case TABLE_ACL:
+			fprintf(f, "acl priority %u ",
+				m->match.acl.priority);
+
+			fprintf(f, m->match.acl.ip_version ? "ipv4 " : "ipv6 ");
+
+			if (m->match.acl.ip_version)
+				ipv4_addr_show(f, m->match.acl.ipv4.sa);
+			else
+				ipv6_addr_show(f, m->match.acl.ipv6.sa);
+
+			fprintf(f, "%u",	m->match.acl.sa_depth);
+
+			if (m->match.acl.ip_version)
+				ipv4_addr_show(f, m->match.acl.ipv4.da);
+			else
+				ipv6_addr_show(f, m->match.acl.ipv6.da);
+
+			fprintf(f, "%u",	m->match.acl.da_depth);
+
+			fprintf(f, "%u %u %u %u %u ",
+				(uint32_t)m->match.acl.sp0,
+				(uint32_t)m->match.acl.sp1,
+				(uint32_t)m->match.acl.dp0,
+				(uint32_t)m->match.acl.dp1,
+				(uint32_t)m->match.acl.proto);
+			break;
+
+		case TABLE_ARRAY:
+			fprintf(f, "array %u ",
+				m->match.array.pos);
+			break;
+
+		case TABLE_HASH:
+			fprintf(f, "hash raw ");
+			for (i = 0; i < table->params.match.hash.key_size; i++)
+				fprintf(f, "%02x", m->match.hash.key[i]);
+			fprintf(f, " ");
+			break;
+
+		case TABLE_LPM:
+			fprintf(f, "lpm ");
+
+			fprintf(f, m->match.lpm.ip_version ? "ipv4 " : "ipv6 ");
+
+			if (m->match.acl.ip_version)
+				ipv4_addr_show(f, m->match.lpm.ipv4);
+			else
+				ipv6_addr_show(f, m->match.lpm.ipv6);
+
+			fprintf(f, "%u ",
+				(uint32_t)m->match.lpm.depth);
+			break;
+
+		default:
+			fprintf(f, "unknown ");
+		}
+
+		fprintf(f, "action ");
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_FWD)) {
+			fprintf(f, "fwd ");
+			switch (a->fwd.action) {
+			case RTE_PIPELINE_ACTION_DROP:
+				fprintf(f, "drop ");
+				break;
+
+			case RTE_PIPELINE_ACTION_PORT:
+				fprintf(f, "port %u ", a->fwd.id);
+				break;
+
+			case RTE_PIPELINE_ACTION_PORT_META:
+				fprintf(f, "meta ");
+				break;
+
+			case RTE_PIPELINE_ACTION_TABLE:
+			default:
+				fprintf(f, "table %u ", a->fwd.id);
+			}
+		}
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_LB)) {
+			fprintf(f, "balance ");
+			for (i = 0; i < RTE_DIM(a->lb.out); i++)
+				fprintf(f, "%u ", a->lb.out[i]);
+		}
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_MTR)) {
+			fprintf(f, "mtr ");
+			for (i = 0; i < RTE_TABLE_ACTION_TC_MAX; i++)
+				if (a->mtr.tc_mask & (1 << i)) {
+					struct rte_table_action_mtr_tc_params *p =
+						&a->mtr.mtr[i];
+					enum rte_table_action_policer ga =
+						p->policer[e_RTE_METER_GREEN];
+					enum rte_table_action_policer ya =
+						p->policer[e_RTE_METER_YELLOW];
+					enum rte_table_action_policer ra =
+						p->policer[e_RTE_METER_RED];
+
+					fprintf(f, "tc%u meter %u policer g %s y %s r %s ",
+						i,
+						a->mtr.mtr[i].meter_profile_id,
+						policer_action_string(ga),
+						policer_action_string(ya),
+						policer_action_string(ra));
+				}
+		}
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_TM))
+			fprintf(f, "tm subport %u pipe %u ",
+				a->tm.subport_id,
+				a->tm.pipe_id);
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_ENCAP)) {
+			fprintf(f, "encap ");
+			switch (a->encap.type) {
+			case RTE_TABLE_ACTION_ENCAP_ETHER:
+				fprintf(f, "ether ");
+				ether_addr_show(f, &a->encap.ether.ether.da);
+				fprintf(f, " ");
+				ether_addr_show(f, &a->encap.ether.ether.sa);
+				fprintf(f, " ");
+				break;
+
+			case RTE_TABLE_ACTION_ENCAP_VLAN:
+				fprintf(f, "vlan ");
+				ether_addr_show(f, &a->encap.vlan.ether.da);
+				fprintf(f, " ");
+				ether_addr_show(f, &a->encap.vlan.ether.sa);
+				fprintf(f, " pcp %u dei %u vid %u ",
+					a->encap.vlan.vlan.pcp,
+					a->encap.vlan.vlan.dei,
+					a->encap.vlan.vlan.vid);
+				break;
+
+			case RTE_TABLE_ACTION_ENCAP_QINQ:
+				fprintf(f, "qinq ");
+				ether_addr_show(f, &a->encap.qinq.ether.da);
+				fprintf(f, " ");
+				ether_addr_show(f, &a->encap.qinq.ether.sa);
+				fprintf(f, " pcp %u dei %u vid %u pcp %u dei %u vid %u ",
+					a->encap.qinq.svlan.pcp,
+					a->encap.qinq.svlan.dei,
+					a->encap.qinq.svlan.vid,
+					a->encap.qinq.cvlan.pcp,
+					a->encap.qinq.cvlan.dei,
+					a->encap.qinq.cvlan.vid);
+				break;
+
+			case RTE_TABLE_ACTION_ENCAP_MPLS:
+				fprintf(f, "mpls %s ", (a->encap.mpls.unicast) ?
+					"unicast " : "multicast ");
+				ether_addr_show(f, &a->encap.mpls.ether.da);
+				fprintf(f, " ");
+				ether_addr_show(f, &a->encap.mpls.ether.sa);
+				fprintf(f, " ");
+				for (i = 0; i < a->encap.mpls.mpls_count; i++) {
+					struct rte_table_action_mpls_hdr *l =
+						&a->encap.mpls.mpls[i];
+
+					fprintf(f, "label%u %u %u %u ",
+						i,
+						l->label,
+						l->tc,
+						l->ttl);
+				}
+				break;
+
+			case RTE_TABLE_ACTION_ENCAP_PPPOE:
+				fprintf(f, "pppoe ");
+				ether_addr_show(f, &a->encap.pppoe.ether.da);
+				fprintf(f, " ");
+				ether_addr_show(f, &a->encap.pppoe.ether.sa);
+				fprintf(f, " %u ", a->encap.pppoe.pppoe.session_id);
+				break;
+
+			case RTE_TABLE_ACTION_ENCAP_VXLAN:
+				fprintf(f, "vxlan ether ");
+				ether_addr_show(f, &a->encap.vxlan.ether.da);
+				fprintf(f, " ");
+				ether_addr_show(f, &a->encap.vxlan.ether.sa);
+				if (table->ap->params.encap.vxlan.vlan)
+					fprintf(f, " vlan pcp %u dei %u vid %u ",
+						a->encap.vxlan.vlan.pcp,
+						a->encap.vxlan.vlan.dei,
+						a->encap.vxlan.vlan.vid);
+				if (table->ap->params.encap.vxlan.ip_version) {
+					fprintf(f, " ipv4 ");
+					ipv4_addr_show(f, a->encap.vxlan.ipv4.sa);
+					fprintf(f, " ");
+					ipv4_addr_show(f, a->encap.vxlan.ipv4.da);
+					fprintf(f, " %u %u ",
+						(uint32_t)a->encap.vxlan.ipv4.dscp,
+						(uint32_t)a->encap.vxlan.ipv4.ttl);
+				} else {
+					fprintf(f, " ipv6 ");
+					ipv6_addr_show(f, a->encap.vxlan.ipv6.sa);
+					fprintf(f, " ");
+					ipv6_addr_show(f, a->encap.vxlan.ipv6.da);
+					fprintf(f, " %u %u %u ",
+						a->encap.vxlan.ipv6.flow_label,
+						(uint32_t)a->encap.vxlan.ipv6.dscp,
+						(uint32_t)a->encap.vxlan.ipv6.hop_limit);
+					fprintf(f, " udp %u %u vxlan %u ",
+						a->encap.vxlan.udp.sp,
+						a->encap.vxlan.udp.dp,
+						a->encap.vxlan.vxlan.vni);
+				}
+				break;
+
+			default:
+				fprintf(f, "unknown ");
+			}
+		}
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_NAT)) {
+			fprintf(f, "nat %s ", (a->nat.ip_version) ? "ipv4 " : "ipv6 ");
+			if (a->nat.ip_version)
+				ipv4_addr_show(f, a->nat.addr.ipv4);
+			else
+				ipv6_addr_show(f, a->nat.addr.ipv6);
+			fprintf(f, " %u ", (uint32_t)(a->nat.port));
+		}
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_TTL))
+			fprintf(f, "ttl %s ", (a->ttl.decrement) ? "dec" : "keep");
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_STATS))
+			fprintf(f, "stats ");
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_TIME))
+			fprintf(f, "time ");
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_SYM_CRYPTO))
+			fprintf(f, "sym_crypto ");
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_TAG))
+			fprintf(f, "tag %u ", a->tag.tag);
+
+		if (a->action_mask & (1LLU << RTE_TABLE_ACTION_DECAP))
+			fprintf(f, "decap %u ", a->decap.n);
+
+		/* end */
+		fprintf(f, "\n");
+	}
+
+	/* Write table default rule to file. */
+	if (table->rule_default) {
+		struct table_rule_action *a = &table->rule_default->action;
+
+		fprintf(f, "# match default action fwd ");
+
+		switch (a->fwd.action) {
+		case RTE_PIPELINE_ACTION_DROP:
+			fprintf(f, "drop ");
+			break;
+
+		case RTE_PIPELINE_ACTION_PORT:
+			fprintf(f, "port %u ", a->fwd.id);
+			break;
+
+		case RTE_PIPELINE_ACTION_PORT_META:
+			fprintf(f, "meta ");
+			break;
+
+		case RTE_PIPELINE_ACTION_TABLE:
+		default:
+			fprintf(f, "table %u ", a->fwd.id);
+		}
+	} else
+		fprintf(f, "# match default action fwd drop ");
+
+	fprintf(f, "\n");
+
+	/* Close file. */
+	fclose(f);
+
+	return 0;
+}
+
+static const char cmd_pipeline_table_rule_show_help[] =
+"pipeline <pipeline_name> table <table_id> rule show\n"
+"     file <file_name>\n";
+
+static void
+cmd_pipeline_table_rule_show(char **tokens,
+	uint32_t n_tokens,
 	char *out,
 	size_t out_size)
 {
-	snprintf(out, out_size, MSG_CMD_UNIMPLEM, tokens[0]);
+	char *file_name = NULL, *pipeline_name;
+	uint32_t table_id;
+	int status;
+
+	if (n_tokens != 8) {
+		snprintf(out, out_size, MSG_ARG_MISMATCH, tokens[0]);
+		return;
+	}
+
+	pipeline_name = tokens[1];
+
+	if (strcmp(tokens[2], "table") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "table");
+		return;
+	}
+
+	if (parser_read_uint32(&table_id, tokens[3]) != 0) {
+		snprintf(out, out_size, MSG_ARG_INVALID, "table_id");
+		return;
+	}
+
+	if (strcmp(tokens[4], "rule") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "rule");
+		return;
+	}
+
+	if (strcmp(tokens[5], "show") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "show");
+		return;
+	}
+
+	if (strcmp(tokens[6], "file") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "file");
+		return;
+	}
+
+	file_name = tokens[7];
+
+	status = table_rule_show(pipeline_name, table_id, file_name);
+	if (status) {
+		snprintf(out, out_size, MSG_CMD_FAIL, tokens[0]);
+		return;
+	}
 }
 
+static const char cmd_pipeline_table_rule_stats_read_help[] =
+"pipeline <pipeline_name> table <table_id> rule read stats [clear]\n"
+"     match <match>\n";
+
+static void
+cmd_pipeline_table_rule_stats_read(char **tokens,
+	uint32_t n_tokens,
+	char *out,
+	size_t out_size)
+{
+	struct table_rule_match m;
+	struct rte_table_action_stats_counters stats;
+	char *pipeline_name;
+	uint32_t table_id, n_tokens_parsed;
+	int clear = 0, status;
+
+	if (n_tokens < 7) {
+		snprintf(out, out_size, MSG_ARG_MISMATCH, tokens[0]);
+		return;
+	}
+
+	pipeline_name = tokens[1];
+
+	if (strcmp(tokens[2], "table") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "table");
+		return;
+	}
+
+	if (parser_read_uint32(&table_id, tokens[3]) != 0) {
+		snprintf(out, out_size, MSG_ARG_INVALID, "table_id");
+		return;
+	}
+
+	if (strcmp(tokens[4], "rule") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "rule");
+		return;
+	}
+
+	if (strcmp(tokens[5], "read") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "read");
+		return;
+	}
+
+	if (strcmp(tokens[6], "stats") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "stats");
+		return;
+	}
+
+	n_tokens -= 7;
+	tokens += 7;
+
+	/* clear */
+	if (n_tokens && (strcmp(tokens[0], "clear") == 0)) {
+		clear = 1;
+
+		n_tokens--;
+		tokens++;
+	}
+
+	/* match */
+	if ((n_tokens == 0) || strcmp(tokens[0], "match")) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "match");
+		return;
+	}
+
+	n_tokens_parsed = parse_match(tokens,
+		n_tokens,
+		out,
+		out_size,
+		&m);
+	if (n_tokens_parsed == 0)
+		return;
+	n_tokens -= n_tokens_parsed;
+	tokens += n_tokens_parsed;
+
+	/* end */
+	if (n_tokens) {
+		snprintf(out, out_size, MSG_ARG_INVALID, tokens[0]);
+		return;
+	}
+
+	/* Read table rule stats. */
+	status = pipeline_table_rule_stats_read(pipeline_name,
+		table_id,
+		&m,
+		&stats,
+		clear);
+	if (status) {
+		snprintf(out, out_size, MSG_CMD_FAIL, tokens[0]);
+		return;
+	}
+
+	/* Print stats. */
+	if (stats.n_packets_valid && stats.n_bytes_valid)
+		snprintf(out, out_size, "Packets: %" PRIu64 "; Bytes: %" PRIu64 "\n",
+			stats.n_packets,
+			stats.n_bytes);
+
+	if (stats.n_packets_valid && !stats.n_bytes_valid)
+		snprintf(out, out_size, "Packets: %" PRIu64 "; Bytes: N/A\n",
+			stats.n_packets);
+
+	if (!stats.n_packets_valid && stats.n_bytes_valid)
+		snprintf(out, out_size, "Packets: N/A; Bytes: %" PRIu64 "\n",
+			stats.n_bytes);
+
+	if (!stats.n_packets_valid && !stats.n_bytes_valid)
+		snprintf(out, out_size, "Packets: N/A ; Bytes: N/A\n");
+}
 
 static const char cmd_pipeline_table_meter_profile_add_help[] =
 "pipeline <pipeline_name> table <table_id> meter profile <meter_profile_id>\n"
@@ -5010,15 +5479,98 @@ cmd_pipeline_table_meter_profile_delete(char **tokens,
 
 
 static const char cmd_pipeline_table_rule_meter_read_help[] =
-"pipeline <pipeline_name> table <table_id> rule read meter [clear]\n";
+"pipeline <pipeline_name> table <table_id> rule read meter [clear]\n"
+"     match <match>\n";
 
 static void
 cmd_pipeline_table_rule_meter_read(char **tokens,
-	uint32_t n_tokens __rte_unused,
+	uint32_t n_tokens,
 	char *out,
 	size_t out_size)
 {
-	snprintf(out, out_size, MSG_CMD_UNIMPLEM, tokens[0]);
+	struct table_rule_match m;
+	struct rte_table_action_mtr_counters stats;
+	char *pipeline_name;
+	uint32_t table_id, n_tokens_parsed;
+	int clear = 0, status;
+
+	if (n_tokens < 7) {
+		snprintf(out, out_size, MSG_ARG_MISMATCH, tokens[0]);
+		return;
+	}
+
+	pipeline_name = tokens[1];
+
+	if (strcmp(tokens[2], "table") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "table");
+		return;
+	}
+
+	if (parser_read_uint32(&table_id, tokens[3]) != 0) {
+		snprintf(out, out_size, MSG_ARG_INVALID, "table_id");
+		return;
+	}
+
+	if (strcmp(tokens[4], "rule") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "rule");
+		return;
+	}
+
+	if (strcmp(tokens[5], "read") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "read");
+		return;
+	}
+
+	if (strcmp(tokens[6], "meter") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "meter");
+		return;
+	}
+
+	n_tokens -= 7;
+	tokens += 7;
+
+	/* clear */
+	if (n_tokens && (strcmp(tokens[0], "clear") == 0)) {
+		clear = 1;
+
+		n_tokens--;
+		tokens++;
+	}
+
+	/* match */
+	if ((n_tokens == 0) || strcmp(tokens[0], "match")) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "match");
+		return;
+	}
+
+	n_tokens_parsed = parse_match(tokens,
+		n_tokens,
+		out,
+		out_size,
+		&m);
+	if (n_tokens_parsed == 0)
+		return;
+	n_tokens -= n_tokens_parsed;
+	tokens += n_tokens_parsed;
+
+	/* end */
+	if (n_tokens) {
+		snprintf(out, out_size, MSG_ARG_INVALID, tokens[0]);
+		return;
+	}
+
+	/* Read table rule meter stats. */
+	status = pipeline_table_rule_mtr_read(pipeline_name,
+		table_id,
+		&m,
+		&stats,
+		clear);
+	if (status) {
+		snprintf(out, out_size, MSG_CMD_FAIL, tokens[0]);
+		return;
+	}
+
+	/* Print stats. */
 }
 
 
@@ -5173,17 +5725,188 @@ cmd_pipeline_table_dscp(char **tokens,
 
 
 static const char cmd_pipeline_table_rule_ttl_read_help[] =
-"pipeline <pipeline_name> table <table_id> rule read ttl [clear]\n";
+"pipeline <pipeline_name> table <table_id> rule read ttl [clear]\n"
+"     match <match>\n";
 
 static void
 cmd_pipeline_table_rule_ttl_read(char **tokens,
-	uint32_t n_tokens __rte_unused,
+	uint32_t n_tokens,
 	char *out,
 	size_t out_size)
 {
-	snprintf(out, out_size, MSG_CMD_UNIMPLEM, tokens[0]);
+	struct table_rule_match m;
+	struct rte_table_action_ttl_counters stats;
+	char *pipeline_name;
+	uint32_t table_id, n_tokens_parsed;
+	int clear = 0, status;
+
+	if (n_tokens < 7) {
+		snprintf(out, out_size, MSG_ARG_MISMATCH, tokens[0]);
+		return;
+	}
+
+	pipeline_name = tokens[1];
+
+	if (strcmp(tokens[2], "table") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "table");
+		return;
+	}
+
+	if (parser_read_uint32(&table_id, tokens[3]) != 0) {
+		snprintf(out, out_size, MSG_ARG_INVALID, "table_id");
+		return;
+	}
+
+	if (strcmp(tokens[4], "rule") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "rule");
+		return;
+	}
+
+	if (strcmp(tokens[5], "read") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "read");
+		return;
+	}
+
+	if (strcmp(tokens[6], "ttl") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "ttl");
+		return;
+	}
+
+	n_tokens -= 7;
+	tokens += 7;
+
+	/* clear */
+	if (n_tokens && (strcmp(tokens[0], "clear") == 0)) {
+		clear = 1;
+
+		n_tokens--;
+		tokens++;
+	}
+
+	/* match */
+	if ((n_tokens == 0) || strcmp(tokens[0], "match")) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "match");
+		return;
+	}
+
+	n_tokens_parsed = parse_match(tokens,
+		n_tokens,
+		out,
+		out_size,
+		&m);
+	if (n_tokens_parsed == 0)
+		return;
+	n_tokens -= n_tokens_parsed;
+	tokens += n_tokens_parsed;
+
+	/* end */
+	if (n_tokens) {
+		snprintf(out, out_size, MSG_ARG_INVALID, tokens[0]);
+		return;
+	}
+
+	/* Read table rule TTL stats. */
+	status = pipeline_table_rule_ttl_read(pipeline_name,
+		table_id,
+		&m,
+		&stats,
+		clear);
+	if (status) {
+		snprintf(out, out_size, MSG_CMD_FAIL, tokens[0]);
+		return;
+	}
+
+	/* Print stats. */
+	snprintf(out, out_size, "Packets: %" PRIu64 "\n",
+		stats.n_packets);
 }
 
+static const char cmd_pipeline_table_rule_time_read_help[] =
+"pipeline <pipeline_name> table <table_id> rule read time\n"
+"     match <match>\n";
+
+static void
+cmd_pipeline_table_rule_time_read(char **tokens,
+	uint32_t n_tokens,
+	char *out,
+	size_t out_size)
+{
+	struct table_rule_match m;
+	char *pipeline_name;
+	uint64_t timestamp;
+	uint32_t table_id, n_tokens_parsed;
+	int status;
+
+	if (n_tokens < 7) {
+		snprintf(out, out_size, MSG_ARG_MISMATCH, tokens[0]);
+		return;
+	}
+
+	pipeline_name = tokens[1];
+
+	if (strcmp(tokens[2], "table") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "table");
+		return;
+	}
+
+	if (parser_read_uint32(&table_id, tokens[3]) != 0) {
+		snprintf(out, out_size, MSG_ARG_INVALID, "table_id");
+		return;
+	}
+
+	if (strcmp(tokens[4], "rule") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "rule");
+		return;
+	}
+
+	if (strcmp(tokens[5], "read") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "read");
+		return;
+	}
+
+	if (strcmp(tokens[6], "time") != 0) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "time");
+		return;
+	}
+
+	n_tokens -= 7;
+	tokens += 7;
+
+	/* match */
+	if ((n_tokens == 0) || strcmp(tokens[0], "match")) {
+		snprintf(out, out_size, MSG_ARG_NOT_FOUND, "match");
+		return;
+	}
+
+	n_tokens_parsed = parse_match(tokens,
+		n_tokens,
+		out,
+		out_size,
+		&m);
+	if (n_tokens_parsed == 0)
+		return;
+	n_tokens -= n_tokens_parsed;
+	tokens += n_tokens_parsed;
+
+	/* end */
+	if (n_tokens) {
+		snprintf(out, out_size, MSG_ARG_INVALID, tokens[0]);
+		return;
+	}
+
+	/* Read table rule timestamp. */
+	status = pipeline_table_rule_time_read(pipeline_name,
+		table_id,
+		&m,
+		&timestamp);
+	if (status) {
+		snprintf(out, out_size, MSG_CMD_FAIL, tokens[0]);
+		return;
+	}
+
+	/* Print stats. */
+	snprintf(out, out_size, "Packets: %" PRIu64 "\n", timestamp);
+}
 
 static const char cmd_thread_pipeline_enable_help[] =
 "thread <thread_id> pipeline <pipeline_name> enable\n";
@@ -5308,12 +6031,14 @@ cmd_help(char **tokens, uint32_t n_tokens, char *out, size_t out_size)
 			"\tpipeline table rule add bulk\n"
 			"\tpipeline table rule delete\n"
 			"\tpipeline table rule delete default\n"
+			"\tpipeline table rule show\n"
 			"\tpipeline table rule stats read\n"
 			"\tpipeline table meter profile add\n"
 			"\tpipeline table meter profile delete\n"
 			"\tpipeline table rule meter read\n"
 			"\tpipeline table dscp\n"
 			"\tpipeline table rule ttl read\n"
+			"\tpipeline table rule time read\n"
 			"\tthread pipeline enable\n"
 			"\tthread pipeline disable\n\n");
 		return;
@@ -5521,6 +6246,14 @@ cmd_help(char **tokens, uint32_t n_tokens, char *out, size_t out_size)
 			return;
 		}
 
+		if ((n_tokens == 4) &&
+			(strcmp(tokens[2], "rule") == 0) &&
+			(strcmp(tokens[3], "show") == 0)) {
+			snprintf(out, out_size, "\n%s\n",
+				cmd_pipeline_table_rule_show_help);
+			return;
+		}
+
 		if ((n_tokens == 5) &&
 			(strcmp(tokens[2], "rule") == 0) &&
 			(strcmp(tokens[3], "stats") == 0) &&
@@ -5563,6 +6296,15 @@ cmd_help(char **tokens, uint32_t n_tokens, char *out, size_t out_size)
 			(strcmp(tokens[4], "read") == 0)) {
 			snprintf(out, out_size, "\n%s\n",
 				cmd_pipeline_table_rule_ttl_read_help);
+			return;
+		}
+
+		if ((n_tokens == 5) &&
+			(strcmp(tokens[2], "rule") == 0) &&
+			(strcmp(tokens[3], "time") == 0) &&
+			(strcmp(tokens[4], "read") == 0)) {
+			snprintf(out, out_size, "\n%s\n",
+				cmd_pipeline_table_rule_time_read_help);
 			return;
 		}
 	}
@@ -5816,6 +6558,15 @@ cli_process(char *in, char *out, size_t out_size)
 			return;
 		}
 
+		if ((n_tokens >= 6) &&
+			(strcmp(tokens[2], "table") == 0) &&
+			(strcmp(tokens[4], "rule") == 0) &&
+			(strcmp(tokens[5], "show") == 0)) {
+			cmd_pipeline_table_rule_show(tokens, n_tokens,
+				out, out_size);
+			return;
+		}
+
 		if ((n_tokens >= 7) &&
 			(strcmp(tokens[2], "table") == 0) &&
 			(strcmp(tokens[4], "rule") == 0) &&
@@ -5870,6 +6621,16 @@ cli_process(char *in, char *out, size_t out_size)
 			(strcmp(tokens[5], "read") == 0) &&
 			(strcmp(tokens[6], "ttl") == 0)) {
 			cmd_pipeline_table_rule_ttl_read(tokens, n_tokens,
+				out, out_size);
+			return;
+		}
+
+		if ((n_tokens >= 7) &&
+			(strcmp(tokens[2], "table") == 0) &&
+			(strcmp(tokens[4], "rule") == 0) &&
+			(strcmp(tokens[5], "read") == 0) &&
+			(strcmp(tokens[6], "time") == 0)) {
+			cmd_pipeline_table_rule_time_read(tokens, n_tokens,
 				out, out_size);
 			return;
 		}
@@ -5952,44 +6713,56 @@ cli_script_process(const char *file_name,
 static int
 cli_rule_file_process(const char *file_name,
 	size_t line_len_max,
-	struct table_rule_match *m,
-	struct table_rule_action *a,
+	struct table_rule_list **rule_list,
 	uint32_t *n_rules,
 	uint32_t *line_number,
 	char *out,
 	size_t out_size)
 {
-	FILE *f = NULL;
+	struct table_rule_list *list = NULL;
 	char *line = NULL;
-	uint32_t rule_id, line_id;
+	FILE *f = NULL;
+	uint32_t rule_id = 0, line_id = 0;
 	int status = 0;
 
 	/* Check input arguments */
 	if ((file_name == NULL) ||
 		(strlen(file_name) == 0) ||
-		(line_len_max == 0)) {
-		*line_number = 0;
-		return -EINVAL;
+		(line_len_max == 0) ||
+		(rule_list == NULL) ||
+		(n_rules == NULL) ||
+		(line_number == NULL) ||
+		(out == NULL)) {
+		status = -EINVAL;
+		goto cli_rule_file_process_free;
 	}
 
 	/* Memory allocation */
+	list = malloc(sizeof(struct table_rule_list));
+	if (list == NULL) {
+		status = -ENOMEM;
+		goto cli_rule_file_process_free;
+	}
+
+	TAILQ_INIT(list);
+
 	line = malloc(line_len_max + 1);
 	if (line == NULL) {
-		*line_number = 0;
-		return -ENOMEM;
+		status = -ENOMEM;
+		goto cli_rule_file_process_free;
 	}
 
 	/* Open file */
 	f = fopen(file_name, "r");
 	if (f == NULL) {
-		*line_number = 0;
-		free(line);
-		return -EIO;
+		status = -EIO;
+		goto cli_rule_file_process_free;
 	}
 
 	/* Read file */
-	for (line_id = 1, rule_id = 0; rule_id < *n_rules; line_id++) {
+	for (line_id = 1, rule_id = 0; ; line_id++) {
 		char *tokens[CMD_MAX_TOKENS];
+		struct table_rule *rule = NULL;
 		uint32_t n_tokens, n_tokens_parsed, t0;
 
 		/* Read next line from file. */
@@ -6005,7 +6778,7 @@ cli_rule_file_process(const char *file_name,
 		status = parse_tokenize_string(line, tokens, &n_tokens);
 		if (status) {
 			status = -EINVAL;
-			break;
+			goto cli_rule_file_process_free;
 		}
 
 		/* Empty line. */
@@ -6013,15 +6786,24 @@ cli_rule_file_process(const char *file_name,
 			continue;
 		t0 = 0;
 
+		/* Rule alloc and insert. */
+		rule = calloc(1, sizeof(struct table_rule));
+		if (rule == NULL) {
+			status = -ENOMEM;
+			goto cli_rule_file_process_free;
+		}
+
+		TAILQ_INSERT_TAIL(list, rule, node);
+
 		/* Rule match. */
 		n_tokens_parsed = parse_match(tokens + t0,
 			n_tokens - t0,
 			out,
 			out_size,
-			&m[rule_id]);
+			&rule->match);
 		if (n_tokens_parsed == 0) {
 			status = -EINVAL;
-			break;
+			goto cli_rule_file_process_free;
 		}
 		t0 += n_tokens_parsed;
 
@@ -6030,17 +6812,17 @@ cli_rule_file_process(const char *file_name,
 			n_tokens - t0,
 			out,
 			out_size,
-			&a[rule_id]);
+			&rule->action);
 		if (n_tokens_parsed == 0) {
 			status = -EINVAL;
-			break;
+			goto cli_rule_file_process_free;
 		}
 		t0 += n_tokens_parsed;
 
 		/* Line completed. */
 		if (t0 < n_tokens) {
 			status = -EINVAL;
-			break;
+			goto cli_rule_file_process_free;
 		}
 
 		/* Increment rule count */
@@ -6053,7 +6835,31 @@ cli_rule_file_process(const char *file_name,
 	/* Memory free */
 	free(line);
 
+	*rule_list = list;
 	*n_rules = rule_id;
 	*line_number = line_id;
+	return 0;
+
+cli_rule_file_process_free:
+	*rule_list = NULL;
+	*n_rules = rule_id;
+	*line_number = line_id;
+
+	for ( ; ; ) {
+		struct table_rule *rule;
+
+		rule = TAILQ_FIRST(list);
+		if (rule == NULL)
+			break;
+
+		TAILQ_REMOVE(list, rule, node);
+		free(rule);
+	}
+
+	if (f)
+		fclose(f);
+	free(line);
+	free(list);
+
 	return status;
 }
