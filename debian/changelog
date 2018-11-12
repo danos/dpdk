@@ -40,6 +40,10 @@ dpdk (18.11-rc2-1~git1.1) UNRELEASED; urgency=medium
   * Override lintian warning about scripts with extension in bin.
   * Add libssl-dev dependency on libdpdk-dev for libcrypto.pc.
   * Add libbsd-dev dependency on libdpdk-dev for bsd/string.h.
+  * Drop fix-vhost-user-socket-permission.patch and
+    tmpfix-ppc-build-error.patch. The latter has been fixed upstream,
+    and the former is not needed as we no longer support vhost-user
+    in client mode. Please switch to server mode.
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
