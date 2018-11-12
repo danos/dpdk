@@ -4,9 +4,6 @@
 
 /* This file manages the list of devices and their arguments, as given
  * by the user at startup
- *
- * Code here should not call rte_log since the EAL environment
- * may not be initialized.
  */
 
 #include <stdio.h>
@@ -28,38 +25,8 @@
 TAILQ_HEAD(rte_devargs_list, rte_devargs);
 
 /** Global list of user devices */
-struct rte_devargs_list devargs_list =
+static struct rte_devargs_list devargs_list =
 	TAILQ_HEAD_INITIALIZER(devargs_list);
-
-int
-rte_eal_parse_devargs_str(const char *devargs_str,
-			char **drvname, char **drvargs)
-{
-	char *sep;
-
-	if ((devargs_str) == NULL || (drvname) == NULL || (drvargs == NULL))
-		return -1;
-
-	*drvname = strdup(devargs_str);
-	if (*drvname == NULL)
-		return -1;
-
-	/* set the first ',' to '\0' to split name and arguments */
-	sep = strchr(*drvname, ',');
-	if (sep != NULL) {
-		sep[0] = '\0';
-		*drvargs = strdup(sep + 1);
-	} else {
-		*drvargs = strdup("");
-	}
-
-	if (*drvargs == NULL) {
-		free(*drvname);
-		*drvname = NULL;
-		return -1;
-	}
-	return 0;
-}
 
 static size_t
 devargs_layer_count(const char *s)
@@ -270,6 +237,7 @@ rte_devargs_parsef(struct rte_devargs *da, const char *format, ...)
 	va_list ap;
 	size_t len;
 	char *dev;
+	int ret;
 
 	if (da == NULL)
 		return -EINVAL;
@@ -288,7 +256,10 @@ rte_devargs_parsef(struct rte_devargs *da, const char *format, ...)
 	vsnprintf(dev, len + 1, format, ap);
 	va_end(ap);
 
-	return rte_devargs_parse(da, dev);
+	ret = rte_devargs_parse(da, dev);
+
+	free(dev);
+	return ret;
 }
 
 int __rte_experimental
@@ -296,7 +267,7 @@ rte_devargs_insert(struct rte_devargs *da)
 {
 	int ret;
 
-	ret = rte_devargs_remove(da->bus->name, da->name);
+	ret = rte_devargs_remove(da);
 	if (ret < 0)
 		return ret;
 	TAILQ_INSERT_TAIL(&devargs_list, da, next);
@@ -342,14 +313,17 @@ fail:
 }
 
 int __rte_experimental
-rte_devargs_remove(const char *busname, const char *devname)
+rte_devargs_remove(struct rte_devargs *devargs)
 {
 	struct rte_devargs *d;
 	void *tmp;
 
+	if (devargs == NULL || devargs->bus == NULL)
+		return -1;
+
 	TAILQ_FOREACH_SAFE(d, &devargs_list, next, tmp) {
-		if (strcmp(d->bus->name, busname) == 0 &&
-		    strcmp(d->name, devname) == 0) {
+		if (strcmp(d->bus->name, devargs->bus->name) == 0 &&
+		    strcmp(d->name, devargs->name) == 0) {
 			TAILQ_REMOVE(&devargs_list, d, next);
 			free(d->args);
 			free(d);

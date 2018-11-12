@@ -68,6 +68,11 @@ typedef uint16_t unaligned_uint16_t;
 /******* Macro to mark functions and fields scheduled for removal *****/
 #define __rte_deprecated	__attribute__((__deprecated__))
 
+/**
+ * Mark a function or variable to a weak reference.
+ */
+#define __rte_weak __attribute__((__weak__))
+
 /*********** Macros to eliminate unused variable warnings ********/
 
 /**
@@ -163,6 +168,12 @@ static void __attribute__((destructor(RTE_PRIO(prio)), used)) func(void)
  * ptr1 is greater than ptr2.
  */
 #define RTE_PTR_DIFF(ptr1, ptr2) ((uintptr_t)(ptr1) - (uintptr_t)(ptr2))
+
+/**
+ * Workaround to cast a const field of a structure to non-const type.
+ */
+#define RTE_CAST_FIELD(var, field, type) \
+	(*(type *)((uintptr_t)(var) + offsetof(typeof(*(var)), field)))
 
 /*********** Macros/static functions for doing alignment ********/
 

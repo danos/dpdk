@@ -12,6 +12,7 @@ Network Interface Controller Drivers
     features
     build_and_test
     ark
+    atlantic
     avp
     axgbe
     bnx2x
@@ -21,6 +22,7 @@ Network Interface Controller Drivers
     dpaa2
     e1000em
     ena
+    enetc
     enic
     fm10k
     i40e
@@ -32,6 +34,7 @@ Network Interface Controller Drivers
     liquidio
     mlx4
     mlx5
+    mvneta
     mvpp2
     netvsc
     nfp

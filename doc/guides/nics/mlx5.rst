@@ -54,6 +54,7 @@ Features
 - Support for scattered TX and RX frames.
 - IPv4, IPv6, TCPv4, TCPv6, UDPv4 and UDPv6 RSS on any number of queues.
 - Several RSS hash keys, one for each flow type.
+- Default RSS operation with no hash key specification.
 - Configurable RETA table.
 - Support for multiple MAC addresses.
 - VLAN filtering.
@@ -246,6 +247,24 @@ Run-time configuration
   - x86_64 with ConnectX-4, ConnectX-4 LX, ConnectX-5 and Bluefield.
   - POWER8 and ARMv8 with ConnectX-4 LX, ConnectX-5 and Bluefield.
 
+- ``rxq_cqe_pad_en`` parameter [int]
+
+  A nonzero value enables 128B padding of CQE on RX side. The size of CQE
+  is aligned with the size of a cacheline of the core. If cacheline size is
+  128B, the CQE size is configured to be 128B even though the device writes
+  only 64B data on the cacheline. This is to avoid unnecessary cache
+  invalidation by device's two consecutive writes on to one cacheline.
+  However in some architecture, it is more beneficial to update entire
+  cacheline with padding the rest 64B rather than striding because
+  read-modify-write could drop performance a lot. On the other hand,
+  writing extra data will consume more PCIe bandwidth and could also drop
+  the maximum throughput. It is recommended to empirically set this
+  parameter. Disabled by default.
+
+  Supported on:
+
+  - CPU having 128B cacheline with ConnectX-5 and Bluefield.
+
 - ``mprq_en`` parameter [int]
 
   A nonzero value enables configuring Multi-Packet Rx queues. Rx queue is
@@ -320,6 +339,20 @@ Run-time configuration
 
         - Set to 8 by default.
 
+- ``txqs_max_vec`` parameter [int]
+
+  Enable vectorized Tx only when the number of TX queues is less than or
+  equal to this value. Effective only when ``tx_vec_en`` is enabled.
+
+  On ConnectX-5:
+
+        - Set to 8 by default on ARMv8.
+        - Set to 4 by default otherwise.
+
+  On Bluefield
+
+        - Set to 16 by default.
+
 - ``txq_mpw_en`` parameter [int]
 
   A nonzero value enables multi-packet send (MPS) for ConnectX-4 Lx and
@@ -339,7 +372,12 @@ Run-time configuration
   When those offloads are requested the MPS send function will not be used.
 
   It is currently only supported on the ConnectX-4 Lx, ConnectX-5 and Bluefield
-  families of adapters. Enabled by default.
+  families of adapters.
+  On ConnectX-4 Lx the MPW is considered un-secure hence disabled by default.
+  Users which enable the MPW should be aware that application which provides incorrect
+  mbuf descriptors in the Tx burst can lead to serious errors in the host including, on some cases,
+  NIC to get stuck.
+  On ConnectX-5 and Bluefield the MPW is secure and enabled by default.
 
 - ``txq_mpw_hdr_dseg_en`` parameter [int]
 
@@ -360,7 +398,7 @@ Run-time configuration
 - ``tx_vec_en`` parameter [int]
 
   A nonzero value enables Tx vector on ConnectX-5 and Bluefield NICs if the number of
-  global Tx queues on the port is lesser than MLX5_VPMD_MIN_TXQS.
+  global Tx queues on the port is less than ``txqs_max_vec``.
 
   This option cannot be used with certain offloads such as ``DEV_TX_OFFLOAD_TCP_TSO,
   DEV_TX_OFFLOAD_VXLAN_TNL_TSO, DEV_TX_OFFLOAD_GRE_TNL_TSO, DEV_TX_OFFLOAD_VLAN_INSERT``.
@@ -389,6 +427,13 @@ Run-time configuration
   A nonzero value allows L3 VXLAN and VXLAN-GPE flow creation. To enable
   L3 VXLAN or VXLAN-GPE, users has to configure firmware and enable this
   parameter. This is a prerequisite to receive this kind of traffic.
+
+  Disabled by default.
+
+- ``dv_flow_en`` parameter [int]
+
+  A nonzero value enables the DV flow steering assuming it is supported
+  by the driver.
 
   Disabled by default.
 

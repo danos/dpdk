@@ -238,7 +238,7 @@ transform_cipher_param(struct rte_crypto_sym_xform *xform,
 		return ret;
 
 	xform->type = RTE_CRYPTO_SYM_XFORM_CIPHER;
-	xform->cipher.algo = (uint32_t)ret;
+	xform->cipher.algo = (enum rte_crypto_cipher_algorithm)ret;
 	xform->cipher.key.length = param->cipher_key_len;
 	if (xform->cipher.key.length > 0)
 		xform->cipher.key.data = param->cipher_key_buf;
@@ -288,7 +288,7 @@ transform_chain_param(struct rte_crypto_sym_xform *xforms,
 	if (unlikely(ret < 0))
 		return ret;
 	xform_cipher->type = RTE_CRYPTO_SYM_XFORM_CIPHER;
-	xform_cipher->cipher.algo = (uint32_t)ret;
+	xform_cipher->cipher.algo = (enum rte_crypto_cipher_algorithm)ret;
 	xform_cipher->cipher.key.length = param->cipher_key_len;
 	xform_cipher->cipher.key.data = param->cipher_key_buf;
 	ret = get_iv_len(xform_cipher->cipher.algo);
@@ -302,7 +302,7 @@ transform_chain_param(struct rte_crypto_sym_xform *xforms,
 	ret = auth_algo_transform(param->hash_algo);
 	if (unlikely(ret < 0))
 		return ret;
-	xform_auth->auth.algo = (uint32_t)ret;
+	xform_auth->auth.algo = (enum rte_crypto_auth_algorithm)ret;
 	xform_auth->auth.digest_length = param->digest_len;
 	xform_auth->auth.key.length = param->auth_key_len;
 	xform_auth->auth.key.data = param->auth_key_buf;
@@ -425,35 +425,34 @@ vhost_crypto_close_sess(struct vhost_crypto *vcrypto, uint64_t session_id)
 	return 0;
 }
 
-static int
-vhost_crypto_msg_post_handler(int vid, void *msg, uint32_t *require_reply)
+static enum vh_result
+vhost_crypto_msg_post_handler(int vid, void *msg)
 {
 	struct virtio_net *dev = get_device(vid);
 	struct vhost_crypto *vcrypto;
 	VhostUserMsg *vmsg = msg;
-	int ret = 0;
+	enum vh_result ret = VH_RESULT_OK;
 
-	if (dev == NULL || require_reply == NULL) {
+	if (dev == NULL) {
 		VC_LOG_ERR("Invalid vid %i", vid);
-		return -EINVAL;
+		return VH_RESULT_ERR;
 	}
 
 	vcrypto = dev->extern_data;
 	if (vcrypto == NULL) {
 		VC_LOG_ERR("Cannot find required data, is it initialized?");
-		return -ENOENT;
+		return VH_RESULT_ERR;
 	}
-
-	*require_reply = 0;
 
 	if (vmsg->request.master == VHOST_USER_CRYPTO_CREATE_SESS) {
 		vhost_crypto_create_sess(vcrypto,
 				&vmsg->payload.crypto_session);
-		*require_reply = 1;
-	} else if (vmsg->request.master == VHOST_USER_CRYPTO_CLOSE_SESS)
-		ret = vhost_crypto_close_sess(vcrypto, vmsg->payload.u64);
-	else
-		ret = -EINVAL;
+		vmsg->fd_num = 0;
+		ret = VH_RESULT_REPLY;
+	} else if (vmsg->request.master == VHOST_USER_CRYPTO_CLOSE_SESS) {
+		if (vhost_crypto_close_sess(vcrypto, vmsg->payload.u64))
+			ret = VH_RESULT_ERR;
+	}
 
 	return ret;
 }

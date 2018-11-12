@@ -45,6 +45,7 @@ Sample Applications User Guides
     vhost
     vhost_scsi
     vhost_crypto
+    vdpa
     netmap_compatibility
     ip_pipeline
     test_pipeline
@@ -54,6 +55,7 @@ Sample Applications User Guides
     tep_termination
     ptpclient
     performance_thread
+    fips_validation
     ipsec_secgw
     bbdev_app
 
