@@ -38,7 +38,7 @@ stop)
 try-restart|restart|force-reload)
     ;;
 status)
-    output=$(/lib/dpdk/dpdk-init --status 2>&1) || error="$?"
+    output=$(/lib/dpdk/dpdk-init status 2>&1) || error="$?"
     if [ ! -z "$output" ]; then
         echo "$output" | while read line; do
             log_action_cont_msg "$line"
