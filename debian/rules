@@ -12,6 +12,29 @@ ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
 	export DH_OPTIONS=-v
 endif
 
+# People rebuilding this package can overwrite RTE_MACHINE
+# via DEB_BUILD_OPTIONS if they like
+ifneq (,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
+    RTE_MACHINE ?= $(patsubst rte_machine=%,%,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
+endif
+
+# Use default for arm* where there is a defined list.
+# x86 and power would just use "native", which is an invariant, so set
+# power8 and corei7 to keep it stable.
+ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
+RTE_MACHINE ?= "default"
+else
+ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
+RTE_MACHINE ?= "default"
+else
+ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
+RTE_MACHINE ?= "power8"
+else
+RTE_MACHINE ?= "corei7"
+endif
+endif
+endif
+
 # now stable with parallel comilation, so support -j
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
     PAR := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
@@ -96,7 +119,7 @@ override_dh_auto_configure:
 		--includedir=include/dpdk \
 		-Dper_library_versions=false \
 		-Dinclude_subdir_arch=../$(DEB_HOST_MULTIARCH)/dpdk \
-		-Dmachine=corei7 \
+		-Dmachine=$(RTE_MACHINE) \
 		-Dkernel_dir=$(KSRC) \
 		-Denable_kmods=$(DPDK_CONFIG_BUILD_KMOD)
 
