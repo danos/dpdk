@@ -157,18 +157,18 @@ out:
 /**
  * cxgbe_poll_for_completion: Poll rxq for completion
  * @q: rxq to poll
- * @us: microseconds to delay
+ * @ms: milliseconds to delay
  * @cnt: number of times to poll
  * @c: completion to check for 'done' status
  *
  * Polls the rxq for reples until completion is done or the count
  * expires.
  */
-int cxgbe_poll_for_completion(struct sge_rspq *q, unsigned int us,
+int cxgbe_poll_for_completion(struct sge_rspq *q, unsigned int ms,
 			      unsigned int cnt, struct t4_completion *c)
 {
 	unsigned int i;
-	unsigned int work_done, budget = 4;
+	unsigned int work_done, budget = 32;
 
 	if (!c)
 		return -EINVAL;
@@ -181,7 +181,7 @@ int cxgbe_poll_for_completion(struct sge_rspq *q, unsigned int us,
 			return 0;
 		}
 		t4_os_unlock(&c->lock);
-		udelay(us);
+		rte_delay_ms(ms);
 	}
 	return -ETIMEDOUT;
 }
@@ -1339,18 +1339,22 @@ inline bool force_linkup(struct adapter *adap)
 int link_start(struct port_info *pi)
 {
 	struct adapter *adapter = pi->adapter;
-	int ret;
+	u64 conf_offloads;
 	unsigned int mtu;
+	int ret;
 
 	mtu = pi->eth_dev->data->dev_conf.rxmode.max_rx_pkt_len -
 	      (ETHER_HDR_LEN + ETHER_CRC_LEN);
+
+	conf_offloads = pi->eth_dev->data->dev_conf.rxmode.offloads;
 
 	/*
 	 * We do not set address filters and promiscuity here, the stack does
 	 * that step explicitly.
 	 */
-	ret = t4_set_rxmode(adapter, adapter->mbox, pi->viid, mtu, -1, -1,
-			    -1, 1, true);
+	ret = t4_set_rxmode(adapter, adapter->mbox, pi->viid, mtu, -1, -1, -1,
+			    !!(conf_offloads & DEV_RX_OFFLOAD_VLAN_STRIP),
+			    true);
 	if (ret == 0) {
 		ret = cxgbe_mpstcam_modify(pi, (int)pi->xact_addr_filt,
 				(u8 *)&pi->eth_dev->data->mac_addrs[0]);

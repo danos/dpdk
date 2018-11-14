@@ -1178,6 +1178,12 @@ mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 					  "L3 cannot follow an L4 layer.");
 	if (!mask)
 		mask = &rte_flow_item_ipv4_mask;
+	else if (mask->hdr.next_proto_id != 0 &&
+		 mask->hdr.next_proto_id != 0xff)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM_MASK, mask,
+					  "partial mask is not supported"
+					  " for protocol");
 	ret = mlx5_flow_item_acceptable(item, (const uint8_t *)mask,
 					(const uint8_t *)&nic_mask,
 					sizeof(struct rte_flow_item_ipv4),
@@ -1234,17 +1240,6 @@ mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "L3 cannot follow an L4 layer.");
-	/*
-	 * IPv6 is not recognised by the NIC inside a GRE tunnel.
-	 * Such support has to be disabled as the rule will be
-	 * accepted.  Issue reproduced with Mellanox OFED 4.3-3.0.2.1 and
-	 * Mellanox OFED 4.4-1.0.0.0.
-	 */
-	if (tunnel && item_flags & MLX5_FLOW_LAYER_GRE)
-		return rte_flow_error_set(error, ENOTSUP,
-					  RTE_FLOW_ERROR_TYPE_ITEM, item,
-					  "IPv6 inside a GRE tunnel is"
-					  " not recognised.");
 	if (!mask)
 		mask = &rte_flow_item_ipv6_mask;
 	ret = mlx5_flow_item_acceptable(item, (const uint8_t *)mask,
@@ -2657,7 +2652,7 @@ flow_fdir_cmp(const struct mlx5_fdir *f1, const struct mlx5_fdir *f2)
 	    FLOW_FDIR_CMP(f1, f2, l3_mask) ||
 	    FLOW_FDIR_CMP(f1, f2, l4) ||
 	    FLOW_FDIR_CMP(f1, f2, l4_mask) ||
-	    FLOW_FDIR_CMP(f1, f2, actions[0]))
+	    FLOW_FDIR_CMP(f1, f2, actions[0].type))
 		return 1;
 	if (f1->actions[0].type == RTE_FLOW_ACTION_TYPE_QUEUE &&
 	    FLOW_FDIR_CMP(f1, f2, queue))

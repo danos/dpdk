@@ -248,7 +248,7 @@ tun_alloc(struct pmd_internals *pmd, int is_keepalive)
 	return fd;
 
 error:
-	if (fd > 0)
+	if (fd >= 0)
 		close(fd);
 	return -1;
 }
@@ -1848,6 +1848,7 @@ disable_rte_flow:
 		TAP_LOG(ERR, "Remote feature requires flow support.");
 		goto error_exit;
 	}
+	rte_eth_dev_probing_finish(dev);
 	return 0;
 
 error_remote:

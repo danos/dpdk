@@ -2549,6 +2549,9 @@ ixgbe_dev_start(struct rte_eth_dev *dev)
 		return -EINVAL;
 	}
 
+	/* Stop the link setup handler before resetting the HW. */
+	rte_eal_alarm_cancel(ixgbe_dev_setup_link_alarm_handler, dev);
+
 	/* disable uio/vfio intr/eventfd mapping */
 	rte_intr_disable(intr_handle);
 
@@ -2731,8 +2734,6 @@ ixgbe_dev_start(struct rte_eth_dev *dev)
 	if (err)
 		goto error;
 
-	ixgbe_dev_link_update(dev, 0);
-
 skip_link_setup:
 
 	if (rte_intr_allow_others(intr_handle)) {
@@ -2767,6 +2768,12 @@ skip_link_setup:
 		PMD_DRV_LOG(WARNING,
 			    "please call hierarchy_commit() "
 			    "before starting the port");
+
+	/*
+	 * Update link status right before return, because it may
+	 * start link configuration process in a separate thread.
+	 */
+	ixgbe_dev_link_update(dev, 0);
 
 	return 0;
 
@@ -3873,11 +3880,6 @@ static int
 ixgbevf_check_link(struct ixgbe_hw *hw, ixgbe_link_speed *speed,
 		   int *link_up, int wait_to_complete)
 {
-	/**
-	 * for a quick link status checking, wait_to_compelet == 0,
-	 * skip PF link status checking
-	 */
-	bool no_pflink_check = wait_to_complete == 0;
 	struct ixgbe_mbx_info *mbx = &hw->mbx;
 	struct ixgbe_mac_info *mac = &hw->mac;
 	uint32_t links_reg, in_msg;
@@ -3938,14 +3940,6 @@ ixgbevf_check_link(struct ixgbe_hw *hw, ixgbe_link_speed *speed,
 		*speed = IXGBE_LINK_SPEED_UNKNOWN;
 	}
 
-	if (no_pflink_check) {
-		if (*speed == IXGBE_LINK_SPEED_UNKNOWN)
-			mac->get_link_status = true;
-		else
-			mac->get_link_status = false;
-
-		goto out;
-	}
 	/* if the read failed it could just be a mailbox collision, best wait
 	 * until we are called again and don't report an error
 	 */
@@ -3955,7 +3949,7 @@ ixgbevf_check_link(struct ixgbe_hw *hw, ixgbe_link_speed *speed,
 	if (!(in_msg & IXGBE_VT_MSGTYPE_CTS)) {
 		/* msg is not CTS and is NACK we must have lost CTS status */
 		if (in_msg & IXGBE_VT_MSGTYPE_NACK)
-			ret_val = -1;
+			mac->get_link_status = false;
 		goto out;
 	}
 
@@ -5061,6 +5055,9 @@ ixgbevf_dev_start(struct rte_eth_dev *dev)
 
 	PMD_INIT_FUNC_TRACE();
 
+	/* Stop the link setup handler before resetting the HW. */
+	rte_eal_alarm_cancel(ixgbe_dev_setup_link_alarm_handler, dev);
+
 	err = hw->mac.ops.reset_hw(hw);
 	if (err) {
 		PMD_INIT_LOG(ERR, "Unable to reset vf hardware (%d)", err);
@@ -5095,8 +5092,6 @@ ixgbevf_dev_start(struct rte_eth_dev *dev)
 	}
 
 	ixgbevf_dev_rxtx_start(dev);
-
-	ixgbevf_dev_link_update(dev, 0);
 
 	/* check and configure queue intr-vector mapping */
 	if (rte_intr_cap_multiple(intr_handle) &&
@@ -5134,6 +5129,12 @@ ixgbevf_dev_start(struct rte_eth_dev *dev)
 
 	/* Re-enable interrupt for VF */
 	ixgbevf_intr_enable(dev);
+
+	/*
+	 * Update link status right before return, because it may
+	 * start link configuration process in a separate thread.
+	 */
+	ixgbevf_dev_link_update(dev, 0);
 
 	return 0;
 }
