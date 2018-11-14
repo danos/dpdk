@@ -7,14 +7,12 @@
 
 #define __CXGBE_FILL_FS(__v, __m, fs, elem, e) \
 do { \
-	if (!((fs)->val.elem || (fs)->mask.elem)) { \
-		(fs)->val.elem = (__v); \
-		(fs)->mask.elem = (__m); \
-	} else { \
+	if ((fs)->mask.elem && ((fs)->val.elem != (__v))) \
 		return rte_flow_error_set(e, EINVAL, RTE_FLOW_ERROR_TYPE_ITEM, \
-					  NULL, "a filter can be specified" \
-					  " only once"); \
-	} \
+					  NULL, "Redefined match item with" \
+					  " different values found"); \
+	(fs)->val.elem = (__v); \
+	(fs)->mask.elem = (__m); \
 } while (0)
 
 #define __CXGBE_FILL_FS_MEMCPY(__v, __m, fs, elem) \
@@ -799,7 +797,7 @@ static int __cxgbe_flow_create(struct rte_eth_dev *dev, struct rte_flow *flow)
 
 	/* Poll the FW for reply */
 	err = cxgbe_poll_for_completion(&adap->sge.fw_evtq,
-					CXGBE_FLOW_POLL_US,
+					CXGBE_FLOW_POLL_MS,
 					CXGBE_FLOW_POLL_CNT,
 					&ctx.completion);
 	if (err) {
@@ -885,7 +883,7 @@ static int __cxgbe_flow_destroy(struct rte_eth_dev *dev, struct rte_flow *flow)
 
 	/* Poll the FW for reply */
 	err = cxgbe_poll_for_completion(&adap->sge.fw_evtq,
-					CXGBE_FLOW_POLL_US,
+					CXGBE_FLOW_POLL_MS,
 					CXGBE_FLOW_POLL_CNT,
 					&ctx.completion);
 	if (err) {
