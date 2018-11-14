@@ -1,5 +1,6 @@
-dpdk (18.11-rc2-1~git1.1) UNRELEASED; urgency=medium
+dpdk (18.11-rc2-1~git1.1) disco; urgency=medium
 
+  [ Luca Boccassi ]
   * New upstream release 18.11; for a full list of changes see:
     https://dpdk.org/doc/guides/rel_notes/release_18_11.html
   * Add new 18.11 PMDs and libraries:
@@ -44,6 +45,9 @@ dpdk (18.11-rc2-1~git1.1) UNRELEASED; urgency=medium
     tmpfix-ppc-build-error.patch. The latter has been fixed upstream,
     and the former is not needed as we no longer support vhost-user
     in client mode. Please switch to server mode.
+
+  [ Christian Ehrhardt ]
+  * d/p/fix-build-arch-defaults.patch: fix non x86 compilation and defaults
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
