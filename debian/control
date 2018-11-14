@@ -1373,7 +1373,7 @@ Description: Data Plane Development Kit (librte_pmd_avf runtime library)
  This package contains the runtime libraries for librte_pmd_avf.
 
 Package: librte-pmd-avp18.11
-Architecture: amd64
+Architecture: amd64 i386
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/avp.html
 Pre-Depends: ${misc:Pre-Depends}
