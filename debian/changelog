@@ -50,7 +50,7 @@ dpdk (18.11-rc3-1~git1.1) UNRELEASED; urgency=medium
   * d/p/fix-build-arch-defaults.patch: fix non x86 compilation and defaults
   * d/control: fix libnuma compile issues now available on armhf
   * d/rules: armhf has no default machine, set old default machine
-  * d/control: librte-pmd-avp18.11 now builds for i386 as well
+  * d/control: enable more architectures on PMDs now building
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
