@@ -825,7 +825,7 @@ Description: Data Plane Development Kit (librte-pmd-ena runtime library)
  This package contains the runtime libraries for librte_pmd_ena.
 
 Package: librte-pmd-enic18.11
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/enic.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -851,7 +851,7 @@ Description: Data Plane Development Kit (librte-pmd-failsafe runtime library)
  This package contains the runtime libraries for librte_pmd_failsafe.
 
 Package: librte-pmd-fm10k18.11
-Architecture: amd64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/fm10k.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -877,7 +877,7 @@ Description: Data Plane Development Kit (librte-pmd-i40e runtime library)
  This package contains the runtime libraries for librte_pmd_i40e.
 
 Package: librte-pmd-ixgbe18.11
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/ixgbe.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -1007,7 +1007,7 @@ Description: Data Plane Development Kit (librte-pmd-virtio runtime library)
  This package contains the runtime libraries for librte_pmd_virtio.
 
 Package: librte-pmd-vmxnet3-18.11
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/vmxnet3.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -1373,7 +1373,7 @@ Description: Data Plane Development Kit (librte_pmd_avf runtime library)
  This package contains the runtime libraries for librte_pmd_avf.
 
 Package: librte-pmd-avp18.11
-Architecture: amd64 i386
+Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/avp.html
 Pre-Depends: ${misc:Pre-Depends}
