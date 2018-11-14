@@ -25,7 +25,7 @@ ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
 RTE_MACHINE ?= "default"
 else
 ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
-RTE_MACHINE ?= "default"
+RTE_MACHINE ?= "armv7a"
 else
 ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
 RTE_MACHINE ?= "power8"
