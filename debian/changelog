@@ -48,6 +48,8 @@ dpdk (18.11-rc2-1~git1.1) disco; urgency=medium
 
   [ Christian Ehrhardt ]
   * d/p/fix-build-arch-defaults.patch: fix non x86 compilation and defaults
+  * d/control: fix libnuma compile issues now available on armhf
+  * d/rules: armhf has no default machine, set old default machine
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
