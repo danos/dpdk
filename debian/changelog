@@ -1,4 +1,4 @@
-dpdk (18.11-rc3-1~git1.1) UNRELEASED; urgency=medium
+dpdk (18.11-rc3-1~git1.1ppa2) disco; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 18.11; for a full list of changes see:
@@ -51,7 +51,7 @@ dpdk (18.11-rc3-1~git1.1) UNRELEASED; urgency=medium
   * d/p/0002-build-establish-an-invariant-machine-type.patch: avoid builder
     dependent march selection
   * d/control: fix libnuma compile issues now available on armhf
-  * d/rules: armhf has no default machine, set old default machine
+  * d/rules: select upstream declared baseline as RTE_MACHINE
   * d/control: enable more architectures on PMDs now building
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
