@@ -47,7 +47,9 @@ dpdk (18.11-rc3-1~git1.1) UNRELEASED; urgency=medium
     in client mode. Please switch to server mode.
 
   [ Christian Ehrhardt ]
-  * d/p/fix-build-arch-defaults.patch: fix non x86 compilation and defaults
+  * d/p/0001-build-avoid-non-supported-march-on-ppc-meson.patch: fix ppc build
+  * d/p/0002-build-establish-an-invariant-machine-type.patch: avoid builder
+    dependent march selection
   * d/control: fix libnuma compile issues now available on armhf
   * d/rules: armhf has no default machine, set old default machine
   * d/control: enable more architectures on PMDs now building
