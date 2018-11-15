@@ -1,0 +1,24 @@
+Description: build: set -mfpu=neon flag for armv7a builds
+ Building on armv7a with meson currenctly fails:
+
+ /usr/lib/gcc/arm-linux-gnueabihf/8/include/arm_neon.h:10369:1: error:
+    inlining failed in call to always_inline ‘vld1q_s32’: target
+    specific option mismatch
+
+ Set -mfpu=neon on that architecture like the legacy makefiles do to fix
+ the issue.
+Forwarded: yes
+Author: Luca Boccassi <bluca@debian.org>
+Last-Update: 2018-11-15
+--- a/config/arm/meson.build
++++ b/config/arm/meson.build
+@@ -89,6 +89,9 @@ if cc.sizeof('void *') != 8
+ 	dpdk_conf.set('RTE_CACHE_LINE_SIZE', 64)
+ 	dpdk_conf.set('RTE_ARCH_ARM', 1)
+ 	dpdk_conf.set('RTE_ARCH_ARMv7', 1)
++	# the minimum architecture supported, armv7-a, needs the following,
++	# mk/machine/armv7a/rte.vars.mk sets it too
++	machine_args += '-mfpu=neon'
+ else
+ 	dpdk_conf.set('RTE_CACHE_LINE_SIZE', 128)
+ 	dpdk_conf.set('RTE_ARCH_ARM64', 1)

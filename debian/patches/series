@@ -1,2 +1,3 @@
 0001-build-avoid-non-supported-march-on-ppc-meson.patch
 0002-build-establish-an-invariant-machine-type.patch
+0003-build-set-mfpu-neon-flag-for-armv7a-builds.patch
