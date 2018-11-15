@@ -630,7 +630,7 @@ Description: Data Plane Development Kit (librte-pmd-bond runtime library)
  This package contains the runtime libraries for librte_pmd_bond.
 
 Package: librte-pmd-caam-jr18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/cryptodevs/caam_jr.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -643,7 +643,7 @@ Description: Data Plane Development Kit (librte-pmd-caam-jr runtime library)
  This package contains the runtime libraries for librte_pmd_caam_jr.
 
 Package: librte-pmd-ccp18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/cryptodevs/ccp.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -656,7 +656,7 @@ Description: Data Plane Development Kit (librte-pmd-cpp runtime library)
  This package contains the runtime libraries for librte_pmd_ccp.
 
 Package: librte-pmd-cxgbe18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/cxgbe.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -786,7 +786,7 @@ Description: Data Plane Development Kit (librte-pmd-dsw-event runtime library)
  This package contains the runtime libraries for librte_dsw_event.
 
 Package: librte-pmd-e1000-18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/e1000em.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -825,7 +825,7 @@ Description: Data Plane Development Kit (librte-pmd-ena runtime library)
  This package contains the runtime libraries for librte_pmd_ena.
 
 Package: librte-pmd-enic18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/enic.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -851,7 +851,7 @@ Description: Data Plane Development Kit (librte-pmd-failsafe runtime library)
  This package contains the runtime libraries for librte_pmd_failsafe.
 
 Package: librte-pmd-fm10k18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/fm10k.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -864,7 +864,7 @@ Description: Data Plane Development Kit (librte-pmd-fm10k runtime library)
  This package contains the runtime libraries for librte_pmd_fm10k.
 
 Package: librte-pmd-i40e18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/i40e.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -877,7 +877,7 @@ Description: Data Plane Development Kit (librte-pmd-i40e runtime library)
  This package contains the runtime libraries for librte_pmd_i40e.
 
 Package: librte-pmd-ixgbe18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/ixgbe.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -941,7 +941,7 @@ Description: Data Plane Development Kit (librte-pmd-pcap runtime library)
  This package contains the runtime libraries for librte_pmd_pcap.
 
 Package: librte-pmd-openssl18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/cryptodevs/openssl.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -1007,7 +1007,7 @@ Description: Data Plane Development Kit (librte-pmd-virtio runtime library)
  This package contains the runtime libraries for librte_pmd_virtio.
 
 Package: librte-pmd-vmxnet3-18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/vmxnet3.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -1045,7 +1045,7 @@ Description: Data Plane Development Kit (librte-pmd-qat runtime library)
  This package contains the runtime libraries for librte_pmd_qat.
 
 Package: librte-pmd-qede18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/qede.html
 Pre-Depends: ${misc:Pre-Depends}
@@ -1349,7 +1349,7 @@ Description: Data Plane Development Kit (librte_pmd_aesni_mb runtime library)
  This package contains the runtime libraries for librte_pmd_aesni_mb.
 
 Package: librte-pmd-ark18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
@@ -1373,7 +1373,7 @@ Description: Data Plane Development Kit (librte_pmd_avf runtime library)
  This package contains the runtime libraries for librte_pmd_avf.
 
 Package: librte-pmd-avp18.11
-Architecture: amd64 arm64 i386 ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/avp.html
 Pre-Depends: ${misc:Pre-Depends}
