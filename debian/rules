@@ -86,7 +86,7 @@ override_dh_gencontrol:
 	# list for libdpdk-dev to avoid having to maintain it manually.
 	# Same for the recommends list for dpdk, were we want the PMDs and the mempools.
 	dh_gencontrol -p libdpdk-dev -- -V"librte:Depends=`grep -E 'librte-*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
-	dh_gencontrol -p dpdk -- -V"librte:Recommends=`grep -E 'librte-(pmd|mempool).*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p dpdk -- -V"librte:Suggests=`grep -E 'librte-(pmd|mempool).*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
 ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
 	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
 		-v`cat debian/VERSION` \
