@@ -12,14 +12,14 @@ ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
 	export DH_OPTIONS=-v
 endif
 
-# default to minimal base, without setting this it would build
-# -march=native which is a non portable invariant
-RTE_MACHINE ?= "default"
 # People rebuilding this package can overwrite RTE_MACHINE
 # via DEB_BUILD_OPTIONS if they like
 ifneq (,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
     RTE_MACHINE ?= $(patsubst rte_machine=%,%,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
 endif
+# default to minimal base, without setting this it would build
+# -march=native which is a non portable invariant
+RTE_MACHINE ?= "default"
 
 # now stable with parallel comilation, so support -j
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
