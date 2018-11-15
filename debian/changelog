@@ -53,6 +53,8 @@ dpdk (18.11-rc3-1~git1.1ppa2) disco; urgency=medium
   * d/control: fix libnuma compile issues now available on armhf
   * d/rules: select upstream declared baseline as RTE_MACHINE
   * d/control: enable more architectures on PMDs now building
+  * d/control, d/control.modules.in, d/dpdk.install, d/dpdk-doc.install: apply
+    wrap-and-sort --wrap-always --trailing-comma to keep down change noise
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
