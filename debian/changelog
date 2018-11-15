@@ -1,4 +1,4 @@
-dpdk (18.11-rc3-1~git1.1ppa2) disco; urgency=medium
+dpdk (18.11-rc3-1~git1.1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 18.11; for a full list of changes see:
