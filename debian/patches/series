@@ -1,1 +1,2 @@
-fix-build-arch-defaults.patch
+0001-build-avoid-non-supported-march-on-ppc-meson.patch
+0002-build-establish-an-invariant-machine-type.patch

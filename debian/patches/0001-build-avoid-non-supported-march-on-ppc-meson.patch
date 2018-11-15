@@ -1,0 +1,42 @@
+From b43de46c21b7691c087e980f67814e4c59d2213c Mon Sep 17 00:00:00 2001
+From: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Date: Wed, 14 Nov 2018 12:12:45 +0100
+Subject: [PATCH 1/2] build: avoid non supported -march on ppc (meson)
+
+So far only if machine was "native" it did use the re-direction to
+not set -march on ppc64 (where -march is not supported).
+We have to use mcpu/mtune in any case on ppc for whatever someone using
+the build system defines as machine.
+
+Fixes: 54d609a13876 ("build: add ppc64 meson build")
+
+Acked-by: Luca Boccassi <bluca@debian.org>
+Signed-off-by: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+
+Forwarded: yes
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Last-Update: 2018-11-15
+
+---
+ config/meson.build | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/config/meson.build b/config/meson.build
+index 0b710b795..1af305f46 100644
+--- a/config/meson.build
++++ b/config/meson.build
+@@ -9,8 +9,9 @@ else
+ endif
+ dpdk_conf.set('RTE_MACHINE', machine)
+ machine_args = []
+-# ppc64 does not support -march=native
+-if host_machine.cpu_family().startswith('ppc') and machine == 'native'
++
++# ppc64 does not support -march= at all, use -mcpu and -mtune for that
++if host_machine.cpu_family().startswith('ppc')
+ 	machine_args += '-mcpu=' + machine
+ 	machine_args += '-mtune=' + machine
+ else
+-- 
+2.17.1
+
