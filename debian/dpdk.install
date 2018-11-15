@@ -1,9 +1,9 @@
-debian/interfaces	etc/dpdk/
 debian/dpdk-init	lib/dpdk/
 debian/dpdk.conf	etc/dpdk/
-usr/bin
+debian/interfaces	etc/dpdk/
 obj-*/test/test/dpdk-test usr/bin/
 test/test/autotest.py usr/share/dpdk/test/
 test/test/autotest_data.py usr/share/dpdk/test/
 test/test/autotest_runner.py usr/share/dpdk/test/
 test/test/autotest_test_funcs.py usr/share/dpdk/test/
+usr/bin
