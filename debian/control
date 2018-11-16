@@ -110,6 +110,7 @@ Section: kernel
 Architecture: amd64 arm64 i386 ppc64el
 Depends: dkms,
          libdpdk-dev (= ${binary:Version}),
+         libelf-dev,
          make,
          ${misc:Depends},
 Description: Data Plane Development Kit (igb uio dkms)
@@ -123,6 +124,7 @@ Section: kernel
 Architecture: amd64 arm64 i386 ppc64el
 Depends: dkms,
          libdpdk-dev (= ${binary:Version}),
+         libelf-dev,
          make,
          ${misc:Depends},
 Description: Data Plane Development Kit (rte kni dkms)
