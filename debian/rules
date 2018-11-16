@@ -39,6 +39,15 @@ BUILD_DOCS=y
 endif
 endif
 
+# Allow to pass specific configure flags to meson as a comma separated list
+ifneq (,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS)))
+# GNU Makefile hack: can't directly escape comma and spaces, so use variables
+    comma := ,
+    space :=
+    space +=
+    DPDK_CONFIG_OPTIONS ?= $(subst $(comma),$(space),$(patsubst dpdk_config_options=%,%,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS))))
+endif
+
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
 # optional binary kernel modules package. By default it will be built against
 # the current kernel, or ksrc can be passed with a path to the target kernel
@@ -101,7 +110,7 @@ override_dh_auto_clean:
 	dh_auto_clean
 
 override_dh_auto_configure:
-	dh_auto_configure -- \
+	dh_auto_configure -- $(DPDK_CONFIG_OPTIONS) \
 		--includedir=include/dpdk \
 		-Dper_library_versions=false \
 		-Dinclude_subdir_arch=../$(DEB_HOST_MULTIARCH)/dpdk \
