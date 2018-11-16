@@ -1,7 +1,7 @@
 PACKAGE_NAME="dpdk-rte-kni"
 PACKAGE_VERSION="#MODULE_VERSION#"
 BUILT_MODULE_NAME[0]="rte_kni"
-MAKE="make -C $kernel_source_dir M=$dkms_tree/$PACKAGE_NAME/$PACKAGE_VERSION/build src=$source_tree/$PACKAGE_NAME-$PACKAGE_VERSION MODULE_CFLAGS='-I/usr/include/@@DEB_HOST_MULTIARCH@@/dpdk -include /usr/include/@@DEB_HOST_MULTIARCH@@/dpdk/rte_config.h -I/usr/include/dpdk -I$source_tree/$PACKAGE_NAME-$PACKAGE_VERSION/ethtool/ixgbe -I$source_tree/$PACKAGE_NAME-$PACKAGE_VERSION/ethtool/igb -fno-PIE' modules"
+MAKE="make -C $kernel_source_dir M=$dkms_tree/$PACKAGE_NAME/$PACKAGE_VERSION/build src=$source_tree/$PACKAGE_NAME-$PACKAGE_VERSION MODULE_CFLAGS='-I/usr/include/@@DEB_HOST_MULTIARCH@@/dpdk -include /usr/include/@@DEB_HOST_MULTIARCH@@/dpdk/rte_config.h -I/usr/include/dpdk -I$source_tree/$PACKAGE_NAME-$PACKAGE_VERSION/ethtool/ixgbe -I$source_tree/$PACKAGE_NAME-$PACKAGE_VERSION/ethtool/igb -I$source_tree/$PACKAGE_NAME-$PACKAGE_VERSION -fno-PIE' modules"
 CLEAN="make -C $kernel_source_dir M=$dkms_tree/$PACKAGE_NAME/$PACKAGE_VERSION/build clean"
 DEST_MODULE_LOCATION[0]="/updates/dkms"
 AUTOINSTALL="YES"
