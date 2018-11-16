@@ -57,6 +57,9 @@ dpdk (18.11-rc3-1~git1.1) UNRELEASED; urgency=medium
   * d/control: enable more architectures on PMDs now building
   * d/control, d/control.modules.in, d/dpdk.install, d/dpdk-doc.install: apply
     wrap-and-sort --wrap-always --trailing-comma to keep down change noise
+  * d/dpdk-rte-kni-dkms.dkms.in: fix dkms build in newer kernels by adding a
+    path for its own kni_fifo.h
+  * d/control: enhance dkms builds by depending on libelf-dev
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
