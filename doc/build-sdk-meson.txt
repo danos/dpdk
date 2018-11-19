@@ -132,7 +132,7 @@ Installing the Compiled Files
 
 Use ``ninja install`` to install the required DPDK files onto the system.
 The install prefix defaults to ``/usr/local`` but can be used as with other
-options above. The environment variable ``DEST_DIR`` can be used to adjust
+options above. The environment variable ``DESTDIR`` can be used to adjust
 the root directory for the install, for example when packaging.
 
 With the base install directory, the individual directories for libraries
@@ -203,3 +203,9 @@ From examples/helloworld/Makefile::
 
 	build:
 		@mkdir -p $@
+
+NOTE: for --static builds, DPDK needs to be built with Meson >= 0.46 in order to
+fully generate the list of private dependencies. If DPDK is built with an older
+version of Meson, it might be necessary to manually specify dependencies of DPDK
+PMDs/libraries, for example -lmlx5 -lmnl for librte-pmd-mlx5, or the static link
+step might fail.

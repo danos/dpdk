@@ -160,6 +160,9 @@ struct tc_tunnel_key {
 #ifndef TCA_CLS_FLAGS_SKIP_SW
 #define TCA_CLS_FLAGS_SKIP_SW (1 << 1)
 #endif
+#ifndef TCA_CLS_FLAGS_IN_HW
+#define TCA_CLS_FLAGS_IN_HW (1 << 2)
+#endif
 #ifndef HAVE_TCA_CHAIN
 #define TCA_CHAIN 11
 #endif
@@ -3699,6 +3702,8 @@ override_na_vlan_priority:
 	assert(na_flower);
 	assert(na_flower_act);
 	mnl_attr_nest_end(nlh, na_flower_act);
+	dev_flow->tcf.ptc_flags = mnl_attr_get_payload
+					(mnl_nlmsg_get_payload_tail(nlh));
 	mnl_attr_put_u32(nlh, TCA_FLOWER_FLAGS,	decap.vxlan ?
 						0 : TCA_CLS_FLAGS_SKIP_SW);
 	mnl_attr_nest_end(nlh, na_flower);
@@ -3717,10 +3722,6 @@ override_na_vlan_priority:
  * @param nlh
  *   Message to send. This function always raises the NLM_F_ACK flag before
  *   sending.
- * @param[in] msglen
- *   Message length. Message buffer may contain multiple commands and
- *   nlmsg_len field not always corresponds to actual message length.
- *   If 0 specified the nlmsg_len field in header is used as message length.
  * @param[in] cb
  *   Callback handler for received message.
  * @param[in] arg
@@ -3732,52 +3733,64 @@ override_na_vlan_priority:
 static int
 flow_tcf_nl_ack(struct mlx5_flow_tcf_context *tcf,
 		struct nlmsghdr *nlh,
-		uint32_t msglen,
 		mnl_cb_t cb, void *arg)
 {
 	unsigned int portid = mnl_socket_get_portid(tcf->nl);
 	uint32_t seq = tcf->seq++;
-	int err, ret;
+	int ret, err = 0;
 
 	assert(tcf->nl);
 	assert(tcf->buf);
-	if (!seq)
+	if (!seq) {
 		/* seq 0 is reserved for kernel event-driven notifications. */
 		seq = tcf->seq++;
-	nlh->nlmsg_seq = seq;
-	if (!msglen) {
-		msglen = nlh->nlmsg_len;
-		nlh->nlmsg_flags |= NLM_F_ACK;
 	}
-	ret = mnl_socket_sendto(tcf->nl, nlh, msglen);
-	err = (ret <= 0) ? errno : 0;
+	nlh->nlmsg_seq = seq;
+	nlh->nlmsg_flags |= NLM_F_ACK;
+	ret = mnl_socket_sendto(tcf->nl, nlh, nlh->nlmsg_len);
+	if (ret <= 0) {
+		/* Message send error occurres. */
+		rte_errno = errno;
+		return -rte_errno;
+	}
 	nlh = (struct nlmsghdr *)(tcf->buf);
 	/*
 	 * The following loop postpones non-fatal errors until multipart
 	 * messages are complete.
 	 */
-	if (ret > 0)
-		while (true) {
-			ret = mnl_socket_recvfrom(tcf->nl, tcf->buf,
-						  tcf->buf_size);
-			if (ret < 0) {
-				err = errno;
-				if (err != ENOSPC)
-					break;
-			}
-			if (!err) {
-				ret = mnl_cb_run(nlh, ret, seq, portid,
-						 cb, arg);
-				if (ret < 0) {
-					err = errno;
-					break;
-				}
-			}
-			/* Will receive till end of multipart message */
-			if (!(nlh->nlmsg_flags & NLM_F_MULTI) ||
-			      nlh->nlmsg_type == NLMSG_DONE)
+	while (true) {
+		ret = mnl_socket_recvfrom(tcf->nl, tcf->buf, tcf->buf_size);
+		if (ret < 0) {
+			err = errno;
+			/*
+			 * In case of overflow Will receive till
+			 * end of multipart message. We may lost part
+			 * of reply messages but mark and return an error.
+			 */
+			if (err != ENOSPC ||
+			    !(nlh->nlmsg_flags & NLM_F_MULTI) ||
+			    nlh->nlmsg_type == NLMSG_DONE)
 				break;
+		} else {
+			ret = mnl_cb_run(nlh, ret, seq, portid, cb, arg);
+			if (!ret) {
+				/*
+				 * libmnl returns 0 if DONE or
+				 * success ACK message found.
+				 */
+				break;
+			}
+			if (ret < 0) {
+				/*
+				 * ACK message with error found
+				 * or some error occurred.
+				 */
+				err = errno;
+				break;
+			}
+			/* We should continue receiving. */
 		}
+	}
 	if (!err)
 		return 0;
 	rte_errno = err;
@@ -3886,7 +3899,7 @@ flow_tcf_send_nlcmd(struct mlx5_flow_tcf_context *tcf,
 			nlh = (struct nlmsghdr *)&bc->msg[msg];
 			assert((bc->size - msg) >= nlh->nlmsg_len);
 			msg += nlh->nlmsg_len;
-			rc = flow_tcf_nl_ack(tcf, nlh, 0, NULL, NULL);
+			rc = flow_tcf_nl_ack(tcf, nlh, NULL, NULL);
 			if (rc) {
 				DRV_LOG(WARNING,
 					"netlink: cleanup error %d", rc);
@@ -4019,7 +4032,7 @@ flow_tcf_encap_local_cleanup(struct mlx5_flow_tcf_context *tcf,
 	ifa->ifa_family = AF_UNSPEC;
 	ifa->ifa_index = ifindex;
 	ifa->ifa_scope = RT_SCOPE_LINK;
-	ret = flow_tcf_nl_ack(tcf, nlh, 0, flow_tcf_collect_local_cb, &ctx);
+	ret = flow_tcf_nl_ack(tcf, nlh, flow_tcf_collect_local_cb, &ctx);
 	if (ret)
 		DRV_LOG(WARNING, "netlink: query device list error %d", ret);
 	ret = flow_tcf_send_nlcmd(tcf, &ctx);
@@ -4140,7 +4153,7 @@ flow_tcf_encap_neigh_cleanup(struct mlx5_flow_tcf_context *tcf,
 	ndm->ndm_family = AF_UNSPEC;
 	ndm->ndm_ifindex = ifindex;
 	ndm->ndm_state = NUD_PERMANENT;
-	ret = flow_tcf_nl_ack(tcf, nlh, 0, flow_tcf_collect_neigh_cb, &ctx);
+	ret = flow_tcf_nl_ack(tcf, nlh, flow_tcf_collect_neigh_cb, &ctx);
 	if (ret)
 		DRV_LOG(WARNING, "netlink: query device list error %d", ret);
 	ret = flow_tcf_send_nlcmd(tcf, &ctx);
@@ -4269,7 +4282,7 @@ flow_tcf_encap_iface_cleanup(struct mlx5_flow_tcf_context *tcf,
 	nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
 	ifm = mnl_nlmsg_put_extra_header(nlh, sizeof(*ifm));
 	ifm->ifi_family = AF_UNSPEC;
-	ret = flow_tcf_nl_ack(tcf, nlh, 0, flow_tcf_collect_vxlan_cb, &ctx);
+	ret = flow_tcf_nl_ack(tcf, nlh, flow_tcf_collect_vxlan_cb, &ctx);
 	if (ret)
 		DRV_LOG(WARNING, "netlink: query device list error %d", ret);
 	ret = flow_tcf_send_nlcmd(tcf, &ctx);
@@ -4341,7 +4354,7 @@ flow_tcf_rule_local(struct mlx5_flow_tcf_context *tcf,
 					  sizeof(encap->ipv6.dst),
 					  &encap->ipv6.dst);
 	}
-	if (!flow_tcf_nl_ack(tcf, nlh, 0, NULL, NULL))
+	if (!flow_tcf_nl_ack(tcf, nlh, NULL, NULL))
 		return 0;
 	return rte_flow_error_set(error, rte_errno,
 				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
@@ -4404,7 +4417,7 @@ flow_tcf_rule_neigh(struct mlx5_flow_tcf_context *tcf,
 	if (encap->mask & FLOW_TCF_ENCAP_ETH_DST)
 		mnl_attr_put(nlh, NDA_LLADDR, sizeof(encap->eth.dst),
 						    &encap->eth.dst);
-	if (!flow_tcf_nl_ack(tcf, nlh, 0, NULL, NULL))
+	if (!flow_tcf_nl_ack(tcf, nlh, NULL, NULL))
 		return 0;
 	return rte_flow_error_set(error, rte_errno,
 				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
@@ -4679,7 +4692,7 @@ flow_tcf_vtep_delete(struct mlx5_flow_tcf_context *tcf,
 		ifm->ifi_family = AF_UNSPEC;
 		ifm->ifi_index = vtep->ifindex;
 		assert(sizeof(buf) >= nlh->nlmsg_len);
-		ret = flow_tcf_nl_ack(tcf, nlh, 0, NULL, NULL);
+		ret = flow_tcf_nl_ack(tcf, nlh, NULL, NULL);
 		if (ret)
 			DRV_LOG(WARNING, "netlink: error deleting vxlan"
 					 " encap/decap ifindex %u",
@@ -4769,7 +4782,7 @@ flow_tcf_vtep_create(struct mlx5_flow_tcf_context *tcf,
 	mnl_attr_nest_end(nlh, na_vxlan);
 	mnl_attr_nest_end(nlh, na_info);
 	assert(sizeof(buf) >= nlh->nlmsg_len);
-	ret = flow_tcf_nl_ack(tcf, nlh, 0, NULL, NULL);
+	ret = flow_tcf_nl_ack(tcf, nlh, NULL, NULL);
 	if (ret) {
 		DRV_LOG(WARNING,
 			"netlink: VTEP %s create failure (%d)",
@@ -4811,7 +4824,7 @@ flow_tcf_vtep_create(struct mlx5_flow_tcf_context *tcf,
 	ifm->ifi_index = vtep->ifindex;
 	ifm->ifi_flags = IFF_UP;
 	ifm->ifi_change = IFF_UP;
-	ret = flow_tcf_nl_ack(tcf, nlh, 0, NULL, NULL);
+	ret = flow_tcf_nl_ack(tcf, nlh, NULL, NULL);
 	if (ret) {
 		rte_flow_error_set(error, -errno,
 				   RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
@@ -5069,6 +5082,172 @@ flow_tcf_vtep_release(struct mlx5_flow_tcf_context *tcf,
 	pthread_mutex_unlock(&vtep_list_mutex);
 }
 
+struct tcf_nlcb_query {
+	uint32_t handle;
+	uint32_t tc_flags;
+	uint32_t flags_valid:1;
+};
+
+/**
+ * Collect queried rule attributes. This is callback routine called by
+ * libmnl mnl_cb_run() in loop for every message in received packet.
+ * Current implementation collects the flower flags only.
+ *
+ * @param[in] nlh
+ *   Pointer to reply header.
+ * @param[in, out] arg
+ *   Context pointer for this callback.
+ *
+ * @return
+ *   A positive, nonzero value on success (required by libmnl
+ *   to continue messages processing).
+ */
+static int
+flow_tcf_collect_query_cb(const struct nlmsghdr *nlh, void *arg)
+{
+	struct tcf_nlcb_query *query = arg;
+	struct tcmsg *tcm = mnl_nlmsg_get_payload(nlh);
+	struct nlattr *na, *na_opt;
+	bool flower = false;
+
+	if (nlh->nlmsg_type != RTM_NEWTFILTER ||
+	    tcm->tcm_handle != query->handle)
+		return 1;
+	mnl_attr_for_each(na, nlh, sizeof(*tcm)) {
+		switch (mnl_attr_get_type(na)) {
+		case TCA_KIND:
+			if (strcmp(mnl_attr_get_payload(na), "flower")) {
+				/* Not flower filter, drop entire message. */
+				return 1;
+			}
+			flower = true;
+			break;
+		case TCA_OPTIONS:
+			if (!flower) {
+				/* Not flower options, drop entire message. */
+				return 1;
+			}
+			/* Check nested flower options. */
+			mnl_attr_for_each_nested(na_opt, na) {
+				switch (mnl_attr_get_type(na_opt)) {
+				case TCA_FLOWER_FLAGS:
+					query->flags_valid = 1;
+					query->tc_flags =
+						mnl_attr_get_u32(na_opt);
+					break;
+				}
+			}
+			break;
+		}
+	}
+	return 1;
+}
+
+/**
+ * Query a TC flower rule flags via netlink.
+ *
+ * @param[in] tcf
+ *   Context object initialized by mlx5_flow_tcf_context_create().
+ * @param[in] dev_flow
+ *   Pointer to the flow.
+ * @param[out] pflags
+ *   pointer to the data retrieved by the query.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise.
+ */
+static int
+flow_tcf_query_flags(struct mlx5_flow_tcf_context *tcf,
+		     struct mlx5_flow *dev_flow,
+		     uint32_t *pflags)
+{
+	struct nlmsghdr *nlh;
+	struct tcmsg *tcm;
+	struct tcf_nlcb_query query = {
+		.handle = dev_flow->tcf.tcm->tcm_handle,
+	};
+
+	nlh = mnl_nlmsg_put_header(tcf->buf);
+	nlh->nlmsg_type = RTM_GETTFILTER;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+	tcm = mnl_nlmsg_put_extra_header(nlh, sizeof(*tcm));
+	memcpy(tcm, dev_flow->tcf.tcm, sizeof(*tcm));
+	/*
+	 * Ignore Netlink error for filter query operations.
+	 * The reply length is sent by kernel as errno.
+	 * Just check we got the flags option.
+	 */
+	flow_tcf_nl_ack(tcf, nlh, flow_tcf_collect_query_cb, &query);
+	if (!query.flags_valid) {
+		*pflags = 0;
+		return -ENOENT;
+	}
+	*pflags = query.tc_flags;
+	return 0;
+}
+
+/**
+ * Query and check the in_hw set for specified rule.
+ *
+ * @param[in] tcf
+ *   Context object initialized by mlx5_flow_tcf_context_create().
+ * @param[in] dev_flow
+ *   Pointer to the flow to check.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise.
+ */
+static int
+flow_tcf_check_inhw(struct mlx5_flow_tcf_context *tcf,
+		    struct mlx5_flow *dev_flow)
+{
+	uint32_t flags;
+	int ret;
+
+	ret = flow_tcf_query_flags(tcf, dev_flow, &flags);
+	if (ret)
+		return ret;
+	return  (flags & TCA_CLS_FLAGS_IN_HW) ? 0 : -ENOENT;
+}
+
+/**
+ * Remove flow from E-Switch by sending Netlink message.
+ *
+ * @param[in] dev
+ *   Pointer to Ethernet device.
+ * @param[in, out] flow
+ *   Pointer to the sub flow.
+ */
+static void
+flow_tcf_remove(struct rte_eth_dev *dev, struct rte_flow *flow)
+{
+	struct priv *priv = dev->data->dev_private;
+	struct mlx5_flow_tcf_context *ctx = priv->tcf_context;
+	struct mlx5_flow *dev_flow;
+	struct nlmsghdr *nlh;
+
+	if (!flow)
+		return;
+	dev_flow = LIST_FIRST(&flow->dev_flows);
+	if (!dev_flow)
+		return;
+	/* E-Switch flow can't be expanded. */
+	assert(!LIST_NEXT(dev_flow, next));
+	if (dev_flow->tcf.applied) {
+		nlh = dev_flow->tcf.nlh;
+		nlh->nlmsg_type = RTM_DELTFILTER;
+		nlh->nlmsg_flags = NLM_F_REQUEST;
+		flow_tcf_nl_ack(ctx, nlh, NULL, NULL);
+		if (dev_flow->tcf.tunnel) {
+			assert(dev_flow->tcf.tunnel->vtep);
+			flow_tcf_vtep_release(ctx,
+				dev_flow->tcf.tunnel->vtep,
+				dev_flow);
+			dev_flow->tcf.tunnel->vtep = NULL;
+		}
+		dev_flow->tcf.applied = 0;
+	}
+}
 
 /**
  * Apply flow to E-Switch by sending Netlink message.
@@ -5120,8 +5299,22 @@ flow_tcf_apply(struct rte_eth_dev *dev, struct rte_flow *flow,
 		*dev_flow->tcf.tunnel->ifindex_ptr =
 			dev_flow->tcf.tunnel->vtep->ifindex;
 	}
-	if (!flow_tcf_nl_ack(ctx, nlh, 0, NULL, NULL)) {
+	if (!flow_tcf_nl_ack(ctx, nlh, NULL, NULL)) {
 		dev_flow->tcf.applied = 1;
+		if (*dev_flow->tcf.ptc_flags & TCA_CLS_FLAGS_SKIP_SW)
+			return 0;
+		/*
+		 * Rule was applied without skip_sw flag set.
+		 * We should check whether the rule was acctually
+		 * accepted by hardware (have look at in_hw flag).
+		 */
+		if (flow_tcf_check_inhw(ctx, dev_flow)) {
+			flow_tcf_remove(dev, flow);
+			return rte_flow_error_set
+				(error, ENOENT,
+				 RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
+				 "netlink: rule has no in_hw flag set");
+		}
 		return 0;
 	}
 	if (dev_flow->tcf.tunnel) {
@@ -5134,45 +5327,6 @@ flow_tcf_apply(struct rte_eth_dev *dev, struct rte_flow *flow,
 	return rte_flow_error_set(error, rte_errno,
 				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
 				  "netlink: failed to create TC flow rule");
-}
-
-/**
- * Remove flow from E-Switch by sending Netlink message.
- *
- * @param[in] dev
- *   Pointer to Ethernet device.
- * @param[in, out] flow
- *   Pointer to the sub flow.
- */
-static void
-flow_tcf_remove(struct rte_eth_dev *dev, struct rte_flow *flow)
-{
-	struct priv *priv = dev->data->dev_private;
-	struct mlx5_flow_tcf_context *ctx = priv->tcf_context;
-	struct mlx5_flow *dev_flow;
-	struct nlmsghdr *nlh;
-
-	if (!flow)
-		return;
-	dev_flow = LIST_FIRST(&flow->dev_flows);
-	if (!dev_flow)
-		return;
-	/* E-Switch flow can't be expanded. */
-	assert(!LIST_NEXT(dev_flow, next));
-	if (dev_flow->tcf.applied) {
-		nlh = dev_flow->tcf.nlh;
-		nlh->nlmsg_type = RTM_DELTFILTER;
-		nlh->nlmsg_flags = NLM_F_REQUEST;
-		flow_tcf_nl_ack(ctx, nlh, 0, NULL, NULL);
-		if (dev_flow->tcf.tunnel) {
-			assert(dev_flow->tcf.tunnel->vtep);
-			flow_tcf_vtep_release(ctx,
-				dev_flow->tcf.tunnel->vtep,
-				dev_flow);
-			dev_flow->tcf.tunnel->vtep = NULL;
-		}
-		dev_flow->tcf.applied = 0;
-	}
 }
 
 /**
@@ -5494,7 +5648,7 @@ flow_tcf_nl_filter_parse_and_get(struct nlmsghdr *cnlh,
  *   Message received from Netlink.
  * @param[out] data
  *   Pointer to data area to be filled by the parsing routine.
- *   assumed to be a pinter to struct flow_tcf_stats_basic.
+ *   assumed to be a pointer to struct flow_tcf_stats_basic.
  *
  * @return
  *   MNL_CB_OK value.
@@ -5542,7 +5696,7 @@ flow_tcf_query_count(struct rte_eth_dev *dev,
 			  void *data,
 			  struct rte_flow_error *error)
 {
-	struct flow_tcf_stats_basic sb_data = { 0 };
+	struct flow_tcf_stats_basic sb_data;
 	struct rte_flow_query_count *qc = data;
 	struct priv *priv = dev->data->dev_private;
 	struct mlx5_flow_tcf_context *ctx = priv->tcf_context;
@@ -5553,6 +5707,7 @@ flow_tcf_query_count(struct rte_eth_dev *dev,
 	ssize_t ret;
 	assert(qc);
 
+	memset(&sb_data, 0, sizeof(sb_data));
 	dev_flow = LIST_FIRST(&flow->dev_flows);
 	/* E-Switch flow can't be expanded. */
 	assert(!LIST_NEXT(dev_flow, next));
@@ -5714,7 +5869,7 @@ mlx5_flow_tcf_init(struct mlx5_flow_tcf_context *ctx,
 	tcm->tcm_parent = TC_H_INGRESS;
 	assert(sizeof(buf) >= nlh->nlmsg_len);
 	/* Ignore errors when qdisc is already absent. */
-	if (flow_tcf_nl_ack(ctx, nlh, 0, NULL, NULL) &&
+	if (flow_tcf_nl_ack(ctx, nlh, NULL, NULL) &&
 	    rte_errno != EINVAL && rte_errno != ENOENT)
 		return rte_flow_error_set(error, rte_errno,
 					  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
@@ -5731,7 +5886,7 @@ mlx5_flow_tcf_init(struct mlx5_flow_tcf_context *ctx,
 	tcm->tcm_parent = TC_H_INGRESS;
 	mnl_attr_put_strz_check(nlh, sizeof(buf), TCA_KIND, "ingress");
 	assert(sizeof(buf) >= nlh->nlmsg_len);
-	if (flow_tcf_nl_ack(ctx, nlh, 0, NULL, NULL))
+	if (flow_tcf_nl_ack(ctx, nlh, NULL, NULL))
 		return rte_flow_error_set(error, rte_errno,
 					  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
 					  "netlink: failed to create ingress"

@@ -233,7 +233,7 @@ F: drivers/net/ixgbe/ixgbe_rxtx_vec_neon.c
 F: drivers/net/i40e/i40e_rxtx_vec_neon.c
 F: drivers/net/virtio/virtio_rxtx_simple_neon.c
 
-IBM POWER
+IBM POWER (alpha)
 M: Chao Zhu <chaozhu@linux.vnet.ibm.com>
 F: lib/librte_eal/common/arch/ppc_64/
 F: lib/librte_eal/common/include/arch/ppc_64/
@@ -347,7 +347,7 @@ F: lib/librte_cryptodev/
 F: test/test/test_cryptodev*
 F: examples/l2fwd-crypto/
 
-Security API - EXPERIMENTAL
+Security API
 M: Akhil Goyal <akhil.goyal@nxp.com>
 M: Declan Doherty <declan.doherty@intel.com>
 T: git://dpdk.org/next/dpdk-next-crypto

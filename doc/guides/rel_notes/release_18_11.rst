@@ -279,6 +279,25 @@ New Features
   their telemetry via a UNIX socket in JSON. The JSON can be consumed by any
   Service Assurance agent, such as CollectD.
 
+* **Updated KNI kernel module, rte_kni library, and KNI sample application.**
+
+  Updated the KNI kernel module with a new kernel module parameter,
+  ``carrier=[on|off]`` to allow the user to control the default carrier
+  state of KNI kernel network interfaces.  The default carrier state
+  is now set to ``off``, so the interfaces cannot be used until the
+  carrier state is set to ``on`` via ``rte_kni_update_link`` or
+  by writing ``1`` to ``/sys/devices/virtual/net/<iface>/carrier``.
+  In previous versions the default carrier state was left undefined.
+  See :doc:`../prog_guide/kernel_nic_interface` for more information.
+
+  Added the new API function ``rte_kni_update_link`` to allow the user
+  to set the carrier state of the KNI kernel network interface.
+
+  Added a new command line flag ``-m`` to the KNI sample application to
+  monitor and automatically reflect the physical NIC carrier state to the
+  KNI kernel network interface with the new ``rte_kni_update_link`` API.
+  See :doc:`../sample_app_ug/kernel_nic_interface` for more information.
+
 * **Added ability to switch queue deferred start flag on testpmd app.**
 
   Added a console command to testpmd app, giving ability to switch
@@ -384,6 +403,20 @@ API Changes
 
 * eventdev: Type of 2nd parameter to ``rte_event_eth_rx_adapter_caps_get()``
   has been changed from uint8_t to uint16_t.
+
+* kni: By default, interface carrier status is ``off`` which means there won't
+  be any traffic. It can be set to ``on`` via ``rte_kni_update_link()`` API
+  or via ``sysfs`` interface:
+  ``echo 1 > /sys/class/net/vEth0/carrier``.
+  Note interface should be ``up`` to be able to read/write sysfs interface.
+  When KNI sample application is used, ``-m`` parameter can be used to
+  automatically update the carrier status for the interface.
+
+* kni: When ethtool support enabled (``CONFIG_RTE_KNI_KMOD_ETHTOOL=y``)
+  ethtool commands ``ETHTOOL_GSET & ETHTOOL_SSET`` are no more supported for the
+  kernels that has ``ETHTOOL_GLINKSETTINGS & ETHTOOL_SLINKSETTINGS`` support.
+  This means ``ethtool "-a|--show-pause", "-s|--change"`` won't work, and
+  ``ethtool <iface>`` output will have less information.
 
 
 ABI Changes
@@ -531,6 +564,8 @@ Known Issues
 * When using SR-IOV (VF) support with netvsc PMD and the Mellanox mlx5 bifurcated
   driver; the Linux netvsc device must be brought up before the netvsc device is
   unbound and passed to the DPDK.
+
+* IBM Power8 is not supported by this release of DPDK. IBM Power9 is supported.
 
 
 Tested Platforms

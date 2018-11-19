@@ -1468,6 +1468,8 @@ mlx5_rxq_new(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 	tmpl->rxq.mp = mp;
 	tmpl->rxq.stats.idx = idx;
 	tmpl->rxq.elts_n = log2above(desc);
+	tmpl->rxq.rq_repl_thresh =
+		MLX5_VPMD_RXQ_RPLNSH_THRESH(1 << tmpl->rxq.elts_n);
 	tmpl->rxq.elts =
 		(struct rte_mbuf *(*)[1 << tmpl->rxq.elts_n])(tmpl + 1);
 #ifndef RTE_ARCH_64
@@ -1782,7 +1784,7 @@ mlx5_hrxq_new(struct rte_eth_dev *dev,
 	struct mlx5_ind_table_ibv *ind_tbl;
 	struct ibv_qp *qp;
 #ifdef HAVE_IBV_DEVICE_TUNNEL_SUPPORT
-	struct mlx5dv_qp_init_attr qp_init_attr = {0};
+	struct mlx5dv_qp_init_attr qp_init_attr;
 #endif
 	int err;
 
@@ -1795,6 +1797,7 @@ mlx5_hrxq_new(struct rte_eth_dev *dev,
 		return NULL;
 	}
 #ifdef HAVE_IBV_DEVICE_TUNNEL_SUPPORT
+	memset(&qp_init_attr, 0, sizeof(qp_init_attr));
 	if (tunnel) {
 		qp_init_attr.comp_mask =
 				MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
