@@ -46,16 +46,12 @@ dpdk (18.11-rc3-1~git1.1) UNRELEASED; urgency=medium
     tmpfix-ppc-build-error.patch. The latter has been fixed upstream,
     and the former is not needed as we no longer support vhost-user
     in client mode. Please switch to server mode.
-  * d/p/0003-build-set-mfpu-neon-flag-for-armv7a-builds.patch: fix armhf build
   * Add new DEB_BUILD_OPTIONS dpdk_config_options that accepts a comma
     separated list (no spaces) of additional DPDK build configure options that
     will be passed to Meson. Substitutes support for custom legacy Makefile
     config files.
 
   [ Christian Ehrhardt ]
-  * d/p/0001-build-avoid-non-supported-march-on-ppc-meson.patch: fix ppc build
-  * d/p/0002-build-establish-an-invariant-machine-type.patch: avoid builder
-    dependent march selection
   * d/control: fix libnuma compile issues now available on armhf
   * d/rules: select upstream declared baseline as RTE_MACHINE
   * d/control: enable more architectures on PMDs now building
