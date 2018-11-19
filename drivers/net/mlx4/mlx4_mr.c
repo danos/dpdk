@@ -354,8 +354,9 @@ mr_insert_dev_cache(struct rte_eth_dev *dev, struct mlx4_mr *mr)
 	DEBUG("port %u inserting MR(%p) to global cache",
 	      dev->data->port_id, (void *)mr);
 	for (n = 0; n < mr->ms_bmp_n; ) {
-		struct mlx4_mr_cache entry = { 0, };
+		struct mlx4_mr_cache entry;
 
+		memset(&entry, 0, sizeof(entry));
 		/* Find a contiguous chunk and advance the index. */
 		n = mr_find_next_chunk(mr, &entry, n);
 		if (!entry.end)
@@ -398,8 +399,9 @@ mr_lookup_dev_list(struct rte_eth_dev *dev, struct mlx4_mr_cache *entry,
 		if (mr->ms_n == 0)
 			continue;
 		for (n = 0; n < mr->ms_bmp_n; ) {
-			struct mlx4_mr_cache ret = { 0, };
+			struct mlx4_mr_cache ret;
 
+			memset(&ret, 0, sizeof(ret));
 			n = mr_find_next_chunk(mr, &ret, n);
 			if (addr >= ret.start && addr < ret.end) {
 				/* Found. */
@@ -571,7 +573,7 @@ mlx4_mr_create(struct rte_eth_dev *dev, struct mlx4_mr_cache *entry,
 	 * Find out a contiguous virtual address chunk in use, to which the
 	 * given address belongs, in order to register maximum range. In the
 	 * best case where mempools are not dynamically recreated and
-	 * '--socket-mem' is speicified as an EAL option, it is very likely to
+	 * '--socket-mem' is specified as an EAL option, it is very likely to
 	 * have only one MR(LKey) per a socket and per a hugepage-size even
 	 * though the system memory is highly fragmented.
 	 */
@@ -688,8 +690,9 @@ alloc_resources:
 	 */
 	for (n = 0; n < ms_n; ++n) {
 		uintptr_t start;
-		struct mlx4_mr_cache ret = { 0, };
+		struct mlx4_mr_cache ret;
 
+		memset(&ret, 0, sizeof(ret));
 		start = data_re.start + n * msl->page_sz;
 		/* Exclude memsegs already registered by other MRs. */
 		if (mr_lookup_dev(dev, &ret, start) == UINT32_MAX) {
@@ -1039,7 +1042,7 @@ mlx4_rx_addr2mr_bh(struct rxq *rxq, uintptr_t addr)
  * @return
  *   Searched LKey on success, UINT32_MAX on no match.
  */
-uint32_t
+static uint32_t
 mlx4_tx_addr2mr_bh(struct txq *txq, uintptr_t addr)
 {
 	struct mlx4_mr_ctrl *mr_ctrl = &txq->mr_ctrl;
@@ -1048,6 +1051,32 @@ mlx4_tx_addr2mr_bh(struct txq *txq, uintptr_t addr)
 	DEBUG("Tx queue %u: miss on top-half, mru=%u, head=%u, addr=%p",
 	      txq->stats.idx, mr_ctrl->mru, mr_ctrl->head, (void *)addr);
 	return mlx4_mr_addr2mr_bh(priv->dev, mr_ctrl, addr);
+}
+
+/**
+ * Bottom-half of LKey search on Tx. If it can't be searched in the memseg
+ * list, register the mempool of the mbuf as externally allocated memory.
+ *
+ * @param txq
+ *   Pointer to Tx queue structure.
+ * @param mb
+ *   Pointer to mbuf.
+ *
+ * @return
+ *   Searched LKey on success, UINT32_MAX on no match.
+ */
+uint32_t
+mlx4_tx_mb2mr_bh(struct txq *txq, struct rte_mbuf *mb)
+{
+	uintptr_t addr = (uintptr_t)mb->buf_addr;
+	uint32_t lkey;
+
+	lkey = mlx4_tx_addr2mr_bh(txq, addr);
+	if (lkey == UINT32_MAX && rte_errno == ENXIO) {
+		/* Mempool may have externally allocated memory. */
+		return mlx4_tx_update_ext_mp(txq, addr, mlx4_mb2mp(mb));
+	}
+	return lkey;
 }
 
 /**
@@ -1277,8 +1306,9 @@ mlx4_mr_dump_dev(struct rte_eth_dev *dev)
 		if (mr->ms_n == 0)
 			continue;
 		for (n = 0; n < mr->ms_bmp_n; ) {
-			struct mlx4_mr_cache ret = { 0, };
+			struct mlx4_mr_cache ret;
 
+			memset(&ret, 0, sizeof(ret));
 			n = mr_find_next_chunk(mr, &ret, n);
 			if (!ret.end)
 				break;

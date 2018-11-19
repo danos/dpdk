@@ -101,6 +101,7 @@ struct mlx5_rxq_data {
 	uint16_t consumed_strd; /* Number of consumed strides in WQE. */
 	uint32_t rq_pi;
 	uint32_t cq_ci;
+	uint16_t rq_repl_thresh; /* Threshold for buffer replenishment. */
 	struct mlx5_mr_ctrl mr_ctrl; /* MR control descriptor. */
 	uint16_t mprq_max_memcpy_len; /* Maximum size of packet to memcpy. */
 	volatile void *wqes;
@@ -363,7 +364,7 @@ uint16_t mlx5_rx_burst_vec(void *dpdk_txq, struct rte_mbuf **pkts,
 
 void mlx5_mr_flush_local_cache(struct mlx5_mr_ctrl *mr_ctrl);
 uint32_t mlx5_rx_addr2mr_bh(struct mlx5_rxq_data *rxq, uintptr_t addr);
-uint32_t mlx5_tx_addr2mr_bh(struct mlx5_txq_data *txq, uintptr_t addr);
+uint32_t mlx5_tx_mb2mr_bh(struct mlx5_txq_data *txq, struct rte_mbuf *mb);
 uint32_t mlx5_tx_update_ext_mp(struct mlx5_txq_data *txq, uintptr_t addr,
 			       struct rte_mempool *mp);
 
@@ -379,17 +380,16 @@ uint32_t mlx5_tx_update_ext_mp(struct mlx5_txq_data *txq, uintptr_t addr,
  *   Address of the lock to use for that UAR access.
  */
 static __rte_always_inline void
-__mlx5_uar_write64_relaxed(uint64_t val, volatile void *addr,
+__mlx5_uar_write64_relaxed(uint64_t val, void *addr,
 			   rte_spinlock_t *lock __rte_unused)
 {
 #ifdef RTE_ARCH_64
-	rte_write64_relaxed(val, addr);
+	*(uint64_t *)addr = val;
 #else /* !RTE_ARCH_64 */
 	rte_spinlock_lock(lock);
-	rte_write32_relaxed(val, addr);
+	*(uint32_t *)addr = val;
 	rte_io_wmb();
-	rte_write32_relaxed(val >> 32,
-			    (volatile void *)((volatile char *)addr + 4));
+	*((uint32_t *)addr + 1) = val >> 32;
 	rte_spinlock_unlock(lock);
 #endif
 }
@@ -407,7 +407,7 @@ __mlx5_uar_write64_relaxed(uint64_t val, volatile void *addr,
  *   Address of the lock to use for that UAR access.
  */
 static __rte_always_inline void
-__mlx5_uar_write64(uint64_t val, volatile void *addr, rte_spinlock_t *lock)
+__mlx5_uar_write64(uint64_t val, void *addr, rte_spinlock_t *lock)
 {
 	rte_io_wmb();
 	__mlx5_uar_write64_relaxed(val, addr, lock);
@@ -619,7 +619,7 @@ mlx5_tx_complete(struct mlx5_txq_data *txq)
  * @return
  *   Memory pool where data is located for given mbuf.
  */
-static struct rte_mempool *
+static inline struct rte_mempool *
 mlx5_mb2mp(struct rte_mbuf *buf)
 {
 	if (unlikely(RTE_MBUF_INDIRECT(buf)))
@@ -668,9 +668,10 @@ mlx5_rx_addr2mr(struct mlx5_rxq_data *rxq, uintptr_t addr)
  *   Searched LKey on success, UINT32_MAX on no match.
  */
 static __rte_always_inline uint32_t
-mlx5_tx_addr2mr(struct mlx5_txq_data *txq, uintptr_t addr)
+mlx5_tx_mb2mr(struct mlx5_txq_data *txq, struct rte_mbuf *mb)
 {
 	struct mlx5_mr_ctrl *mr_ctrl = &txq->mr_ctrl;
+	uintptr_t addr = (uintptr_t)mb->buf_addr;
 	uint32_t lkey;
 
 	/* Check generation bit to see if there's any change on existing MRs. */
@@ -681,23 +682,8 @@ mlx5_tx_addr2mr(struct mlx5_txq_data *txq, uintptr_t addr)
 				    MLX5_MR_CACHE_N, addr);
 	if (likely(lkey != UINT32_MAX))
 		return lkey;
-	/* Take slower bottom-half (binary search) on miss. */
-	return mlx5_tx_addr2mr_bh(txq, addr);
-}
-
-static __rte_always_inline uint32_t
-mlx5_tx_mb2mr(struct mlx5_txq_data *txq, struct rte_mbuf *mb)
-{
-	uintptr_t addr = (uintptr_t)mb->buf_addr;
-	uint32_t lkey = mlx5_tx_addr2mr(txq, addr);
-
-	if (likely(lkey != UINT32_MAX))
-		return lkey;
-	if (rte_errno == ENXIO) {
-		/* Mempool may have externally allocated memory. */
-		lkey = mlx5_tx_update_ext_mp(txq, addr, mlx5_mb2mp(mb));
-	}
-	return lkey;
+	/* Take slower bottom-half on miss. */
+	return mlx5_tx_mb2mr_bh(txq, mb);
 }
 
 /**

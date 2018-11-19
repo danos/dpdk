@@ -294,7 +294,7 @@ static struct mlx5_flow_tunnel_info tunnels_info[] = {
 	},
 	{
 		.tunnel = MLX5_FLOW_LAYER_MPLS | MLX5_FLOW_LAYER_OUTER_L4_UDP,
-		.ptype = RTE_PTYPE_TUNNEL_MPLS_IN_GRE | RTE_PTYPE_L4_UDP,
+		.ptype = RTE_PTYPE_TUNNEL_MPLS_IN_UDP | RTE_PTYPE_L4_UDP,
 	},
 	{
 		.tunnel = MLX5_FLOW_LAYER_MPLS,
@@ -1593,12 +1593,14 @@ mlx5_flow_validate_item_gre(const struct rte_flow_item *item,
 /**
  * Validate MPLS item.
  *
+ * @param[in] dev
+ *   Pointer to the rte_eth_dev structure.
  * @param[in] item
  *   Item specification.
  * @param[in] item_flags
  *   Bit-fields that holds the items detected until now.
- * @param[in] target_protocol
- *   The next protocol in the previous item.
+ * @param[in] prev_layer
+ *   The protocol layer indicated in previous item.
  * @param[out] error
  *   Pointer to error structure.
  *
@@ -1606,16 +1608,27 @@ mlx5_flow_validate_item_gre(const struct rte_flow_item *item,
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 int
-mlx5_flow_validate_item_mpls(const struct rte_flow_item *item __rte_unused,
+mlx5_flow_validate_item_mpls(struct rte_eth_dev *dev __rte_unused,
+			     const struct rte_flow_item *item __rte_unused,
 			     uint64_t item_flags __rte_unused,
-			     uint8_t target_protocol __rte_unused,
+			     uint64_t prev_layer __rte_unused,
 			     struct rte_flow_error *error)
 {
 #ifdef HAVE_IBV_DEVICE_MPLS_SUPPORT
 	const struct rte_flow_item_mpls *mask = item->mask;
+	struct priv *priv = dev->data->dev_private;
 	int ret;
 
-	if (target_protocol != 0xff && target_protocol != IPPROTO_MPLS)
+	if (!priv->config.mpls_en)
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "MPLS not supported or"
+					  " disabled in firmware"
+					  " configuration.");
+	/* MPLS over IP, UDP, GRE is allowed */
+	if (!(prev_layer & (MLX5_FLOW_LAYER_OUTER_L3 |
+			    MLX5_FLOW_LAYER_OUTER_L4_UDP |
+			    MLX5_FLOW_LAYER_GRE)))
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "protocol filtering not compatible"
@@ -2127,14 +2140,14 @@ static void
 flow_list_destroy(struct rte_eth_dev *dev, struct mlx5_flows *list,
 		  struct rte_flow *flow)
 {
-	flow_drv_destroy(dev, flow);
-	TAILQ_REMOVE(list, flow, next);
 	/*
 	 * Update RX queue flags only if port is started, otherwise it is
 	 * already clean.
 	 */
 	if (dev->data->dev_started)
 		flow_rxq_flags_trim(dev, flow);
+	flow_drv_destroy(dev, flow);
+	TAILQ_REMOVE(list, flow, next);
 	rte_free(flow->fdir);
 	rte_free(flow);
 }

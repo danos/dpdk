@@ -114,6 +114,9 @@
 #define IPPROTO_MPLS 137
 #endif
 
+/* UDP port number for MPLS */
+#define MLX5_UDP_PORT_MPLS 6635
+
 /* UDP port numbers for VxLAN. */
 #define MLX5_UDP_PORT_VXLAN 4789
 #define MLX5_UDP_PORT_VXLAN_GPE 4790
@@ -219,6 +222,7 @@ struct mlx5_flow_dv {
 struct mlx5_flow_tcf {
 	struct nlmsghdr *nlh;
 	struct tcmsg *tcm;
+	uint32_t *ptc_flags; /**< tc rule applied flags. */
 	union { /**< Tunnel encap/decap descriptor. */
 		struct flow_tcf_tunnel_hdr *tunnel;
 		struct flow_tcf_vxlan_decap *vxlan_decap;
@@ -381,9 +385,10 @@ int mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 int mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
 				 uint64_t item_flags,
 				 struct rte_flow_error *error);
-int mlx5_flow_validate_item_mpls(const struct rte_flow_item *item,
+int mlx5_flow_validate_item_mpls(struct rte_eth_dev *dev,
+				 const struct rte_flow_item *item,
 				 uint64_t item_flags,
-				 uint8_t target_protocol,
+				 uint64_t prev_layer,
 				 struct rte_flow_error *error);
 int mlx5_flow_validate_item_tcp(const struct rte_flow_item *item,
 				uint64_t item_flags,
