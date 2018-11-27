@@ -43,10 +43,6 @@ extern "C" {
 #include <rte_branch_prediction.h>
 #include <rte_prefetch.h>
 
-#ifndef RTE_BITMAP_OPTIMIZATIONS
-#define RTE_BITMAP_OPTIMIZATIONS		         1
-#endif
-
 /* Slab */
 #define RTE_BITMAP_SLAB_BIT_SIZE                 64
 #define RTE_BITMAP_SLAB_BIT_SIZE_LOG2            6
@@ -97,42 +93,11 @@ __rte_bitmap_index2_set(struct rte_bitmap *bmp)
 	bmp->index2 = (((bmp->index1 << RTE_BITMAP_SLAB_BIT_SIZE_LOG2) + bmp->offset1) << RTE_BITMAP_CL_SLAB_SIZE_LOG2);
 }
 
-#if RTE_BITMAP_OPTIMIZATIONS
-
-static inline int
+static inline int __rte_deprecated
 rte_bsf64(uint64_t slab, uint32_t *pos)
 {
-	if (likely(slab == 0)) {
-		return 0;
-	}
-
-	*pos = __builtin_ctzll(slab);
-	return 1;
+	return rte_bsf64_safe(slab, pos);
 }
-
-#else
-
-static inline int
-rte_bsf64(uint64_t slab, uint32_t *pos)
-{
-	uint64_t mask;
-	uint32_t i;
-
-	if (likely(slab == 0)) {
-		return 0;
-	}
-
-	for (i = 0, mask = 1; i < RTE_BITMAP_SLAB_BIT_SIZE; i ++, mask <<= 1) {
-		if (unlikely(slab & mask)) {
-			*pos = i;
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
-#endif
 
 static inline uint32_t
 __rte_bitmap_get_memory_footprint(uint32_t n_bits,
@@ -439,9 +404,8 @@ __rte_bitmap_scan_search(struct rte_bitmap *bmp)
 	value1 = bmp->array1[bmp->index1];
 	value1 &= __rte_bitmap_mask1_get(bmp);
 
-	if (rte_bsf64(value1, &bmp->offset1)) {
+	if (rte_bsf64_safe(value1, &bmp->offset1))
 		return 1;
-	}
 
 	__rte_bitmap_index1_inc(bmp);
 	bmp->offset1 = 0;
@@ -450,9 +414,8 @@ __rte_bitmap_scan_search(struct rte_bitmap *bmp)
 	for (i = 0; i < bmp->array1_size; i ++, __rte_bitmap_index1_inc(bmp)) {
 		value1 = bmp->array1[bmp->index1];
 
-		if (rte_bsf64(value1, &bmp->offset1)) {
+		if (rte_bsf64_safe(value1, &bmp->offset1))
 			return 1;
-		}
 	}
 
 	return 0;
