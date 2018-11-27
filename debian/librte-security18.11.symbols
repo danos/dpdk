@@ -1,6 +1,6 @@
 librte_security.so.18.11 librte-security18.11 #MINVER#
  DPDK_18.11@DPDK_18.11 18.11
-#MISSING: 18.11# EXPERIMENTAL@EXPERIMENTAL 17.11
+ EXPERIMENTAL@EXPERIMENTAL 18.11
  rte_security_capabilities_get@DPDK_18.11 18.11
 #MISSING: 18.11# rte_security_capabilities_get@EXPERIMENTAL 17.11
  rte_security_capability_get@DPDK_18.11 18.11
