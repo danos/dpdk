@@ -1,4 +1,4 @@
-dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
+dpdk (18.11-1) experimental; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 18.11; for a full list of changes see:
@@ -61,7 +61,9 @@ dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
     path for its own kni_fifo.h
   * d/control: enhance dkms builds by depending on libelf-dev
 
- -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
+  [ Luca Boccassi ]
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 27 Nov 2018 11:34:50 +0000
 
 dpdk (18.08-3) experimental; urgency=medium
 
