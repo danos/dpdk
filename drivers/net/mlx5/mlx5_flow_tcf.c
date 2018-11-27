@@ -1887,9 +1887,23 @@ flow_tcf_validate(struct rte_eth_dev *dev,
 		case RTE_FLOW_ACTION_TYPE_OF_POP_VLAN:
 			current_action_flag = MLX5_FLOW_ACTION_OF_POP_VLAN;
 			break;
-		case RTE_FLOW_ACTION_TYPE_OF_PUSH_VLAN:
+		case RTE_FLOW_ACTION_TYPE_OF_PUSH_VLAN: {
+			rte_be16_t ethertype;
+
 			current_action_flag = MLX5_FLOW_ACTION_OF_PUSH_VLAN;
+			if (!actions->conf)
+				break;
+			conf.of_push_vlan = actions->conf;
+			ethertype = conf.of_push_vlan->ethertype;
+			if (ethertype != RTE_BE16(ETH_P_8021Q) &&
+			    ethertype != RTE_BE16(ETH_P_8021AD))
+				return rte_flow_error_set
+					(error, EINVAL,
+					 RTE_FLOW_ERROR_TYPE_ACTION, actions,
+					 "vlan push TPID must be "
+					 "802.1Q or 802.1AD");
 			break;
+		}
 		case RTE_FLOW_ACTION_TYPE_OF_SET_VLAN_VID:
 			if (!(action_flags & MLX5_FLOW_ACTION_OF_PUSH_VLAN))
 				return rte_flow_error_set
@@ -3246,7 +3260,8 @@ flow_tcf_translate(struct rte_eth_dev *dev, struct mlx5_flow *dev_flow,
 			assert(mask.ipv4);
 			spec.ipv4 = items->spec;
 			if (!decap.vxlan) {
-				if (!eth_type_set && !vlan_eth_type_set)
+				if (!eth_type_set ||
+				    (!vlan_eth_type_set && vlan_present))
 					mnl_attr_put_u16
 						(nlh,
 						 vlan_present ?
@@ -3303,14 +3318,14 @@ flow_tcf_translate(struct rte_eth_dev *dev, struct mlx5_flow *dev_flow,
 			assert(mask.ipv6);
 			spec.ipv6 = items->spec;
 			if (!decap.vxlan) {
-				if (!eth_type_set || !vlan_eth_type_set) {
+				if (!eth_type_set ||
+				    (!vlan_eth_type_set && vlan_present))
 					mnl_attr_put_u16
 						(nlh,
 						 vlan_present ?
 						 TCA_FLOWER_KEY_VLAN_ETH_TYPE :
 						 TCA_FLOWER_KEY_ETH_TYPE,
 						 RTE_BE16(ETH_P_IPV6));
-				}
 				eth_type_set = 1;
 				vlan_eth_type_set = 1;
 				if (mask.ipv6 == &flow_tcf_mask_empty.ipv6)
