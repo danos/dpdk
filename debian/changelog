@@ -1,4 +1,4 @@
-dpdk (18.11-rc4-1~git1.1) UNRELEASED; urgency=medium
+dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 18.11; for a full list of changes see:
