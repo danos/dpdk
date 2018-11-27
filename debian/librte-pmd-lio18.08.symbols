@@ -1,4 +1,0 @@
-librte_pmd_lio.so.18.08 librte-pmd-lio18.08 #MINVER#
- DPDK_17.05@DPDK_17.05 17.05
-# INFO: this library exports no symbols, essentially it is a driver that
-# registers itself on load and is then only driven by callbacks.

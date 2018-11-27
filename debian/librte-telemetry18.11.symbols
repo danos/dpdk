@@ -1,0 +1,6 @@
+librte_telemetry.so.18.11 librte-telemetry18.11 #MINVER#
+ EXPERIMENTAL@EXPERIMENTAL 18.11
+ rte_telemetry_cleanup@EXPERIMENTAL 18.11
+ rte_telemetry_init@EXPERIMENTAL 18.11
+ rte_telemetry_parse@EXPERIMENTAL 18.11
+ rte_telemetry_selftest@EXPERIMENTAL 18.11

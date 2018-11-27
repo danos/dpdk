@@ -1,0 +1,4 @@
+librte_pmd_dpaa_event.so.18.11 librte-pmd-dpaa-event18.11 #MINVER#
+ DPDK_18.02@DPDK_18.02 18.05
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

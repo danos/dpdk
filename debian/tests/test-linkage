@@ -1,6 +1,6 @@
 #!/bin/bash
 set -eux
-binary="build/testlinkage"
+binary="testlinkage"
 
 basedir=$(dirname "$0")
 . "${basedir}"/check-dpdk-supported-arch.sh
@@ -16,39 +16,10 @@ int main(void)
 }
 EOF
 
-cat >  Makefile-testlinkage << 'EOF'
-# Based on examples/helloworld/Makefile
-
-ifeq ($(RTE_SDK),)
-$(error "Please define RTE_SDK environment variable")
-endif
-
-# Default target, can be overridden by command line or environment
-RTE_TARGET ?= x86_64-native-linuxapp-gcc
-
-include $(RTE_SDK)/mk/rte.vars.mk
-
-# binary name
-APP = testlinkage
-
-# all source are stored in SRCS-y
-SRCS-y := testlinkage.c
-
-CFLAGS += -O3
-CFLAGS += $(WERROR_FLAGS)
-
-include $(RTE_SDK)/mk/rte.extapp.mk
-EOF
-
-
-printf "\n\nSet up DPDK'ish build environment\n"
-. /usr/share/dpdk/dpdk-sdk-env.sh
-export CFLAGS=$(pkg-config --libs --cflags libdpdk)
-
 # -ldpdk actually refers to a linker script now, not a real .so
 # with broken linkage this will fail with undefined symbols
 printf "\n\nChecking compile with link against DPDK\n"
-make V=1 -f Makefile-testlinkage
+gcc testlinkage.c $(pkg-config --libs --cflags libdpdk) -o testlinkage
 echo "OK"
 
 printf "\n\nLinkage info\n"

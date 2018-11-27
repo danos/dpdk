@@ -1,3 +1,68 @@
+dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
+
+  [ Luca Boccassi ]
+  * New upstream release 18.11; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_11.html
+  * Add new 18.11 PMDs and libraries:
+    - librte-common-cpt18.11
+    - librte-common-dpaax18.11
+    - librte-pmd-atlantic18.11
+    - librte-pmd-caam-jr18.11
+    - librte-pmd-octeontx-crypto18.11
+    - librte-telemetry18.11
+  * Bump debhelper compat to 10.
+  * Switch to Meson. Rename PMD packages to follow the shared library names:
+    - librte-pmd-vmxnet3-uio18.11 -> librte-pmd-vmxnet3-18.11
+    - librte-pmd-lio18.11 -> librte-pmd-liquidio18.11
+    - librte-pmd-octeontx-ssovf18.11 -> librte-pmd-octeontx-event18.11
+    - librte-pmd-octeontx-zip18.11 -> librte-pmd-octeontx-compress18.11
+    - librte-pmd-sfc-efx18.11 -> librte-pmd-sfc18.11
+    - librte-pmd-thunderx-nicvf18.11 -> librte-pmd-thunderx18.11
+    Switch PMD installation directory from /usr/lib/*/dpdk-18.11-drivers to
+    /usr/lib/*/dpdk/pmds-18.11.
+    Remove backward-compatibility symlink for arch-dependent headers. Users
+    now should use the libdpdk.pc pkg-config file to get the appropriate
+    CFLAGS, or specify -I/usr/include/<ARCH>/dpdk manually.
+    Drop the dpdk-dev SDK package, users should just use pkg-config now.
+    Rename all binaries and scripts to have a dpdk- prefix.
+    Build-Depend on debhelper >= 10.3~, which introduced Meson support.
+  * Don't build dpdk-doc when using the nodoc profile.
+  * Build-depend on libjansson-dev, libbsd-dev and libelf-dev.
+  * Package libraries built by default:
+    - librte-pmd-bnx2x18.11
+    - librte-pmd-ccp18.11
+    - librte-pmd-dsw-event18.11
+  * Use dh-missing.
+  * Package zlib PMD:
+    - librte-pmd-zlib18.11
+  * Add missing BNX URL metadata.
+  * Drop libdpdk-dbgsym - not really used and broken in sid.
+  * Override -march pkg-config Lintian error.
+  * Enable PIE hardening.
+  * Override lintian warning about scripts with extension in bin.
+  * Add libssl-dev dependency on libdpdk-dev for libcrypto.pc.
+  * Add libbsd-dev dependency on libdpdk-dev for bsd/string.h.
+  * Drop fix-vhost-user-socket-permission.patch and
+    tmpfix-ppc-build-error.patch. The latter has been fixed upstream,
+    and the former is not needed as we no longer support vhost-user
+    in client mode. Please switch to server mode.
+  * Add new DEB_BUILD_OPTIONS dpdk_config_options that accepts a comma
+    separated list (no spaces) of additional DPDK build configure options that
+    will be passed to Meson. Substitutes support for custom legacy Makefile
+    config files.
+
+  [ Christian Ehrhardt ]
+  * d/control: fix libnuma compile issues now available on armhf
+  * d/rules: select upstream declared baseline as RTE_MACHINE
+  * d/control: enable more architectures on PMDs now building
+  * d/control, d/control.modules.in, d/dpdk.install, d/dpdk-doc.install: apply
+    wrap-and-sort --wrap-always --trailing-comma to keep down change noise
+  * d/dpdk-rte-kni-dkms.dkms.in: fix dkms build in newer kernels by adding a
+    path for its own kni_fifo.h
+  * d/control: enhance dkms builds by depending on libelf-dev
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
+
 dpdk (18.08-3) experimental; urgency=medium
 
   * Enable armhf build. (Closes: #906931)

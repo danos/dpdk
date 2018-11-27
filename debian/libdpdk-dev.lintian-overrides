@@ -1,0 +1,2 @@
+# upstream includes flags which are actually necessary
+libdpdk-dev: pkg-config-bad-directive
