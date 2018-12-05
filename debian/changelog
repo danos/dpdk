@@ -50,6 +50,9 @@ dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
     separated list (no spaces) of additional DPDK build configure options that
     will be passed to Meson. Substitutes support for custom legacy Makefile
     config files.
+  * d/p/0001-doc-fix-garbage-text-in-generated-HTML-guides.patch: fix
+    reproducible builds by making sure no garbage text end up in generated
+    documentation HTML pages.
 
   [ Christian Ehrhardt ]
   * d/control: fix libnuma compile issues now available on armhf
