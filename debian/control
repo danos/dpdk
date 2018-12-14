@@ -140,6 +140,8 @@ Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
 Depends: libbsd-dev,
          libibverbs-dev,
+         libmnl-dev,
+         libnuma-dev,
          libpcap-dev,
          libssl-dev,
          zlib1g-dev,
