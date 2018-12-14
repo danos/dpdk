@@ -53,6 +53,8 @@ dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
   * d/p/0001-doc-fix-garbage-text-in-generated-HTML-guides.patch: fix
     reproducible builds by making sure no garbage text end up in generated
     documentation HTML pages.
+  * Add libmnl-dev, libnuma-dev dependency on libdpdk-dev to allow static
+    builds to work.
 
   [ Christian Ehrhardt ]
   * d/control: fix libnuma compile issues now available on armhf
