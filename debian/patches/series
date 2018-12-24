@@ -1,3 +1,0 @@
-fix-vhost-user-socket-permission.patch
-testpmd-link-virtio.patch
-app-testpmd-add-ethernet-peer-command.patch

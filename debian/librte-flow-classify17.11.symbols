@@ -1,8 +1,0 @@
-librte_flow_classify.so.17.11 librte-flow-classify17.11 #MINVER#
- EXPERIMENTAL@EXPERIMENTAL 17.11
- rte_flow_classifier_create@EXPERIMENTAL 17.11
- rte_flow_classifier_free@EXPERIMENTAL 17.11
- rte_flow_classifier_query@EXPERIMENTAL 17.11
- rte_flow_classify_table_create@EXPERIMENTAL 17.11
- rte_flow_classify_table_entry_add@EXPERIMENTAL 17.11
- rte_flow_classify_table_entry_delete@EXPERIMENTAL 17.11

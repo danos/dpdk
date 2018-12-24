@@ -1,75 +1,25 @@
 #!/usr/bin/make -f
-# See debhelper(7) (uncomment to enable)
-# output every command that modifies files on the build system.
-export DH_VERBOSE=1
-export DH_OPTIONS=-v
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
+DPKG_EXPORT_BUILDFLAGS = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 include /usr/share/dpkg/default.mk
 
 DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '-' -f1 | cut -d '.'  -f1-2 | cut -d '~' -f1)
-DPDK_DRIVER_DIR ?= dpdk-$(DPDK_ABI)-drivers
 
-# see FEATURE AREAS in dpkg-buildflags(1)
-export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-pie
-
-# see ENVIRONMENT in dpkg-buildflags(1)
-DPKG_EXPORT_BUILDFLAGS = 1
-include /usr/share/dpkg/buildflags.mk
-
-# Support backporting to jessie
-dpkg_version_lt = $(shell dpkg --compare-versions $$(dpkg --status dpkg-dev | grep Version | cut -d' ' -f2) lt-nl "1.18.11" && echo yes)
-ifeq (yes, $(dpkg_version_lt))
-	# package maintainers to append CFLAGS
-	# For Debian, dpkg-dev >= 1.18.11 and gcc 6.x, dpkg-buildflags and gcc
-	# handle -fPIC and related flags relying on specs files
-	# (/usr/share/dpkg/*specs)
-	export DEB_CFLAGS_MAINT_APPEND  = -fPIC
-	export EXTRA_CFLAGS=$(CFLAGS)
-	export EXTRA_CPPFLAGS=$(CPPFLAGS)
-	export HOST_EXTRA_CFLAGS=$(CFLAGS)
-	export HOST_EXTRA_CPPFLAGS=$(CPPFLAGS)
-	# need to be stripped as DPDK build system adds them and it would be -Wl,-Wl,opt
-	export EXTRA_LDFLAGS=$(shell echo $(LDFLAGS) | sed 's/-Wl,//g')
-	# HOST_CC build system does not add -Wl ...
-	export EXTRA_HOST_LDFLAGS=$(LDFLAGS)
+ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
+	export DH_VERBOSE=1
+	export DH_OPTIONS=-v
 endif
 
-export RTE_DEVEL_BUILD=n
-export EXTRA_CFLAGS+=-g
-
-# People rebuilding this package can overwrite DPDK_CONFIG, RTE_MACHINE and
-# RTE_TARGET via DEB_BUILD_OPTIONS if they like
-ifneq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
-    DPDK_CONFIG ?= $(patsubst dpdk_config=%,%,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
-endif
+# People rebuilding this package can overwrite RTE_MACHINE
+# via DEB_BUILD_OPTIONS if they like
 ifneq (,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
     RTE_MACHINE ?= $(patsubst rte_machine=%,%,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
 endif
-ifneq (,$(filter rte_target=%,$(DEB_BUILD_OPTIONS)))
-    RTE_TARGET ?= $(patsubst rte_target=%,%,$(filter rte_target=%,$(DEB_BUILD_OPTIONS)))
-endif
-
-ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
-DPDK_CONFIG ?= "arm64-armv8a-linuxapp-gcc"
-RTE_MACHINE ?= "armv8a"
-RTE_TARGET ?= "arm64-armv8a-linuxapp-gcc"
-INCLUDE_ARCH := arm
-else
-ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
-DPDK_CONFIG ?= "ppc_64-power8-linuxapp-gcc"
-RTE_MACHINE ?= "power8"
-RTE_TARGET ?= "ppc_64-power8-linuxapp-gcc"
-INCLUDE_ARCH := ppc_64
-else
-DPDK_CONFIG ?= "$(DEB_HOST_GNU_CPU)-native-linuxapp-gcc"
+# default to minimal base, without setting this it would build
+# -march=native which is a non portable invariant
 RTE_MACHINE ?= "default"
-RTE_TARGET ?= "$(DEB_HOST_GNU_CPU)-default-linuxapp-gcc"
-INCLUDE_ARCH := x86
-endif
-endif
-DPDK_STATIC_DIR = "debian/build/static-root"
-DPDK_SHARED_DIR = "debian/build/shared-root"
 
 # now stable with parallel comilation, so support -j
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
@@ -77,16 +27,25 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
     MAKEFLAGS += -j$(PAR)
 endif
 
+ifneq (,$(findstring nodoc,$(DEB_BUILD_PROFILES)))
+BUILD_DOCS=n
+else
 ifneq (,$(findstring nodoc,$(DEB_BUILD_OPTIONS)))
 BUILD_DOCS=n
+# to stop dh_installdoc from running
+export DEB_BUILD_PROFILES += nodoc
 else
 BUILD_DOCS=y
 endif
+endif
 
-ifneq (,$(findstring nostatic,$(DEB_BUILD_OPTIONS)))
-BUILD_STATIC_LIB=n
-else
-BUILD_STATIC_LIB=y
+# Allow to pass specific configure flags to meson as a comma separated list
+ifneq (,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS)))
+# GNU Makefile hack: can't directly escape comma and spaces, so use variables
+    comma := ,
+    space :=
+    space +=
+    DPDK_CONFIG_OPTIONS ?= $(subst $(comma),$(space),$(patsubst dpdk_config_options=%,%,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS))))
 endif
 
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
@@ -94,7 +53,7 @@ endif
 # the current kernel, or ksrc can be passed with a path to the target kernel
 # sources instead.
 ifeq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
-DPDK_CONFIG_BUILD_KMOD=n
+DPDK_CONFIG_BUILD_KMOD=false
 KSRC=""
 else
 ifneq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
@@ -107,7 +66,7 @@ KVERS := $(shell perl debian/kernel-version $(KSRC))
 export KVERS
 export MODULE_CFLAGS=-fno-PIE
 
-DPDK_CONFIG_BUILD_KMOD=y
+DPDK_CONFIG_BUILD_KMOD=true
 
 # Since the binary module package is generated at build time depending on the
 # local kernel version, we have to append the new package in d/control.
@@ -122,248 +81,92 @@ build:
 	fi
 	sh debian/prep-modules $(KSRC)
 	cat debian/control.modules >> debian/control
-	dh $@ --with python3,dkms,systemd
+	dh $@ --with python3,dkms,systemd --buildsystem=meson
 endif
 
 %:
-	dh $@ --with python3,dkms,systemd
+	dh $@ --with python3,dkms,systemd --buildsystem=meson
 
 override_dh_gencontrol:
 	dh_gencontrol
 	# debian/files will not exist until dh_gencontrol has ran at least once,
-	# so we need to run gencontrol for libdpdk-dev and libdpdk-dbgsym after.
+	# so we need to run gencontrol for libdpdk-dev after.
 	# The list of libraries and PMDs is everchanging, so generate the dependency
 	# list for libdpdk-dev to avoid having to maintain it manually.
 	# Same for the recommends list for dpdk, were we want the PMDs and the mempools.
 	dh_gencontrol -p libdpdk-dev -- -V"librte:Depends=`grep -E 'librte-*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
-	dh_gencontrol -p dpdk -- -V"librte:Recommends=`grep -E 'librte-(pmd|mempool).*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p dpdk -- -V"librte:Suggests=`grep -E 'librte-(pmd|mempool).*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
 ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
 	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
 		-v`cat debian/VERSION` \
 		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
-endif
-ifneq (,$(findstring dbgsym_meta,$(DEB_BUILD_OPTIONS)))
-	./debian/dh-dbgsym-metapkg libdpdk$(DPDK_ABI)-dbgsym
-endif
-
-# dbgsym_meta can be passed via DEB_BUILD_OPTIONS to enable building the
-# optional dbgsym meta package libdpdk<ABI>-dbgsym.
-# This is not built by default as it would go in main but depend on
-# packages in the debian-debug archive.
-# Debian Developers and FTP masters strongly discourage this.
-# We provide this optional flag as a convenience for rebuilders.
-ifneq (,$(findstring dbgsym_meta,$(DEB_BUILD_OPTIONS)))
-override_dh_builddeb:
-	dh_builddeb
-	dh_builddeb -plibdpdk$(DPDK_ABI)-dbgsym
 endif
 
 override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
-	test -L config/defconfig_$(DPDK_CONFIG) && rm -f config/defconfig_$(DPDK_CONFIG) || true
 	rm -f debian/dpdk-igb-uio-dkms.dkms debian/dpdk-rte-kni-dkms.dkms
-	rm -f debian/dpdk-dev.preinst
+	dh_auto_clean
 
 override_dh_auto_configure:
-	# Add support for a custom defconfig file in the debian directory.
-ifneq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
-	test -e config/defconfig_$(DPDK_CONFIG) || ln -fs ../debian/defconfig_$(DPDK_CONFIG) config/defconfig_$(DPDK_CONFIG)
-endif
-	# report dpkg-buildflags status to build log
-	dpkg-buildflags --status
-	echo EXTRA_CFLAGS $$EXTRA_CFLAGS
-	echo EXTRA_LDFLAGS: $$EXTRA_LDFLAGS
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) T=$(DPDK_CONFIG) config
-ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
-	sed -ri -e 's,(RTE_MACHINE=).*,\1$(RTE_MACHINE),' \
-		-e 's,(RTE_NEXT_ABI=).*,\1n,' \
-		-e 's,(CONFIG_RTE_EAL_IGB_UIO=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
-		-e 's,(CONFIG_RTE_KNI_KMOD=).*,\1$(DPDK_CONFIG_BUILD_KMOD),' \
-		-e 's,(LIBRTE_PMD_PCAP=).*,\1y,' \
-		-e 's,(CONFIG_RTE_LIBRTE_MLX4_PMD=).*,\1y,' \
-		-e 's,(CONFIG_RTE_LIBRTE_MLX5_PMD=).*,\1y,' \
-		-e 's,(CONFIG_RTE_EAL_PMD_PATH=).*,\1"/usr/lib/$(DEB_HOST_MULTIARCH)/$(DPDK_DRIVER_DIR)/",' \
-		$(DPDK_STATIC_DIR)/.config
-endif
-	echo "CONFIG_RTE_MAJOR_ABI=\"$(DPDK_ABI)\"" >> \
-		$(DPDK_STATIC_DIR)/.config
-	dh_auto_configure
+	dh_auto_configure -- $(DPDK_CONFIG_OPTIONS) \
+		--includedir=include/dpdk \
+		-Dper_library_versions=false \
+		-Dinclude_subdir_arch=../$(DEB_HOST_MULTIARCH)/dpdk \
+		-Dmachine=$(RTE_MACHINE) \
+		-Dkernel_dir=$(KSRC) \
+		-Denable_kmods=$(DPDK_CONFIG_BUILD_KMOD)
 
 override_dh_auto_build-indep:
 ifeq (y,$(BUILD_DOCS))
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) doc-api-html doc-guides-html
+	dh_auto_build -- doc
+	# NINJA DOC INSTALL DOES NOT WORK - .buildinfo present, css missing
+	rm -f obj-$(DEB_HOST_MULTIARCH)/doc/guides/guides/.buildinfo
 endif
 
+# ninja install doc does not work, will rebuild everything,
+# only dpdk-doc as arch: all so just skip it
 override_dh_auto_install-indep:
-	# Package: dpdk-doc
-	# All files based on the install-doc rule (includes examples)
-ifeq (y,$(BUILD_DOCS))
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr \
-		DESTDIR=debian/dpdk-doc install-doc
-endif
 
-override_dh_auto_build-arch:
-ifeq (y,$(BUILD_STATIC_LIB))
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) RTE_KERNELDIR=$(KSRC) build
-endif
-	# Unfortunately the decision about having static or shared libraries is
-	# made for the whole build, which then produces only .a or .so files
-	# (but not both).
-	# And the target layout for target selection has no field for the
-	# type of library.
-	# Right now I hack this by doing a second build which only differs in
-	# the selection of shared libs.
-	# Shared libs should be default, so the previous static build is only
-	# used to get static libraries.
-	cp -a $(DPDK_STATIC_DIR) $(DPDK_SHARED_DIR)
-	sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1y,' \
-		$(DPDK_SHARED_DIR)/.config
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) build
-ifeq (y,$(BUILD_DOCS))
-	# need to be around for dh_installman to be picked up
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) doc-guides-man
-endif
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) RTE_KERNELDIR=$(KSRC) test-build
-
-override_dh_auto_install-arch: LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH)
 override_dh_auto_install-arch:
-	# Package: dpdk (runtime)
-ifeq (y,$(BUILD_STATIC_LIB))
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_STATIC_DIR) prefix=/usr libdir=$(LIBDIR) \
-		DESTDIR=debian/dpdk install-runtime
-endif
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr libdir=$(LIBDIR) \
-		DESTDIR=debian/dpdk install-runtime
-	mkdir -p debian/dpdk/etc/dpdk
-	cp debian/dpdk.interfaces debian/dpdk/etc/dpdk/interfaces
-	rm debian/dpdk/usr/sbin/dpdk-devbind
-	mkdir -p debian/dpdk/sbin
-	ln -s /usr/share/dpdk/usertools/dpdk-devbind.py \
-		debian/dpdk/sbin/dpdk-devbind
-	# Package: dpdk-dev (build environment)
-	# workaround to fix symbolic link creation
-	mkdir -p debian/dpdk-dev/$(LIBDIR)
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) prefix=/usr libdir=$(LIBDIR) \
-		DESTDIR=debian/dpdk-dev install-sdk
-	# remove workaround
-	rm -fr debian/dpdk-dev/usr/lib
-	cp $(DPDK_SHARED_DIR)/.config debian/dpdk-dev/usr/share/dpdk/config
-	sed -e 's/SDK_TARGET/$(RTE_TARGET)/' debian/dpdk-sdk-env.sh.in > \
-		debian/dpdk-dev/usr/share/dpdk/dpdk-sdk-env.sh
-	# include the bundled autotest suite to be usable from the dpdk-dev package
-	if grep -qs 'CONFIG_RTE_APP_TEST=y' $(DPDK_SHARED_DIR)/.config; then \
-		mkdir -p debian/dpdk-dev/usr/share/dpdk/test; \
-		cp -a test/test/autotest* debian/dpdk-dev/usr/share/dpdk/test; \
-		cp $(DPDK_SHARED_DIR)/app/test debian/dpdk-dev/usr/share/dpdk/test/; \
-		cp $(DPDK_SHARED_DIR)/app/testacl debian/dpdk-dev/usr/share/dpdk/test/; \
-		cp $(DPDK_SHARED_DIR)/app/testpipeline debian/dpdk-dev/usr/share/dpdk/test/; \
-	fi
-	# since we move libs to multiarch dirs update the non aware symlink
-	rm debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
-	ln -rs debian/dpdk-dev/$(LIBDIR)/ \
-		debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/lib
-	# Package: libdpdk-dev (bare headers, static devel libs and linker
-	# script)
-	mkdir -p debian/libdpdk-dev/$(LIBDIR)
-	# linker script
-	mv debian/dpdk/$(LIBDIR)/libdpdk.so debian/libdpdk-dev/$(LIBDIR)/
-	# includes
-	# Some headers have architecture-specific content, but the upstream build
-	# system installs them in the same directory, breaking multiarch.
-	# Move them in /usr/include/<arch>/dpdk instead.
-	mkdir -p debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk
-	# Before moving the files, remove the symlink in usr/share/dpdk and copy them over,
-	# as the SDK subdir is architecture specific and requires the arch-specific headers
-	# in the top level
-	rm -f debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
-	mkdir -p debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
-	cp -r debian/dpdk-dev/usr/include/dpdk/* debian/dpdk-dev/usr/share/dpdk/$(RTE_TARGET)/include
-	# genereate the preinst to deal with the symlink -> directory transition smoothly
-	sed "s/@@RTE_TARGET@@/$(RTE_TARGET)/g" debian/dpdk-dev.preinst.in > debian/dpdk-dev.preinst
-	mv $(addprefix debian/dpdk-dev/usr/include/dpdk/,$(notdir $(wildcard lib/librte_eal/common/include/arch/$(INCLUDE_ARCH)/*.h))) \
-		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
-	mv debian/dpdk-dev/usr/include/dpdk/rte_config.h \
-		debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/
-	mv debian/dpdk-dev/usr/include/dpdk debian/libdpdk-dev/usr/include/
-	rmdir debian/dpdk-dev/usr/include
-	# backward compatibility: to ease things for the majority of users,
-	# which are on x86_64, symlink the x86 headers into the global
-	# directory.
-ifeq (x86_64-linux-gnu,$(DEB_HOST_MULTIARCH))
-	ln -rs debian/libdpdk-dev/usr/include/$(DEB_HOST_MULTIARCH)/dpdk/*.h \
-		debian/libdpdk-dev/usr/include/dpdk
-endif
+	dh_auto_install
 	# have the DKMS build include the correct per-arch directory
 	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
 	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-rte-kni-dkms.dkms.in > debian/dpdk-rte-kni-dkms.dkms
-	# all static libs are in the dev package
-ifeq (y,$(BUILD_STATIC_LIB))
-	mv debian/dpdk/$(LIBDIR)/lib*.a debian/libdpdk-dev/$(LIBDIR)/
-endif
-	# symlinks to last .so's are in the non versioned libdpdk-dev as well
-	# this allows multiple libdpdk-<NAME><VER> at different VER concurrently
-	# libdpdk-dev depends on all sublibs so symlinks are never broken
-	mv debian/dpdk/$(LIBDIR)/*.so debian/libdpdk-dev/$(LIBDIR)/
-	# Package(s): libdpdk-<NAME><VER> (bare runtime libs)
-	for lib in $$(ls -1 debian/dpdk/$(LIBDIR)/*.so.*); do \
-	  BN=$$(basename $${lib}); \
-	  LN=$$(echo $${BN} | sed -e 's/\.so\.[0-9\.]*$$//' | tr '_' '-'); \
+	# Package(s): libdpdk-<NAME><VER> (bare runtime libs and PMDs)
+	for lib in $$(ls -1 debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/*.so.*); do \
+	  LN=$$(basename $${lib} | sed -e 's/\.so\.[0-9\.]*$$//' | tr '_' '-'); \
 	  if echo $${LN} | grep -q ".*[0-9]$$"; then \
 	    PKG=$${LN}-$(DPDK_ABI); \
 	  else \
 	    PKG=$${LN}$(DPDK_ABI); \
 	  fi; \
 	  LIBF="$$(basename $${lib})"; \
-	  LIBD="debian/$${PKG}/$(LIBDIR)"; \
-	  echo "moving $${lib} to dir $${LIBD} (PKG=$${PKG} BN=$${BN} LN={$${LN} LIBF=$${LIBF} LIBD=$${LIBD})"; \
-	  mkdir -p $${LIBD}; \
-	  mv $${lib} $${LIBD}; \
-	  if [ "$${LIBF#librte_pmd_}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
-	    echo "PMD: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/$(DPDK_DRIVER_DIR)/"; \
-	    ln -s --relative --target-directory=$${LIBD}/$(DPDK_DRIVER_DIR)/ $${LIBD}/$${LIBF}; \
-	  fi; \
-	  if [ "$${LIBF#librte_mempool_}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
-	    echo "MEMPOOL: linking $${LIBF} into RTE_EAL_PMD_PATH at $${LIBD}/$(DPDK_DRIVER_DIR)/"; \
-	    ln -s --relative --target-directory=$${LIBD}/$(DPDK_DRIVER_DIR)/ $${LIBD}/$${LIBF}; \
-	  fi; \
-	  if [ "$${LIBF#librte_eal}x" != "$${LIBF}x" ]; then \
-	    mkdir -p $${LIBD}/$(DPDK_DRIVER_DIR); \
+	  dh_install -p $${PKG} usr/lib/$(DEB_HOST_MULTIARCH)/$${LIBF}; \
+	  if [ -f debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/*/*/$${LIBF} ]; then \
+	    dh_install -p $${PKG} usr/lib/$(DEB_HOST_MULTIARCH)/*/*/$${LIBF}; \
 	  fi; \
 	done
-	# pkg-config
-	mkdir -p debian/libdpdk-dev/$(LIBDIR)/pkgconfig
-	LIBS=$$(sed -e 's/GROUP ( \(.*\) )/\1/' -e 's/lib/-l/g' -e 's/\.so//g' \
-		$(CURDIR)/debian/libdpdk-dev/$(LIBDIR)/libdpdk.so); \
-	sed -e "s/@DPDK_LIBS@/$${LIBS}/" -e "s/@VERSION@/$(DEB_VERSION_UPSTREAM)/" \
-		-e "s|@DEB_HOST_MULTIARCH@|$(DEB_HOST_MULTIARCH)|g" \
-		debian/libdpdk.pc.in > debian/libdpdk-dev/$(LIBDIR)/pkgconfig/libdpdk.pc
 	# Package: dpdk-igb-uio-dkms
-	mkdir -p debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
-	cp lib/librte_eal/linuxapp/igb_uio/* \
-		debian/dpdk-igb-uio-dkms/usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
+	dh_install -p dpdk-igb-uio-dkms kernel/linux/igb_uio/* \
+		usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
 	# Package: dpdk-rte-kni-dkms
-	mkdir -p debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
-	cp -a lib/librte_eal/linuxapp/kni/* \
-		debian/dpdk-rte-kni-dkms/usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
+	dh_install -p dpdk-rte-kni-dkms kernel/linux/kni/* \
+		usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
-	$(MAKE) V=$(DH_VERBOSE) O=$(DPDK_SHARED_DIR) \
-		kerneldir=/lib/modules/$(KVERS)/extra/dpdk \
-		DESTDIR=debian/dpdk-modules-$(KVERS) install-kmod
+	dh_install -p dpdk-modules-$(KVERS) lib/modules
 endif
 
 override_dh_dkms:
 	dh_dkms -V $(DEB_VERSION_UPSTREAM)
 
 override_dh_installinit:
-	dh_installinit --no-start --no-restart-on-upgrade
+	dh_installinit --no-start --no-stop-on-upgrade
 
 override_dh_systemd_start:
-	dh_systemd_start --no-start --no-restart-on-upgrade
+	dh_systemd_start --no-start --no-stop-on-upgrade
 
 override_dh_auto_test:
 
@@ -372,3 +175,5 @@ override_dh_python3:
 	# /usr/share/dpdk, so pass /usr to catch all
 	dh_python3 --shebang=/usr/bin/python3 /usr
 
+override_dh_missing:
+	dh_missing --fail-missing

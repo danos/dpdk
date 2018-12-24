@@ -15,7 +15,7 @@ modprobe igb_uio
 rmmod igb_uio
 echo "OK"
 
-printf "\n\nChecking igb_uio\n"
+printf "\n\nChecking rte_kni\n"
 modinfo rte_kni
 modprobe rte_kni
 rmmod rte_kni

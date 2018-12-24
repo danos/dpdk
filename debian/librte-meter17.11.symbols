@@ -1,4 +1,0 @@
-librte_meter.so.17.11 librte-meter17.11 #MINVER#
- DPDK_2.0@DPDK_2.0 16.04
- rte_meter_srtcm_config@DPDK_2.0 16.04
- rte_meter_trtcm_config@DPDK_2.0 16.04

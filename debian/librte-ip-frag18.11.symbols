@@ -1,0 +1,13 @@
+librte_ip_frag.so.18.11 librte-ip-frag18.11 #MINVER#
+ DPDK_17.08@DPDK_17.08 17.08
+ DPDK_2.0@DPDK_2.0 16.04
+ EXPERIMENTAL@EXPERIMENTAL 18.11
+ rte_frag_table_del_expired_entries@EXPERIMENTAL 18.11
+ rte_ip_frag_free_death_row@DPDK_2.0 16.04
+ rte_ip_frag_table_create@DPDK_2.0 16.04
+ rte_ip_frag_table_destroy@DPDK_17.08 17.08
+ rte_ip_frag_table_statistics_dump@DPDK_2.0 16.04
+ rte_ipv4_frag_reassemble_packet@DPDK_2.0 16.04
+ rte_ipv4_fragment_packet@DPDK_2.0 16.04
+ rte_ipv6_frag_reassemble_packet@DPDK_2.0 16.04
+ rte_ipv6_fragment_packet@DPDK_2.0 16.04
