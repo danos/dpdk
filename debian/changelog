@@ -1,3 +1,14 @@
+dpdk (18.11-2) unstable; urgency=medium
+
+  * d/p/0001-doc-fix-garbage-text-in-generated-HTML-guides.patch: fix
+    reproducible builds by making sure no garbage text end up in generated
+    documentation HTML pages.
+  * Add libmnl-dev, libnuma-dev dependency on libdpdk-dev to allow static
+    builds to work.
+  * Restrict watch file to 18.11.x series.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 24 Dec 2018 11:00:30 +0100
+
 dpdk (18.11-1) experimental; urgency=medium
 
   [ Luca Boccassi ]
