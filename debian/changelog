@@ -55,6 +55,7 @@ dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
     documentation HTML pages.
   * Add libmnl-dev, libnuma-dev dependency on libdpdk-dev to allow static
     builds to work.
+  * Restrict watch file to 18.11.x series.
 
   [ Christian Ehrhardt ]
   * d/control: fix libnuma compile issues now available on armhf
