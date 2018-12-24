@@ -1,3 +1,10 @@
+dpdk (18.11-3) UNRELEASED; urgency=medium
+
+  * d/p/0002-build-use-generic-march-on-arm64-when-using-default.patch: fix
+    arm64 build by fixing baseline architecture.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 24 Dec 2018 13:58:20 +0100
+
 dpdk (18.11-2) unstable; urgency=medium
 
   * d/p/0001-doc-fix-garbage-text-in-generated-HTML-guides.patch: fix
