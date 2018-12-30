@@ -58,6 +58,7 @@ dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
   * Restrict watch file to 18.11.x series.
   * d/p/0002-build-use-generic-march-on-arm64-when-using-default.patch: fix
     arm64 build by fixing baseline architecture.
+  * Fix typo in ccp PMD short description. (Closes: #917792)
 
   [ Christian Ehrhardt ]
   * d/control: fix libnuma compile issues now available on armhf
