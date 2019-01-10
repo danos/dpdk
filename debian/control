@@ -68,7 +68,7 @@ Suggests: dpdk-doc,
           dpdk-rte-kni-dkms (= ${binary:Version}),
           linux-image-generic,
           ${librte:Suggests},
-Breaks: dpdk-dev (<< 18.11),
+Breaks: dpdk-dev (<< 18.11-4),
 Replaces: dpdk-dev (<< 18.11),
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -78,14 +78,17 @@ Description: Data Plane Development Kit (runtime)
 
 Package: dpdk-dev
 Section: oldlibs
-Architecture: all
+Architecture: amd64 arm64 armhf i386 ppc64el
+Breaks: dpdk (<< 18.11-4),
+Replaces: dpdk (<< 18.11-4),
 Depends: libdpdk-dev (>= ${source:Version}),
          ${misc:Depends},
-Description: transitional package
+         ${shlibs:Depends},
+Description: Data Plane Development Kit (dev tools)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This is a transitional package. It can safely be removed.
+ This package contains tools useful to a developer and for dpdk self tests.
 
 Package: dpdk-doc
 Section: doc
