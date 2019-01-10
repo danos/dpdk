@@ -1,4 +1,4 @@
-dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
+dpdk (18.11-4~git1.1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * New upstream release 18.11; for a full list of changes see:
@@ -69,6 +69,7 @@ dpdk (18.11-1~git1.1) UNRELEASED; urgency=medium
   * d/dpdk-rte-kni-dkms.dkms.in: fix dkms build in newer kernels by adding a
     path for its own kni_fifo.h
   * d/control: enhance dkms builds by depending on libelf-dev
+  * move developer tools from dpdk to dpdk-dev
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
