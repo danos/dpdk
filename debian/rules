@@ -112,6 +112,7 @@ override_dh_auto_clean:
 override_dh_auto_configure:
 	dh_auto_configure -- $(DPDK_CONFIG_OPTIONS) \
 		--includedir=include/dpdk \
+		--default-library=shared \
 		-Dper_library_versions=false \
 		-Dinclude_subdir_arch=../$(DEB_HOST_MULTIARCH)/dpdk \
 		-Dmachine=$(RTE_MACHINE) \
