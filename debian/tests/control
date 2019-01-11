@@ -14,4 +14,4 @@ Depends: kmod, dpdk-igb-uio-dkms [amd64 arm64 i386 ppc64el],
 
 Tests: test-autotest
 Restrictions: allow-stderr, isolation-machine, needs-root
-Depends: dpdk [amd64 arm64 i386 ppc64el], python, python-pexpect
+Depends: dpdk-dev [amd64 arm64 i386 ppc64el], python, python-pexpect
