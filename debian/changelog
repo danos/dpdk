@@ -60,6 +60,9 @@ dpdk (18.11-4~git1.1) UNRELEASED; urgency=medium
     arm64 build by fixing baseline architecture.
   * Fix typo in ccp PMD short description. (Closes: #917792)
   * Link applications and tests dynamically instead of statically.
+  * Update libdpdk-dev's description to mention that the pkg-config file's
+    CFLAGS might contain an -march higher than typical baseline, due to
+    DPDK's requirements.
 
   [ Christian Ehrhardt ]
   * d/control: fix libnuma compile issues now available on armhf
