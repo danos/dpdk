@@ -157,6 +157,10 @@ Description: Data Plane Development Kit (basic development files)
  This package contains the basic headers and library files required to
  build external applications which will also require at least SSE3 support
  when running.
+ .
+ libdpdk.pc: note that CFLAGS might contain an -march flag higher than typical
+ baseline.
+ This is required for a number of static inline functions in the public headers.
 
 Package: librte-bbdev18.11
 Architecture: amd64 arm64 armhf i386 ppc64el
