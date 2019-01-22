@@ -1,4 +1,4 @@
-dpdk (18.11-4) UNRELEASED; urgency=medium
+dpdk (18.11-4) unstable; urgency=medium
 
   * Fix typo in ccp PMD short description. (Closes: #917792)
   * Link applications and tests dynamically instead of statically.
@@ -18,7 +18,9 @@ dpdk (18.11-4) UNRELEASED; urgency=medium
   [ Christian Ehrhardt ]
   * move developer tools from dpdk to dpdk-dev
 
- -- Luca Boccassi <bluca@debian.org>  Tue, 22 Jan 2019 18:32:09 +0000
+  [ Luca Boccassi ]
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 22 Jan 2019 18:34:46 +0000
 
 dpdk (18.11-3) unstable; urgency=medium
 
