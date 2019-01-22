@@ -63,6 +63,8 @@ dpdk (18.11-4~git1.1) UNRELEASED; urgency=medium
   * Update libdpdk-dev's description to mention that the pkg-config file's
     CFLAGS might contain an -march higher than typical baseline, due to
     DPDK's requirements.
+  * Binary kernel module build: use kernel headers from highest version
+    rather than what uname -a returns by default.
 
   [ Christian Ehrhardt ]
   * d/control: fix libnuma compile issues now available on armhf
