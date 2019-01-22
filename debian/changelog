@@ -65,6 +65,13 @@ dpdk (18.11-4~git1.1) UNRELEASED; urgency=medium
     DPDK's requirements.
   * Binary kernel module build: use kernel headers from highest version
     rather than what uname -a returns by default.
+  * Backport the following Meson patches to fix dependencies issues:
+    - 0003-build-mention-march-in-pkg-config-description.patch
+    - 0004-build-bump-minimum-Meson-version-to-0.47.1.patch
+    - 0005-build-use-dependency-instead-of-find_library.patch
+    - 0006-build-reorder-libraries-and-build-eal-before-cmdline.patch
+    - 0007-build-use-dependency-for-libbsd-instead-of-manual-ap.patch
+    Bump mimimum Meson version to 0.47.1 accordingly.
 
   [ Christian Ehrhardt ]
   * d/control: fix libnuma compile issues now available on armhf
