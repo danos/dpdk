@@ -59,7 +59,7 @@ else
 ifneq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
     KSRC := $(patsubst ksrc=%,%,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
 else
-    KSRC := /lib/modules/$(shell uname -r)/build
+    KSRC := /lib/modules/$(shell LIST=$$(ls /lib/modules/); for dir in $$LIST; do test -d /lib/modules/$$dir/build && echo $$dir; done | sort -V | tail -n1)/build
 endif
 
 KVERS := $(shell perl debian/kernel-version $(KSRC))
@@ -112,6 +112,7 @@ override_dh_auto_clean:
 override_dh_auto_configure:
 	dh_auto_configure -- $(DPDK_CONFIG_OPTIONS) \
 		--includedir=include/dpdk \
+		--default-library=shared \
 		-Dper_library_versions=false \
 		-Dinclude_subdir_arch=../$(DEB_HOST_MULTIARCH)/dpdk \
 		-Dmachine=$(RTE_MACHINE) \

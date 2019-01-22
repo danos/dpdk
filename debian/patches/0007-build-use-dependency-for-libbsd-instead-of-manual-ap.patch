@@ -1,0 +1,36 @@
+Author: Luca Boccassi <bluca@debian.org>
+Description: use dependency() for libbsd instead of manual append to ldflags
+ Move libbsd inclusion to librte_eal, so that all other libraries and
+ PMDs will inherit it.
+Origin: https://patches.dpdk.org/patch/49998/
+--- a/config/meson.build
++++ b/config/meson.build
+@@ -74,11 +74,11 @@ if numa_dep.found() and cc.has_header('n
+ endif
+ 
+ # check for strlcpy
+-if host_machine.system() == 'linux' and cc.find_library('bsd',
+-		required: false).found() and cc.has_header('bsd/string.h')
+-	dpdk_conf.set('RTE_USE_LIBBSD', 1)
+-	add_project_link_arguments('-lbsd', language: 'c')
+-	dpdk_extra_ldflags += '-lbsd'
++if host_machine.system() == 'linux'
++	libbsd = dependency('libbsd', required: false)
++	if libbsd.found()
++		dpdk_conf.set('RTE_USE_LIBBSD', 1)
++	endif
+ endif
+ 
+ # add -include rte_config to cflags
+--- a/lib/librte_eal/meson.build
++++ b/lib/librte_eal/meson.build
+@@ -25,6 +25,9 @@ version = 9  # the version of the EAL AP
+ allow_experimental_apis = true
+ deps += 'compat'
+ deps += 'kvargs'
++if dpdk_conf.has('RTE_USE_LIBBSD')
++	ext_deps += libbsd
++endif
+ sources = common_sources + env_sources
+ objs = common_objs + env_objs
+ headers = common_headers + env_headers

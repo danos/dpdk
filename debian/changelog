@@ -1,3 +1,25 @@
+dpdk (18.11-4) UNRELEASED; urgency=medium
+
+  * Fix typo in ccp PMD short description. (Closes: #917792)
+  * Link applications and tests dynamically instead of statically.
+  * Update libdpdk-dev's description to mention that the pkg-config file's
+    CFLAGS might contain an -march higher than typical baseline, due to
+    DPDK's requirements.
+  * Binary kernel module build: use kernel headers from highest version
+    rather than what uname -a returns by default.
+  * Backport the following Meson patches to fix dependencies issues:
+    - 0003-build-mention-march-in-pkg-config-description.patch
+    - 0004-build-bump-minimum-Meson-version-to-0.47.1.patch
+    - 0005-build-use-dependency-instead-of-find_library.patch
+    - 0006-build-reorder-libraries-and-build-eal-before-cmdline.patch
+    - 0007-build-use-dependency-for-libbsd-instead-of-manual-ap.patch
+    Bump mimimum Meson version to 0.47.1 accordingly.
+
+  [ Christian Ehrhardt ]
+  * move developer tools from dpdk to dpdk-dev
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 22 Jan 2019 18:32:09 +0000
+
 dpdk (18.11-3) unstable; urgency=medium
 
   * d/p/0002-build-use-generic-march-on-arm64-when-using-default.patch: fix

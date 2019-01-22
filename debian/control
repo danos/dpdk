@@ -20,7 +20,7 @@ Build-Depends: debhelper (>= 10.3~),
                libnuma-dev,
                libpcap-dev,
                libssl-dev,
-               meson (>= 0.41~),
+               meson (>= 0.47.1~),
                pkg-config,
                python3,
                python3-sphinx <!nodoc>,
@@ -68,7 +68,7 @@ Suggests: dpdk-doc,
           dpdk-rte-kni-dkms (= ${binary:Version}),
           linux-image-generic,
           ${librte:Suggests},
-Breaks: dpdk-dev (<< 18.11),
+Breaks: dpdk-dev (<< 18.11-4),
 Replaces: dpdk-dev (<< 18.11),
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -78,14 +78,17 @@ Description: Data Plane Development Kit (runtime)
 
 Package: dpdk-dev
 Section: oldlibs
-Architecture: all
+Architecture: amd64 arm64 armhf i386 ppc64el
+Breaks: dpdk (<< 18.11-4),
+Replaces: dpdk (<< 18.11-4),
 Depends: libdpdk-dev (>= ${source:Version}),
          ${misc:Depends},
-Description: transitional package
+         ${shlibs:Depends},
+Description: Data Plane Development Kit (dev tools)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This is a transitional package. It can safely be removed.
+ This package contains tools useful to a developer and for dpdk self tests.
 
 Package: dpdk-doc
 Section: doc
@@ -154,6 +157,10 @@ Description: Data Plane Development Kit (basic development files)
  This package contains the basic headers and library files required to
  build external applications which will also require at least SSE3 support
  when running.
+ .
+ libdpdk.pc: note that CFLAGS might contain an -march flag higher than typical
+ baseline.
+ This is required for a number of static inline functions in the public headers.
 
 Package: librte-bbdev18.11
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -717,7 +724,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-cpp runtime library)
+Description: Data Plane Development Kit (librte-pmd-ccp runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
