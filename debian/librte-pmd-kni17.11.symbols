@@ -1,4 +1,0 @@
-librte_pmd_kni.so.17.11 librte-pmd-kni17.11 #MINVER#
- DPDK_17.05@DPDK_17.05 17.05
-# INFO: this library exports no symbols, essentially it is a driver that
-# registers itself on load and is then only driven by callbacks.

@@ -1,0 +1,20 @@
+Author: Luca Boccassi <bluca@debian.org>
+Description: mention -march in pkg-config description
+ Applications need to at least match DPDK's -march option to build
+ successfully due to some static inline functions in the public headers.
+ This might cause problems, especially in distributions, so add a note
+ in the pkg-config description.
+Origin: https://patches.dpdk.org/patch/49629/
+--- a/meson.build
++++ b/meson.build
+@@ -83,7 +83,9 @@ pkg.generate(name: meson.project_name(),
+ 	libraries: dpdk_libraries,
+ 	libraries_private: dpdk_drivers + dpdk_libraries +
+ 			['-Wl,-Bdynamic'] + dpdk_extra_ldflags,
+-	description: 'The Data Plane Development Kit (DPDK)',
++	description: '''The Data Plane Development Kit (DPDK).
++Note that CFLAGS might contain an -march flag higher than typical baseline.
++This is required for a number of static inline functions in the public headers.''',
+ 	subdirs: [get_option('include_subdir_arch'), '.'],
+ 	extra_cflags: ['-include', 'rte_config.h'] + machine_args
+ )

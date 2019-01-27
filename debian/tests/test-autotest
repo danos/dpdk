@@ -31,9 +31,6 @@ if [[ "$realhp" != "512" ]]; then
     exit 0
 fi
 
-# fetch build config
-. /usr/share/dpdk/dpdk-sdk-env.sh
-
 # Reasons for not being an dh_autotest
 # - needs root and hugepages
 # - build environment capabilities too unpredictable
@@ -50,9 +47,8 @@ fi
 # - pci doesn't initialize in all virt env causing command not found issues
 # - rather slow performance tests not suited for regular build associated tests: ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf
 
-python "${RTE_SDK}/test/autotest.py" \
-    "${RTE_SDK}/test/test" \
-    "${RTE_TARGET}" \
+python "/usr/share/dpdk/test/autotest.py" \
+    "/usr/bin/dpdk-test" \
     "-KNI,power_acpi_cpufreq,power_kvm_vm,IVSHMEM,eal_flags,pci,ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf" \
 
 # Pass/Fail

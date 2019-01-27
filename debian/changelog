@@ -1,3 +1,265 @@
+dpdk (18.11-4) unstable; urgency=medium
+
+  * Fix typo in ccp PMD short description. (Closes: #917792)
+  * Link applications and tests dynamically instead of statically.
+  * Update libdpdk-dev's description to mention that the pkg-config file's
+    CFLAGS might contain an -march higher than typical baseline, due to
+    DPDK's requirements.
+  * Binary kernel module build: use kernel headers from highest version
+    rather than what uname -a returns by default.
+  * Backport the following Meson patches to fix dependencies issues:
+    - 0003-build-mention-march-in-pkg-config-description.patch
+    - 0004-build-bump-minimum-Meson-version-to-0.47.1.patch
+    - 0005-build-use-dependency-instead-of-find_library.patch
+    - 0006-build-reorder-libraries-and-build-eal-before-cmdline.patch
+    - 0007-build-use-dependency-for-libbsd-instead-of-manual-ap.patch
+    Bump mimimum Meson version to 0.47.1 accordingly.
+
+  [ Christian Ehrhardt ]
+  * move developer tools from dpdk to dpdk-dev
+
+  [ Luca Boccassi ]
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 22 Jan 2019 18:34:46 +0000
+
+dpdk (18.11-3) unstable; urgency=medium
+
+  * d/p/0002-build-use-generic-march-on-arm64-when-using-default.patch: fix
+    arm64 build by fixing baseline architecture.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 24 Dec 2018 13:59:06 +0100
+
+dpdk (18.11-2) unstable; urgency=medium
+
+  * d/p/0001-doc-fix-garbage-text-in-generated-HTML-guides.patch: fix
+    reproducible builds by making sure no garbage text end up in generated
+    documentation HTML pages.
+  * Add libmnl-dev, libnuma-dev dependency on libdpdk-dev to allow static
+    builds to work.
+  * Restrict watch file to 18.11.x series.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 24 Dec 2018 11:00:30 +0100
+
+dpdk (18.11-1) experimental; urgency=medium
+
+  [ Luca Boccassi ]
+  * New upstream release 18.11; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_11.html
+  * Add new 18.11 PMDs and libraries:
+    - librte-common-cpt18.11
+    - librte-common-dpaax18.11
+    - librte-pmd-atlantic18.11
+    - librte-pmd-caam-jr18.11
+    - librte-pmd-octeontx-crypto18.11
+    - librte-telemetry18.11
+  * Bump debhelper compat to 10.
+  * Switch to Meson. Rename PMD packages to follow the shared library names:
+    - librte-pmd-vmxnet3-uio18.11 -> librte-pmd-vmxnet3-18.11
+    - librte-pmd-lio18.11 -> librte-pmd-liquidio18.11
+    - librte-pmd-octeontx-ssovf18.11 -> librte-pmd-octeontx-event18.11
+    - librte-pmd-octeontx-zip18.11 -> librte-pmd-octeontx-compress18.11
+    - librte-pmd-sfc-efx18.11 -> librte-pmd-sfc18.11
+    - librte-pmd-thunderx-nicvf18.11 -> librte-pmd-thunderx18.11
+    Switch PMD installation directory from /usr/lib/*/dpdk-18.11-drivers to
+    /usr/lib/*/dpdk/pmds-18.11.
+    Remove backward-compatibility symlink for arch-dependent headers. Users
+    now should use the libdpdk.pc pkg-config file to get the appropriate
+    CFLAGS, or specify -I/usr/include/<ARCH>/dpdk manually.
+    Drop the dpdk-dev SDK package, users should just use pkg-config now.
+    Rename all binaries and scripts to have a dpdk- prefix.
+    Build-Depend on debhelper >= 10.3~, which introduced Meson support.
+  * Don't build dpdk-doc when using the nodoc profile.
+  * Build-depend on libjansson-dev, libbsd-dev and libelf-dev.
+  * Package libraries built by default:
+    - librte-pmd-bnx2x18.11
+    - librte-pmd-ccp18.11
+    - librte-pmd-dsw-event18.11
+  * Use dh-missing.
+  * Package zlib PMD:
+    - librte-pmd-zlib18.11
+  * Add missing BNX URL metadata.
+  * Drop libdpdk-dbgsym - not really used and broken in sid.
+  * Override -march pkg-config Lintian error.
+  * Enable PIE hardening.
+  * Override lintian warning about scripts with extension in bin.
+  * Add libssl-dev dependency on libdpdk-dev for libcrypto.pc.
+  * Add libbsd-dev dependency on libdpdk-dev for bsd/string.h.
+  * Drop fix-vhost-user-socket-permission.patch and
+    tmpfix-ppc-build-error.patch. The latter has been fixed upstream,
+    and the former is not needed as we no longer support vhost-user
+    in client mode. Please switch to server mode.
+  * Add new DEB_BUILD_OPTIONS dpdk_config_options that accepts a comma
+    separated list (no spaces) of additional DPDK build configure options that
+    will be passed to Meson. Substitutes support for custom legacy Makefile
+    config files.
+
+  [ Christian Ehrhardt ]
+  * d/control: fix libnuma compile issues now available on armhf
+  * d/rules: select upstream declared baseline as RTE_MACHINE
+  * d/control: enable more architectures on PMDs now building
+  * d/control, d/control.modules.in, d/dpdk.install, d/dpdk-doc.install: apply
+    wrap-and-sort --wrap-always --trailing-comma to keep down change noise
+  * d/dpdk-rte-kni-dkms.dkms.in: fix dkms build in newer kernels by adding a
+    path for its own kni_fifo.h
+  * d/control: enhance dkms builds by depending on libelf-dev
+
+  [ Luca Boccassi ]
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 27 Nov 2018 11:34:50 +0000
+
+dpdk (18.08-3) experimental; urgency=medium
+
+  * Enable armhf build. (Closes: #906931)
+  * Add libibverbs-dev dependency in libdpdk-dev, for static linking.
+    (Closes: #907365)
+  * Add missing packages for new PMDs and libraries built by default:
+    - librte-bus-vmbus18.08
+    - librte-pmd-netvsc18.08
+    - librte-pmd-qat18.08
+    - librte-pmd-octeontx-zip18.08
+  * Add "terse" DEB_BUILD_OPTIONS to reduce build log verbosity.
+  * Set Rules-Requires-Root to no.
+  * Bump Standards-Version to 4.2.1.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 27 Aug 2018 17:13:24 +0100
+
+dpdk (18.08-2) experimental; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * d/p/tmpfix-ppc-build-error.patch: fix ppc64el build issue due to a
+    conflict of stdbool and altivec.
+
+  [ Luca Boccassi ]
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 23 Aug 2018 10:58:10 +0100
+
+dpdk (18.08-1) experimental; urgency=medium
+
+  * New upstream release 18.08; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_08.html
+    - refresh d/p/fix-vhost-user-socket-permission.patch for 18.08
+    - add build-dependency on libmnl-dev, needed by MLX PMD
+    - d/control: bump ABI version on packages
+    - bump d/*.symbols for new ABI
+    - Rename librte-ifcvf-vdpa to librte-pmd-ifc following upstream change
+  * Enable librte-pmd-avf on arm64, i386 and ppc64el since it's available.
+    (Closes: #905041)
+  * Enable AESNI-MB/AESNI-GCM crypto drivers PMDs and packages with build
+    dependency on libipsec-mb-dev (amd64-only).
+    (Closes: #905580)
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 15 Aug 2018 12:58:27 +0100
+
+dpdk (18.05-1) experimental; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * New upstream release 18.05; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_05.html
+    - refresh d/p/fix-vhost-user-socket-permission.patch for 18.05
+    - d/control: bump ABI version on packages
+    - bump d/*.symbols for new ABI
+    - d/control: d/*.symbols: new libraries and pmds
+      - librte-bpf
+      - librte-bus-ifpga
+      - librte-common-octeontx
+      - librte-compressdev
+      - librte-ifcvf-vdpa
+      - librte-mempool-bucket
+      - librte-pmd-axgbe
+      - librte-pmd-dpaa
+      - librte-pmd-dpaa-sec
+      - librte-pmd-dpaa-event
+      - librte-pmd-dpaa2
+      - librte-pmd-dpaa2-cmdif
+      - librte-pmd-dpaa2-event
+      - librte-pmd-dpaa2-qdma
+      - librte-pmd-dpaa2-sec
+      - librte-pmd-ifpga-rawdev
+      - librte-pmd-virtio-crypto
+    - d/rules: adapt to move of kernel modules directories in 18.05
+    - d/control: dpaa drivers build on non arm64 as well now
+    - d/rules: handle IFCVF as callback driver
+  * Dropped changes that are upstream in 18.05:
+    - Backport dpdk-dev-app-testpmd-fix-DPAA-shared-library-dependency.patch
+      and dpdk-dev-mk-fix-dependencies-of-dpaaX-drivers.patch from upstream to
+    - d/p/dpdk-dev-eal-ppc-fix-rte_smp_mb-for-a-compilation-error-with-else-
+      clause.patch: fix build on ppc64el
+      fix arm64 build.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 11 Jun 2018 14:34:19 +0100
+
+dpdk (18.02.1-1) experimental; urgency=medium
+
+  [ Luca Boccassi ]
+  * New upstream release 18.02.1; for a full list of changes see:
+    https://dpdk.org/doc/guides-18.02/rel_notes/release_18_02.html
+    * Fixes CVE-2018-1059 (Closes: #896688).
+
+  [ Christian Ehrhardt ]
+  * d/control: add new PMDs: bbdev-null, skeleton-rawdev, vdev-netvsc
+  * Symbols of new PMDs in 18.02
+    - debian/librte-pmd-bbdev-null18.02.symbols
+    - debian/librte-pmd-mlx4-18.02.symbols
+    - debian/librte-pmd-mlx5-18.02.symbols
+    - debian/librte-pmd-skeleton-rawdev18.02.symbols
+    - debian/librte-pmd-vdev-netvsc18.02.symbols
+
+  [ Luca Boccassi ]
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 23 Apr 2018 15:58:42 +0100
+
+dpdk (18.02-2) experimental; urgency=medium
+
+  [ Luca Boccassi ]
+  * autopkgtest: use libdpdk pkg-config to set all the required compiler
+    flags.
+  * autopkgtest: add pkg-config dependency to really fix linkate test.
+  * Backport dpdk-dev-app-testpmd-fix-DPAA-shared-library-dependency.patch
+    and dpdk-dev-mk-fix-dependencies-of-dpaaX-drivers.patch from upstream to
+    fix arm64 build.
+  * Add librte-bus-dpaa18.02, librte-bus-fslmc.02, librte-pmd-dpaa18.02 and
+    librte-mempool-dpaa18.02 on arm64, as their config is enabled by default
+    upstream.
+  * Add new symbols to symbols files for 18.02.
+
+  [ Christian Ehrhardt ]
+  * d/control: let libdpdk-dev depend on zlib1g-dev as it is used on build and
+    creeps into pkg-config. Even thou at the moment no dpdk .so uses it is
+    required to build correctly with the libs provided by pkg-config.
+  * d/t/control: depend on dpdk-dev to be able to use dpdk-sdk-env.sh
+  * d/t/testlinkage: improvements and fixes for current debci issues
+    - Use RTE_SDK to build the binary
+    - verbose execution for better debugging
+    - check for librt instead of libpthread as second level lib
+    - use a valid prototype for main
+  * Add package and build-dependency MLX4 and MLX5 PMDs.
+    With rdma-core >16 being in Debian and Ubuntu as well as some stabilization
+    work ongoing upstream we can start to enable these PMDs.
+  * d/p/dpdk-dev-eal-ppc-fix-rte_smp_mb-for-a-compilation-error-with-else-
+    clause.patch: fix build on ppc64el
+  * test-linkage: drop brittle test for secondary library dependencies
+  * debian/control: Fix MLX4/MLX5 enablement to match DPDK 18.02
+
+  [ Luca Boccassi ]
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 15 Mar 2018 10:53:02 +0000
+
+dpdk (18.02-1) experimental; urgency=medium
+
+  * New upstream release 18.02; for a full list of changes see:
+    https://dpdk.org/doc/guides/rel_notes/release_18_02.html
+  * Bump ABI version of packages from 17.11 to 18.02.
+  * Drop testpmd-link-virtio.patch, not needed.
+  * Refresh fix-vhost-user-socket-permission.patch to remove fuzz from
+    18.02.
+  * Add packages for new libraries/PMDs: librte-bbdev18.02,
+    librte-rawdev18.02, librte-pmd-avf18.02,
+    librte-pmd-opdl-event18.02.
+  * Add package and build-dependency for OpenSSL PMD:
+    librte-pmd-openssl18.02. (Closes: #886150)
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 22 Feb 2018 14:00:03 +0000
+
 dpdk (17.11.4-1~bpo9+1) stretch-backports; urgency=medium
 
   * Rebuild for stretch-backports.

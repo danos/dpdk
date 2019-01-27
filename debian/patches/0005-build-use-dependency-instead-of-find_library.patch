@@ -1,0 +1,144 @@
+Author: Luca Boccassi <bluca@debian.org>
+Description: use dependency() instead of find_library()
+ Whenever possible (if the library ships a pkg-config file) use meson's
+ dependency() function to look for it, as it will automatically add it
+ to the Requires.private list if needed, to allow for static builds to
+ succeed for reverse dependencies of DPDK. Otherwise the recursive
+ dependencies are not parsed, and users doing static builds have to
+ resolve them manually by themselves.
+ When using this API avoid additional checks that are superfluous and
+ take extra time, and avoid adding the linker flag manually which causes
+ it to be duplicated.
+Origin: https://patches.dpdk.org/patch/49996/
+--- a/drivers/crypto/ccp/meson.build
++++ b/drivers/crypto/ccp/meson.build
+@@ -18,4 +18,3 @@ sources = files('rte_ccp_pmd.c',
+ 		'ccp_pmd_ops.c')
+ 
+ ext_deps += dep
+-pkgconfig_extra_libs += '-lcrypto'
+--- a/drivers/crypto/openssl/meson.build
++++ b/drivers/crypto/openssl/meson.build
+@@ -8,4 +8,3 @@ endif
+ deps += 'bus_vdev'
+ sources = files('rte_openssl_pmd.c', 'rte_openssl_pmd_ops.c')
+ ext_deps += dep
+-pkgconfig_extra_libs += '-lcrypto'
+--- a/drivers/crypto/qat/meson.build
++++ b/drivers/crypto/qat/meson.build
+@@ -13,6 +13,5 @@ if dep.found()
+ 			     'qat_sym.c',
+ 			     'qat_sym_session.c')
+ 	qat_ext_deps += dep
+-	pkgconfig_extra_libs += '-lcrypto'
+ 	qat_cflags += '-DBUILD_QAT_SYM'
+ endif
+--- a/drivers/meson.build
++++ b/drivers/meson.build
+@@ -46,10 +46,11 @@ foreach class:driver_classes
+ 		# set up internal deps. Drivers can append/override as necessary
+ 		deps = std_deps
+ 		# ext_deps: Stores external library dependency got
+-		# using dependency() or cc.find_library(). For most cases, we
+-		# probably also need to specify the "-l" flags in
+-		# pkgconfig_extra_libs variable too, so that it can be reflected
+-		# in the pkgconfig output for static builds
++		# using dependency() (preferred) or find_library().
++		# For the find_library() case (but not with dependency()) we also
++		# need to specify the "-l" flags in pkgconfig_extra_libs variable
++		# too, so that it can be reflected in the pkgconfig output for
++		# static builds.
+ 		ext_deps = []
+ 		pkgconfig_extra_libs = []
+ 
+--- a/drivers/net/bnx2x/meson.build
++++ b/drivers/net/bnx2x/meson.build
+@@ -1,7 +1,7 @@
+ # SPDX-License-Identifier: BSD-3-Clause
+ # Copyright(c) 2018 Intel Corporation
+ 
+-dep = cc.find_library('z', required: false)
++dep = dependency('zlib', required: false)
+ build = dep.found()
+ ext_deps += dep
+ cflags += '-DZLIB_CONST'
+--- a/drivers/net/mlx4/meson.build
++++ b/drivers/net/mlx4/meson.build
+@@ -14,9 +14,9 @@ if pmd_dlopen
+ 	]
+ endif
+ libs = [
+-	cc.find_library('mnl', required:false),
+-	cc.find_library('mlx4', required:false),
+-	cc.find_library('ibverbs', required:false),
++	dependency('libmnl', required:false),
++	dependency('libmlx4', required:false),
++	dependency('libibverbs', required:false),
+ ]
+ build = true
+ foreach lib:libs
+--- a/drivers/net/mlx5/meson.build
++++ b/drivers/net/mlx5/meson.build
+@@ -14,9 +14,9 @@ if pmd_dlopen
+ 	]
+ endif
+ libs = [
+-	cc.find_library('mnl', required:false),
+-	cc.find_library('mlx5', required:false),
+-	cc.find_library('ibverbs', required:false),
++	dependency('libmnl', required:false),
++	dependency('libmlx5', required:false),
++	dependency('libibverbs', required:false),
+ ]
+ build = true
+ foreach lib:libs
+--- a/drivers/net/pcap/meson.build
++++ b/drivers/net/pcap/meson.build
+@@ -1,12 +1,11 @@
+ # SPDX-License-Identifier: BSD-3-Clause
+ # Copyright(c) 2017 Intel Corporation
+ 
+-pcap_dep = cc.find_library('pcap', required: false)
+-if pcap_dep.found() and cc.has_header('pcap.h', dependencies: pcap_dep)
++pcap_dep = dependency('pcap', required: false)
++if pcap_dep.found()
+ 	build = true
+ else
+ 	build = false
+ endif
+ sources = files('rte_eth_pcap.c')
+ ext_deps += pcap_dep
+-pkgconfig_extra_libs += '-lpcap'
+--- a/lib/librte_bpf/meson.build
++++ b/lib/librte_bpf/meson.build
+@@ -18,8 +18,8 @@ install_headers = files('bpf_def.h',
+ 
+ deps += ['mbuf', 'net', 'ethdev']
+ 
+-dep = cc.find_library('elf', required: false)
+-if dep.found() == true and cc.has_header('libelf.h', dependencies: dep)
++dep = dependency('libelf', required: false)
++if dep.found()
+ 	sources += files('bpf_load_elf.c')
+ 	ext_deps += dep
+ endif
+--- a/lib/librte_telemetry/meson.build
++++ b/lib/librte_telemetry/meson.build
+@@ -6,7 +6,7 @@ headers = files('rte_telemetry.h', 'rte_
+ deps += ['metrics', 'ethdev']
+ cflags += '-DALLOW_EXPERIMENTAL_API'
+ 
+-jansson = cc.find_library('jansson', required: false)
++jansson = dependency('jansson', required: false)
+ if jansson.found()
+ 	ext_deps += jansson
+ 	dpdk_app_link_libraries += ['telemetry']
+--- a/drivers/compress/zlib/meson.build
++++ b/drivers/compress/zlib/meson.build
+@@ -9,6 +9,5 @@ endif
+ deps += 'bus_vdev'
+ sources = files('zlib_pmd.c', 'zlib_pmd_ops.c')
+ ext_deps += dep
+-pkgconfig_extra_libs += '-lz'
+ 
+ allow_experimental_apis = true

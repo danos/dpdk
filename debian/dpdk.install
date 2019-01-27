@@ -1,2 +1,5 @@
 debian/dpdk-init	lib/dpdk/
 debian/dpdk.conf	etc/dpdk/
+debian/interfaces	etc/dpdk/
+usr/bin/dpdk-devbind.py
+usr/bin/dpdk-pmdinfo.py

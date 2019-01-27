@@ -1,0 +1,3 @@
+# upstream ships these, and changing them now would be backward incompatible
+dpdk: script-with-language-extension usr/bin/dpdk-devbind.py
+dpdk: script-with-language-extension usr/bin/dpdk-pmdinfo.py
