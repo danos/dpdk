@@ -1,3 +1,11 @@
+dpdk (18.11-4~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+  * Merge remote-tracking branch 'salsa/sid' into stretch-backports
+  * Do not build Intel AES PMD, missing build-dep in stretch.
+
+ -- Luca Boccassi <bluca@debian.org>  Sun, 27 Jan 2019 15:41:57 +0000
+
 dpdk (18.11-4) unstable; urgency=medium
 
   * Fix typo in ccp PMD short description. (Closes: #917792)
