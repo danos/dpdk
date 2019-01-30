@@ -85,6 +85,10 @@ dpdk (18.11-4~git1.1) UNRELEASED; urgency=medium
     path for its own kni_fifo.h
   * d/control: enhance dkms builds by depending on libelf-dev
   * move developer tools from dpdk to dpdk-dev
+  * d/control: add librte-mempool-ring to the list of default libs that dpdk
+    Recommends. This ensures a generally functional mempool backend by default
+    but stays configurable (remove librte-mempool-ring and/or add other
+    librte-mempool packages).
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
