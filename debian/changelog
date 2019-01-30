@@ -1,3 +1,17 @@
+dpdk (18.11-5) UNRELEASED; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * d/control: add librte-mempool-ring to the list of default libs that dpdk
+    Recommends. This ensures a generally functional mempool backend by default
+    but stays configurable (remove librte-mempool-ring and/or add other
+    librte-mempool packages).
+
+  [ Luca Boccassi ]
+  * libdpdk-dev: depend on libipsec-mb-dev as its linker flag is in
+    pkg-config's static list.
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 30 Jan 2019 13:21:41 +0000
+
 dpdk (18.11-4) unstable; urgency=medium
 
   * Fix typo in ccp PMD short description. (Closes: #917792)
