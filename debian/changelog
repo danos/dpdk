@@ -89,6 +89,7 @@ dpdk (18.11-4~git1.1) UNRELEASED; urgency=medium
     Recommends. This ensures a generally functional mempool backend by default
     but stays configurable (remove librte-mempool-ring and/or add other
     librte-mempool packages).
+  * d/control: ensure break relationships are backportable (Closes: #921042)
 
  -- Luca Boccassi <bluca@debian.org>  Mon, 29 Oct 2018 16:07:49 +0000
 
