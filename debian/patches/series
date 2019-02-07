@@ -5,3 +5,5 @@
 0005-build-use-dependency-instead-of-find_library.patch
 0006-build-reorder-libraries-and-build-eal-before-cmdline.patch
 0007-build-use-dependency-for-libbsd-instead-of-manual-ap.patch
+0001-kni-fix-build-for-dev_open-in-Linux-5.0.patch
+0002-kni-fix-build-for-igb_ndo_bridge_setlink-in-Linux-5..patch
