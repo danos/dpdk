@@ -2,6 +2,7 @@ dpdk (18.11-5~git1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
   * Add NEWS entry to list changes to dpdk-dev. (Closes: #921043)
+  * Bump Standards-Version to 4.3.0, no changes.
 
   [ Christian Ehrhardt ]
   * d/control: ensure break relationships are backportable (Closes: #921042)
