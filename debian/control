@@ -43,6 +43,7 @@ Depends: hwdata,
          ${python3:Depends},
          ${shlibs:Depends},
 Recommends: librte-mempool18.11,
+            librte-mempool-ring18.11,
             librte-pmd-af-packet18.11,
             librte-pmd-bond18.11,
             librte-pmd-e1000-18.11,
@@ -64,7 +65,7 @@ Suggests: dpdk-doc,
           dpdk-rte-kni-dkms (= ${binary:Version}),
           linux-image-generic,
           ${librte:Suggests},
-Breaks: dpdk-dev (<< 18.11-4),
+Breaks: dpdk-dev (<< 18.11-4~),
 Replaces: dpdk-dev (<< 18.11),
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -75,7 +76,7 @@ Description: Data Plane Development Kit (runtime)
 Package: dpdk-dev
 Section: oldlibs
 Architecture: amd64 arm64 armhf i386 ppc64el
-Breaks: dpdk (<< 18.11-4),
+Breaks: dpdk (<< 18.11-4~),
 Replaces: dpdk (<< 18.11-4),
 Depends: libdpdk-dev (>= ${source:Version}),
          ${misc:Depends},

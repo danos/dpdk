@@ -1,3 +1,28 @@
+dpdk (18.11-6) unstable; urgency=medium
+
+  [ Luca Boccassi ]
+  * Add NEWS entry to list changes to dpdk-dev. (Closes: #921043)
+
+  [ Christian Ehrhardt ]
+  * d/control: ensure break relationships are backportable (Closes: #921042)
+  * d/p/*kni-fix-build*: fix build with kernel 5.0 (LP: #1814919)
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 07 Feb 2019 16:34:57 +0000
+
+dpdk (18.11-5) unstable; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * d/control: add librte-mempool-ring to the list of default libs that dpdk
+    Recommends. This ensures a generally functional mempool backend by default
+    but stays configurable (remove librte-mempool-ring and/or add other
+    librte-mempool packages).
+
+  [ Luca Boccassi ]
+  * libdpdk-dev: depend on libipsec-mb-dev as its linker flag is in
+    pkg-config's static list.
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 30 Jan 2019 13:23:13 +0000
+
 dpdk (18.11-4~bpo9+1) stretch-backports; urgency=medium
 
   * Rebuild for stretch-backports.
