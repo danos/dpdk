@@ -1,3 +1,10 @@
+dpdk (18.11-6~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+  * Merge remote-tracking branch 'salsa/sid' into stretch-backports
+
+ -- Luca Boccassi <bluca@debian.org>  Sun, 10 Feb 2019 18:22:39 +0000
+
 dpdk (18.11-6) unstable; urgency=medium
 
   [ Luca Boccassi ]
