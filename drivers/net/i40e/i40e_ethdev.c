@@ -1224,9 +1224,6 @@ eth_i40e_dev_init(struct rte_eth_dev *dev)
 	/* Make sure all is clean before doing PF reset */
 	i40e_clear_hw(hw);
 
-	/* Initialize the hardware */
-	i40e_hw_init(dev);
-
 	/* Reset here to make sure all is clean for each PF */
 	ret = i40e_pf_reset(hw);
 	if (ret) {
@@ -1240,6 +1237,23 @@ eth_i40e_dev_init(struct rte_eth_dev *dev)
 		PMD_INIT_LOG(ERR, "Failed to init shared code (base driver): %d", ret);
 		return ret;
 	}
+
+	/* Initialize the parameters for adminq */
+	i40e_init_adminq_parameter(hw);
+	ret = i40e_init_adminq(hw);
+	if (ret != I40E_SUCCESS) {
+		PMD_INIT_LOG(ERR, "Failed to init adminq: %d", ret);
+		return -EIO;
+	}
+	PMD_INIT_LOG(INFO, "FW %d.%d API %d.%d NVM %02d.%02d.%02d eetrack %04x",
+		     hw->aq.fw_maj_ver, hw->aq.fw_min_ver,
+		     hw->aq.api_maj_ver, hw->aq.api_min_ver,
+		     ((hw->nvm.version >> 12) & 0xf),
+		     ((hw->nvm.version >> 4) & 0xff),
+		     (hw->nvm.version & 0xf), hw->nvm.eetrack);
+
+	/* Initialize the hardware */
+	i40e_hw_init(dev);
 
 	i40e_config_automask(pf);
 
@@ -1256,20 +1270,6 @@ eth_i40e_dev_init(struct rte_eth_dev *dev)
 
 	/* Initialize the input set for filters (hash and fd) to default value */
 	i40e_filter_input_set_init(pf);
-
-	/* Initialize the parameters for adminq */
-	i40e_init_adminq_parameter(hw);
-	ret = i40e_init_adminq(hw);
-	if (ret != I40E_SUCCESS) {
-		PMD_INIT_LOG(ERR, "Failed to init adminq: %d", ret);
-		return -EIO;
-	}
-	PMD_INIT_LOG(INFO, "FW %d.%d API %d.%d NVM %02d.%02d.%02d eetrack %04x",
-		     hw->aq.fw_maj_ver, hw->aq.fw_min_ver,
-		     hw->aq.api_maj_ver, hw->aq.api_min_ver,
-		     ((hw->nvm.version >> 12) & 0xf),
-		     ((hw->nvm.version >> 4) & 0xff),
-		     (hw->nvm.version & 0xf), hw->nvm.eetrack);
 
 	/* initialise the L3_MAP register */
 	if (!pf->support_multi_driver) {
@@ -2419,6 +2419,10 @@ i40e_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	if (status != I40E_SUCCESS)
 		PMD_DRV_LOG(ERR, "Failed to disable unicast promiscuous");
 
+	/* must remain in all_multicast mode */
+	if (dev->data->all_multicast == 1)
+		return;
+
 	status = i40e_aq_set_vsi_multicast_promiscuous(hw, vsi->seid,
 							false, NULL);
 	if (status != I40E_SUCCESS)
@@ -2480,7 +2484,7 @@ i40e_dev_set_link_down(struct rte_eth_dev *dev)
 }
 
 static __rte_always_inline void
-update_link_no_wait(struct i40e_hw *hw, struct rte_eth_link *link)
+update_link_reg(struct i40e_hw *hw, struct rte_eth_link *link)
 {
 /* Link status registers and values*/
 #define I40E_PRTMAC_LINKSTA		0x001E2420
@@ -2534,8 +2538,8 @@ update_link_no_wait(struct i40e_hw *hw, struct rte_eth_link *link)
 }
 
 static __rte_always_inline void
-update_link_wait(struct i40e_hw *hw, struct rte_eth_link *link,
-	bool enable_lse)
+update_link_aq(struct i40e_hw *hw, struct rte_eth_link *link,
+	bool enable_lse, int wait_to_complete)
 {
 #define CHECK_INTERVAL             100  /* 100ms */
 #define MAX_REPEAT_TIME            10  /* 1s (10 * 100ms) in total */
@@ -2557,7 +2561,7 @@ update_link_wait(struct i40e_hw *hw, struct rte_eth_link *link,
 		}
 
 		link->link_status = link_status.link_info & I40E_AQ_LINK_UP;
-		if (unlikely(link->link_status != 0))
+		if (!wait_to_complete || link->link_status)
 			break;
 
 		rte_delay_ms(CHECK_INTERVAL);
@@ -2607,10 +2611,10 @@ i40e_dev_link_update(struct rte_eth_dev *dev,
 	link.link_autoneg = !(dev->data->dev_conf.link_speeds &
 			ETH_LINK_SPEED_FIXED);
 
-	if (!wait_to_complete)
-		update_link_no_wait(hw, &link);
+	if (!wait_to_complete && !enable_lse)
+		update_link_reg(hw, &link);
 	else
-		update_link_wait(hw, &link, enable_lse);
+		update_link_aq(hw, &link, enable_lse, wait_to_complete);
 
 	rte_i40e_dev_atomic_write_link_status(dev, &link);
 	if (link.link_status == old.link_status)
@@ -5075,7 +5079,7 @@ i40e_enable_pf_lb(struct i40e_pf *pf)
 	int ret;
 
 	/* Use the FW API if FW >= v5.0 */
-	if (hw->aq.fw_maj_ver < 5) {
+	if (hw->aq.fw_maj_ver < 5 && hw->mac.type != I40E_MAC_X722) {
 		PMD_INIT_LOG(ERR, "FW < v5.0, cannot enable loopback");
 		return;
 	}
@@ -5346,7 +5350,7 @@ i40e_vsi_setup(struct i40e_pf *pf,
 		ctxt.flags = I40E_AQ_VSI_TYPE_VF;
 
 		/* Use the VEB configuration if FW >= v5.0 */
-		if (hw->aq.fw_maj_ver >= 5) {
+		if (hw->aq.fw_maj_ver >= 5 || hw->mac.type == I40E_MAC_X722) {
 			/* Configure switch ID */
 			ctxt.info.valid_sections |=
 			rte_cpu_to_le_16(I40E_AQ_VSI_PROP_SWITCH_VALID);
@@ -11201,6 +11205,32 @@ i40e_dev_rx_queue_intr_disable(struct rte_eth_dev *dev, uint16_t queue_id)
 	return 0;
 }
 
+/**
+ * This function is used to check if the register is valid.
+ * Below is the valid registers list for X722 only:
+ * 0x2b800--0x2bb00
+ * 0x38700--0x38a00
+ * 0x3d800--0x3db00
+ * 0x208e00--0x209000
+ * 0x20be00--0x20c000
+ * 0x263c00--0x264000
+ * 0x265c00--0x266000
+ */
+static inline int i40e_valid_regs(enum i40e_mac_type type, uint32_t reg_offset)
+{
+	if ((type != I40E_MAC_X722) &&
+	    ((reg_offset >= 0x2b800 && reg_offset <= 0x2bb00) ||
+	     (reg_offset >= 0x38700 && reg_offset <= 0x38a00) ||
+	     (reg_offset >= 0x3d800 && reg_offset <= 0x3db00) ||
+	     (reg_offset >= 0x208e00 && reg_offset <= 0x209000) ||
+	     (reg_offset >= 0x20be00 && reg_offset <= 0x20c000) ||
+	     (reg_offset >= 0x263c00 && reg_offset <= 0x264000) ||
+	     (reg_offset >= 0x265c00 && reg_offset <= 0x266000)))
+		return 0;
+	else
+		return 1;
+}
+
 static int i40e_get_regs(struct rte_eth_dev *dev,
 			 struct rte_dev_reg_info *regs)
 {
@@ -11242,8 +11272,11 @@ static int i40e_get_regs(struct rte_eth_dev *dev,
 				reg_offset = arr_idx * reg_info->stride1 +
 					arr_idx2 * reg_info->stride2;
 				reg_offset += reg_info->base_addr;
-				ptr_data[reg_offset >> 2] =
-					I40E_READ_REG(hw, reg_offset);
+				if (!i40e_valid_regs(hw->mac.type, reg_offset))
+					ptr_data[reg_offset >> 2] = 0;
+				else
+					ptr_data[reg_offset >> 2] =
+						I40E_READ_REG(hw, reg_offset);
 			}
 	}
 

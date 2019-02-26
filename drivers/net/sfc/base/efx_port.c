@@ -61,7 +61,7 @@ efx_port_init(
 	epp->ep_emop->emo_reconfigure(enp);
 
 	/* Pick up current phy capababilities */
-	efx_port_poll(enp, NULL);
+	(void) efx_port_poll(enp, NULL);
 
 	/*
 	 * Turn on the PHY if available, otherwise reset it, and
@@ -109,7 +109,6 @@ efx_port_poll(
 	EFSYS_ASSERT3U(enp->en_mod_flags, &, EFX_MOD_PORT);
 
 	EFSYS_ASSERT(emop != NULL);
-	EFSYS_ASSERT(!epp->ep_mac_stats_pending);
 
 	if (link_modep == NULL)
 		link_modep = &ignore_link_mode;

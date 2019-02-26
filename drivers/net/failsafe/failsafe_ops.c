@@ -260,9 +260,13 @@ fs_rx_queue_release(void *queue)
 		return;
 	rxq = queue;
 	dev = rxq->priv->dev;
-	FOREACH_SUBDEV_STATE(sdev, i, dev, DEV_ACTIVE)
-		SUBOPS(sdev, rx_queue_release)
-			(ETH(sdev)->data->rx_queues[rxq->qid]);
+	FOREACH_SUBDEV_STATE(sdev, i, dev, DEV_ACTIVE) {
+		if (ETH(sdev)->data->rx_queues != NULL &&
+		    ETH(sdev)->data->rx_queues[rxq->qid] != NULL) {
+			SUBOPS(sdev, rx_queue_release)
+				(ETH(sdev)->data->rx_queues[rxq->qid]);
+		}
+	}
 	dev->data->rx_queues[rxq->qid] = NULL;
 	rte_free(rxq);
 }
@@ -279,6 +283,11 @@ fs_rx_queue_setup(struct rte_eth_dev *dev,
 	struct rxq *rxq;
 	uint8_t i;
 	int ret;
+
+	if (rx_conf->rx_deferred_start) {
+		ERROR("Rx queue deferred start is not supported");
+		return -EINVAL;
+	}
 
 	rxq = dev->data->rx_queues[rx_queue_id];
 	if (rxq != NULL) {
@@ -328,9 +337,13 @@ fs_tx_queue_release(void *queue)
 		return;
 	txq = queue;
 	dev = txq->priv->dev;
-	FOREACH_SUBDEV_STATE(sdev, i, dev, DEV_ACTIVE)
-		SUBOPS(sdev, tx_queue_release)
-			(ETH(sdev)->data->tx_queues[txq->qid]);
+	FOREACH_SUBDEV_STATE(sdev, i, dev, DEV_ACTIVE) {
+		if (ETH(sdev)->data->tx_queues != NULL &&
+		    ETH(sdev)->data->tx_queues[txq->qid] != NULL) {
+			SUBOPS(sdev, tx_queue_release)
+				(ETH(sdev)->data->tx_queues[txq->qid]);
+		}
+	}
 	dev->data->tx_queues[txq->qid] = NULL;
 	rte_free(txq);
 }
@@ -346,6 +359,11 @@ fs_tx_queue_setup(struct rte_eth_dev *dev,
 	struct txq *txq;
 	uint8_t i;
 	int ret;
+
+	if (tx_conf->tx_deferred_start) {
+		ERROR("Tx queue deferred start is not supported");
+		return -EINVAL;
+	}
 
 	txq = dev->data->tx_queues[tx_queue_id];
 	if (txq != NULL) {

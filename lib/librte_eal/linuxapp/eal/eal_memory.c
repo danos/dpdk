@@ -396,7 +396,7 @@ map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
 	int node_id = -1;
 	int essential_prev = 0;
 	int oldpolicy;
-	struct bitmask *oldmask = numa_allocate_nodemask();
+	struct bitmask *oldmask = NULL;
 	bool have_numa = true;
 	unsigned long maxnode = 0;
 
@@ -408,6 +408,7 @@ map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
 
 	if (orig && have_numa) {
 		RTE_LOG(DEBUG, EAL, "Trying to obtain current memory policy.\n");
+		oldmask = numa_allocate_nodemask();
 		if (get_mempolicy(&oldpolicy, oldmask->maskp,
 				  oldmask->size + 1, 0, 0) < 0) {
 			RTE_LOG(ERR, EAL,
@@ -421,6 +422,21 @@ map_all_hugepages(struct hugepage_file *hugepg_tbl, struct hugepage_info *hpi,
 	}
 #endif
 
+#ifdef RTE_ARCH_64
+	/*
+	 * Hugepages are first mmaped individually and then re-mmapped to
+	 * another region for having contiguous physical pages in contiguous
+	 * virtual addresses. Setting here vma_addr for the first hugepage
+	 * mapped to a virtual address which will not collide with the second
+	 * mmaping later. The next hugepages will use increments of this
+	 * initial address.
+	 *
+	 * The final virtual address will be based on baseaddr which is
+	 * 0x100000000. We use a hint here starting at 0x200000000, leaving
+	 * another 4GB just in case, plus the total available hugepages memory.
+	 */
+	vma_addr = (char *)0x200000000 + (hpi->hugepage_sz * hpi->num_pages[0]);
+#endif
 	for (i = 0; i < hpi->num_pages[0]; i++) {
 		uint64_t hugepage_sz = hpi->hugepage_sz;
 
@@ -588,7 +604,8 @@ out:
 			numa_set_localalloc();
 		}
 	}
-	numa_free_cpumask(oldmask);
+	if (oldmask != NULL)
+		numa_free_cpumask(oldmask);
 #endif
 	return i;
 }

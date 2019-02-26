@@ -88,8 +88,13 @@
 /* Maximum Packet headers size (L2+L3+L4) for TSO. */
 #define MLX5_MAX_TSO_HEADER 128
 
-/* Default minimum number of Tx queues for vectorized Tx. */
-#define MLX5_VPMD_MIN_TXQS 4
+/* Default maximum number of Tx queues for vectorized Tx. */
+#if defined(RTE_ARCH_ARM64)
+#define MLX5_VPMD_MAX_TXQS 8
+#else
+#define MLX5_VPMD_MAX_TXQS 4
+#endif
+#define MLX5_VPMD_MAX_TXQS_BLUEFIELD 16
 
 /* Threshold of buffer replenishment for vectorized Rx. */
 #define MLX5_VPMD_RXQ_RPLNSH_THRESH(n) \
@@ -123,6 +128,12 @@
  * packets invisible to HW.
  */
 #define MLX5_UAR_OFFSET (1ULL << 32)
+
+/* Size of per-queue MR cache table. */
+#define MLX5_MR_CACHE_N 8
+
+/* First entry must be NULL for comparison. */
+#define MLX5_MR_LOOKUP_TABLE_PAD 1
 
 /* Definition of static_assert found in /usr/include/assert.h */
 #ifndef HAVE_STATIC_ASSERT

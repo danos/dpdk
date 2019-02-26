@@ -944,12 +944,6 @@ struct rte_eth_conf {
 };
 
 /**
- * A structure used to retrieve the contextual information of
- * an Ethernet device, such as the controlling driver of the device,
- * its PCI context, etc...
- */
-
-/**
  * RX offload capabilities of a device.
  */
 #define DEV_RX_OFFLOAD_VLAN_STRIP  0x00000001
@@ -1009,6 +1003,12 @@ struct rte_pci_device;
 
 /**
  * Ethernet device information
+ */
+
+/**
+ * A structure used to retrieve the contextual information of
+ * an Ethernet device, such as the controlling driver of the
+ * device, etc...
  */
 struct rte_eth_dev_info {
 	struct rte_pci_device *pci_dev; /**< Device PCI information. */
@@ -2884,6 +2884,7 @@ rte_eth_rx_burst(uint16_t port_id, uint16_t queue_id,
 		 struct rte_mbuf **rx_pkts, const uint16_t nb_pkts)
 {
 	struct rte_eth_dev *dev = &rte_eth_devices[port_id];
+	uint16_t nb_rx;
 
 #ifdef RTE_LIBRTE_ETHDEV_DEBUG
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, 0);
@@ -2894,13 +2895,14 @@ rte_eth_rx_burst(uint16_t port_id, uint16_t queue_id,
 		return 0;
 	}
 #endif
-	int16_t nb_rx = (*dev->rx_pkt_burst)(dev->data->rx_queues[queue_id],
-			rx_pkts, nb_pkts);
+	nb_rx = (*dev->rx_pkt_burst)(dev->data->rx_queues[queue_id],
+				     rx_pkts, nb_pkts);
 
 #ifdef RTE_ETHDEV_RXTX_CALLBACKS
-	struct rte_eth_rxtx_callback *cb = dev->post_rx_burst_cbs[queue_id];
+	if (unlikely(dev->post_rx_burst_cbs[queue_id] != NULL)) {
+		struct rte_eth_rxtx_callback *cb =
+			dev->post_rx_burst_cbs[queue_id];
 
-	if (unlikely(cb != NULL)) {
 		do {
 			nb_rx = cb->fn.rx(port_id, queue_id, rx_pkts, nb_rx,
 						nb_pkts, cb->param);
@@ -2935,7 +2937,7 @@ rte_eth_rx_queue_count(uint16_t port_id, uint16_t queue_id)
 	if (queue_id >= dev->data->nb_rx_queues)
 		return -EINVAL;
 
-	return (*dev->dev_ops->rx_queue_count)(dev, queue_id);
+	return (int)(*dev->dev_ops->rx_queue_count)(dev, queue_id);
 }
 
 /**
@@ -3361,8 +3363,9 @@ rte_eth_tx_buffer_flush(uint16_t port_id, uint16_t queue_id,
 
 	/* All packets sent, or to be dealt with by callback below */
 	if (unlikely(sent != to_send))
-		buffer->error_callback(&buffer->pkts[sent], to_send - sent,
-				buffer->error_userdata);
+		buffer->error_callback(&buffer->pkts[sent],
+				       (uint16_t)(to_send - sent),
+				       buffer->error_userdata);
 
 	return sent;
 }

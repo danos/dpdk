@@ -322,13 +322,17 @@ extern "C" {
  * which can be set for packet.
  */
 #define PKT_TX_OFFLOAD_MASK (    \
+		PKT_TX_OUTER_IPV6 |	 \
+		PKT_TX_OUTER_IPV4 |	 \
+		PKT_TX_OUTER_IP_CKSUM |  \
+		PKT_TX_VLAN_PKT |        \
+		PKT_TX_IPV6 |		 \
+		PKT_TX_IPV4 |		 \
 		PKT_TX_IP_CKSUM |        \
 		PKT_TX_L4_MASK |         \
-		PKT_TX_OUTER_IP_CKSUM |  \
-		PKT_TX_TCP_SEG |         \
 		PKT_TX_IEEE1588_TMST |	 \
+		PKT_TX_TCP_SEG |         \
 		PKT_TX_QINQ_PKT |        \
-		PKT_TX_VLAN_PKT |        \
 		PKT_TX_TUNNEL_MASK |	 \
 		PKT_TX_MACSEC |		 \
 		PKT_TX_SEC_OFFLOAD)
@@ -755,7 +759,7 @@ rte_mbuf_refcnt_read(const struct rte_mbuf *m)
 static inline void
 rte_mbuf_refcnt_set(struct rte_mbuf *m, uint16_t new_value)
 {
-	rte_atomic16_set(&m->refcnt_atomic, new_value);
+	rte_atomic16_set(&m->refcnt_atomic, (int16_t)new_value);
 }
 
 /* internal */
@@ -785,8 +789,9 @@ rte_mbuf_refcnt_update(struct rte_mbuf *m, int16_t value)
 	 * reference counter can occur.
 	 */
 	if (likely(rte_mbuf_refcnt_read(m) == 1)) {
-		rte_mbuf_refcnt_set(m, 1 + value);
-		return 1 + value;
+		++value;
+		rte_mbuf_refcnt_set(m, (uint16_t)value);
+		return (uint16_t)value;
 	}
 
 	return __rte_mbuf_refcnt_update(m, value);
@@ -1139,7 +1144,8 @@ rte_pktmbuf_priv_size(struct rte_mempool *mp)
  */
 static inline void rte_pktmbuf_reset_headroom(struct rte_mbuf *m)
 {
-	m->data_off = RTE_MIN(RTE_PKTMBUF_HEADROOM, (uint16_t)m->buf_len);
+	m->data_off = (uint16_t)RTE_MIN((uint16_t)RTE_PKTMBUF_HEADROOM,
+					(uint16_t)m->buf_len);
 }
 
 /**
@@ -1319,10 +1325,11 @@ static inline void rte_pktmbuf_detach(struct rte_mbuf *m)
 {
 	struct rte_mbuf *md = rte_mbuf_from_indirect(m);
 	struct rte_mempool *mp = m->pool;
-	uint32_t mbuf_size, buf_len, priv_size;
+	uint32_t mbuf_size, buf_len;
+	uint16_t priv_size;
 
 	priv_size = rte_pktmbuf_priv_size(mp);
-	mbuf_size = sizeof(struct rte_mbuf) + priv_size;
+	mbuf_size = (uint32_t)(sizeof(struct rte_mbuf) + priv_size);
 	buf_len = rte_pktmbuf_data_room_size(mp);
 
 	m->priv_size = priv_size;
@@ -1659,7 +1666,10 @@ static inline char *rte_pktmbuf_prepend(struct rte_mbuf *m,
 	if (unlikely(len > rte_pktmbuf_headroom(m)))
 		return NULL;
 
-	m->data_off -= len;
+	/* NB: elaborating the subtraction like this instead of using
+	 *     -= allows us to ensure the result type is uint16_t
+	 *     avoiding compiler warnings on gcc 8.1 at least */
+	m->data_off = (uint16_t)(m->data_off - len);
 	m->data_len = (uint16_t)(m->data_len + len);
 	m->pkt_len  = (m->pkt_len + len);
 
@@ -1719,8 +1729,11 @@ static inline char *rte_pktmbuf_adj(struct rte_mbuf *m, uint16_t len)
 	if (unlikely(len > m->data_len))
 		return NULL;
 
+	/* NB: elaborating the addition like this instead of using
+	 *     += allows us to ensure the result type is uint16_t
+	 *     avoiding compiler warnings on gcc 8.1 at least */
 	m->data_len = (uint16_t)(m->data_len - len);
-	m->data_off += len;
+	m->data_off = (uint16_t)(m->data_off + len);
 	m->pkt_len  = (m->pkt_len - len);
 	return (char *)m->buf_addr + m->data_off;
 }
@@ -1832,8 +1845,11 @@ static inline int rte_pktmbuf_chain(struct rte_mbuf *head, struct rte_mbuf *tail
 	cur_tail = rte_pktmbuf_lastseg(head);
 	cur_tail->next = tail;
 
-	/* accumulate number of segments and total length. */
-	head->nb_segs += tail->nb_segs;
+	/* accumulate number of segments and total length.
+	 * NB: elaborating the addition like this instead of using
+	 *     -= allows us to ensure the result type is uint16_t
+	 *     avoiding compiler warnings on gcc 8.1 at least */
+	head->nb_segs = (uint16_t)(head->nb_segs + tail->nb_segs);
 	head->pkt_len += tail->pkt_len;
 
 	/* pkt_len is only set in the head */
@@ -1863,7 +1879,11 @@ rte_validate_tx_offload(const struct rte_mbuf *m)
 		return 0;
 
 	if (ol_flags & PKT_TX_OUTER_IP_CKSUM)
-		inner_l3_offset += m->outer_l2_len + m->outer_l3_len;
+		/* NB: elaborating the addition like this instead of using
+		 *     += gives the result uint64_t type instead of int,
+		 *     avoiding compiler warnings on gcc 8.1 at least */
+		inner_l3_offset = inner_l3_offset + m->outer_l2_len +
+				  m->outer_l3_len;
 
 	/* Headers are fragmented */
 	if (rte_pktmbuf_data_len(m) < inner_l3_offset + m->l3_len + m->l4_len)
@@ -1908,7 +1928,7 @@ rte_validate_tx_offload(const struct rte_mbuf *m)
 static inline int
 rte_pktmbuf_linearize(struct rte_mbuf *mbuf)
 {
-	int seg_len, copy_len;
+	size_t seg_len, copy_len;
 	struct rte_mbuf *m;
 	struct rte_mbuf *m_next;
 	char *buffer;

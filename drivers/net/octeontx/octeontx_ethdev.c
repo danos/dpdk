@@ -892,10 +892,11 @@ octeontx_dev_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 		pktbuf_conf.mmask.f_cache_mode = 1;
 
 		pktbuf_conf.wqe_skip = OCTTX_PACKET_WQE_SKIP;
-		pktbuf_conf.first_skip = OCTTX_PACKET_FIRST_SKIP;
+		pktbuf_conf.first_skip = OCTTX_PACKET_FIRST_SKIP(mb_pool);
 		pktbuf_conf.later_skip = OCTTX_PACKET_LATER_SKIP;
 		pktbuf_conf.mbuff_size = (mb_pool->elt_size -
 					RTE_PKTMBUF_HEADROOM -
+					rte_pktmbuf_priv_size(mb_pool) -
 					sizeof(struct rte_mbuf));
 
 		pktbuf_conf.cache_mode = PKI_OPC_MODE_STF2_STT;
@@ -1263,15 +1264,8 @@ octeontx_probe(struct rte_vdev_device *dev)
 		res = -EINVAL;
 		goto parse_error;
 	}
-	if (pnum > qnum) {
-		/*
-		 * We don't poll on event ports
-		 * that do not have any queues assigned.
-		 */
-		pnum = qnum;
-		PMD_INIT_LOG(INFO,
-			"reducing number of active event ports to %d", pnum);
-	}
+
+	/* Enable all queues available */
 	for (i = 0; i < qnum; i++) {
 		res = rte_event_queue_setup(evdev, i, NULL);
 		if (res < 0) {
@@ -1281,6 +1275,7 @@ octeontx_probe(struct rte_vdev_device *dev)
 		}
 	}
 
+	/* Enable all ports available */
 	for (i = 0; i < pnum; i++) {
 		res = rte_event_port_setup(evdev, i, NULL);
 		if (res < 0) {
@@ -1289,6 +1284,14 @@ octeontx_probe(struct rte_vdev_device *dev)
 						i, res);
 			goto parse_error;
 		}
+	}
+
+	/*
+	 * Do 1:1 links for ports & queues. All queues would be mapped to
+	 * one port. If there are more ports than queues, then some ports
+	 * won't be linked to any queue.
+	 */
+	for (i = 0; i < qnum; i++) {
 		/* Link one queue to one event port */
 		qlist = i;
 		res = rte_event_port_link(evdev, i, &qlist, NULL, 1);
