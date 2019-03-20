@@ -50,7 +50,7 @@
 #include "bnxt_vnic.h"
 #include "hsi_struct_def_dpdk.h"
 
-#define HWRM_CMD_TIMEOUT		2000
+#define HWRM_CMD_TIMEOUT		6000000
 
 /*
  * HWRM Functions (sent to HWRM)
@@ -97,7 +97,7 @@ static int bnxt_hwrm_send_message_locked(struct bnxt *bp, void *msg,
 			if (*valid == HWRM_RESP_VALID_KEY)
 				break;
 		}
-		rte_delay_us(600);
+		rte_delay_us(1);
 	}
 
 	if (i >= HWRM_CMD_TIMEOUT) {
@@ -232,6 +232,8 @@ int bnxt_hwrm_set_filter(struct bnxt *bp,
 	HWRM_PREP(req, CFA_L2_FILTER_ALLOC, -1, resp);
 
 	req.flags = rte_cpu_to_le_32(filter->flags);
+	req.flags |=
+	rte_cpu_to_le_32(HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_OUTERMOST);
 
 	enables = filter->enables |
 	      HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_DST_ID;
@@ -379,7 +381,6 @@ int bnxt_hwrm_ver_get(struct bnxt *bp)
 	int rc = 0;
 	struct hwrm_ver_get_input req = {.req_type = 0 };
 	struct hwrm_ver_get_output *resp = bp->hwrm_cmd_resp_addr;
-	uint32_t my_version;
 	uint32_t fw_version;
 	uint16_t max_resp_len;
 	char type[RTE_MEMZONE_NAMESIZE];
@@ -405,10 +406,6 @@ int bnxt_hwrm_ver_get(struct bnxt *bp)
 	RTE_LOG(INFO, PMD, "Driver HWRM version: %d.%d.%d\n",
 		HWRM_VERSION_MAJOR, HWRM_VERSION_MINOR, HWRM_VERSION_UPDATE);
 
-	my_version = HWRM_VERSION_MAJOR << 16;
-	my_version |= HWRM_VERSION_MINOR << 8;
-	my_version |= HWRM_VERSION_UPDATE;
-
 	fw_version = resp->hwrm_intf_maj << 16;
 	fw_version |= resp->hwrm_intf_min << 8;
 	fw_version |= resp->hwrm_intf_upd;
@@ -417,21 +414,6 @@ int bnxt_hwrm_ver_get(struct bnxt *bp)
 		RTE_LOG(ERR, PMD, "Unsupported firmware API version\n");
 		rc = -EINVAL;
 		goto error;
-	}
-
-	if (my_version != fw_version) {
-		RTE_LOG(INFO, PMD, "BNXT Driver/HWRM API mismatch.\n");
-		if (my_version < fw_version) {
-			RTE_LOG(INFO, PMD,
-				"Firmware API version is newer than driver.\n");
-			RTE_LOG(INFO, PMD,
-				"The driver may be missing features.\n");
-		} else {
-			RTE_LOG(INFO, PMD,
-				"Firmware API version is older than driver.\n");
-			RTE_LOG(INFO, PMD,
-				"Not all driver features may be functional.\n");
-		}
 	}
 
 	if (bp->max_req_len > resp->max_req_win_len) {
@@ -898,8 +880,11 @@ int bnxt_hwrm_vnic_cfg(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	req.lb_rule = rte_cpu_to_le_16(0xffff);
 	req.mru = rte_cpu_to_le_16(bp->eth_dev->data->mtu + ETHER_HDR_LEN +
 				   ETHER_CRC_LEN + VLAN_TAG_SIZE);
-	if (vnic->func_default)
+	/* Configure default VNIC only once. */
+	if (vnic->func_default && !(bp->flags & BNXT_FLAG_DFLT_VNIC_SET)) {
 		req.flags = 1;
+		bp->flags |= BNXT_FLAG_DFLT_VNIC_SET;
+	}
 	if (vnic->vlan_strip)
 		req.flags |=
 		    rte_cpu_to_le_32(HWRM_VNIC_CFG_INPUT_FLAGS_VLAN_STRIP_MODE);
@@ -976,6 +961,10 @@ int bnxt_hwrm_vnic_free(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 	HWRM_CHECK_RESULT;
 
 	vnic->fw_vnic_id = INVALID_HW_RING_ID;
+	/* Configure default VNIC again if necessary. */
+	if (vnic->func_default && (bp->flags & BNXT_FLAG_DFLT_VNIC_SET))
+		bp->flags &= ~BNXT_FLAG_DFLT_VNIC_SET;
+
 	return rc;
 }
 

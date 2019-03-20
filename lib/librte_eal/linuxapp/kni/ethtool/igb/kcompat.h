@@ -697,19 +697,22 @@ struct _kc_ethtool_pauseparam {
 #define SLE_VERSION(a,b,c) KERNEL_VERSION(a,b,c)
 #endif
 #ifdef CONFIG_SUSE_KERNEL
-#if ( LINUX_VERSION_CODE == KERNEL_VERSION(2,6,27) )
-/* SLES11 GA is 2.6.27 based */
-#define SLE_VERSION_CODE SLE_VERSION(11,0,0)
-#elif ( LINUX_VERSION_CODE == KERNEL_VERSION(2,6,32) )
-/* SLES11 SP1 is 2.6.32 based */
-#define SLE_VERSION_CODE SLE_VERSION(11,1,0)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 57))
+/* SLES12SP3 is at least 4.4.57+ based */
+#define SLE_VERSION_CODE SLE_VERSION(12, 3, 0)
+#elif ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,28) )
+/* SLES12 is at least 3.12.28+ based */
+#define SLE_VERSION_CODE SLE_VERSION(12,0,0)
 #elif ((LINUX_VERSION_CODE >= KERNEL_VERSION(3,0,61)) && \
        (LINUX_VERSION_CODE < KERNEL_VERSION(3,1,0)))
 /* SLES11 SP3 is at least 3.0.61+ based */
 #define SLE_VERSION_CODE SLE_VERSION(11,3,0)
-#elif ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,28) )
-/* SLES12 is at least 3.12.28+ based */
-#define SLE_VERSION_CODE SLE_VERSION(12,0,0)
+#elif ( LINUX_VERSION_CODE == KERNEL_VERSION(2,6,32) )
+/* SLES11 SP1 is 2.6.32 based */
+#define SLE_VERSION_CODE SLE_VERSION(11,1,0)
+#elif ( LINUX_VERSION_CODE == KERNEL_VERSION(2,6,27) )
+/* SLES11 GA is 2.6.27 based */
+#define SLE_VERSION_CODE SLE_VERSION(11,0,0)
 #endif /* LINUX_VERSION_CODE == KERNEL_VERSION(x,y,z) */
 #endif /* CONFIG_SUSE_KERNEL */
 #ifndef SLE_VERSION_CODE
@@ -3912,7 +3915,8 @@ skb_set_hash(struct sk_buff *skb, __u32 hash, __always_unused int type)
 #define HAVE_NDO_BRIDGE_GETLINK_NLFLAGS
 #endif /* >= 4.1.0 */
 
-#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(4,2,0) )
+#if (( LINUX_VERSION_CODE >= KERNEL_VERSION(4,2,0) ) \
+    || ( RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7,4) ))
 /* ndo_bridge_getlink adds new filter_mask and vlan_fill parameters */
 #define HAVE_NDO_BRIDGE_GETLINK_FILTER_MASK_VLAN_FILL
 #endif /* >= 4.2.0 */
@@ -3929,9 +3933,16 @@ skb_set_hash(struct sk_buff *skb, __u32 hash, __always_unused int type)
 #define vlan_tx_tag_present skb_vlan_tag_present
 #endif
 
-#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0) )
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)) || \
+     (SLE_VERSION_CODE && SLE_VERSION_CODE >= SLE_VERSION(12, 3, 0)) || \
+     (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 4)))
 #define HAVE_VF_VLAN_PROTO
-#endif /* >= 4.9.0 */
+#if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 4))
+/* In RHEL/Centos 7.4, the "new" version of ndo_set_vf_vlan
+ * is in the struct net_device_ops_extended */
+#define ndo_set_vf_vlan extended.ndo_set_vf_vlan
+#endif
+#endif
 
 #if (defined(RHEL_RELEASE_CODE) && \
 	(RHEL_RELEASE_VERSION(7, 5) <= RHEL_RELEASE_CODE))
