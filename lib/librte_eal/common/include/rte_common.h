@@ -200,16 +200,7 @@ rte_is_aligned(void *ptr, unsigned align)
 /**
  * Triggers an error at compilation time if the condition is true.
  */
-#ifndef __OPTIMIZE__
 #define RTE_BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
-#else
-extern int RTE_BUILD_BUG_ON_detected_error;
-#define RTE_BUILD_BUG_ON(condition) do {             \
-	((void)sizeof(char[1 - 2*!!(condition)]));   \
-	if (condition)                               \
-		RTE_BUILD_BUG_ON_detected_error = 1; \
-} while(0)
-#endif
 
 /*********** Macros to work with powers of 2 ********/
 
@@ -324,6 +315,23 @@ static inline uint32_t
 rte_bsf32(uint32_t v)
 {
 	return (uint32_t)__builtin_ctz(v);
+}
+
+/**
+ * Return the last (most-significant) bit set.
+ *
+ * @note The last (most significant) bit is at position 32.
+ * @note rte_fls_u32(0) = 0, rte_fls_u32(1) = 1, rte_fls_u32(0x80000000) = 32
+ *
+ * @param x
+ *     The input parameter.
+ * @return
+ *     The last (most-significant) bit set, or 0 if the input is 0.
+ */
+static inline int
+rte_fls_u32(uint32_t x)
+{
+	return (x == 0) ? 0 : 32 - __builtin_clz(x);
 }
 
 #ifndef offsetof

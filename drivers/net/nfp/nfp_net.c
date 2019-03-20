@@ -1567,21 +1567,20 @@ nfp_net_rx_cksum(struct nfp_net_rxq *rxq, struct nfp_net_rx_desc *rxd,
 		return;
 
 	/* If IPv4 and IP checksum error, fail */
-	if ((rxd->rxd.flags & PCIE_DESC_RX_IP4_CSUM) &&
-	    !(rxd->rxd.flags & PCIE_DESC_RX_IP4_CSUM_OK))
+	if (unlikely((rxd->rxd.flags & PCIE_DESC_RX_IP4_CSUM) &&
+	    !(rxd->rxd.flags & PCIE_DESC_RX_IP4_CSUM_OK)))
 		mb->ol_flags |= PKT_RX_IP_CKSUM_BAD;
+	else
+		mb->ol_flags |= PKT_RX_IP_CKSUM_GOOD;
 
 	/* If neither UDP nor TCP return */
 	if (!(rxd->rxd.flags & PCIE_DESC_RX_TCP_CSUM) &&
 	    !(rxd->rxd.flags & PCIE_DESC_RX_UDP_CSUM))
 		return;
 
-	if ((rxd->rxd.flags & PCIE_DESC_RX_TCP_CSUM) &&
-	    !(rxd->rxd.flags & PCIE_DESC_RX_TCP_CSUM_OK))
-		mb->ol_flags |= PKT_RX_L4_CKSUM_BAD;
-
-	if ((rxd->rxd.flags & PCIE_DESC_RX_UDP_CSUM) &&
-	    !(rxd->rxd.flags & PCIE_DESC_RX_UDP_CSUM_OK))
+	if (likely(rxd->rxd.flags & PCIE_DESC_RX_L4_CSUM_OK))
+		mb->ol_flags |= PKT_RX_L4_CKSUM_GOOD;
+	else
 		mb->ol_flags |= PKT_RX_L4_CKSUM_BAD;
 }
 
@@ -1628,6 +1627,18 @@ nfp_net_set_hash(struct nfp_net_rxq *rxq, struct nfp_net_rx_desc *rxd,
 		mbuf->packet_type |= RTE_PTYPE_INNER_L3_IPV6;
 		break;
 	case NFP_NET_RSS_IPV6_EX:
+		mbuf->packet_type |= RTE_PTYPE_INNER_L3_IPV6_EXT;
+		break;
+	case NFP_NET_RSS_IPV4_TCP:
+		mbuf->packet_type |= RTE_PTYPE_INNER_L3_IPV6_EXT;
+		break;
+	case NFP_NET_RSS_IPV6_TCP:
+		mbuf->packet_type |= RTE_PTYPE_INNER_L3_IPV6_EXT;
+		break;
+	case NFP_NET_RSS_IPV4_UDP:
+		mbuf->packet_type |= RTE_PTYPE_INNER_L3_IPV6_EXT;
+		break;
+	case NFP_NET_RSS_IPV6_UDP:
 		mbuf->packet_type |= RTE_PTYPE_INNER_L3_IPV6_EXT;
 		break;
 	default:
@@ -2223,14 +2234,22 @@ nfp_net_rss_hash_update(struct rte_eth_dev *dev,
 	}
 
 	if (rss_hf & ETH_RSS_IPV4)
-		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV4 |
-				NFP_NET_CFG_RSS_IPV4_TCP |
-				NFP_NET_CFG_RSS_IPV4_UDP;
+		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV4;
+
+	if (rss_hf & ETH_RSS_NONFRAG_IPV4_TCP)
+		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV4_TCP;
+
+	if (rss_hf & ETH_RSS_NONFRAG_IPV4_UDP)
+		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV4_UDP;
 
 	if (rss_hf & ETH_RSS_IPV6)
-		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV6 |
-				NFP_NET_CFG_RSS_IPV6_TCP |
-				NFP_NET_CFG_RSS_IPV6_UDP;
+		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV6;
+
+	if (rss_hf & ETH_RSS_NONFRAG_IPV6_TCP)
+		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV6_TCP;
+
+	if (rss_hf & ETH_RSS_NONFRAG_IPV6_UDP)
+		cfg_rss_ctrl |= NFP_NET_CFG_RSS_IPV6_UDP;
 
 	cfg_rss_ctrl |= NFP_NET_CFG_RSS_MASK;
 	cfg_rss_ctrl |= NFP_NET_CFG_RSS_TOEPLITZ;
@@ -2449,6 +2468,9 @@ nfp_net_init(struct rte_eth_dev *eth_dev)
 	/* Copying mac address to DPDK eth_dev struct */
 	ether_addr_copy((struct ether_addr *)hw->mac_addr,
 			&eth_dev->data->mac_addrs[0]);
+
+	if (!(hw->cap & NFP_NET_CFG_CTRL_LIVE_ADDR))
+		eth_dev->data->dev_flags |= RTE_ETH_DEV_NOLIVE_MAC_ADDR;
 
 	PMD_INIT_LOG(INFO, "port %d VendorID=0x%x DeviceID=0x%x "
 		     "mac=%02x:%02x:%02x:%02x:%02x:%02x",

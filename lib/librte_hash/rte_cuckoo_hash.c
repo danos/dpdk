@@ -212,7 +212,9 @@ rte_hash_create(const struct rte_hash_parameters *params)
 		goto err_unlock;
 	}
 
-	const uint32_t key_entry_size = sizeof(struct rte_hash_key) + params->key_len;
+	const uint32_t key_entry_size =
+		RTE_ALIGN(sizeof(struct rte_hash_key) + params->key_len,
+			  KEY_ALIGNMENT);
 	const uint64_t key_tbl_size = (uint64_t) key_entry_size * num_key_slots;
 
 	k = rte_zmalloc_socket(NULL, key_tbl_size,
@@ -405,7 +407,7 @@ rte_hash_reset(struct rte_hash *h)
 
 	/* clear the free ring */
 	while (rte_ring_dequeue(h->free_slots, &ptr) == 0)
-		rte_pause();
+		continue;
 
 	/* Repopulate the free slots ring. Entry zero is reserved for key misses */
 	if (h->hw_trans_mem_support)

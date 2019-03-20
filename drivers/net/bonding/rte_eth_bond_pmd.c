@@ -1,7 +1,7 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2010-2015 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2010-2017 Intel Corporation. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -62,7 +62,8 @@ get_vlan_offset(struct ether_hdr *eth_hdr, uint16_t *proto)
 {
 	size_t vlan_offset = 0;
 
-	if (rte_cpu_to_be_16(ETHER_TYPE_VLAN) == *proto) {
+	if (rte_cpu_to_be_16(ETHER_TYPE_VLAN) == *proto ||
+		rte_cpu_to_be_16(ETHER_TYPE_QINQ) == *proto) {
 		struct vlan_hdr *vlan_hdr = (struct vlan_hdr *)(eth_hdr + 1);
 
 		vlan_offset = sizeof(struct vlan_hdr);
@@ -82,28 +83,34 @@ bond_ethdev_rx_burst(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 {
 	struct bond_dev_private *internals;
 
-	uint16_t num_rx_slave = 0;
 	uint16_t num_rx_total = 0;
-
+	uint16_t slave_count;
+	uint16_t active_slave;
 	int i;
 
 	/* Cast to structure, containing bonded device's port id and queue id */
 	struct bond_rx_queue *bd_rx_q = (struct bond_rx_queue *)queue;
-
 	internals = bd_rx_q->dev_private;
+	slave_count = internals->active_slave_count;
+	active_slave = internals->active_slave;
 
+	for (i = 0; i < slave_count && nb_pkts; i++) {
+		uint16_t num_rx_slave;
 
-	for (i = 0; i < internals->active_slave_count && nb_pkts; i++) {
 		/* Offset of pointer to *bufs increases as packets are received
 		 * from other slaves */
-		num_rx_slave = rte_eth_rx_burst(internals->active_slaves[i],
-				bd_rx_q->queue_id, bufs + num_rx_total, nb_pkts);
-		if (num_rx_slave) {
-			num_rx_total += num_rx_slave;
-			nb_pkts -= num_rx_slave;
-		}
+		num_rx_slave =
+			rte_eth_rx_burst(internals->active_slaves[active_slave],
+					 bd_rx_q->queue_id,
+					 bufs + num_rx_total, nb_pkts);
+		num_rx_total += num_rx_slave;
+		nb_pkts -= num_rx_slave;
+		if (++active_slave == slave_count)
+			active_slave = 0;
 	}
 
+	if (++internals->active_slave == slave_count)
+		internals->active_slave = 0;
 	return num_rx_total;
 }
 
@@ -145,7 +152,7 @@ bond_ethdev_rx_burst_8023ad(void *queue, struct rte_mbuf **bufs,
 	const uint16_t ether_type_slow_be = rte_be_to_cpu_16(ETHER_TYPE_SLOW);
 	uint16_t num_rx_total = 0;	/* Total number of received packets */
 	uint8_t slaves[RTE_MAX_ETHPORTS];
-	uint8_t slave_count;
+	uint8_t slave_count, idx;
 
 	uint8_t collecting;  /* current slave collecting status */
 	const uint8_t promisc = internals->promiscuous_en;
@@ -159,12 +166,18 @@ bond_ethdev_rx_burst_8023ad(void *queue, struct rte_mbuf **bufs,
 	memcpy(slaves, internals->active_slaves,
 			sizeof(internals->active_slaves[0]) * slave_count);
 
+	idx = internals->active_slave;
+	if (idx >= slave_count) {
+		internals->active_slave = 0;
+		idx = 0;
+	}
 	for (i = 0; i < slave_count && num_rx_total < nb_pkts; i++) {
 		j = num_rx_total;
-		collecting = ACTOR_STATE(&mode_8023ad_ports[slaves[i]], COLLECTING);
+		collecting = ACTOR_STATE(&mode_8023ad_ports[slaves[idx]],
+					 COLLECTING);
 
 		/* Read packets from this slave */
-		num_rx_total += rte_eth_rx_burst(slaves[i], bd_rx_q->queue_id,
+		num_rx_total += rte_eth_rx_burst(slaves[idx], bd_rx_q->queue_id,
 				&bufs[num_rx_total], nb_pkts - num_rx_total);
 
 		for (k = j; k < 2 && k < num_rx_total; k++)
@@ -187,8 +200,8 @@ bond_ethdev_rx_burst_8023ad(void *queue, struct rte_mbuf **bufs,
 					!is_same_ether_addr(&bond_mac, &hdr->d_addr)))) {
 
 				if (hdr->ether_type == ether_type_slow_be) {
-					bond_mode_8023ad_handle_slow_pkt(internals, slaves[i],
-						bufs[j]);
+					bond_mode_8023ad_handle_slow_pkt(
+					    internals, slaves[idx], bufs[j]);
 				} else
 					rte_pktmbuf_free(bufs[j]);
 
@@ -201,7 +214,12 @@ bond_ethdev_rx_burst_8023ad(void *queue, struct rte_mbuf **bufs,
 			} else
 				j++;
 		}
+		if (unlikely(++idx == slave_count))
+			idx = 0;
 	}
+
+	if (++internals->active_slave == slave_count)
+		internals->active_slave = 0;
 
 	return num_rx_total;
 }
@@ -1324,6 +1342,9 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
 	int errval;
 	uint16_t q_id;
 
+	struct bond_dev_private *internals = (struct bond_dev_private *)
+		bonded_eth_dev->data->dev_private;
+
 	/* Stop slave */
 	rte_eth_dev_stop(slave_eth_dev->data->port_id);
 
@@ -1333,12 +1354,11 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
 
 	/* If RSS is enabled for bonding, try to enable it for slaves  */
 	if (bonded_eth_dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) {
-		if (bonded_eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key_len
-				!= 0) {
+		if (internals->rss_key_len != 0) {
 			slave_eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key_len =
-					bonded_eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key_len;
+					internals->rss_key_len;
 			slave_eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key =
-					bonded_eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key;
+					internals->rss_key;
 		} else {
 			slave_eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key = NULL;
 		}
@@ -1649,12 +1669,20 @@ bond_ethdev_stop(struct rte_eth_dev *eth_dev)
 			tlb_last_obytets[internals->active_slaves[i]] = 0;
 	}
 
-	internals->link_status_polling_enabled = 0;
-	for (i = 0; i < internals->slave_count; i++)
-		internals->slaves[i].last_link_status = 0;
-
 	eth_dev->data->dev_link.link_status = ETH_LINK_DOWN;
 	eth_dev->data->dev_started = 0;
+
+	internals->link_status_polling_enabled = 0;
+	for (i = 0; i < internals->slave_count; i++) {
+		uint16_t slave_id = internals->slaves[i].port_id;
+		if (find_slave_by_id(internals->active_slaves,
+				internals->active_slave_count, slave_id) !=
+						internals->active_slave_count) {
+			internals->slaves[i].last_link_status = 0;
+			rte_eth_dev_stop(slave_id);
+			deactivate_slave(eth_dev, slave_id);
+		}
+	}
 }
 
 void
@@ -2371,16 +2399,30 @@ bond_ethdev_configure(struct rte_eth_dev *dev)
 
 	unsigned i, j;
 
-	/* If RSS is enabled, fill table and key with default values */
+	/*
+	 * If RSS is enabled, fill table with default values and
+	 * set key to the the value specified in port RSS configuration.
+	 * Fall back to default RSS key if the key is not specified
+	 */
 	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS) {
-		dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key = internals->rss_key;
-		dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key_len = 0;
-		memcpy(internals->rss_key, default_rss_key, 40);
+		if (dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key != NULL) {
+			internals->rss_key_len =
+				dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key_len;
+			memcpy(internals->rss_key,
+			       dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key,
+			       internals->rss_key_len);
+		} else {
+			internals->rss_key_len = sizeof(default_rss_key);
+			memcpy(internals->rss_key, default_rss_key,
+			       internals->rss_key_len);
+		}
 
 		for (i = 0; i < RTE_DIM(internals->reta_conf); i++) {
 			internals->reta_conf[i].mask = ~0LL;
 			for (j = 0; j < RTE_RETA_GROUP_SIZE; j++)
-				internals->reta_conf[i].reta[j] = j % dev->data->nb_rx_queues;
+				internals->reta_conf[i].reta[j] =
+						(i * RTE_RETA_GROUP_SIZE + j) %
+						dev->data->nb_rx_queues;
 		}
 	}
 
