@@ -1,3 +1,10 @@
+dpdk (16.11.9-1+deb9u1) stretch; urgency=medium
+
+  * Merge stable update to 16.11.9; For a list of changes see
+    https://mails.dpdk.org/archives/announce/2019-March/000252.html
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 20 Mar 2019 15:32:56 +0000
+
 dpdk (16.11.8-1+deb9u1) stretch; urgency=medium
 
   * Merge stable update to 16.11.8; For a list of changes see
