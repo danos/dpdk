@@ -8,6 +8,10 @@ dpdk (18.11.1-1~git1) UNRELEASED; urgency=medium
       0003-build-mention-march-in-pkg-config-description.patch
       0001-kni-fix-build-for-dev_open-in-Linux-5.0.patch
       0002-kni-fix-build-for-igb_ndo_bridge_setlink-in-Linux-5..patch
+  * d/control: fix usability issue with mlx PMDs which might need rdma-core
+    to be installed. In most cases users will want this, to be able to
+    drop rdma-core if unwanted in some cases this is only a recommends added
+    to librte-pmd-mlx4-18.11 and librte-pmd-mlx5-18.11 (Closes: #925141)
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 15 Apr 2019 14:51:34 +0200
 
