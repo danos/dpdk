@@ -1,3 +1,16 @@
+dpdk (18.11.1-1~git1) UNRELEASED; urgency=medium
+
+  * Merge stable update to 18.11.1; For a list of changes see
+    https://doc.dpdk.org/guides-18.11/rel_notes/release_18_11.html
+    - refresh 0004-build-bump-minimum-Meson-version-to-0.47.1.patch for 18.11.1
+    - drop changes upstream in 18.11.1
+      0001-doc-fix-garbage-text-in-generated-HTML-guides.patch
+      0003-build-mention-march-in-pkg-config-description.patch
+      0001-kni-fix-build-for-dev_open-in-Linux-5.0.patch
+      0002-kni-fix-build-for-igb_ndo_bridge_setlink-in-Linux-5..patch
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 15 Apr 2019 14:51:34 +0200
+
 dpdk (18.11-5~git1) UNRELEASED; urgency=medium
 
   [ Luca Boccassi ]
