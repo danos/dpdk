@@ -35,7 +35,7 @@ Origin: https://patches.dpdk.org/patch/49995/
 --- a/meson.build
 +++ b/meson.build
 @@ -5,7 +5,7 @@ project('DPDK', 'C',
- 	version: '18.11.0',
+ 	version: '18.11.1',
  	license: 'BSD',
  	default_options: ['buildtype=release', 'default_library=static'],
 -	meson_version: '>= 0.41'
