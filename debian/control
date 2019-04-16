@@ -28,7 +28,7 @@ Build-Depends: debhelper (>= 10.3~),
                texlive-fonts-recommended <!nodoc>,
                texlive-latex-extra <!nodoc>,
                zlib1g-dev,
-Standards-Version: 4.2.1
+Standards-Version: 4.3.0
 Rules-Requires-Root: no
 Section: libs
 Homepage: https://www.dpdk.org
@@ -1745,6 +1745,7 @@ Homepage: https://dpdk.org/doc/guides/nics/mlx4.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+         rdma-core,
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-pmd-mlx4 runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -1759,6 +1760,7 @@ Homepage: https://dpdk.org/doc/guides/nics/mlx5.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+         rdma-core,
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-pmd-mlx5 runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run

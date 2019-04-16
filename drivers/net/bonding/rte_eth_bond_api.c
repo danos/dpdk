@@ -19,7 +19,10 @@ int
 check_for_bonded_ethdev(const struct rte_eth_dev *eth_dev)
 {
 	/* Check valid pointer */
-	if (eth_dev->device->driver->name == NULL)
+	if (eth_dev == NULL ||
+		eth_dev->device == NULL ||
+		eth_dev->device->driver == NULL ||
+		eth_dev->device->driver->name == NULL)
 		return -1;
 
 	/* return 0 if driver name matches */
@@ -125,6 +128,12 @@ deactivate_slave(struct rte_eth_dev *eth_dev, uint16_t port_id)
 
 	RTE_ASSERT(active_count < RTE_DIM(internals->active_slaves));
 	internals->active_slave_count = active_count;
+
+	/* Resetting active_slave when reaches to max
+	 * no of slaves in active list
+	 */
+	if (internals->active_slave >= active_count)
+		internals->active_slave = 0;
 
 	if (eth_dev->data->dev_started) {
 		if (internals->mode == BONDING_MODE_8023AD) {
