@@ -12,6 +12,7 @@ dpdk (18.11.1-1~git1) UNRELEASED; urgency=medium
     to be installed. In most cases users will want this, to be able to
     drop rdma-core if unwanted in some cases this is only a recommends added
     to librte-pmd-mlx4-18.11 and librte-pmd-mlx5-18.11 (Closes: #925141)
+  * d/control: drop shlibs:Depends from dpdk as it has no binaries anymore
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 15 Apr 2019 14:51:34 +0200
 
