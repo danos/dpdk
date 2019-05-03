@@ -13,6 +13,9 @@ dpdk (18.11.1-1) experimental; urgency=medium
     to be installed. In most cases users will want this, to be able to
     drop rdma-core if unwanted in some cases this is only a recommends added
     to librte-pmd-mlx4-18.11 and librte-pmd-mlx5-18.11 (Closes: #925141)
+  * d/control: drop shlibs:Depends from dpdk as it has no binaries anymore
+  * d/p/lp-1827102-kni-fix-build-with-Linux-5.1.patch fix kni DKMS build with
+    Linux 5.1 kernels (LP: #1827102)
 
   [ Luca Boccassi ]
   * Bump Standards-Version to 4.3.0, no changes.
