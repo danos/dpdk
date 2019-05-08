@@ -1,3 +1,11 @@
+dpdk (18.11.1-3) experimental; urgency=medium
+
+  * d/control: add dependencies to libdpdk-dev: libelf-dev and libjansson-dev
+    to avoid pkg-config issues
+  * d/control: drop unused build dependency to libcap-dev
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Wed, 08 May 2019 09:25:26 +0200
+
 dpdk (18.11.1-2) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
