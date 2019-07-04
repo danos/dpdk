@@ -40,3 +40,30 @@ fi
 
 Open a new terminal or souce ~/.bashrc, and then you will be able to use
 dquilt.
+
+***************
+
+After using Gerrit on FD.io (thanks!) for a while we converged on using salsa
+The main page is at https://salsa.debian.org/debian/dpdk
+
+Branches that we use:
+- sid                   - main development branch, uploads to unstable from here
+- experimental          - development if frozen, merged to sid on a new release
+- pristine-tar          - artifact of gbp import to recreate tarballs
+- upstream              - artifact of gbp import reflecting new versions
+                          upstream following mainline "master" releases
+                          e.g. 18.11 -> 19.02 -> 19.05 -> ...
+- upstream-XX.YY-stable - to keep updates linear stable releases like 18.11.2
+                          will go here, branched from XX.YY
+                          e.g. 17.11 -> 18.11 -> 19.11 -> ...
+- stretch*              - track updates/backports to stable Debian releases
+
+The majority of changes is co-maintained in Salsa directly.
+Uploads to existing Ubuntu releases are maintained in git Ubuntu [1]
+at https://git.launchpad.net/ubuntu/+source/dpdk
+
+There are branches per Ubuntu release which are forked off the Debian branch
+at the time. SRU [2] uploads follow the usual process based on these branches.
+
+[1]: https://ubuntu.com/blog/developing-ubuntu-using-git
+[2]: https://wiki.ubuntu.com/StableReleaseUpdates
