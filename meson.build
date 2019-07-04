@@ -2,7 +2,7 @@
 # Copyright(c) 2017 Intel Corporation
 
 project('DPDK', 'C',
-	version: '18.11.1',
+	version: '18.11.2',
 	license: 'BSD',
 	default_options: ['buildtype=release', 'default_library=static'],
 	meson_version: '>= 0.41'
@@ -68,13 +68,6 @@ configure_file(output: build_cfg,
 # for static builds, include the drivers as libs and we need to "whole-archive"
 # them.
 dpdk_drivers = ['-Wl,--whole-archive'] + dpdk_drivers + ['-Wl,--no-whole-archive']
-
-# driver .so files often depend upon the bus drivers for their connect bus,
-# e.g. ixgbe depends on librte_bus_pci. This means that the bus drivers need
-# to be in the library path, so symlink the drivers from the main lib directory.
-meson.add_install_script('buildtools/symlink-drivers-solibs.sh',
-		driver_install_path,
-		get_option('libdir'))
 
 pkg = import('pkgconfig')
 pkg.generate(name: meson.project_name(),

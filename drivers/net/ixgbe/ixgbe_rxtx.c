@@ -2029,7 +2029,7 @@ ixgbe_recv_pkts_lro(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts,
 		struct ixgbe_rx_entry *next_rxe = NULL;
 		struct rte_mbuf *first_seg;
 		struct rte_mbuf *rxm;
-		struct rte_mbuf *nmb;
+		struct rte_mbuf *nmb = NULL;
 		union ixgbe_adv_rx_desc rxd;
 		uint16_t data_len;
 		uint16_t next_id;
@@ -2853,14 +2853,14 @@ ixgbe_get_rx_port_offloads(struct rte_eth_dev *dev)
 		   DEV_RX_OFFLOAD_TCP_CKSUM   |
 		   DEV_RX_OFFLOAD_KEEP_CRC    |
 		   DEV_RX_OFFLOAD_JUMBO_FRAME |
+		   DEV_RX_OFFLOAD_VLAN_FILTER |
 		   DEV_RX_OFFLOAD_SCATTER;
 
 	if (hw->mac.type == ixgbe_mac_82598EB)
 		offloads |= DEV_RX_OFFLOAD_VLAN_STRIP;
 
 	if (ixgbe_is_vf(dev) == 0)
-		offloads |= (DEV_RX_OFFLOAD_VLAN_FILTER |
-			     DEV_RX_OFFLOAD_VLAN_EXTEND);
+		offloads |= DEV_RX_OFFLOAD_VLAN_EXTEND;
 
 	/*
 	 * RSC is only supported by 82599 and x540 PF devices in a non-SR-IOV

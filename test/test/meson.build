@@ -154,7 +154,6 @@ test_names = [
 	'cycles_autotest',
 	'debug_autotest',
 	'delay_us_sleep_autotest',
-	'devargs_autotest',
 	'distributor_autotest',
 	'distributor_perf_autotest',
 	'eal_flags_autotest',
@@ -263,7 +262,7 @@ if cc.has_argument('-Wno-format-truncation')
 endif
 
 # specify -D_GNU_SOURCE unconditionally
-default_cflags += '-D_GNU_SOURCE'
+cflags += '-D_GNU_SOURCE'
 
 test_dep_objs = []
 compress_test_dep = dependency('zlib', required: false)
