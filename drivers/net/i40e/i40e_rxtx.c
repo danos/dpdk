@@ -1718,7 +1718,7 @@ i40e_dev_rx_queue_setup_runtime(struct rte_eth_dev *dev,
 		(uint16_t)(rte_pktmbuf_data_room_size(rxq->mp) -
 			   RTE_PKTMBUF_HEADROOM);
 	int use_scattered_rx =
-		((rxq->max_pkt_len + 2 * I40E_VLAN_TAG_SIZE) > buf_size);
+		(rxq->max_pkt_len > buf_size);
 
 	if (i40e_rx_queue_init(rxq) != I40E_SUCCESS) {
 		PMD_DRV_LOG(ERR,
@@ -2423,12 +2423,12 @@ i40e_tx_queue_release_mbufs(struct i40e_tx_queue *txq)
 	struct rte_eth_dev *dev;
 	uint16_t i;
 
-	dev = &rte_eth_devices[txq->port_id];
-
 	if (!txq || !txq->sw_ring) {
-		PMD_DRV_LOG(DEBUG, "Pointer to rxq or sw_ring is NULL");
+		PMD_DRV_LOG(DEBUG, "Pointer to txq or sw_ring is NULL");
 		return;
 	}
+
+	dev = &rte_eth_devices[txq->port_id];
 
 	/**
 	 *  vPMD tx will not set sw_ring's mbuf to NULL after free,
@@ -2708,9 +2708,8 @@ i40e_rx_queue_init(struct i40e_rx_queue *rxq)
 		RTE_PKTMBUF_HEADROOM);
 
 	/* Check if scattered RX needs to be used. */
-	if ((rxq->max_pkt_len + 2 * I40E_VLAN_TAG_SIZE) > buf_size) {
+	if (rxq->max_pkt_len > buf_size)
 		dev_data->scattered_rx = 1;
-	}
 
 	/* Init the RX tail regieter. */
 	I40E_PCI_REG_WRITE(rxq->qrx_tail, rxq->nb_rx_desc - 1);
