@@ -1,11 +1,15 @@
 dpdk (18.11.2-1) experimental; urgency=medium
 
+  [ Christian Ehrhardt ]
   * Merge stable update to 18.11.2; For a list of changes see
     http://doc.dpdk.org/guides-18.11/rel_notes/release_18_11.html#id1
     - refresh 0004-build-bump-minimum-Meson-version-to-0.47.1.patch for 18.11.2
     - drop changes upstream in 18.11.2
       0002-build-use-generic-march-on-arm64-when-using-default.patch
       lp-1827102-kni-fix-build-with-Linux-5.1.patch
+
+  [ Santiago Ruano Rincón ]
+  * debian/rules: clean doc files
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 04 Jul 2019 11:05:14 +0200
 
