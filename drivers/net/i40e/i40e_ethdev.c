@@ -2671,11 +2671,11 @@ update_link_reg(struct i40e_hw *hw, struct rte_eth_link *link)
 #define I40E_PRTMAC_MACC		0x001E24E0
 #define I40E_REG_MACC_25GB		0x00020000
 #define I40E_REG_SPEED_MASK		0x38000000
-#define I40E_REG_SPEED_100MB		0x00000000
-#define I40E_REG_SPEED_1GB		0x08000000
-#define I40E_REG_SPEED_10GB		0x10000000
-#define I40E_REG_SPEED_20GB		0x20000000
-#define I40E_REG_SPEED_25_40GB		0x18000000
+#define I40E_REG_SPEED_0		0x00000000
+#define I40E_REG_SPEED_1		0x08000000
+#define I40E_REG_SPEED_2		0x10000000
+#define I40E_REG_SPEED_3		0x18000000
+#define I40E_REG_SPEED_4		0x20000000
 	uint32_t link_speed;
 	uint32_t reg_val;
 
@@ -2689,26 +2689,35 @@ update_link_reg(struct i40e_hw *hw, struct rte_eth_link *link)
 
 	/* Parse the link status */
 	switch (link_speed) {
-	case I40E_REG_SPEED_100MB:
+	case I40E_REG_SPEED_0:
 		link->link_speed = ETH_SPEED_NUM_100M;
 		break;
-	case I40E_REG_SPEED_1GB:
+	case I40E_REG_SPEED_1:
 		link->link_speed = ETH_SPEED_NUM_1G;
 		break;
-	case I40E_REG_SPEED_10GB:
-		link->link_speed = ETH_SPEED_NUM_10G;
-		break;
-	case I40E_REG_SPEED_20GB:
-		link->link_speed = ETH_SPEED_NUM_20G;
-		break;
-	case I40E_REG_SPEED_25_40GB:
-		reg_val = I40E_READ_REG(hw, I40E_PRTMAC_MACC);
-
-		if (reg_val & I40E_REG_MACC_25GB)
-			link->link_speed = ETH_SPEED_NUM_25G;
+	case I40E_REG_SPEED_2:
+		if (hw->mac.type == I40E_MAC_X722)
+			link->link_speed = ETH_SPEED_NUM_2_5G;
 		else
-			link->link_speed = ETH_SPEED_NUM_40G;
+			link->link_speed = ETH_SPEED_NUM_10G;
+		break;
+	case I40E_REG_SPEED_3:
+		if (hw->mac.type == I40E_MAC_X722) {
+			link->link_speed = ETH_SPEED_NUM_5G;
+		} else {
+			reg_val = I40E_READ_REG(hw, I40E_PRTMAC_MACC);
 
+			if (reg_val & I40E_REG_MACC_25GB)
+				link->link_speed = ETH_SPEED_NUM_25G;
+			else
+				link->link_speed = ETH_SPEED_NUM_40G;
+		}
+		break;
+	case I40E_REG_SPEED_4:
+		if (hw->mac.type == I40E_MAC_X722)
+			link->link_speed = ETH_SPEED_NUM_10G;
+		else
+			link->link_speed = ETH_SPEED_NUM_20G;
 		break;
 	default:
 		PMD_DRV_LOG(ERR, "Unknown link speed info %u", link_speed);
@@ -10830,6 +10839,7 @@ i40e_start_timecounters(struct rte_eth_dev *dev)
 
 	switch (link.link_speed) {
 	case ETH_SPEED_NUM_40G:
+	case ETH_SPEED_NUM_25G:
 		tsync_inc_l = I40E_PTP_40GB_INCVAL & 0xFFFFFFFF;
 		tsync_inc_h = I40E_PTP_40GB_INCVAL >> 32;
 		break;
@@ -11890,16 +11900,17 @@ static int i40e_get_module_eeprom(struct rte_eth_dev *dev,
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	bool is_sfp = false;
 	i40e_status status;
-	uint8_t *data = info->data;
+	uint8_t *data;
 	uint32_t value = 0;
 	uint32_t i;
 
-	if (!info || !info->length || !data)
+	if (!info || !info->length || !info->data)
 		return -EINVAL;
 
 	if (hw->phy.link_info.module_type[0] == I40E_MODULE_TYPE_SFP)
 		is_sfp = true;
 
+	data = info->data;
 	for (i = 0; i < info->length; i++) {
 		u32 offset = i + info->offset;
 		u32 addr = is_sfp ? I40E_I2C_EEPROM_DEV_ADDR : 0;
@@ -12201,8 +12212,8 @@ i40e_update_customized_pctype(struct rte_eth_dev *dev, uint8_t *pkg,
 			for (n = 0; n < proto_num; n++) {
 				if (proto[n].proto_id != proto_id)
 					continue;
-				strcat(name, proto[n].name);
-				strcat(name, "_");
+				strlcat(name, proto[n].name, sizeof(name));
+				strlcat(name, "_", sizeof(name));
 				break;
 			}
 		}
@@ -12699,9 +12710,6 @@ i40e_config_rss_filter(struct i40e_pf *pf,
 		return -EINVAL;
 	}
 
-	if (rss_info->conf.queue_num)
-		return -EINVAL;
-
 	/* If both VMDQ and RSS enabled, not all of PF queues are configured.
 	 * It's necessary to calculate the actual PF queues that are configured.
 	 */
@@ -12744,6 +12752,8 @@ i40e_config_rss_filter(struct i40e_pf *pf,
 		rss_conf.rss_key = (uint8_t *)rss_key_default;
 		rss_conf.rss_key_len = (I40E_PFQF_HKEY_MAX_INDEX + 1) *
 							sizeof(uint32_t);
+		PMD_DRV_LOG(INFO,
+			"No valid RSS key config for i40e, using default\n");
 	}
 
 	i40e_hw_rss_hash_set(pf, &rss_conf);

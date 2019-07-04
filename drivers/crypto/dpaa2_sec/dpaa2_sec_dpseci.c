@@ -236,8 +236,8 @@ build_authenc_gcm_sg_fd(dpaa2_sec_session *sess,
 
 	/* Configure Output SGE for Encap/Decap */
 	DPAA2_SET_FLE_ADDR(sge, DPAA2_MBUF_VADDR_TO_IOVA(mbuf));
-	DPAA2_SET_FLE_OFFSET(sge, mbuf->data_off + sym_op->aead.data.offset -
-								auth_only_len);
+	DPAA2_SET_FLE_OFFSET(sge, mbuf->data_off +
+			RTE_ALIGN_CEIL(auth_only_len, 16) - auth_only_len);
 	sge->length = mbuf->data_len - sym_op->aead.data.offset + auth_only_len;
 
 	mbuf = mbuf->next;
@@ -400,8 +400,8 @@ build_authenc_gcm_fd(dpaa2_sec_session *sess,
 
 	/* Configure Output SGE for Encap/Decap */
 	DPAA2_SET_FLE_ADDR(sge, DPAA2_MBUF_VADDR_TO_IOVA(dst));
-	DPAA2_SET_FLE_OFFSET(sge, sym_op->aead.data.offset +
-				dst->data_off - auth_only_len);
+	DPAA2_SET_FLE_OFFSET(sge, dst->data_off +
+			RTE_ALIGN_CEIL(auth_only_len, 16) - auth_only_len);
 	sge->length = sym_op->aead.data.length + auth_only_len;
 
 	if (sess->dir == DIR_ENC) {
@@ -2864,7 +2864,7 @@ dpaa2_sec_security_session_destroy(void *dev __rte_unused,
 		rte_free(s->ctxt);
 		rte_free(s->cipher_key.data);
 		rte_free(s->auth_key.data);
-		memset(sess, 0, sizeof(dpaa2_sec_session));
+		memset(s, 0, sizeof(dpaa2_sec_session));
 		set_sec_session_private_data(sess, NULL);
 		rte_mempool_put(sess_mp, sess_priv);
 	}
@@ -2913,7 +2913,7 @@ dpaa2_sec_sym_session_clear(struct rte_cryptodev *dev,
 		rte_free(s->ctxt);
 		rte_free(s->cipher_key.data);
 		rte_free(s->auth_key.data);
-		memset(sess, 0, sizeof(dpaa2_sec_session));
+		memset(s, 0, sizeof(dpaa2_sec_session));
 		struct rte_mempool *sess_mp = rte_mempool_from_obj(sess_priv);
 		set_sym_session_private_data(sess, index, NULL);
 		rte_mempool_put(sess_mp, sess_priv);

@@ -22,7 +22,7 @@ They must be separated from the EAL options, shown in the previous section, with
 
     sudo ./testpmd -l 0-3 -n 4 -- -i --portmask=0x1 --nb-cores=2
 
-The commandline options are:
+The command line options are:
 
 *   ``-i, --interactive``
 
@@ -365,7 +365,7 @@ The commandline options are:
 
 *   ``--hot-plug``
 
-    Enable device event monitor machenism for hotplug.
+    Enable device event monitor mechanism for hotplug.
 
 *   ``--vxlan-gpe-port=N``
 
@@ -405,21 +405,21 @@ The commandline options are:
 
 *   ``--noisy-lkup-memory=N``
 
-    Set the size of the noisy neighbour simulation memory buffer in MB to N.
+    Set the size of the noisy neighbor simulation memory buffer in MB to N.
     Only available with the noisy forwarding mode. The default value is 0.
 
 
 *   ``--noisy-lkup-num-reads=N``
 
-    Set the number of reads to be done in noisy neighbour simulation memory buffer to N.
+    Set the number of reads to be done in noisy neighbor simulation memory buffer to N.
     Only available with the noisy forwarding mode. The default value is 0.
 
 *   ``--noisy-lkup-num-writes=N``
 
-    Set the number of writes to be done in noisy neighbour simulation memory buffer to N.
+    Set the number of writes to be done in noisy neighbor simulation memory buffer to N.
     Only available with the noisy forwarding mode. The default value is 0.
 
 *   ``--noisy-lkup-num-reads-writes=N``
 
-    Set the number of r/w accesses to be done in noisy neighbour simulation memory buffer to N.
+    Set the number of r/w accesses to be done in noisy neighbor simulation memory buffer to N.
     Only available with the noisy forwarding mode. The default value is 0.

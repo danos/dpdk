@@ -94,17 +94,17 @@ sfc_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 
 	/* Autonegotiation may be disabled */
 	dev_info->speed_capa = ETH_LINK_SPEED_FIXED;
-	if (sa->port.phy_adv_cap_mask & EFX_PHY_CAP_1000FDX)
+	if (sa->port.phy_adv_cap_mask & (1u << EFX_PHY_CAP_1000FDX))
 		dev_info->speed_capa |= ETH_LINK_SPEED_1G;
-	if (sa->port.phy_adv_cap_mask & EFX_PHY_CAP_10000FDX)
+	if (sa->port.phy_adv_cap_mask & (1u << EFX_PHY_CAP_10000FDX))
 		dev_info->speed_capa |= ETH_LINK_SPEED_10G;
-	if (sa->port.phy_adv_cap_mask & EFX_PHY_CAP_25000FDX)
+	if (sa->port.phy_adv_cap_mask & (1u << EFX_PHY_CAP_25000FDX))
 		dev_info->speed_capa |= ETH_LINK_SPEED_25G;
-	if (sa->port.phy_adv_cap_mask & EFX_PHY_CAP_40000FDX)
+	if (sa->port.phy_adv_cap_mask & (1u << EFX_PHY_CAP_40000FDX))
 		dev_info->speed_capa |= ETH_LINK_SPEED_40G;
-	if (sa->port.phy_adv_cap_mask & EFX_PHY_CAP_50000FDX)
+	if (sa->port.phy_adv_cap_mask & (1u << EFX_PHY_CAP_50000FDX))
 		dev_info->speed_capa |= ETH_LINK_SPEED_50G;
-	if (sa->port.phy_adv_cap_mask & EFX_PHY_CAP_100000FDX)
+	if (sa->port.phy_adv_cap_mask & (1u << EFX_PHY_CAP_100000FDX))
 		dev_info->speed_capa |= ETH_LINK_SPEED_100G;
 
 	dev_info->max_rx_queues = sa->rxq_max;
@@ -860,6 +860,33 @@ fail_inval:
 }
 
 static int
+sfc_check_scatter_on_all_rx_queues(struct sfc_adapter *sa, size_t pdu)
+{
+	const efx_nic_cfg_t *encp = efx_nic_cfg_get(sa->nic);
+	boolean_t scatter_enabled;
+	const char *error;
+	unsigned int i;
+
+	for (i = 0; i < sa->rxq_count; i++) {
+		if ((sa->rxq_info[i].rxq->state & SFC_RXQ_INITIALIZED) == 0)
+			continue;
+
+		scatter_enabled = (sa->rxq_info[i].type_flags &
+				   EFX_RXQ_FLAG_SCATTER);
+
+		if (!sfc_rx_check_scatter(pdu, sa->rxq_info[i].rxq->buf_size,
+					  encp->enc_rx_prefix_size,
+					  scatter_enabled, &error)) {
+			sfc_err(sa, "MTU check for RxQ %u failed: %s", i,
+				error);
+			return EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static int
 sfc_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 {
 	struct sfc_adapter *sa = dev->data->dev_private;
@@ -884,6 +911,10 @@ sfc_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	}
 
 	sfc_adapter_lock(sa);
+
+	rc = sfc_check_scatter_on_all_rx_queues(sa, pdu);
+	if (rc != 0)
+		goto fail_check_scatter;
 
 	if (pdu != sa->port.pdu) {
 		if (sa->state == SFC_ADAPTER_STARTED) {
@@ -921,6 +952,8 @@ fail_start:
 		sfc_err(sa, "cannot start with neither new (%u) nor old (%u) "
 			"PDU max size - port is stopped",
 			(unsigned int)pdu, (unsigned int)old_pdu);
+
+fail_check_scatter:
 	sfc_adapter_unlock(sa);
 
 fail_inval:
@@ -1123,8 +1156,6 @@ static uint32_t
 sfc_rx_queue_count(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 {
 	struct sfc_adapter *sa = dev->data->dev_private;
-
-	sfc_log_init(sa, "RxQ=%u", rx_queue_id);
 
 	return sfc_rx_qdesc_npending(sa, rx_queue_id);
 }
@@ -1877,7 +1908,7 @@ static const struct eth_dev_ops sfc_eth_dev_secondary_ops = {
 };
 
 static int
-sfc_eth_dev_secondary_set_ops(struct rte_eth_dev *dev)
+sfc_eth_dev_secondary_set_ops(struct rte_eth_dev *dev, uint32_t logtype_main)
 {
 	/*
 	 * Device private data has really many process-local pointers.
@@ -1891,12 +1922,14 @@ sfc_eth_dev_secondary_set_ops(struct rte_eth_dev *dev)
 
 	dp_rx = sfc_dp_find_rx_by_name(&sfc_dp_head, sa->dp_rx_name);
 	if (dp_rx == NULL) {
-		sfc_err(sa, "cannot find %s Rx datapath", sa->dp_rx_name);
+		SFC_LOG(sa, RTE_LOG_ERR, logtype_main,
+			"cannot find %s Rx datapath", sa->dp_rx_name);
 		rc = ENOENT;
 		goto fail_dp_rx;
 	}
 	if (~dp_rx->features & SFC_DP_RX_FEAT_MULTI_PROCESS) {
-		sfc_err(sa, "%s Rx datapath does not support multi-process",
+		SFC_LOG(sa, RTE_LOG_ERR, logtype_main,
+			"%s Rx datapath does not support multi-process",
 			sa->dp_rx_name);
 		rc = EINVAL;
 		goto fail_dp_rx_multi_process;
@@ -1904,12 +1937,14 @@ sfc_eth_dev_secondary_set_ops(struct rte_eth_dev *dev)
 
 	dp_tx = sfc_dp_find_tx_by_name(&sfc_dp_head, sa->dp_tx_name);
 	if (dp_tx == NULL) {
-		sfc_err(sa, "cannot find %s Tx datapath", sa->dp_tx_name);
+		SFC_LOG(sa, RTE_LOG_ERR, logtype_main,
+			"cannot find %s Tx datapath", sa->dp_tx_name);
 		rc = ENOENT;
 		goto fail_dp_tx;
 	}
 	if (~dp_tx->features & SFC_DP_TX_FEAT_MULTI_PROCESS) {
-		sfc_err(sa, "%s Tx datapath does not support multi-process",
+		SFC_LOG(sa, RTE_LOG_ERR, logtype_main,
+			"%s Tx datapath does not support multi-process",
 			sa->dp_tx_name);
 		rc = EINVAL;
 		goto fail_dp_tx_multi_process;
@@ -1957,26 +1992,29 @@ sfc_eth_dev_init(struct rte_eth_dev *dev)
 {
 	struct sfc_adapter *sa = dev->data->dev_private;
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+	uint32_t logtype_main;
 	int rc;
 	const efx_nic_cfg_t *encp;
 	const struct ether_addr *from;
 
 	sfc_register_dp();
 
+	logtype_main = sfc_register_logtype(&pci_dev->addr,
+					    SFC_LOGTYPE_MAIN_STR,
+					    RTE_LOG_NOTICE);
+
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		return -sfc_eth_dev_secondary_set_ops(dev);
+		return -sfc_eth_dev_secondary_set_ops(dev, logtype_main);
 
 	/* Required for logging */
 	sa->pci_addr = pci_dev->addr;
 	sa->port_id = dev->data->port_id;
+	sa->logtype_main = logtype_main;
 
 	sa->eth_dev = dev;
 
 	/* Copy PCI device info to the dev->data */
 	rte_eth_copy_pci_info(dev, pci_dev);
-
-	sa->logtype_main = sfc_register_logtype(sa, SFC_LOGTYPE_MAIN_STR,
-						RTE_LOG_NOTICE);
 
 	rc = sfc_kvargs_parse(sa);
 	if (rc != 0)

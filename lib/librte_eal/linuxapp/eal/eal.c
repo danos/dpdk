@@ -320,7 +320,7 @@ rte_eal_config_create(void)
 		rte_mem_cfg_addr = NULL;
 
 	if (mem_cfg_fd < 0){
-		mem_cfg_fd = open(pathname, O_RDWR | O_CREAT, 0660);
+		mem_cfg_fd = open(pathname, O_RDWR | O_CREAT, 0600);
 		if (mem_cfg_fd < 0)
 			rte_panic("Cannot open '%s' for rte_mem_config\n", pathname);
 	}
@@ -1000,6 +1000,12 @@ rte_eal_init(int argc, char **argv)
 		return -1;
 	}
 
+	if (rte_eal_alarm_init() < 0) {
+		rte_eal_init_alert("Cannot init interrupt-handling thread");
+		/* rte_eal_alarm_init sets rte_errno on failure. */
+		return -1;
+	}
+
 	/* Put mp channel init before bus scan so that we can init the vdev
 	 * bus through mp channel in the secondary process before the bus scan.
 	 */
@@ -1120,12 +1126,6 @@ rte_eal_init(int argc, char **argv)
 		return -1;
 	}
 
-	if (rte_eal_alarm_init() < 0) {
-		rte_eal_init_alert("Cannot init interrupt-handling thread");
-		/* rte_eal_alarm_init sets rte_errno on failure. */
-		return -1;
-	}
-
 	if (rte_eal_timer_init() < 0) {
 		rte_eal_init_alert("Cannot init HPET or TSC timers");
 		rte_errno = ENOTSUP;
@@ -1214,8 +1214,11 @@ rte_eal_init(int argc, char **argv)
 	 * whether we are primary or secondary process, but we cannot remove
 	 * primary process' files because secondary should be able to run even
 	 * if primary process is dead.
+	 *
+	 * In no_shconf mode, no runtime directory is created in the first
+	 * place, so no cleanup needed.
 	 */
-	if (eal_clean_runtime_dir() < 0) {
+	if (!internal_config.no_shconf && eal_clean_runtime_dir() < 0) {
 		rte_eal_init_alert("Cannot clear runtime directory\n");
 		return -1;
 	}
