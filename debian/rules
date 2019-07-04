@@ -107,6 +107,13 @@ override_dh_auto_clean:
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	rm -f debian/dpdk-igb-uio-dkms.dkms debian/dpdk-rte-kni-dkms.dkms
+	rm -f doc/guides/compressdevs/overview_feature_table.txt \
+		doc/guides/cryptodevs/overview_aead_table.txt \
+		doc/guides/cryptodevs/overview_asym_table.txt \
+		doc/guides/cryptodevs/overview_auth_table.txt \
+		doc/guides/cryptodevs/overview_cipher_table.txt \
+		doc/guides/cryptodevs/overview_feature_table.txt \
+		doc/guides/nics/overview_table.txt
 	dh_auto_clean
 
 override_dh_auto_configure:
