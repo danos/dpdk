@@ -195,7 +195,7 @@ scan_one_fslmc_device(char *dev_name)
 
 	t_ptr = strtok(NULL, ".");
 	if (!t_ptr) {
-		DPAA2_BUS_ERR("Incorrect device string observed (%s)", t_ptr);
+		DPAA2_BUS_ERR("Incorrect device string observed (null)");
 		goto cleanup;
 	}
 
@@ -246,13 +246,13 @@ rte_fslmc_parse(const char *name, void *addr)
 	    strncmp("dpci", t_ptr, 4) &&
 	    strncmp("dpmcp", t_ptr, 5) &&
 	    strncmp("dpdmai", t_ptr, 6)) {
-		DPAA2_BUS_ERR("Unknown or unsupported device");
+		DPAA2_BUS_DEBUG("Unknown or unsupported device (%s)", name);
 		goto err_out;
 	}
 
 	t_ptr = strchr(name, '.');
 	if (!t_ptr) {
-		DPAA2_BUS_ERR("Incorrect device string observed (%s)", t_ptr);
+		DPAA2_BUS_ERR("Incorrect device string observed (null)");
 		goto err_out;
 	}
 
