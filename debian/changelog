@@ -1,3 +1,9 @@
+dpdk (18.11.2-2+deb10u1) buster; urgency=medium
+
+  * Rebuild for buster.
+
+ -- Luca Boccassi <bluca@debian.org>  Fri, 09 Aug 2019 13:35:31 +0100
+
 dpdk (18.11.2-2) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
