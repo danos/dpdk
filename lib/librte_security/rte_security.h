@@ -163,6 +163,15 @@ struct rte_security_ipsec_sa_options {
 	 * * 0: Inner packet is not modified.
 	 */
 	uint32_t dec_ttl : 1;
+
+	/**< Explicit Congestion Notification (ECN)
+	 *
+	 * * 1: In tunnel mode, enable outer header ECN Field copied from
+	 *      inner header in tunnel encapsulation, or inner header ECN
+	 *      field construction in decapsulation.
+	 * * 0: Inner/outer header are not modified.
+	 */
+	uint32_t ecn : 1;
 };
 
 /** IPSec security association direction */
@@ -317,6 +326,8 @@ struct rte_security_session_conf {
 struct rte_security_session {
 	void *sess_private_data;
 	/**< Private session material */
+	uint64_t opaque_data;
+	/**< Opaque user defined data */
 };
 
 /**
@@ -344,7 +355,8 @@ rte_security_session_create(struct rte_security_ctx *instance,
  *  - On success returns 0
  *  - On failure return errno
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_security_session_update(struct rte_security_ctx *instance,
 			    struct rte_security_session *sess,
 			    struct rte_security_session_conf *conf);
@@ -412,7 +424,8 @@ rte_security_set_pkt_metadata(struct rte_security_ctx *instance,
  *  - On success, userdata
  *  - On failure, NULL
  */
-void * __rte_experimental
+__rte_experimental
+void *
 rte_security_get_userdata(struct rte_security_ctx *instance, uint64_t md);
 
 /**
@@ -499,7 +512,8 @@ struct rte_security_stats {
  *  - On success return 0
  *  - On failure errno
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_security_session_stats_get(struct rte_security_ctx *instance,
 			       struct rte_security_session *sess,
 			       struct rte_security_stats *stats);
@@ -534,7 +548,7 @@ struct rte_security_capability {
 			enum rte_security_pdcp_domain domain;
 			/**< PDCP mode of operation: Control or data */
 			uint32_t capa_flags;
-			/**< Capabilitity flags, see RTE_SECURITY_PDCP_* */
+			/**< Capability flags, see RTE_SECURITY_PDCP_* */
 		} pdcp;
 		/**< PDCP capability */
 	};
@@ -566,7 +580,7 @@ struct rte_security_capability {
 #define RTE_SECURITY_TX_HW_TRAILER_OFFLOAD	0x00000002
 /**< HW constructs trailer of packets
  * Transmitted packets will have the trailer added to them
- * by hardawre. The next protocol field will be based on
+ * by hardware. The next protocol field will be based on
  * the mbuf->inner_esp_next_proto field.
  */
 #define RTE_SECURITY_RX_HW_TRAILER_OFFLOAD	0x00010000

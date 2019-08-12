@@ -80,6 +80,8 @@ struct vfio_device_info;
 
 #endif /* VFIO_PRESENT */
 
+#define RTE_VFIO_DEFAULT_CONTAINER_FD (-1)
+
 /**
  * Setup vfio_cfg for the device identified by its address.
  * It discovers the configured I/O MMU groups or sets a new one for the device.
@@ -178,7 +180,7 @@ int rte_vfio_noiommu_is_enabled(void);
  * an error on BSD.
  *
  * @param vfio_group_fd
- *   VFIO Grouup FD.
+ *   VFIO Group FD.
  *
  * @return
  *   0 on success.
@@ -291,6 +293,10 @@ rte_vfio_get_group_fd(int iommu_group_num);
  *       containers by default, user needs to manage DMA mappings for
  *       any container created by this API.
  *
+ * @note When creating containers using this API, the container will only be
+ *       available in the process that has created it. Sharing containers and
+ *       devices between multiple processes is not supported.
+ *
  * @return
  *   the container fd if successful
  *   <0 if failed
@@ -347,7 +353,8 @@ rte_vfio_container_group_unbind(int container_fd, int iommu_group_num);
  * Perform DMA mapping for devices in a container.
  *
  * @param container_fd
- *   the specified container fd
+ *   the specified container fd. Use RTE_VFIO_DEFAULT_CONTAINER_FD to
+ *   use the default container.
  *
  * @param vaddr
  *   Starting virtual address of memory to be mapped.
@@ -370,7 +377,8 @@ rte_vfio_container_dma_map(int container_fd, uint64_t vaddr,
  * Perform DMA unmapping for devices in a container.
  *
  * @param container_fd
- *   the specified container fd
+ *   the specified container fd. Use RTE_VFIO_DEFAULT_CONTAINER_FD to
+ *   use the default container.
  *
  * @param vaddr
  *   Starting virtual address of memory to be unmapped.

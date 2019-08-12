@@ -62,6 +62,7 @@ cperf_latency_test_free(struct cperf_latency_ctx *ctx)
 
 void *
 cperf_latency_test_constructor(struct rte_mempool *sess_mp,
+		struct rte_mempool *sess_priv_mp,
 		uint8_t dev_id, uint16_t qp_id,
 		const struct cperf_options *options,
 		const struct cperf_test_vector *test_vector,
@@ -86,8 +87,8 @@ cperf_latency_test_constructor(struct rte_mempool *sess_mp,
 		sizeof(struct rte_crypto_sym_op) +
 		sizeof(struct cperf_op_result *);
 
-	ctx->sess = op_fns->sess_create(sess_mp, dev_id, options, test_vector,
-			iv_offset);
+	ctx->sess = op_fns->sess_create(sess_mp, sess_priv_mp, dev_id, options,
+			test_vector, iv_offset);
 	if (ctx->sess == NULL)
 		goto err;
 
@@ -128,7 +129,7 @@ cperf_latency_test_runner(void *arg)
 	uint8_t burst_size_idx = 0;
 	uint32_t imix_idx = 0;
 
-	static int only_once;
+	static rte_atomic16_t display_once = RTE_ATOMIC16_INIT(0);
 
 	if (ctx == NULL)
 		return 0;
@@ -310,7 +311,7 @@ cperf_latency_test_runner(void *arg)
 		time_min = tunit*(double)(tsc_min) / tsc_hz;
 
 		if (ctx->options->csv) {
-			if (!only_once)
+			if (rte_atomic16_test_and_set(&display_once))
 				printf("\n# lcore, Buffer Size, Burst Size, Pakt Seq #, "
 						"Packet Size, cycles, time (us)");
 
@@ -325,7 +326,6 @@ cperf_latency_test_runner(void *arg)
 						/ tsc_hz);
 
 			}
-			only_once = 1;
 		} else {
 			printf("\n# Device %d on lcore %u\n", ctx->dev_id,
 				ctx->lcore_id);

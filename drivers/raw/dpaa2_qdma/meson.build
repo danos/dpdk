@@ -4,7 +4,8 @@
 version = 2
 
 build = dpdk_conf.has('RTE_LIBRTE_DPAA2_MEMPOOL')
-deps += ['rawdev', 'mempool_dpaa2', 'ring']
+reason = 'missing dependency, DPDK DPAA2 mempool driver'
+deps += ['rawdev', 'mempool_dpaa2', 'ring', 'kvargs']
 sources = files('dpaa2_qdma.c')
 
 allow_experimental_apis = true

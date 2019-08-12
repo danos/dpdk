@@ -187,6 +187,8 @@ The ``struct rte_kni_conf`` structure contains fields which allow the
 user to specify the interface name, set the MTU size, set an explicit or
 random MAC address and control the affinity of the kernel Rx thread(s)
 (both single and multi-threaded modes).
+By default the KNI sample example gets the MTU from the matching device,
+and in case of KNI PMD it is derived from mbuf buffer length.
 
 The ``struct rte_kni_ops`` structure contains pointers to functions to
 handle requests from the ``rte_kni`` kernel module.  These functions
@@ -225,7 +227,7 @@ application functions:
 
 ``config_promiscusity``:
 
-    Called when the user changes the promiscusity state of the KNI
+    Called when the user changes the promiscuity state of the KNI
     interface.  For example, when the user runs ``ip link set promisc
     [on|off] dev <ifaceX>``. If the user sets this callback function to
     NULL, but sets the ``port_id`` field to a value other than -1, a default
@@ -266,12 +268,16 @@ Use Case: Ingress
 -----------------
 
 On the DPDK RX side, the mbuf is allocated by the PMD in the RX thread context.
-This thread will enqueue the mbuf in the rx_q FIFO.
+This thread will enqueue the mbuf in the rx_q FIFO,
+and the next pointers in mbuf-chain will convert to physical address.
 The KNI thread will poll all KNI active devices for the rx_q.
 If an mbuf is dequeued, it will be converted to a sk_buff and sent to the net stack via netif_rx().
-The dequeued mbuf must be freed, so the same pointer is sent back in the free_q FIFO.
+The dequeued mbuf must be freed, so the same pointer is sent back in the free_q FIFO,
+and next pointers must convert back to virtual address if exists before put in the free_q FIFO.
 
 The RX thread, in the same main loop, polls this FIFO and frees the mbuf after dequeuing it.
+The address conversion of the next pointer is to prevent the chained mbuf
+in different hugepage segments from causing kernel crash.
 
 Use Case: Egress
 ----------------
@@ -288,7 +294,8 @@ It then puts the mbuf back in the cache.
 Ethtool
 -------
 
-Ethtool is a Linux-specific tool with corresponding support in the kernel
-where each net device must register its own callbacks for the supported operations.
-The current implementation uses the igb/ixgbe modified Linux drivers for ethtool support.
-Ethtool is not supported in i40e and VMs (VF or EM devices).
+Ethtool is a Linux-specific tool with corresponding support in the kernel.
+The current version of kni provides minimal ethtool functionality
+including querying version and link state. It does not support link
+control, statistics, or dumping device registers.
+

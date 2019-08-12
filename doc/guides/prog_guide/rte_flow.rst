@@ -2,8 +2,6 @@
     Copyright 2016 6WIND S.A.
     Copyright 2016 Mellanox Technologies, Ltd
 
-.. _Generic_flow_API:
-
 Generic flow API (rte_flow)
 ===========================
 
@@ -240,29 +238,29 @@ Example of an item specification matching an Ethernet header:
 
 .. table:: Ethernet item
 
-   +----------+----------+--------------------+
-   | Field    | Subfield | Value              |
-   +==========+==========+====================+
-   | ``spec`` | ``src``  | ``00:01:02:03:04`` |
-   |          +----------+--------------------+
-   |          | ``dst``  | ``00:2a:66:00:01`` |
-   |          +----------+--------------------+
-   |          | ``type`` | ``0x22aa``         |
-   +----------+----------+--------------------+
-   | ``last`` | unspecified                   |
-   +----------+----------+--------------------+
-   | ``mask`` | ``src``  | ``00:ff:ff:ff:00`` |
-   |          +----------+--------------------+
-   |          | ``dst``  | ``00:00:00:00:ff`` |
-   |          +----------+--------------------+
-   |          | ``type`` | ``0x0000``         |
-   +----------+----------+--------------------+
+   +----------+----------+-----------------------+
+   | Field    | Subfield | Value                 |
+   +==========+==========+=======================+
+   | ``spec`` | ``src``  | ``00:00:01:02:03:04`` |
+   |          +----------+-----------------------+
+   |          | ``dst``  | ``00:00:2a:66:00:01`` |
+   |          +----------+-----------------------+
+   |          | ``type`` | ``0x22aa``            |
+   +----------+----------+-----------------------+
+   | ``last`` | unspecified                      |
+   +----------+----------+-----------------------+
+   | ``mask`` | ``src``  | ``00:00:ff:ff:ff:00`` |
+   |          +----------+-----------------------+
+   |          | ``dst``  | ``00:00:00:00:00:ff`` |
+   |          +----------+-----------------------+
+   |          | ``type`` | ``0x0000``            |
+   +----------+----------+-----------------------+
 
 Non-masked bits stand for any value (shown as ``?`` below), Ethernet headers
 with the following properties are thus matched:
 
-- ``src``: ``??:01:02:03:??``
-- ``dst``: ``??:??:??:??:01``
+- ``src``: ``??:??:01:02:03:??``
+- ``dst``: ``??:??:??:??:??:01``
 - ``type``: ``0x????``
 
 Matching pattern
@@ -865,7 +863,7 @@ Item: ``VLAN``
 Matches an 802.1Q/ad VLAN tag.
 
 The corresponding standard outer EtherType (TPID) values are
-``ETHER_TYPE_VLAN`` or ``ETHER_TYPE_QINQ``. It can be overridden by the
+``RTE_ETHER_TYPE_VLAN`` or ``RTE_ETHER_TYPE_QINQ``. It can be overridden by the
 preceding pattern item.
 
 - ``tci``: tag control information.
@@ -942,7 +940,7 @@ Item: ``E_TAG``
 Matches an IEEE 802.1BR E-Tag header.
 
 The corresponding standard outer EtherType (TPID) value is
-``ETHER_TYPE_ETAG``. It can be overridden by the preceding pattern item.
+``RTE_ETHER_TYPE_ETAG``. It can be overridden by the preceding pattern item.
 
 - ``epcp_edei_in_ecid_b``: E-Tag control information (E-TCI), E-PCP (3b),
   E-DEI (1b), ingress E-CID base (12b).
@@ -981,6 +979,15 @@ Matches a GRE header.
 - ``c_rsvd0_ver``: checksum, reserved 0 and version.
 - ``protocol``: protocol type.
 - Default ``mask`` matches protocol only.
+
+Item: ``GRE_KEY``
+^^^^^^^^^^^^^^^^^
+
+Matches a GRE key field.
+This should be preceded by item ``GRE``.
+
+- Value to be matched is a big-endian 32 bit integer.
+- When this item present it implicitly match K bit in default mask as "1"
 
 Item: ``FUZZY``
 ^^^^^^^^^^^^^^^
@@ -1215,8 +1222,9 @@ Matches an application specific 32 bit metadata item.
 Actions
 ~~~~~~~
 
-Each possible action is represented by a type. Some have associated
-configuration structures. Several actions combined in a list can be assigned
+Each possible action is represented by a type.
+An action can have an associated configuration object.
+Several actions combined in a list can be assigned
 to a flow rule and are performed in order.
 
 They fall in three categories:
@@ -2131,7 +2139,7 @@ as defined in the ``rte_flow_action_raw_decap``
 
 This action modifies the payload of matched flows. The data supplied must
 be a valid header, either holding layer 2 data in case of removing layer 2
-before eincapsulation of layer 3 tunnel (for example MPLSoGRE) or complete
+before encapsulation of layer 3 tunnel (for example MPLSoGRE) or complete
 tunnel definition starting from layer 2 and moving to the tunnel item itself.
 When applied to the original packet the resulting packet must be a
 valid packet.
@@ -2281,7 +2289,7 @@ Action: ``DEC_TTL``
 Decrease TTL value.
 
 If there is no valid RTE_FLOW_ITEM_TYPE_IPV4 or RTE_FLOW_ITEM_TYPE_IPV6
-in pattern, Some PMDs will reject rule because behaviour will be undefined.
+in pattern, Some PMDs will reject rule because behavior will be undefined.
 
 .. _table_rte_flow_action_dec_ttl:
 
@@ -2299,7 +2307,7 @@ Action: ``SET_TTL``
 Assigns a new TTL value.
 
 If there is no valid RTE_FLOW_ITEM_TYPE_IPV4 or RTE_FLOW_ITEM_TYPE_IPV6
-in pattern, Some PMDs will reject rule because behaviour will be undefined.
+in pattern, Some PMDs will reject rule because behavior will be undefined.
 
 .. _table_rte_flow_action_set_ttl:
 
@@ -2314,7 +2322,10 @@ in pattern, Some PMDs will reject rule because behaviour will be undefined.
 Action: ``SET_MAC_SRC``
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Set source MAC address
+Set source MAC address.
+
+It must be used with a valid RTE_FLOW_ITEM_TYPE_ETH flow pattern item.
+Otherwise, RTE_FLOW_ERROR_TYPE_ACTION error will be returned.
 
 .. _table_rte_flow_action_set_mac_src:
 
@@ -2329,7 +2340,10 @@ Set source MAC address
 Action: ``SET_MAC_DST``
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Set source MAC address
+Set destination MAC address.
+
+It must be used with a valid RTE_FLOW_ITEM_TYPE_ETH flow pattern item.
+Otherwise, RTE_FLOW_ERROR_TYPE_ACTION error will be returned.
 
 .. _table_rte_flow_action_set_mac_dst:
 
@@ -2340,6 +2354,38 @@ Set source MAC address
    +==============+===============+
    | ``mac_addr`` | MAC address   |
    +--------------+---------------+
+
+Action: ``INC_TCP_SEQ``
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Increase sequence number in the outermost TCP header.
+Value to increase TCP sequence number by is a big-endian 32 bit integer.
+
+Using this action on non-matching traffic will result in undefined behavior.
+
+Action: ``DEC_TCP_SEQ``
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Decrease sequence number in the outermost TCP header.
+Value to decrease TCP sequence number by is a big-endian 32 bit integer.
+
+Using this action on non-matching traffic will result in undefined behavior.
+
+Action: ``INC_TCP_ACK``
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Increase acknowledgment number in the outermost TCP header.
+Value to increase TCP acknowledgment number by is a big-endian 32 bit integer.
+
+Using this action on non-matching traffic will result in undefined behavior.
+
+Action: ``DEC_TCP_ACK``
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Decrease acknowledgment number in the outermost TCP header.
+Value to decrease TCP acknowledgment number by is a big-endian 32 bit integer.
+
+Using this action on non-matching traffic will result in undefined behavior.
 
 Negative types
 ~~~~~~~~~~~~~~
@@ -2553,8 +2599,10 @@ Return values:
 
 - 0 on success, a negative errno value otherwise and ``rte_errno`` is set.
 
-Isolated mode
--------------
+.. _flow_isolated_mode:
+
+Flow isolated mode
+------------------
 
 The general expectation for ingress traffic is that flow rules process it
 first; the remaining unmatched or pass-through traffic usually ends up in a
@@ -2719,7 +2767,7 @@ Caveats
 - API operations are synchronous and blocking (``EAGAIN`` cannot be
   returned).
 
-- There is no provision for reentrancy/multi-thread safety, although nothing
+- There is no provision for re-entrancy/multi-thread safety, although nothing
   should prevent different devices from being configured at the same
   time. PMDs may protect their control path functions accordingly.
 

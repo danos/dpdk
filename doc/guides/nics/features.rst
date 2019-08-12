@@ -285,7 +285,7 @@ Inner RSS
 
 Supports RX RSS hashing on Inner headers.
 
-* **[users]    rte_flow_action_rss**: ``level``.
+* **[uses]    rte_flow_action_rss**: ``level``.
 * **[provides] mbuf**: ``mbuf.ol_flags:PKT_RX_RSS_HASH``, ``mbuf.rss``.
 
 
@@ -366,84 +366,6 @@ Supports filtering of a VLAN Tag identifier.
 * **[related]    API**: ``rte_eth_dev_vlan_filter()``.
 
 
-.. _nic_features_ethertype_filter:
-
-Ethertype filter
-----------------
-
-Supports filtering on Ethernet type.
-
-* **[implements] eth_dev_ops**: ``filter_ctrl:RTE_ETH_FILTER_ETHERTYPE``.
-* **[related]    API**: ``rte_eth_dev_filter_ctrl()``, ``rte_eth_dev_filter_supported()``.
-
-.. _nic_features_ntuple_filter:
-
-N-tuple filter
---------------
-
-Supports filtering on N-tuple values.
-
-* **[implements] eth_dev_ops**: ``filter_ctrl:RTE_ETH_FILTER_NTUPLE``.
-* **[related]    API**: ``rte_eth_dev_filter_ctrl()``, ``rte_eth_dev_filter_supported()``.
-
-
-.. _nic_features_syn_filter:
-
-SYN filter
-----------
-
-Supports TCP syn filtering.
-
-* **[implements] eth_dev_ops**: ``filter_ctrl:RTE_ETH_FILTER_SYN``.
-* **[related]    API**: ``rte_eth_dev_filter_ctrl()``, ``rte_eth_dev_filter_supported()``.
-
-
-.. _nic_features_tunnel_filter:
-
-Tunnel filter
--------------
-
-Supports tunnel filtering.
-
-* **[implements] eth_dev_ops**: ``filter_ctrl:RTE_ETH_FILTER_TUNNEL``.
-* **[related]    API**: ``rte_eth_dev_filter_ctrl()``, ``rte_eth_dev_filter_supported()``.
-
-
-.. _nic_features_flexible_filter:
-
-Flexible filter
----------------
-
-Supports a flexible (non-tuple or Ethertype) filter.
-
-* **[implements] eth_dev_ops**: ``filter_ctrl:RTE_ETH_FILTER_FLEXIBLE``.
-* **[related]    API**: ``rte_eth_dev_filter_ctrl()``, ``rte_eth_dev_filter_supported()``.
-
-
-.. _nic_features_hash_filter:
-
-Hash filter
------------
-
-Supports Hash filtering.
-
-* **[implements] eth_dev_ops**: ``filter_ctrl:RTE_ETH_FILTER_HASH``.
-* **[related]    API**: ``rte_eth_dev_filter_ctrl()``, ``rte_eth_dev_filter_supported()``.
-
-
-.. _nic_features_flow_director:
-
-Flow director
--------------
-
-Supports Flow Director style filtering to queues.
-
-* **[implements] eth_dev_ops**: ``filter_ctrl:RTE_ETH_FILTER_FDIR``.
-* **[provides]   mbuf**: ``mbuf.ol_flags:`` ``PKT_RX_FDIR``, ``PKT_RX_FDIR_ID``,
-  ``PKT_RX_FDIR_FLX``.
-* **[related]    API**: ``rte_eth_dev_filter_ctrl()``, ``rte_eth_dev_filter_supported()``.
-
-
 .. _nic_features_flow_control:
 
 Flow control
@@ -495,7 +417,7 @@ Supports adding traffic mirroring rules.
 Inline crypto
 -------------
 
-Supports inline crypto processing (eg. inline IPsec). See Security library and PMD documentation for more details.
+Supports inline crypto processing (e.g. inline IPsec). See Security library and PMD documentation for more details.
 
 * **[uses]       rte_eth_rxconf,rte_eth_rxmode**: ``offloads:DEV_RX_OFFLOAD_SECURITY``,
 * **[uses]       rte_eth_txconf,rte_eth_txmode**: ``offloads:DEV_TX_OFFLOAD_SECURITY``.
@@ -602,6 +524,7 @@ Supports Timestamp.
 * **[provides] mbuf**: ``mbuf.ol_flags:PKT_RX_TIMESTAMP``.
 * **[provides] mbuf**: ``mbuf.timestamp``.
 * **[provides] rte_eth_dev_info**: ``rx_offload_capa,rx_queue_offload_capa: DEV_RX_OFFLOAD_TIMESTAMP``.
+* **[related] eth_dev_ops**: ``read_clock``.
 
 .. _nic_features_macsec_offload:
 

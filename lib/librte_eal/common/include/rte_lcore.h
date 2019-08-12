@@ -23,10 +23,47 @@ extern "C" {
 #define LCORE_ID_ANY     UINT32_MAX       /**< Any lcore. */
 
 #if defined(__linux__)
-	typedef	cpu_set_t rte_cpuset_t;
+typedef	cpu_set_t rte_cpuset_t;
+#define RTE_CPU_AND(dst, src1, src2) CPU_AND(dst, src1, src2)
+#define RTE_CPU_OR(dst, src1, src2) CPU_OR(dst, src1, src2)
+#define RTE_CPU_FILL(set) do \
+{ \
+	unsigned int i; \
+	CPU_ZERO(set); \
+	for (i = 0; i < CPU_SETSIZE; i++) \
+		CPU_SET(i, set); \
+} while (0)
+#define RTE_CPU_NOT(dst, src) do \
+{ \
+	cpu_set_t tmp; \
+	RTE_CPU_FILL(&tmp); \
+	CPU_XOR(dst, &tmp, src); \
+} while (0)
 #elif defined(__FreeBSD__)
 #include <pthread_np.h>
-	typedef cpuset_t rte_cpuset_t;
+typedef cpuset_t rte_cpuset_t;
+#define RTE_CPU_AND(dst, src1, src2) do \
+{ \
+	cpuset_t tmp; \
+	CPU_COPY(src1, &tmp); \
+	CPU_AND(&tmp, src2); \
+	CPU_COPY(&tmp, dst); \
+} while (0)
+#define RTE_CPU_OR(dst, src1, src2) do \
+{ \
+	cpuset_t tmp; \
+	CPU_COPY(src1, &tmp); \
+	CPU_OR(&tmp, src2); \
+	CPU_COPY(&tmp, dst); \
+} while (0)
+#define RTE_CPU_FILL(set) CPU_FILL(set)
+#define RTE_CPU_NOT(dst, src) do \
+{ \
+	cpuset_t tmp; \
+	CPU_FILL(&tmp); \
+	CPU_NAND(&tmp, src); \
+	CPU_COPY(&tmp, dst); \
+} while (0)
 #endif
 
 /**
@@ -113,15 +150,7 @@ rte_lcore_count(void)
  * @return
  *   The relative index, or -1 if not enabled.
  */
-static inline int
-rte_lcore_index(int lcore_id)
-{
-	if (lcore_id >= RTE_MAX_LCORE)
-		return -1;
-	if (lcore_id < 0)
-		lcore_id = (int)rte_lcore_id();
-	return lcore_config[lcore_id].core_index;
-}
+int rte_lcore_index(int lcore_id);
 
 /**
  * Return the ID of the physical socket of the logical core we are
@@ -129,7 +158,7 @@ rte_lcore_index(int lcore_id)
  * @return
  *   the ID of current lcoreid's physical socket
  */
-unsigned rte_socket_id(void);
+unsigned int rte_socket_id(void);
 
 /**
  * Return number of physical sockets detected on the system.
@@ -141,7 +170,7 @@ unsigned rte_socket_id(void);
  * @return
  *   the number of physical sockets as recognized by EAL
  */
-unsigned int __rte_experimental
+unsigned int
 rte_socket_count(void);
 
 /**
@@ -158,7 +187,7 @@ rte_socket_count(void);
  *   - physical socket id as recognized by EAL
  *   - -1 on error, with errno set to EINVAL
  */
-int __rte_experimental
+int
 rte_socket_id_by_idx(unsigned int idx);
 
 /**
@@ -169,11 +198,37 @@ rte_socket_id_by_idx(unsigned int idx);
  * @return
  *   the ID of lcoreid's physical socket
  */
-static inline unsigned
-rte_lcore_to_socket_id(unsigned lcore_id)
-{
-	return lcore_config[lcore_id].socket_id;
-}
+unsigned int
+rte_lcore_to_socket_id(unsigned int lcore_id);
+
+/**
+ * @warning
+ * @b EXPERIMENTAL: this API may change without prior notice.
+ *
+ * Return the id of the lcore on a socket starting from zero.
+ *
+ * @param lcore_id
+ *   The targeted lcore, or -1 for the current one.
+ * @return
+ *   The relative index, or -1 if not enabled.
+ */
+__rte_experimental
+int
+rte_lcore_to_cpu_id(int lcore_id);
+
+/**
+ * @warning
+ * @b EXPERIMENTAL: this API may change without prior notice.
+ *
+ * Return the cpuset for a given lcore.
+ * @param lcore_id
+ *   the targeted lcore, which MUST be between 0 and RTE_MAX_LCORE-1.
+ * @return
+ *   The cpuset of that lcore
+ */
+__rte_experimental
+rte_cpuset_t
+rte_lcore_cpuset(unsigned int lcore_id);
 
 /**
  * Test if an lcore is enabled.
@@ -185,7 +240,7 @@ rte_lcore_to_socket_id(unsigned lcore_id)
  *   True if the given lcore is enabled; false otherwise.
  */
 static inline int
-rte_lcore_is_enabled(unsigned lcore_id)
+rte_lcore_is_enabled(unsigned int lcore_id)
 {
 	struct rte_config *cfg = rte_eal_get_configuration();
 	if (lcore_id >= RTE_MAX_LCORE)
@@ -206,8 +261,8 @@ rte_lcore_is_enabled(unsigned lcore_id)
  * @return
  *   The next lcore_id or RTE_MAX_LCORE if not found.
  */
-static inline unsigned
-rte_get_next_lcore(unsigned i, int skip_master, int wrap)
+static inline unsigned int
+rte_get_next_lcore(unsigned int i, int skip_master, int wrap)
 {
 	i++;
 	if (wrap)
@@ -280,8 +335,9 @@ int rte_thread_setname(pthread_t id, const char *name);
  * Create a control thread.
  *
  * Wrapper to pthread_create(), pthread_setname_np() and
- * pthread_setaffinity_np(). The dataplane and service lcores are
- * excluded from the affinity of the new thread.
+ * pthread_setaffinity_np(). The affinity of the new thread is based
+ * on the CPU affinity retrieved at the time rte_eal_init() was called,
+ * the dataplane and service lcores are then excluded.
  *
  * @param thread
  *   Filled with the thread id of the new created thread.
@@ -297,7 +353,7 @@ int rte_thread_setname(pthread_t id, const char *name);
  *   On success, returns 0; on error, it returns a negative value
  *   corresponding to the error number.
  */
-__rte_experimental int
+int
 rte_ctrl_thread_create(pthread_t *thread, const char *name,
 		const pthread_attr_t *attr,
 		void *(*start_routine)(void *), void *arg);

@@ -55,9 +55,6 @@
 
 #define INVALID_PORT_ID 0xFF
 
-/* Max number of devices. Limited by vmdq. */
-#define MAX_DEVICES 64
-
 /* Maximum long option length for option parsing. */
 #define MAX_LONG_OPT_SZ 64
 
@@ -164,7 +161,7 @@ const uint16_t vlan_tags[] = {
 };
 
 /* ethernet addresses of ports */
-static struct ether_addr vmdq_ports_eth_addr[RTE_MAX_ETHPORTS];
+static struct rte_ether_addr vmdq_ports_eth_addr[RTE_MAX_ETHPORTS];
 
 static struct vhost_dev_tailq_list vhost_dev_list =
 	TAILQ_HEAD_INITIALIZER(vhost_dev_list);
@@ -215,21 +212,6 @@ get_eth_conf(struct rte_eth_conf *eth_conf, uint32_t num_devices)
 }
 
 /*
- * Validate the device number according to the max pool number gotten form
- * dev_info. If the device number is invalid, give the error message and
- * return -1. Each device must have its own pool.
- */
-static inline int
-validate_num_devices(uint32_t max_nb_devices)
-{
-	if (num_devices > max_nb_devices) {
-		RTE_LOG(ERR, VHOST_PORT, "invalid number of devices\n");
-		return -1;
-	}
-	return 0;
-}
-
-/*
  * Initialises a given port using global settings and with the rx buffers
  * coming from the mbuf_pool passed as parameter
  */
@@ -269,10 +251,6 @@ port_init(uint16_t port)
 		tx_ring_size = 64;
 
 	tx_rings = (uint16_t)rte_lcore_count();
-
-	retval = validate_num_devices(MAX_DEVICES);
-	if (retval < 0)
-		return retval;
 
 	/* Get port configuration. */
 	retval = get_eth_conf(&port_conf, num_devices);
@@ -375,12 +353,20 @@ port_init(uint16_t port)
 static int
 us_vhost_parse_socket_path(const char *q_arg)
 {
+	char *old;
+
 	/* parse number string */
 	if (strnlen(q_arg, PATH_MAX) == PATH_MAX)
 		return -1;
 
+	old = socket_files;
 	socket_files = realloc(socket_files, PATH_MAX * (nb_sockets + 1));
-	snprintf(socket_files + nb_sockets * PATH_MAX, PATH_MAX, "%s", q_arg);
+	if (socket_files == NULL) {
+		free(old);
+		return -1;
+	}
+
+	strlcpy(socket_files + nb_sockets * PATH_MAX, q_arg, PATH_MAX);
 	nb_sockets++;
 
 	return 0;
@@ -674,13 +660,13 @@ static unsigned check_ports_num(unsigned nb_ports)
 }
 
 static __rte_always_inline struct vhost_dev *
-find_vhost_dev(struct ether_addr *mac)
+find_vhost_dev(struct rte_ether_addr *mac)
 {
 	struct vhost_dev *vdev;
 
 	TAILQ_FOREACH(vdev, &vhost_dev_list, global_vdev_entry) {
 		if (vdev->ready == DEVICE_RX &&
-		    is_same_ether_addr(mac, &vdev->mac_address))
+		    rte_is_same_ether_addr(mac, &vdev->mac_address))
 			return vdev;
 	}
 
@@ -694,11 +680,11 @@ find_vhost_dev(struct ether_addr *mac)
 static int
 link_vmdq(struct vhost_dev *vdev, struct rte_mbuf *m)
 {
-	struct ether_hdr *pkt_hdr;
+	struct rte_ether_hdr *pkt_hdr;
 	int i, ret;
 
 	/* Learn MAC address of guest device from packet */
-	pkt_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+	pkt_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
 
 	if (find_vhost_dev(&pkt_hdr->s_addr)) {
 		RTE_LOG(ERR, VHOST_DATA,
@@ -707,7 +693,7 @@ link_vmdq(struct vhost_dev *vdev, struct rte_mbuf *m)
 		return -1;
 	}
 
-	for (i = 0; i < ETHER_ADDR_LEN; i++)
+	for (i = 0; i < RTE_ETHER_ADDR_LEN; i++)
 		vdev->mac_address.addr_bytes[i] = pkt_hdr->s_addr.addr_bytes[i];
 
 	/* vlan_tag currently uses the device_id. */
@@ -800,10 +786,10 @@ virtio_xmit(struct vhost_dev *dst_vdev, struct vhost_dev *src_vdev,
 static __rte_always_inline int
 virtio_tx_local(struct vhost_dev *vdev, struct rte_mbuf *m)
 {
-	struct ether_hdr *pkt_hdr;
+	struct rte_ether_hdr *pkt_hdr;
 	struct vhost_dev *dst_vdev;
 
-	pkt_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+	pkt_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
 
 	dst_vdev = find_vhost_dev(&pkt_hdr->d_addr);
 	if (!dst_vdev)
@@ -838,7 +824,8 @@ find_local_dest(struct vhost_dev *vdev, struct rte_mbuf *m,
 	uint32_t *offset, uint16_t *vlan_tag)
 {
 	struct vhost_dev *dst_vdev;
-	struct ether_hdr *pkt_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+	struct rte_ether_hdr *pkt_hdr =
+		rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
 
 	dst_vdev = find_vhost_dev(&pkt_hdr->d_addr);
 	if (!dst_vdev)
@@ -871,16 +858,17 @@ get_psd_sum(void *l3_hdr, uint64_t ol_flags)
 {
 	if (ol_flags & PKT_TX_IPV4)
 		return rte_ipv4_phdr_cksum(l3_hdr, ol_flags);
-	else /* assume ethertype == ETHER_TYPE_IPv6 */
+	else /* assume ethertype == RTE_ETHER_TYPE_IPV6 */
 		return rte_ipv6_phdr_cksum(l3_hdr, ol_flags);
 }
 
 static void virtio_tx_offload(struct rte_mbuf *m)
 {
 	void *l3_hdr;
-	struct ipv4_hdr *ipv4_hdr = NULL;
-	struct tcp_hdr *tcp_hdr = NULL;
-	struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+	struct rte_ipv4_hdr *ipv4_hdr = NULL;
+	struct rte_tcp_hdr *tcp_hdr = NULL;
+	struct rte_ether_hdr *eth_hdr =
+		rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
 
 	l3_hdr = (char *)eth_hdr + m->l2_len;
 
@@ -890,7 +878,7 @@ static void virtio_tx_offload(struct rte_mbuf *m)
 		m->ol_flags |= PKT_TX_IP_CKSUM;
 	}
 
-	tcp_hdr = (struct tcp_hdr *)((char *)l3_hdr + m->l3_len);
+	tcp_hdr = (struct rte_tcp_hdr *)((char *)l3_hdr + m->l3_len);
 	tcp_hdr->cksum = get_psd_sum(l3_hdr, m->ol_flags);
 }
 
@@ -924,11 +912,11 @@ virtio_tx_route(struct vhost_dev *vdev, struct rte_mbuf *m, uint16_t vlan_tag)
 	struct mbuf_table *tx_q;
 	unsigned offset = 0;
 	const uint16_t lcore_id = rte_lcore_id();
-	struct ether_hdr *nh;
+	struct rte_ether_hdr *nh;
 
 
-	nh = rte_pktmbuf_mtod(m, struct ether_hdr *);
-	if (unlikely(is_broadcast_ether_addr(&nh->d_addr))) {
+	nh = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+	if (unlikely(rte_is_broadcast_ether_addr(&nh->d_addr))) {
 		struct vhost_dev *vdev2;
 
 		TAILQ_FOREACH(vdev2, &vhost_dev_list, global_vdev_entry) {
@@ -960,10 +948,10 @@ queue2nic:
 	/*Add packet to the port tx queue*/
 	tx_q = &lcore_tx_queue[lcore_id];
 
-	nh = rte_pktmbuf_mtod(m, struct ether_hdr *);
-	if (unlikely(nh->ether_type == rte_cpu_to_be_16(ETHER_TYPE_VLAN))) {
+	nh = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+	if (unlikely(nh->ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN))) {
 		/* Guest has inserted the vlan tag. */
-		struct vlan_hdr *vh = (struct vlan_hdr *) (nh + 1);
+		struct rte_vlan_hdr *vh = (struct rte_vlan_hdr *) (nh + 1);
 		uint16_t vlan_tag_be = rte_cpu_to_be_16(vlan_tag);
 		if ((vm2vm_mode == VM2VM_HARDWARE) &&
 			(vh->vlan_tci != vlan_tag_be))
@@ -1220,7 +1208,7 @@ destroy_device(int vid)
 
 /*
  * A new device is added to a data core. First the device is added to the main linked list
- * and the allocated to a specific data core.
+ * and then allocated to a specific data core.
  */
 static int
 new_device(int vid)

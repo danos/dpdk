@@ -63,13 +63,11 @@
  * function can be used to retrieve the adapter's service function ID.
  *
  * The ethernet port and transmit queue index to transmit the mbuf on are
- * specified using the mbuf port and the higher 16 bits of
- * struct rte_mbuf::hash::sched:hi. The application should use the
- * rte_event_eth_tx_adapter_txq_set() and rte_event_eth_tx_adapter_txq_get()
- * functions to access the transmit queue index since it is expected that the
- * transmit queue will be eventually defined within struct rte_mbuf and using
- * these macros will help with minimizing application impact due to
- * a change in how the transmit queue index is specified.
+ * specified using the mbuf port struct rte_mbuf::hash::txadapter:txq.
+ * The application should use the rte_event_eth_tx_adapter_txq_set()
+ * and rte_event_eth_tx_adapter_txq_get() functions to access the transmit
+ * queue index, using these macros will help with minimizing application
+ * impact due to a change in how the transmit queue index is specified.
  */
 
 #ifdef __cplusplus
@@ -83,9 +81,6 @@ extern "C" {
 #include "rte_eventdev.h"
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Adapter configuration structure
  *
  * @see rte_event_eth_tx_adapter_create_ext
@@ -105,9 +100,6 @@ struct rte_event_eth_tx_adapter_conf {
 };
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Function type used for adapter configuration callback. The callback is
  * used to fill in members of the struct rte_event_eth_tx_adapter_conf, this
  * callback is invoked when creating a RTE service function based
@@ -132,9 +124,6 @@ typedef int (*rte_event_eth_tx_adapter_conf_cb) (uint8_t id, uint8_t dev_id,
 				void *arg);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * A structure used to retrieve statistics for an ethernet Tx adapter instance.
  */
 struct rte_event_eth_tx_adapter_stats {
@@ -147,9 +136,6 @@ struct rte_event_eth_tx_adapter_stats {
 };
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Create a new ethernet Tx adapter with the specified identifier.
  *
  * @param id
@@ -163,14 +149,11 @@ struct rte_event_eth_tx_adapter_stats {
  *   - 0: Success
  *   - <0: Error code on failure
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_create(uint8_t id, uint8_t dev_id,
 				struct rte_event_port_conf *port_config);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Create a new ethernet Tx adapter with the specified identifier.
  *
  * @param id
@@ -187,15 +170,12 @@ rte_event_eth_tx_adapter_create(uint8_t id, uint8_t dev_id,
  *   - 0: Success
  *   - <0: Error code on failure
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_create_ext(uint8_t id, uint8_t dev_id,
 				rte_event_eth_tx_adapter_conf_cb conf_cb,
 				void *conf_arg);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Free an ethernet Tx adapter
  *
  * @param id
@@ -205,13 +185,10 @@ rte_event_eth_tx_adapter_create_ext(uint8_t id, uint8_t dev_id,
  *   - <0: Error code on failure, If the adapter still has Tx queues
  *      added to it, the function returns -EBUSY.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_free(uint8_t id);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Start ethernet Tx adapter
  *
  * @param id
@@ -220,13 +197,10 @@ rte_event_eth_tx_adapter_free(uint8_t id);
  *  - 0: Success, Adapter started correctly.
  *  - <0: Error code on failure.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_start(uint8_t id);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Stop ethernet Tx adapter
  *
  * @param id
@@ -235,13 +209,10 @@ rte_event_eth_tx_adapter_start(uint8_t id);
  *  - 0: Success.
  *  - <0: Error code on failure.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_stop(uint8_t id);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Add a Tx queue to the adapter.
  * A queue value of -1 is used to indicate all
  * queues within the device.
@@ -256,15 +227,12 @@ rte_event_eth_tx_adapter_stop(uint8_t id);
  *  - 0: Success, Queues added successfully.
  *  - <0: Error code on failure.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_queue_add(uint8_t id,
 				uint16_t eth_dev_id,
 				int32_t queue);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Delete a Tx queue from the adapter.
  * A queue value of -1 is used to indicate all
  * queues within the device, that have been added to this
@@ -280,15 +248,12 @@ rte_event_eth_tx_adapter_queue_add(uint8_t id,
  *  - 0: Success, Queues deleted successfully.
  *  - <0: Error code on failure.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_queue_del(uint8_t id,
 				uint16_t eth_dev_id,
 				int32_t queue);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Set Tx queue in the mbuf. This queue is used by the adapter
  * to transmit the mbuf.
  *
@@ -297,17 +262,13 @@ rte_event_eth_tx_adapter_queue_del(uint8_t id,
  * @param queue
  *  Tx queue index.
  */
-static __rte_always_inline void __rte_experimental
+static __rte_always_inline void
 rte_event_eth_tx_adapter_txq_set(struct rte_mbuf *pkt, uint16_t queue)
 {
-	uint16_t *p = (uint16_t *)&pkt->hash.sched.hi;
-	p[1] = queue;
+	pkt->hash.txadapter.txq = queue;
 }
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Retrieve Tx queue from the mbuf.
  *
  * @param pkt
@@ -317,17 +278,13 @@ rte_event_eth_tx_adapter_txq_set(struct rte_mbuf *pkt, uint16_t queue)
  *
  * @see rte_event_eth_tx_adapter_txq_set()
  */
-static __rte_always_inline uint16_t __rte_experimental
+static __rte_always_inline uint16_t
 rte_event_eth_tx_adapter_txq_get(struct rte_mbuf *pkt)
 {
-	uint16_t *p = (uint16_t *)&pkt->hash.sched.hi;
-	return p[1];
+	return pkt->hash.txadapter.txq;
 }
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Retrieve the adapter event port. The adapter creates an event port if
  * the #RTE_EVENT_ETH_TX_ADAPTER_CAP_INTERNAL_PORT is not set in the
  * ethernet Tx capabilities of the event device.
@@ -340,7 +297,7 @@ rte_event_eth_tx_adapter_txq_get(struct rte_mbuf *pkt)
  *   - 0: Success.
  *   - <0: Error code on failure.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_event_port_get(uint8_t id, uint8_t *event_port_id);
 
 /**
@@ -365,7 +322,8 @@ rte_event_eth_tx_adapter_event_port_get(uint8_t id, uint8_t *event_port_id);
  *  which contain the event object enqueue operations to be processed.
  * @param nb_events
  *  The number of event objects to enqueue, typically number of
- *  rte_event_port_enqueue_depth() available for this port.
+ *  rte_event_port_attr_get(...RTE_EVENT_PORT_ATTR_ENQ_DEPTH...)
+ *  available for this port.
  *
  * @return
  *   The number of event objects actually enqueued on the event device. The
@@ -374,14 +332,14 @@ rte_event_eth_tx_adapter_event_port_get(uint8_t id, uint8_t *event_port_id);
  *   *rte_event*. If the return value is less than *nb_events*, the remaining
  *   events at the end of ev[] are not consumed and the caller has to take care
  *   of them, and rte_errno is set accordingly. Possible errno values include:
- *   - -EINVAL  The port ID is invalid, device ID is invalid, an event's queue
+ *   - EINVAL   The port ID is invalid, device ID is invalid, an event's queue
  *              ID is invalid, or an event's sched type doesn't match the
  *              capabilities of the destination queue.
- *   - -ENOSPC  The event port was backpressured and unable to enqueue
+ *   - ENOSPC   The event port was backpressured and unable to enqueue
  *              one or more events. This error code is only applicable to
  *              closed systems.
  */
-static inline uint16_t __rte_experimental
+static inline uint16_t
 rte_event_eth_tx_adapter_enqueue(uint8_t dev_id,
 				uint8_t port_id,
 				struct rte_event ev[],
@@ -392,12 +350,12 @@ rte_event_eth_tx_adapter_enqueue(uint8_t dev_id,
 #ifdef RTE_LIBRTE_EVENTDEV_DEBUG
 	if (dev_id >= RTE_EVENT_MAX_DEVS ||
 		!rte_eventdevs[dev_id].attached) {
-		rte_errno = -EINVAL;
+		rte_errno = EINVAL;
 		return 0;
 	}
 
 	if (port_id >= dev->data->nb_ports) {
-		rte_errno = -EINVAL;
+		rte_errno = EINVAL;
 		return 0;
 	}
 #endif
@@ -405,9 +363,6 @@ rte_event_eth_tx_adapter_enqueue(uint8_t dev_id,
 }
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Retrieve statistics for an adapter
  *
  * @param id
@@ -418,14 +373,11 @@ rte_event_eth_tx_adapter_enqueue(uint8_t dev_id,
  *  - 0: Success, statistics retrieved successfully.
  *  - <0: Error code on failure.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_stats_get(uint8_t id,
 				struct rte_event_eth_tx_adapter_stats *stats);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Reset statistics for an adapter.
  *
  * @param id
@@ -434,13 +386,10 @@ rte_event_eth_tx_adapter_stats_get(uint8_t id,
  *  - 0: Success, statistics reset successfully.
  *  - <0: Error code on failure.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_stats_reset(uint8_t id);
 
 /**
- * @warning
- * @b EXPERIMENTAL: this API may change without prior notice
- *
  * Retrieve the service ID of an adapter. If the adapter doesn't use
  * a rte_service function, this function returns -ESRCH.
  *
@@ -453,7 +402,7 @@ rte_event_eth_tx_adapter_stats_reset(uint8_t id);
  *  - <0: Error code on failure, if the adapter doesn't use a rte_service
  * function, this function returns -ESRCH.
  */
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_service_id_get(uint8_t id, uint32_t *service_id);
 
 #ifdef __cplusplus

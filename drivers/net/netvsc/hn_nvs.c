@@ -323,12 +323,12 @@ hn_nvs_conf_ndis(struct hn_data *hv, unsigned int mtu)
 
 	memset(&conf, 0, sizeof(conf));
 	conf.type = NVS_TYPE_NDIS_CONF;
-	conf.mtu = mtu + ETHER_HDR_LEN;
+	conf.mtu = mtu + RTE_ETHER_HDR_LEN;
 	conf.caps = NVS_NDIS_CONF_VLAN;
 
-	/* TODO enable SRIOV */
-	//if (hv->nvs_ver >= NVS_VERSION_5)
-	//	conf.caps |= NVS_NDIS_CONF_SRIOV;
+	/* enable SRIOV */
+	if (hv->nvs_ver >= NVS_VERSION_5)
+		conf.caps |= NVS_NDIS_CONF_SRIOV;
 
 	/* NOTE: No response. */
 	error = hn_nvs_req_send(hv, &conf, sizeof(conf));

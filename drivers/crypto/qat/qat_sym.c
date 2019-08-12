@@ -156,7 +156,10 @@ qat_sym_build_request(void *in_op, uint8_t *out_msg,
 	uint32_t auth_len = 0, auth_ofs = 0;
 	uint32_t min_ofs = 0;
 	uint64_t src_buf_start = 0, dst_buf_start = 0;
+	uint64_t auth_data_end = 0;
 	uint8_t do_sgl = 0;
+	uint8_t in_place = 1;
+	int alignment_adjustment = 0;
 	struct rte_crypto_op *op = (struct rte_crypto_op *)in_op;
 	struct qat_sym_op_cookie *cookie =
 				(struct qat_sym_op_cookie *)op_cookie;
@@ -438,6 +441,7 @@ qat_sym_build_request(void *in_op, uint8_t *out_msg,
 		 * Don't align DMA start. DMA the minimum data-set
 		 * so as not to overwrite data in dest buffer
 		 */
+		in_place = 0;
 		src_buf_start =
 			rte_pktmbuf_iova_offset(op->sym->m_src, min_ofs);
 		dst_buf_start =
@@ -462,6 +466,10 @@ qat_sym_build_request(void *in_op, uint8_t *out_msg,
 								min_ofs);
 		}
 		dst_buf_start = src_buf_start;
+
+		/* remember any adjustment for later, note, can be +/- */
+		alignment_adjustment = src_buf_start -
+			rte_pktmbuf_iova_offset(op->sym->m_src, min_ofs);
 	}
 
 	if (do_cipher || do_aead) {
@@ -489,6 +497,57 @@ qat_sym_build_request(void *in_op, uint8_t *out_msg,
 		> (auth_param->auth_off + auth_param->auth_len) ?
 		(cipher_param->cipher_offset + cipher_param->cipher_length)
 		: (auth_param->auth_off + auth_param->auth_len);
+
+	if (do_auth && do_cipher) {
+		/* Handle digest-encrypted cases, i.e.
+		 * auth-gen-then-cipher-encrypt and
+		 * cipher-decrypt-then-auth-verify
+		 */
+		 /* First find the end of the data */
+		if (do_sgl) {
+			uint32_t remaining_off = auth_param->auth_off +
+				auth_param->auth_len + alignment_adjustment;
+			struct rte_mbuf *sgl_buf =
+				(in_place ?
+					op->sym->m_src : op->sym->m_dst);
+
+			while (remaining_off >= rte_pktmbuf_data_len(sgl_buf)
+					&& sgl_buf->next != NULL) {
+				remaining_off -= rte_pktmbuf_data_len(sgl_buf);
+				sgl_buf = sgl_buf->next;
+			}
+
+			auth_data_end = (uint64_t)rte_pktmbuf_iova_offset(
+				sgl_buf, remaining_off);
+		} else {
+			auth_data_end = (in_place ?
+				src_buf_start : dst_buf_start) +
+				auth_param->auth_off + auth_param->auth_len;
+		}
+		/* Then check if digest-encrypted conditions are met */
+		if ((auth_param->auth_off + auth_param->auth_len <
+					cipher_param->cipher_offset +
+					cipher_param->cipher_length) &&
+				(op->sym->auth.digest.phys_addr ==
+					auth_data_end)) {
+			/* Handle partial digest encryption */
+			if (cipher_param->cipher_offset +
+					cipher_param->cipher_length <
+					auth_param->auth_off +
+					auth_param->auth_len +
+					ctx->digest_length)
+				qat_req->comn_mid.dst_length =
+					qat_req->comn_mid.src_length =
+					auth_param->auth_off +
+					auth_param->auth_len +
+					ctx->digest_length;
+			struct icp_qat_fw_comn_req_hdr *header =
+				&qat_req->comn_hdr;
+			ICP_QAT_FW_LA_DIGEST_IN_BUFFER_SET(
+				header->serv_specif_flags,
+				ICP_QAT_FW_LA_DIGEST_IN_BUFFER);
+		}
+	}
 
 	if (do_sgl) {
 
@@ -527,6 +586,8 @@ qat_sym_build_request(void *in_op, uint8_t *out_msg,
 			qat_req->comn_mid.dest_data_addr =
 					cookie->qat_sgl_dst_phys_addr;
 		}
+		qat_req->comn_mid.src_length = 0;
+		qat_req->comn_mid.dst_length = 0;
 	} else {
 		qat_req->comn_mid.src_data_addr = src_buf_start;
 		qat_req->comn_mid.dest_data_addr = dst_buf_start;

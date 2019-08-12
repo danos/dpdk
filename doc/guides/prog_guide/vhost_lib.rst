@@ -63,7 +63,7 @@ The following is an overview of some key Vhost API functions:
       512).
 
     * zero copy is really good for VM2VM case. For iperf between two VMs, the
-      boost could be above 70% (when TSO is enableld).
+      boost could be above 70% (when TSO is enabled).
 
     * For zero copy in VM2NIC case, guest Tx used vring may be starved if the
       PMD driver consume the mbuf but not release them timely.
@@ -91,6 +91,9 @@ The following is an overview of some key Vhost API functions:
       is because we don't setup iommu dma mapping for guest memory. If you have
       to use vfio-pci driver, please insert vfio-pci kernel module in noiommu
       mode.
+
+    * The consumer of zero copy mbufs should consume these mbufs as soon as
+      possible, otherwise it may block the operations in vhost.
 
   - ``RTE_VHOST_USER_IOMMU_SUPPORT``
 

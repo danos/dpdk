@@ -38,7 +38,7 @@ typedef rte_iova_t ecore_dma_addr_t; /* expected to be 64 bit wide */
 typedef volatile int ecore_atomic_t;
 
 
-#define ETH_ALEN ETHER_ADDR_LEN /* 6 */
+#define ETH_ALEN RTE_ETHER_ADDR_LEN /* 6 */
 
 #define ECORE_SWCID_SHIFT   17
 #define ECORE_SWCID_MASK    ((0x1 << ECORE_SWCID_SHIFT) - 1)
@@ -151,14 +151,15 @@ typedef rte_spinlock_t ECORE_MUTEX_SPIN;
 		}							\
 	} while (0)
 
-#define ECORE_ILT_FREE(x, y, size)                   \
-    do {                                             \
-	if (x) {                                     \
-	    rte_free(x);                             \
-	    x = NULL;                                \
-	    y = 0;                                   \
-	}                                            \
-    } while (0)
+#define ECORE_ILT_FREE(x, y, size)					\
+	do {								\
+		if (x) {						\
+			bnx2x_dma_free((struct bnx2x_dma *)x);		\
+			rte_free(x);					\
+			x = NULL;					\
+			y = 0;						\
+		}							\
+	} while (0)
 
 #define ECORE_IS_VALID_ETHER_ADDR(_mac) TRUE
 

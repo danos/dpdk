@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: (BSD-3-Clause OR GPL-2.0)
- * Copyright(c) 2015-2018 Intel Corporation
+ * Copyright(c) 2015-2019 Intel Corporation
  */
 
 #include <openssl/sha.h>	/* Needed to calculate pre-compute values */
@@ -35,7 +35,7 @@ bpi_cipher_ctx_free(void *bpi_ctx)
 static int
 bpi_cipher_ctx_init(enum rte_crypto_cipher_algorithm cryptodev_algo,
 		enum rte_crypto_cipher_operation direction __rte_unused,
-		uint8_t *key, void **ctx)
+		const uint8_t *key, void **ctx)
 {
 	const EVP_CIPHER *algo = NULL;
 	int ret;
@@ -242,7 +242,8 @@ qat_sym_session_configure_cipher(struct rte_cryptodev *dev,
 		session->qat_mode = ICP_QAT_HW_CIPHER_ECB_MODE;
 		break;
 	case RTE_CRYPTO_CIPHER_NULL:
-		session->qat_mode = ICP_QAT_HW_CIPHER_ECB_MODE;
+		session->qat_cipher_alg = ICP_QAT_HW_CIPHER_ALGO_NULL;
+		session->qat_mode = ICP_QAT_HW_CIPHER_CTR_MODE;
 		break;
 	case RTE_CRYPTO_CIPHER_KASUMI_F8:
 		if (qat_sym_validate_kasumi_key(cipher_xform->key.length,
@@ -333,10 +334,23 @@ qat_sym_session_configure_cipher(struct rte_cryptodev *dev,
 		}
 		session->qat_mode = ICP_QAT_HW_CIPHER_ECB_MODE;
 		break;
+	case RTE_CRYPTO_CIPHER_AES_XTS:
+		if ((cipher_xform->key.length/2) == ICP_QAT_HW_AES_192_KEY_SZ) {
+			QAT_LOG(ERR, "AES-XTS-192 not supported");
+			ret = -EINVAL;
+			goto error_out;
+		}
+		if (qat_sym_validate_aes_key((cipher_xform->key.length/2),
+				&session->qat_cipher_alg) != 0) {
+			QAT_LOG(ERR, "Invalid AES-XTS cipher key size");
+			ret = -EINVAL;
+			goto error_out;
+		}
+		session->qat_mode = ICP_QAT_HW_CIPHER_XTS_MODE;
+		break;
 	case RTE_CRYPTO_CIPHER_3DES_ECB:
 	case RTE_CRYPTO_CIPHER_AES_ECB:
 	case RTE_CRYPTO_CIPHER_AES_F8:
-	case RTE_CRYPTO_CIPHER_AES_XTS:
 	case RTE_CRYPTO_CIPHER_ARC4:
 		QAT_LOG(ERR, "Crypto QAT PMD: Unsupported Cipher alg %u",
 				cipher_xform->algo);
@@ -496,7 +510,7 @@ qat_sym_session_configure_auth(struct rte_cryptodev *dev,
 {
 	struct rte_crypto_auth_xform *auth_xform = qat_get_auth_xform(xform);
 	struct qat_sym_dev_private *internals = dev->data->dev_private;
-	uint8_t *key_data = auth_xform->key.data;
+	const uint8_t *key_data = auth_xform->key.data;
 	uint8_t key_length = auth_xform->key.length;
 	session->aes_cmac = 0;
 
@@ -1143,8 +1157,8 @@ static int qat_sym_do_precomputes(enum icp_qat_hw_auth_algo hash_alg,
 	}
 
 	block_size = qat_hash_get_block_size(hash_alg);
-	if (block_size <= 0)
-		return -EFAULT;
+	if (block_size < 0)
+		return block_size;
 	/* init ipad and opad from key and xor with fixed values */
 	memset(ipad, 0, block_size);
 	memset(opad, 0, block_size);
@@ -1258,7 +1272,7 @@ qat_get_crypto_proto_flag(uint16_t flags)
 }
 
 int qat_sym_session_aead_create_cd_cipher(struct qat_sym_session *cdesc,
-						uint8_t *cipherkey,
+						const uint8_t *cipherkey,
 						uint32_t cipherkeylen)
 {
 	struct icp_qat_hw_cipher_algo_blk *cipher;
@@ -1413,7 +1427,7 @@ int qat_sym_session_aead_create_cd_cipher(struct qat_sym_session *cdesc,
 }
 
 int qat_sym_session_aead_create_cd_auth(struct qat_sym_session *cdesc,
-						uint8_t *authkey,
+						const uint8_t *authkey,
 						uint32_t authkeylen,
 						uint32_t aad_length,
 						uint32_t digestsize,
@@ -1488,11 +1502,17 @@ int qat_sym_session_aead_create_cd_auth(struct qat_sym_session *cdesc,
 		|| cdesc->qat_hash_alg == ICP_QAT_HW_AUTH_ALGO_KASUMI_F9
 		|| cdesc->qat_hash_alg == ICP_QAT_HW_AUTH_ALGO_ZUC_3G_128_EIA3
 		|| cdesc->qat_hash_alg == ICP_QAT_HW_AUTH_ALGO_AES_XCBC_MAC
+		|| cdesc->qat_hash_alg == ICP_QAT_HW_AUTH_ALGO_AES_CBC_MAC
+		|| cdesc->qat_hash_alg == ICP_QAT_HW_AUTH_ALGO_NULL
 			)
 		hash->auth_counter.counter = 0;
-	else
-		hash->auth_counter.counter = rte_bswap32(
-				qat_hash_get_block_size(cdesc->qat_hash_alg));
+	else {
+		int block_size = qat_hash_get_block_size(cdesc->qat_hash_alg);
+
+		if (block_size < 0)
+			return block_size;
+		hash->auth_counter.counter = rte_bswap32(block_size);
+	}
 
 	cdesc->cd_cur_ptr += sizeof(struct icp_qat_hw_auth_setup);
 

@@ -613,8 +613,8 @@ fm10k_dev_mq_rx_configure(struct rte_eth_dev *dev)
 
 	/* reset MAC/VLAN as it's based on VMDQ or PF main VSI */
 	memset(dev->data->mac_addrs, 0,
-		ETHER_ADDR_LEN * FM10K_MAX_MACADDR_NUM);
-	ether_addr_copy((const struct ether_addr *)hw->mac.addr,
+		RTE_ETHER_ADDR_LEN * FM10K_MAX_MACADDR_NUM);
+	rte_ether_addr_copy((const struct rte_ether_addr *)hw->mac.addr,
 		&dev->data->mac_addrs[0]);
 	memset(macvlan, 0, sizeof(*macvlan));
 	macvlan->nb_queue_pools = nb_queue_pools;
@@ -1389,6 +1389,15 @@ fm10k_dev_infos_get(struct rte_eth_dev *dev,
 
 	dev_info->hash_key_size = FM10K_RSSRK_SIZE * sizeof(uint32_t);
 	dev_info->reta_size = FM10K_MAX_RSS_INDICES;
+	dev_info->flow_type_rss_offloads = ETH_RSS_IPV4 |
+					ETH_RSS_IPV6 |
+					ETH_RSS_IPV6_EX |
+					ETH_RSS_NONFRAG_IPV4_TCP |
+					ETH_RSS_NONFRAG_IPV6_TCP |
+					ETH_RSS_IPV6_TCP_EX |
+					ETH_RSS_NONFRAG_IPV4_UDP |
+					ETH_RSS_NONFRAG_IPV6_UDP |
+					ETH_RSS_IPV6_UDP_EX;
 
 	dev_info->default_rxconf = (struct rte_eth_rxconf) {
 		.rx_thresh = {
@@ -1525,7 +1534,7 @@ fm10k_vlan_filter_set(struct rte_eth_dev *dev, uint16_t vlan_id, int on)
 
 	for (mac_index = 0; (mac_index < FM10K_MAX_MACADDR_NUM) &&
 			(result == FM10K_SUCCESS); mac_index++) {
-		if (is_zero_ether_addr(&data->mac_addrs[mac_index]))
+		if (rte_is_zero_ether_addr(&data->mac_addrs[mac_index]))
 			continue;
 		if (mac_num > macvlan->mac_num - 1) {
 			PMD_INIT_LOG(ERR, "MAC address number "
@@ -1664,7 +1673,7 @@ static void fm10k_MAC_filter_set(struct rte_eth_dev *dev,
 /* Add a MAC address, and update filters */
 static int
 fm10k_macaddr_add(struct rte_eth_dev *dev,
-		struct ether_addr *mac_addr,
+		struct rte_ether_addr *mac_addr,
 		uint32_t index,
 		uint32_t pool)
 {
@@ -2372,7 +2381,7 @@ fm10k_dev_rx_queue_intr_enable(struct rte_eth_dev *dev, uint16_t queue_id)
 	else
 		FM10K_WRITE_REG(hw, FM10K_VFITR(Q2V(pdev, queue_id)),
 			FM10K_ITR_AUTOMASK | FM10K_ITR_MASK_CLEAR);
-	rte_intr_enable(&pdev->intr_handle);
+	rte_intr_ack(&pdev->intr_handle);
 	return 0;
 }
 
@@ -2671,7 +2680,7 @@ fm10k_dev_interrupt_handler_pf(void *param)
 	FM10K_WRITE_REG(hw, FM10K_ITR(0), FM10K_ITR_AUTOMASK |
 					FM10K_ITR_MASK_CLEAR);
 	/* Re-enable interrupt from host side */
-	rte_intr_enable(dev->intr_handle);
+	rte_intr_ack(dev->intr_handle);
 }
 
 /**
@@ -2751,7 +2760,7 @@ fm10k_dev_interrupt_handler_vf(void *param)
 	FM10K_WRITE_REG(hw, FM10K_VFITR(0), FM10K_ITR_AUTOMASK |
 					FM10K_ITR_MASK_CLEAR);
 	/* Re-enable interrupt from host side */
-	rte_intr_enable(dev->intr_handle);
+	rte_intr_ack(dev->intr_handle);
 }
 
 /* Mailbox message handler in VF */
@@ -2819,6 +2828,7 @@ static const struct eth_dev_ops fm10k_eth_dev_ops = {
 	.rx_queue_release	= fm10k_rx_queue_release,
 	.tx_queue_setup		= fm10k_tx_queue_setup,
 	.tx_queue_release	= fm10k_tx_queue_release,
+	.rx_queue_count		= fm10k_dev_rx_queue_count,
 	.rx_descriptor_done	= fm10k_dev_rx_descriptor_done,
 	.rx_descriptor_status = fm10k_dev_rx_descriptor_status,
 	.tx_descriptor_status = fm10k_dev_tx_descriptor_status,
@@ -3003,6 +3013,7 @@ fm10k_params_init(struct rte_eth_dev *dev)
 	hw->bus.payload = fm10k_bus_payload_256;
 
 	info->rx_vec_allowed = true;
+	info->sm_down = false;
 }
 
 static int
@@ -3071,7 +3082,7 @@ eth_fm10k_dev_init(struct rte_eth_dev *dev)
 
 	/* Initialize MAC address(es) */
 	dev->data->mac_addrs = rte_zmalloc("fm10k",
-			ETHER_ADDR_LEN * FM10K_MAX_MACADDR_NUM, 0);
+			RTE_ETHER_ADDR_LEN * FM10K_MAX_MACADDR_NUM, 0);
 	if (dev->data->mac_addrs == NULL) {
 		PMD_INIT_LOG(ERR, "Cannot allocate memory for MAC addresses");
 		return -ENOMEM;
@@ -3079,16 +3090,16 @@ eth_fm10k_dev_init(struct rte_eth_dev *dev)
 
 	diag = fm10k_read_mac_addr(hw);
 
-	ether_addr_copy((const struct ether_addr *)hw->mac.addr,
+	rte_ether_addr_copy((const struct rte_ether_addr *)hw->mac.addr,
 			&dev->data->mac_addrs[0]);
 
 	if (diag != FM10K_SUCCESS ||
-		!is_valid_assigned_ether_addr(dev->data->mac_addrs)) {
+		!rte_is_valid_assigned_ether_addr(dev->data->mac_addrs)) {
 
 		/* Generate a random addr */
-		eth_random_addr(hw->mac.addr);
+		rte_eth_random_addr(hw->mac.addr);
 		memcpy(hw->mac.perm_addr, hw->mac.addr, ETH_ALEN);
-		ether_addr_copy((const struct ether_addr *)hw->mac.addr,
+		rte_ether_addr_copy((const struct rte_ether_addr *)hw->mac.addr,
 		&dev->data->mac_addrs[0]);
 	}
 
@@ -3257,8 +3268,7 @@ static const struct rte_pci_id pci_id_fm10k_map[] = {
 
 static struct rte_pci_driver rte_pmd_fm10k = {
 	.id_table = pci_id_fm10k_map,
-	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC |
-		     RTE_PCI_DRV_IOVA_AS_VA,
+	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
 	.probe = eth_fm10k_pci_probe,
 	.remove = eth_fm10k_pci_remove,
 };

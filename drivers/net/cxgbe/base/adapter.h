@@ -14,9 +14,9 @@
 #include <rte_rwlock.h>
 #include <rte_ethdev.h>
 
-#include "cxgbe_compat.h"
+#include "../cxgbe_compat.h"
+#include "../cxgbe_ofld.h"
 #include "t4_regs_values.h"
-#include "cxgbe_ofld.h"
 
 enum {
 	MAX_ETH_QSETS = 64,           /* # of Ethernet Tx/Rx queue sets */
@@ -368,7 +368,7 @@ static inline void t4_os_write_unlock(rte_rwlock_t *lock)
  */
 static inline struct port_info *ethdev2pinfo(const struct rte_eth_dev *dev)
 {
-	return (struct port_info *)dev->data->dev_private;
+	return dev->data->dev_private;
 }
 
 /**
@@ -671,7 +671,7 @@ static inline void t4_os_set_hw_addr(struct adapter *adapter, int port_idx,
 {
 	struct port_info *pi = adap2pinfo(adapter, port_idx);
 
-	ether_addr_copy((struct ether_addr *)hw_addr,
+	rte_ether_addr_copy((struct rte_ether_addr *)hw_addr,
 			&pi->eth_dev->data->mac_addrs[0]);
 }
 
@@ -801,8 +801,6 @@ void t4_sge_tx_monitor_stop(struct adapter *adap);
 int t4_eth_xmit(struct sge_eth_txq *txq, struct rte_mbuf *mbuf,
 		uint16_t nb_pkts);
 int t4_mgmt_tx(struct sge_ctrl_txq *txq, struct rte_mbuf *mbuf);
-int t4_ethrx_handler(struct sge_rspq *q, const __be64 *rsp,
-		     const struct pkt_gl *gl);
 int t4_sge_init(struct adapter *adap);
 int t4vf_sge_init(struct adapter *adap);
 int t4_sge_alloc_eth_txq(struct adapter *adap, struct sge_eth_txq *txq,

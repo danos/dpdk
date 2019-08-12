@@ -17,80 +17,6 @@
 
 #include "failsafe_private.h"
 
-static struct rte_eth_dev_info default_infos = {
-	/* Max possible number of elements */
-	.max_rx_pktlen = UINT32_MAX,
-	.max_rx_queues = RTE_MAX_QUEUES_PER_PORT,
-	.max_tx_queues = RTE_MAX_QUEUES_PER_PORT,
-	.max_mac_addrs = FAILSAFE_MAX_ETHADDR,
-	.max_hash_mac_addrs = UINT32_MAX,
-	.max_vfs = UINT16_MAX,
-	.max_vmdq_pools = UINT16_MAX,
-	.rx_desc_lim = {
-		.nb_max = UINT16_MAX,
-		.nb_min = 0,
-		.nb_align = 1,
-		.nb_seg_max = UINT16_MAX,
-		.nb_mtu_seg_max = UINT16_MAX,
-	},
-	.tx_desc_lim = {
-		.nb_max = UINT16_MAX,
-		.nb_min = 0,
-		.nb_align = 1,
-		.nb_seg_max = UINT16_MAX,
-		.nb_mtu_seg_max = UINT16_MAX,
-	},
-	/*
-	 * Set of capabilities that can be verified upon
-	 * configuring a sub-device.
-	 */
-	.rx_offload_capa =
-		DEV_RX_OFFLOAD_VLAN_STRIP |
-		DEV_RX_OFFLOAD_IPV4_CKSUM |
-		DEV_RX_OFFLOAD_UDP_CKSUM |
-		DEV_RX_OFFLOAD_TCP_CKSUM |
-		DEV_RX_OFFLOAD_TCP_LRO |
-		DEV_RX_OFFLOAD_QINQ_STRIP |
-		DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM |
-		DEV_RX_OFFLOAD_MACSEC_STRIP |
-		DEV_RX_OFFLOAD_HEADER_SPLIT |
-		DEV_RX_OFFLOAD_VLAN_FILTER |
-		DEV_RX_OFFLOAD_VLAN_EXTEND |
-		DEV_RX_OFFLOAD_JUMBO_FRAME |
-		DEV_RX_OFFLOAD_SCATTER |
-		DEV_RX_OFFLOAD_TIMESTAMP |
-		DEV_RX_OFFLOAD_SECURITY,
-	.rx_queue_offload_capa =
-		DEV_RX_OFFLOAD_VLAN_STRIP |
-		DEV_RX_OFFLOAD_IPV4_CKSUM |
-		DEV_RX_OFFLOAD_UDP_CKSUM |
-		DEV_RX_OFFLOAD_TCP_CKSUM |
-		DEV_RX_OFFLOAD_TCP_LRO |
-		DEV_RX_OFFLOAD_QINQ_STRIP |
-		DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM |
-		DEV_RX_OFFLOAD_MACSEC_STRIP |
-		DEV_RX_OFFLOAD_HEADER_SPLIT |
-		DEV_RX_OFFLOAD_VLAN_FILTER |
-		DEV_RX_OFFLOAD_VLAN_EXTEND |
-		DEV_RX_OFFLOAD_JUMBO_FRAME |
-		DEV_RX_OFFLOAD_SCATTER |
-		DEV_RX_OFFLOAD_TIMESTAMP |
-		DEV_RX_OFFLOAD_SECURITY,
-	.tx_offload_capa =
-		DEV_TX_OFFLOAD_MULTI_SEGS |
-		DEV_TX_OFFLOAD_IPV4_CKSUM |
-		DEV_TX_OFFLOAD_UDP_CKSUM |
-		DEV_TX_OFFLOAD_TCP_CKSUM |
-		DEV_TX_OFFLOAD_TCP_TSO,
-	.flow_type_rss_offloads =
-			ETH_RSS_IP |
-			ETH_RSS_UDP |
-			ETH_RSS_TCP,
-	.dev_capa =
-		RTE_ETH_DEV_CAPA_RUNTIME_RX_QUEUE_SETUP |
-		RTE_ETH_DEV_CAPA_RUNTIME_TX_QUEUE_SETUP,
-};
-
 static int
 fs_dev_configure(struct rte_eth_dev *dev)
 {
@@ -451,7 +377,7 @@ fs_rx_queue_release(void *queue)
 	if (queue == NULL)
 		return;
 	rxq = queue;
-	dev = rxq->priv->dev;
+	dev = &rte_eth_devices[rxq->priv->data->port_id];
 	fs_lock(dev, 0);
 	if (rxq->event_fd > 0)
 		close(rxq->event_fd);
@@ -635,7 +561,7 @@ fs_tx_queue_release(void *queue)
 	if (queue == NULL)
 		return;
 	txq = queue;
-	dev = txq->priv->dev;
+	dev = &rte_eth_devices[txq->priv->data->port_id];
 	fs_lock(dev, 0);
 	FOREACH_SUBDEV_STATE(sdev, i, dev, DEV_ACTIVE) {
 		if (ETH(sdev)->data->tx_queues != NULL &&
@@ -863,6 +789,46 @@ fs_stats_reset(struct rte_eth_dev *dev)
 	fs_unlock(dev, 0);
 }
 
+static void
+fs_dev_merge_desc_lim(struct rte_eth_desc_lim *to,
+		      const struct rte_eth_desc_lim *from)
+{
+	to->nb_max = RTE_MIN(to->nb_max, from->nb_max);
+	to->nb_min = RTE_MAX(to->nb_min, from->nb_min);
+	to->nb_align = RTE_MAX(to->nb_align, from->nb_align);
+
+	to->nb_seg_max = RTE_MIN(to->nb_seg_max, from->nb_seg_max);
+	to->nb_mtu_seg_max = RTE_MIN(to->nb_mtu_seg_max, from->nb_mtu_seg_max);
+}
+
+/*
+ * Merge the information from sub-devices.
+ *
+ * The reported values must be the common subset of all sub devices
+ */
+static void
+fs_dev_merge_info(struct rte_eth_dev_info *info,
+		  const struct rte_eth_dev_info *sinfo)
+{
+	info->max_rx_pktlen = RTE_MIN(info->max_rx_pktlen, sinfo->max_rx_pktlen);
+	info->max_rx_queues = RTE_MIN(info->max_rx_queues, sinfo->max_rx_queues);
+	info->max_tx_queues = RTE_MIN(info->max_tx_queues, sinfo->max_tx_queues);
+	info->max_mac_addrs = RTE_MIN(info->max_mac_addrs, sinfo->max_mac_addrs);
+	info->max_hash_mac_addrs = RTE_MIN(info->max_hash_mac_addrs,
+					sinfo->max_hash_mac_addrs);
+	info->max_vmdq_pools = RTE_MIN(info->max_vmdq_pools, sinfo->max_vmdq_pools);
+	info->max_vfs = RTE_MIN(info->max_vfs, sinfo->max_vfs);
+
+	fs_dev_merge_desc_lim(&info->rx_desc_lim, &sinfo->rx_desc_lim);
+	fs_dev_merge_desc_lim(&info->tx_desc_lim, &sinfo->tx_desc_lim);
+
+	info->rx_offload_capa &= sinfo->rx_offload_capa;
+	info->tx_offload_capa &= sinfo->tx_offload_capa;
+	info->rx_queue_offload_capa &= sinfo->rx_queue_offload_capa;
+	info->tx_queue_offload_capa &= sinfo->tx_queue_offload_capa;
+	info->flow_type_rss_offloads &= sinfo->flow_type_rss_offloads;
+}
+
 /**
  * Fail-safe dev_infos_get rules:
  *
@@ -901,43 +867,76 @@ fs_dev_infos_get(struct rte_eth_dev *dev,
 	struct sub_device *sdev;
 	uint8_t i;
 
-	sdev = TX_SUBDEV(dev);
-	if (sdev == NULL) {
-		DEBUG("No probed device, using default infos");
-		rte_memcpy(&PRIV(dev)->infos, &default_infos,
-			   sizeof(default_infos));
-	} else {
-		uint64_t rx_offload_capa;
-		uint64_t rxq_offload_capa;
-		uint64_t rss_hf_offload_capa;
-		uint64_t dev_capa;
+	/* Use maximum upper bounds by default */
+	infos->max_rx_pktlen = UINT32_MAX;
+	infos->max_rx_queues = RTE_MAX_QUEUES_PER_PORT;
+	infos->max_tx_queues = RTE_MAX_QUEUES_PER_PORT;
+	infos->max_mac_addrs = FAILSAFE_MAX_ETHADDR;
+	infos->max_hash_mac_addrs = UINT32_MAX;
+	infos->max_vfs = UINT16_MAX;
+	infos->max_vmdq_pools = UINT16_MAX;
 
-		rx_offload_capa = default_infos.rx_offload_capa;
-		rxq_offload_capa = default_infos.rx_queue_offload_capa;
-		rss_hf_offload_capa = default_infos.flow_type_rss_offloads;
-		dev_capa = default_infos.dev_capa;
-		FOREACH_SUBDEV_STATE(sdev, i, dev, DEV_PROBED) {
-			rte_eth_dev_info_get(PORT_ID(sdev),
-					&PRIV(dev)->infos);
-			rx_offload_capa &= PRIV(dev)->infos.rx_offload_capa;
-			rxq_offload_capa &=
-					PRIV(dev)->infos.rx_queue_offload_capa;
-			rss_hf_offload_capa &=
-					PRIV(dev)->infos.flow_type_rss_offloads;
-			dev_capa &= PRIV(dev)->infos.dev_capa;
-		}
-		sdev = TX_SUBDEV(dev);
-		rte_eth_dev_info_get(PORT_ID(sdev), &PRIV(dev)->infos);
-		PRIV(dev)->infos.rx_offload_capa = rx_offload_capa;
-		PRIV(dev)->infos.rx_queue_offload_capa = rxq_offload_capa;
-		PRIV(dev)->infos.flow_type_rss_offloads = rss_hf_offload_capa;
-		PRIV(dev)->infos.dev_capa = dev_capa;
-		PRIV(dev)->infos.tx_offload_capa &=
-					default_infos.tx_offload_capa;
-		PRIV(dev)->infos.tx_queue_offload_capa &=
-					default_infos.tx_queue_offload_capa;
+	/*
+	 * Set of capabilities that can be verified upon
+	 * configuring a sub-device.
+	 */
+	infos->rx_offload_capa =
+		DEV_RX_OFFLOAD_VLAN_STRIP |
+		DEV_RX_OFFLOAD_IPV4_CKSUM |
+		DEV_RX_OFFLOAD_UDP_CKSUM |
+		DEV_RX_OFFLOAD_TCP_CKSUM |
+		DEV_RX_OFFLOAD_TCP_LRO |
+		DEV_RX_OFFLOAD_QINQ_STRIP |
+		DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM |
+		DEV_RX_OFFLOAD_MACSEC_STRIP |
+		DEV_RX_OFFLOAD_HEADER_SPLIT |
+		DEV_RX_OFFLOAD_VLAN_FILTER |
+		DEV_RX_OFFLOAD_VLAN_EXTEND |
+		DEV_RX_OFFLOAD_JUMBO_FRAME |
+		DEV_RX_OFFLOAD_SCATTER |
+		DEV_RX_OFFLOAD_TIMESTAMP |
+		DEV_RX_OFFLOAD_SECURITY;
+
+	infos->rx_queue_offload_capa =
+		DEV_RX_OFFLOAD_VLAN_STRIP |
+		DEV_RX_OFFLOAD_IPV4_CKSUM |
+		DEV_RX_OFFLOAD_UDP_CKSUM |
+		DEV_RX_OFFLOAD_TCP_CKSUM |
+		DEV_RX_OFFLOAD_TCP_LRO |
+		DEV_RX_OFFLOAD_QINQ_STRIP |
+		DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM |
+		DEV_RX_OFFLOAD_MACSEC_STRIP |
+		DEV_RX_OFFLOAD_HEADER_SPLIT |
+		DEV_RX_OFFLOAD_VLAN_FILTER |
+		DEV_RX_OFFLOAD_VLAN_EXTEND |
+		DEV_RX_OFFLOAD_JUMBO_FRAME |
+		DEV_RX_OFFLOAD_SCATTER |
+		DEV_RX_OFFLOAD_TIMESTAMP |
+		DEV_RX_OFFLOAD_SECURITY;
+
+	infos->tx_offload_capa =
+		DEV_TX_OFFLOAD_MULTI_SEGS |
+		DEV_TX_OFFLOAD_MBUF_FAST_FREE |
+		DEV_TX_OFFLOAD_IPV4_CKSUM |
+		DEV_TX_OFFLOAD_UDP_CKSUM |
+		DEV_TX_OFFLOAD_TCP_CKSUM |
+		DEV_TX_OFFLOAD_TCP_TSO;
+
+	infos->flow_type_rss_offloads =
+		ETH_RSS_IP |
+		ETH_RSS_UDP |
+		ETH_RSS_TCP;
+	infos->dev_capa =
+		RTE_ETH_DEV_CAPA_RUNTIME_RX_QUEUE_SETUP |
+		RTE_ETH_DEV_CAPA_RUNTIME_TX_QUEUE_SETUP;
+
+	FOREACH_SUBDEV_STATE(sdev, i, dev, DEV_PROBED) {
+		struct rte_eth_dev_info sub_info;
+
+		rte_eth_dev_info_get(PORT_ID(sdev), &sub_info);
+
+		fs_dev_merge_info(infos, &sub_info);
 	}
-	rte_memcpy(infos, &PRIV(dev)->infos, sizeof(*infos));
 }
 
 static const uint32_t *
@@ -1081,7 +1080,7 @@ fs_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
 
 static int
 fs_mac_addr_add(struct rte_eth_dev *dev,
-		struct ether_addr *mac_addr,
+		struct rte_ether_addr *mac_addr,
 		uint32_t index,
 		uint32_t vmdq)
 {
@@ -1110,7 +1109,7 @@ fs_mac_addr_add(struct rte_eth_dev *dev,
 }
 
 static int
-fs_mac_addr_set(struct rte_eth_dev *dev, struct ether_addr *mac_addr)
+fs_mac_addr_set(struct rte_eth_dev *dev, struct rte_ether_addr *mac_addr)
 {
 	struct sub_device *sdev;
 	uint8_t i;
@@ -1134,7 +1133,7 @@ fs_mac_addr_set(struct rte_eth_dev *dev, struct ether_addr *mac_addr)
 
 static int
 fs_set_mc_addr_list(struct rte_eth_dev *dev,
-		    struct ether_addr *mc_addr_set, uint32_t nb_mc_addr)
+		    struct rte_ether_addr *mc_addr_set, uint32_t nb_mc_addr)
 {
 	struct sub_device *sdev;
 	uint8_t i;
@@ -1207,33 +1206,17 @@ fs_rss_hash_update(struct rte_eth_dev *dev,
 }
 
 static int
-fs_filter_ctrl(struct rte_eth_dev *dev,
+fs_filter_ctrl(struct rte_eth_dev *dev __rte_unused,
 		enum rte_filter_type type,
 		enum rte_filter_op op,
 		void *arg)
 {
-	struct sub_device *sdev;
-	uint8_t i;
-	int ret;
-
 	if (type == RTE_ETH_FILTER_GENERIC &&
 	    op == RTE_ETH_FILTER_GET) {
 		*(const void **)arg = &fs_flow_ops;
 		return 0;
 	}
-	fs_lock(dev, 0);
-	FOREACH_SUBDEV_STATE(sdev, i, dev, DEV_ACTIVE) {
-		DEBUG("Calling rte_eth_dev_filter_ctrl on sub_device %d", i);
-		ret = rte_eth_dev_filter_ctrl(PORT_ID(sdev), type, op, arg);
-		if ((ret = fs_err(sdev, ret))) {
-			ERROR("Operation rte_eth_dev_filter_ctrl failed for sub_device %d"
-			      " with error %d", i, ret);
-			fs_unlock(dev, 0);
-			return ret;
-		}
-	}
-	fs_unlock(dev, 0);
-	return 0;
+	return -ENOTSUP;
 }
 
 const struct eth_dev_ops failsafe_ops = {

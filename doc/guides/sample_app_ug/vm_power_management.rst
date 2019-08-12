@@ -131,10 +131,15 @@ can be accessed.
 Host Operating System
 ~~~~~~~~~~~~~~~~~~~~~
 
-The Host OS must also have the *apci_cpufreq* module installed, in some cases
-the *intel_pstate* driver may be the default Power Management environment.
-To enable *acpi_cpufreq* and disable *intel_pstate*, add the following
-to the grub Linux command line:
+The DPDK Power Library can use either the *acpi_cpufreq* or *intel_pstate*
+kernel driver for the management of core frequencies. In many cases
+the *intel_pstate* driver is the default Power Management environment.
+
+Should the *acpi-cpufreq* driver be required, the *intel_pstate* module must
+be disabled, and *apci_cpufreq* module loaded in its place.
+
+To disable *intel_pstate* driver, add the following to the grub Linux
+command line:
 
 .. code-block:: console
 
@@ -339,7 +344,7 @@ monitoring of branch ratio on cores doing busy polling via PMDs.
 
   When this parameter is used, the list of cores specified will monitor the ratio
   between branch hits and branch misses. A tightly polling PMD thread will have a
-  very low branch ratio, so the core frequency will be scaled down to the minimim
+  very low branch ratio, so the core frequency will be scaled down to the minimum
   allowed value. When packets are received, the code path will alter, causing the
   branch ratio to increase. When the ratio goes above the ratio threshold, the
   core frequency will be scaled up to the maximum allowed value.
@@ -375,11 +380,18 @@ parsing functionality will not be present in the app.
 
 Sending a command or policy to the power manager application is achieved by
 simply opening a fifo file, writing a JSON string to that fifo, and closing
-the file.
+the file. In actual implementation every core has own dedicated fifo[0..n],
+where n is number of the last available core.
+Having a dedicated fifo file per core allows using standard filesystem permissions
+to ensure a given container can only write JSON commands into fifos it is allowed
+to use.
 
-The fifo is at /tmp/powermonitor/fifo
+The fifo is at /tmp/powermonitor/fifo[0..n]
 
-The jason string can be a policy or instruction, and takes the following
+For example all cmds put to the /tmp/powermonitor/fifo7, will have
+effect only on CPU[7].
+
+The JSON string can be a policy or instruction, and takes the following
 format:
 
   .. code-block:: javascript
@@ -398,19 +410,6 @@ The pairs are the format of standard JSON name-value pairs. The value type
 varies between the different name/value pairs, and may be integers, strings,
 arrays, etc. Examples of policies follow later in this document. The allowed
 names and value types are as follows:
-
-
-:Pair Name: "name"
-:Description: Name of the VM or Host. Allows the parser to associate the
-  policy with the relevant VM or Host OS.
-:Type: string
-:Values: any valid string
-:Required: yes
-:Example:
-
-    .. code-block:: javascript
-
-      "name", "ubuntu2"
 
 
 :Pair Name: "command"
@@ -504,17 +503,6 @@ names and value types are as follows:
 
     "max_packet_thresh": 500000
 
-:Pair Name: "core_list"
-:Description: The cores to which to apply the policy.
-:Type: array of integers
-:Values: array with list of virtual CPUs.
-:Required: only policy CREATE/DESTROY
-:Example:
-
-  .. code-block:: javascript
-
-    "core_list":[ 10, 11 ]
-
 :Pair Name: "workload"
 :Description: When our policy is of type WORKLOAD, we need to specify how
   heavy our workload is.
@@ -561,17 +549,6 @@ names and value types are as follows:
 
     "unit", "SCALE_MAX"
 
-:Pair Name: "resource_id"
-:Description: The core to which to apply the power command.
-:Type: integer
-:Values: valid core id for VM or host OS.
-:Required: only POWER instruction
-:Example:
-
-  .. code-block:: javascript
-
-    "resource_id": 10
-
 JSON API Examples
 ~~~~~~~~~~~~~~~~~
 
@@ -580,39 +557,35 @@ Profile create example:
   .. code-block:: javascript
 
     {"policy": {
-      "name": "ubuntu",
       "command": "create",
       "policy_type": "TIME",
       "busy_hours":[ 17, 18, 19, 20, 21, 22, 23 ],
-      "quiet_hours":[ 2, 3, 4, 5, 6 ],
-      "core_list":[ 11 ]
+      "quiet_hours":[ 2, 3, 4, 5, 6 ]
     }}
 
 Profile destroy example:
 
   .. code-block:: javascript
 
-    {"profile": {
-      "name": "ubuntu",
-      "command": "destroy",
+    {"policy": {
+      "command": "destroy"
     }}
 
 Power command example:
 
   .. code-block:: javascript
 
-    {"command": {
-      "name": "ubuntu",
-      "unit": "SCALE_MAX",
-      "resource_id": 10
+    {"instruction": {
+      "command": "power",
+      "unit": "SCALE_MAX"
     }}
 
 To send a JSON string to the Power Manager application, simply paste the
-example JSON string into a text file and cat it into the fifo:
+example JSON string into a text file and cat it into the proper fifo:
 
   .. code-block:: console
 
-    cat file.json >/tmp/powermonitor/fifo
+    cat file.json >/tmp/powermonitor/fifo[0..n]
 
 The console of the Power Manager application should indicate the command that
 was just received via the fifo.
@@ -729,7 +702,7 @@ policy down to the host application. These parameters are as follows:
   A comma-separated list of cores in the VM that the user wants the host application to
   monitor. The list of cores in any vm starts at zero, and these are mapped to the
   physical cores by the host application once the policy is passed down.
-  Valid syntax includes individial cores '2,3,4', or a range of cores '2-4', or a
+  Valid syntax includes individual cores '2,3,4', or a range of cores '2-4', or a
   combination of both '1,3,5-7'
 
   .. code-block:: console
@@ -737,7 +710,7 @@ policy down to the host application. These parameters are as follows:
     --busy-hours {list of busy hours}
 
   A comma-separated list of hours within which to set the core frequency to maximum.
-  Valid syntax includes individial hours '2,3,4', or a range of hours '2-4', or a
+  Valid syntax includes individual hours '2,3,4', or a range of hours '2-4', or a
   combination of both '1,3,5-7'. Valid hours are 0 to 23.
 
   .. code-block:: console
@@ -745,7 +718,7 @@ policy down to the host application. These parameters are as follows:
     --quiet-hours {list of quiet hours}
 
   A comma-separated list of hours within which to set the core frequency to minimum.
-  Valid syntax includes individial hours '2,3,4', or a range of hours '2-4', or a
+  Valid syntax includes individual hours '2,3,4', or a range of hours '2-4', or a
   combination of both '1,3,5-7'. Valid hours are 0 to 23.
 
   .. code-block:: console

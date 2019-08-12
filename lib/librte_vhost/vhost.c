@@ -69,6 +69,170 @@ __vhost_iova_to_vva(struct virtio_net *dev, struct vhost_virtqueue *vq,
 	return 0;
 }
 
+#define VHOST_LOG_PAGE	4096
+
+/*
+ * Atomically set a bit in memory.
+ */
+static __rte_always_inline void
+vhost_set_bit(unsigned int nr, volatile uint8_t *addr)
+{
+#if defined(RTE_TOOLCHAIN_GCC) && (GCC_VERSION < 70100)
+	/*
+	 * __sync_ built-ins are deprecated, but __atomic_ ones
+	 * are sub-optimized in older GCC versions.
+	 */
+	__sync_fetch_and_or_1(addr, (1U << nr));
+#else
+	__atomic_fetch_or(addr, (1U << nr), __ATOMIC_RELAXED);
+#endif
+}
+
+static __rte_always_inline void
+vhost_log_page(uint8_t *log_base, uint64_t page)
+{
+	vhost_set_bit(page % 8, &log_base[page / 8]);
+}
+
+void
+__vhost_log_write(struct virtio_net *dev, uint64_t addr, uint64_t len)
+{
+	uint64_t page;
+
+	if (unlikely(!dev->log_base || !len))
+		return;
+
+	if (unlikely(dev->log_size <= ((addr + len - 1) / VHOST_LOG_PAGE / 8)))
+		return;
+
+	/* To make sure guest memory updates are committed before logging */
+	rte_smp_wmb();
+
+	page = addr / VHOST_LOG_PAGE;
+	while (page * VHOST_LOG_PAGE < addr + len) {
+		vhost_log_page((uint8_t *)(uintptr_t)dev->log_base, page);
+		page += 1;
+	}
+}
+
+void
+__vhost_log_cache_sync(struct virtio_net *dev, struct vhost_virtqueue *vq)
+{
+	unsigned long *log_base;
+	int i;
+
+	if (unlikely(!dev->log_base))
+		return;
+
+	rte_smp_wmb();
+
+	log_base = (unsigned long *)(uintptr_t)dev->log_base;
+
+	for (i = 0; i < vq->log_cache_nb_elem; i++) {
+		struct log_cache_entry *elem = vq->log_cache + i;
+
+#if defined(RTE_TOOLCHAIN_GCC) && (GCC_VERSION < 70100)
+		/*
+		 * '__sync' builtins are deprecated, but '__atomic' ones
+		 * are sub-optimized in older GCC versions.
+		 */
+		__sync_fetch_and_or(log_base + elem->offset, elem->val);
+#else
+		__atomic_fetch_or(log_base + elem->offset, elem->val,
+				__ATOMIC_RELAXED);
+#endif
+	}
+
+	rte_smp_wmb();
+
+	vq->log_cache_nb_elem = 0;
+}
+
+static __rte_always_inline void
+vhost_log_cache_page(struct virtio_net *dev, struct vhost_virtqueue *vq,
+			uint64_t page)
+{
+	uint32_t bit_nr = page % (sizeof(unsigned long) << 3);
+	uint32_t offset = page / (sizeof(unsigned long) << 3);
+	int i;
+
+	for (i = 0; i < vq->log_cache_nb_elem; i++) {
+		struct log_cache_entry *elem = vq->log_cache + i;
+
+		if (elem->offset == offset) {
+			elem->val |= (1UL << bit_nr);
+			return;
+		}
+	}
+
+	if (unlikely(i >= VHOST_LOG_CACHE_NR)) {
+		/*
+		 * No more room for a new log cache entry,
+		 * so write the dirty log map directly.
+		 */
+		rte_smp_wmb();
+		vhost_log_page((uint8_t *)(uintptr_t)dev->log_base, page);
+
+		return;
+	}
+
+	vq->log_cache[i].offset = offset;
+	vq->log_cache[i].val = (1UL << bit_nr);
+	vq->log_cache_nb_elem++;
+}
+
+void
+__vhost_log_cache_write(struct virtio_net *dev, struct vhost_virtqueue *vq,
+			uint64_t addr, uint64_t len)
+{
+	uint64_t page;
+
+	if (unlikely(!dev->log_base || !len))
+		return;
+
+	if (unlikely(dev->log_size <= ((addr + len - 1) / VHOST_LOG_PAGE / 8)))
+		return;
+
+	page = addr / VHOST_LOG_PAGE;
+	while (page * VHOST_LOG_PAGE < addr + len) {
+		vhost_log_cache_page(dev, vq, page);
+		page += 1;
+	}
+}
+
+void *
+vhost_alloc_copy_ind_table(struct virtio_net *dev, struct vhost_virtqueue *vq,
+		uint64_t desc_addr, uint64_t desc_len)
+{
+	void *idesc;
+	uint64_t src, dst;
+	uint64_t len, remain = desc_len;
+
+	idesc = rte_malloc(__func__, desc_len, 0);
+	if (unlikely(!idesc))
+		return NULL;
+
+	dst = (uint64_t)(uintptr_t)idesc;
+
+	while (remain) {
+		len = remain;
+		src = vhost_iova_to_vva(dev, vq, desc_addr, &len,
+				VHOST_ACCESS_RO);
+		if (unlikely(!src || !len)) {
+			rte_free(idesc);
+			return NULL;
+		}
+
+		rte_memcpy((void *)(uintptr_t)dst, (void *)(uintptr_t)src, len);
+
+		remain -= len;
+		dst += len;
+		desc_addr += len;
+	}
+
+	return idesc;
+}
+
 void
 cleanup_vq(struct vhost_virtqueue *vq, int destroy)
 {
@@ -401,19 +565,6 @@ vhost_attach_vdpa_device(int vid, int did)
 }
 
 void
-vhost_detach_vdpa_device(int vid)
-{
-	struct virtio_net *dev = get_device(vid);
-
-	if (dev == NULL)
-		return;
-
-	vhost_user_host_notifier_ctrl(vid, false);
-
-	dev->vdpa_dev_id = -1;
-}
-
-void
 vhost_set_ifname(int vid, const char *if_name, unsigned int if_len)
 {
 	struct virtio_net *dev;
@@ -460,7 +611,7 @@ rte_vhost_get_mtu(int vid, uint16_t *mtu)
 {
 	struct virtio_net *dev = get_device(vid);
 
-	if (!dev)
+	if (dev == NULL || mtu == NULL)
 		return -ENODEV;
 
 	if (!(dev->flags & VIRTIO_DEV_READY))
@@ -528,7 +679,7 @@ rte_vhost_get_ifname(int vid, char *buf, size_t len)
 {
 	struct virtio_net *dev = get_device(vid);
 
-	if (dev == NULL)
+	if (dev == NULL || buf == NULL)
 		return -1;
 
 	len = RTE_MIN(len, sizeof(dev->ifname));
@@ -545,7 +696,7 @@ rte_vhost_get_negotiated_features(int vid, uint64_t *features)
 	struct virtio_net *dev;
 
 	dev = get_device(vid);
-	if (!dev)
+	if (dev == NULL || features == NULL)
 		return -1;
 
 	*features = dev->features;
@@ -560,7 +711,7 @@ rte_vhost_get_mem_table(int vid, struct rte_vhost_memory **mem)
 	size_t size;
 
 	dev = get_device(vid);
-	if (!dev)
+	if (dev == NULL || mem == NULL)
 		return -1;
 
 	size = dev->mem->nregions * sizeof(struct rte_vhost_mem_region);
@@ -583,7 +734,7 @@ rte_vhost_get_vhost_vring(int vid, uint16_t vring_idx,
 	struct vhost_virtqueue *vq;
 
 	dev = get_device(vid);
-	if (!dev)
+	if (dev == NULL || vring == NULL)
 		return -1;
 
 	if (vring_idx >= VHOST_MAX_VRING)
@@ -776,15 +927,8 @@ int rte_vhost_get_log_base(int vid, uint64_t *log_base,
 {
 	struct virtio_net *dev = get_device(vid);
 
-	if (!dev)
+	if (dev == NULL || log_base == NULL || log_size == NULL)
 		return -1;
-
-	if (unlikely(!(dev->flags & VIRTIO_DEV_BUILTIN_VIRTIO_NET))) {
-		RTE_LOG(ERR, VHOST_DATA,
-			"(%d) %s: built-in vhost net backend is disabled.\n",
-			dev->vid, __func__);
-		return -1;
-	}
 
 	*log_base = dev->log_base;
 	*log_size = dev->log_size;
@@ -797,15 +941,8 @@ int rte_vhost_get_vring_base(int vid, uint16_t queue_id,
 {
 	struct virtio_net *dev = get_device(vid);
 
-	if (!dev)
+	if (dev == NULL || last_avail_idx == NULL || last_used_idx == NULL)
 		return -1;
-
-	if (unlikely(!(dev->flags & VIRTIO_DEV_BUILTIN_VIRTIO_NET))) {
-		RTE_LOG(ERR, VHOST_DATA,
-			"(%d) %s: built-in vhost net backend is disabled.\n",
-			dev->vid, __func__);
-		return -1;
-	}
 
 	*last_avail_idx = dev->virtqueue[queue_id]->last_avail_idx;
 	*last_used_idx = dev->virtqueue[queue_id]->last_used_idx;
@@ -821,15 +958,21 @@ int rte_vhost_set_vring_base(int vid, uint16_t queue_id,
 	if (!dev)
 		return -1;
 
-	if (unlikely(!(dev->flags & VIRTIO_DEV_BUILTIN_VIRTIO_NET))) {
-		RTE_LOG(ERR, VHOST_DATA,
-			"(%d) %s: built-in vhost net backend is disabled.\n",
-			dev->vid, __func__);
-		return -1;
-	}
-
 	dev->virtqueue[queue_id]->last_avail_idx = last_avail_idx;
 	dev->virtqueue[queue_id]->last_used_idx = last_used_idx;
 
+	return 0;
+}
+
+int rte_vhost_extern_callback_register(int vid,
+		struct rte_vhost_user_extern_ops const * const ops, void *ctx)
+{
+	struct virtio_net *dev = get_device(vid);
+
+	if (dev == NULL || ops == NULL)
+		return -1;
+
+	dev->extern_ops = *ops;
+	dev->extern_data = ctx;
 	return 0;
 }

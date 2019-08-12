@@ -51,6 +51,7 @@ cperf_verify_test_free(struct cperf_verify_ctx *ctx)
 
 void *
 cperf_verify_test_constructor(struct rte_mempool *sess_mp,
+		struct rte_mempool *sess_priv_mp,
 		uint8_t dev_id, uint16_t qp_id,
 		const struct cperf_options *options,
 		const struct cperf_test_vector *test_vector,
@@ -73,8 +74,8 @@ cperf_verify_test_constructor(struct rte_mempool *sess_mp,
 	uint16_t iv_offset = sizeof(struct rte_crypto_op) +
 		sizeof(struct rte_crypto_sym_op);
 
-	ctx->sess = op_fns->sess_create(sess_mp, dev_id, options, test_vector,
-			iv_offset);
+	ctx->sess = op_fns->sess_create(sess_mp, sess_priv_mp, dev_id, options,
+			test_vector, iv_offset);
 	if (ctx->sess == NULL)
 		goto err;
 
@@ -232,7 +233,7 @@ cperf_verify_test_runner(void *test_ctx)
 	uint64_t ops_deqd = 0, ops_deqd_total = 0, ops_deqd_failed = 0;
 	uint64_t ops_failed = 0;
 
-	static int only_once;
+	static rte_atomic16_t display_once = RTE_ATOMIC16_INIT(0);
 
 	uint64_t i;
 	uint16_t ops_unused = 0;
@@ -375,12 +376,11 @@ cperf_verify_test_runner(void *test_ctx)
 	}
 
 	if (!ctx->options->csv) {
-		if (!only_once)
+		if (rte_atomic16_test_and_set(&display_once))
 			printf("%12s%12s%12s%12s%12s%12s%12s%12s\n\n",
 				"lcore id", "Buf Size", "Burst size",
 				"Enqueued", "Dequeued", "Failed Enq",
 				"Failed Deq", "Failed Ops");
-		only_once = 1;
 
 		printf("%12u%12u%12u%12"PRIu64"%12"PRIu64"%12"PRIu64
 				"%12"PRIu64"%12"PRIu64"\n",
@@ -393,11 +393,10 @@ cperf_verify_test_runner(void *test_ctx)
 				ops_deqd_failed,
 				ops_failed);
 	} else {
-		if (!only_once)
+		if (rte_atomic16_test_and_set(&display_once))
 			printf("\n# lcore id, Buffer Size(B), "
 				"Burst Size,Enqueued,Dequeued,Failed Enq,"
 				"Failed Deq,Failed Ops\n");
-		only_once = 1;
 
 		printf("%10u;%10u;%u;%"PRIu64";%"PRIu64";%"PRIu64";%"PRIu64";"
 				"%"PRIu64"\n",

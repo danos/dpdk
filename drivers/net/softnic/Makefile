@@ -45,8 +45,8 @@ SRCS-$(CONFIG_RTE_LIBRTE_PMD_SOFTNIC) += conn.c
 #
 SYMLINK-y-include += rte_eth_softnic.h
 
-ifneq ($(CONFIG_RTE_EXEC_ENV),"linuxapp")
-$(info Softnic PMD can only operate in a linuxapp environment, \
+ifneq ($(CONFIG_RTE_EXEC_ENV_LINUX),y)
+$(info Softnic PMD can only operate in a linux environment, \
 please change the definition of the RTE_TARGET environment variable)
 all:
 clean:

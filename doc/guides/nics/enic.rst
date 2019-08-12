@@ -224,7 +224,7 @@ the use of SR-IOV.
     passthrough devices do not require libvirt, port profiles, and VM-FEX.
 
 
-.. _enic-genic-flow-api:
+.. _enic-generic-flow-api:
 
 Generic Flow API support
 ------------------------
@@ -247,7 +247,7 @@ Generic Flow API is supported. The baseline support is:
   in the pattern.
 
   - Attributes: ingress
-  - Items: eth, ipv4, ipv6, udp, tcp, vxlan, inner eth, ipv4, ipv6, udp, tcp
+  - Items: eth, vlan, ipv4, ipv6, udp, tcp, vxlan, inner eth, vlan, ipv4, ipv6, udp, tcp
   - Actions: queue and void
   - Selectors: 'is', 'spec' and 'mask'. 'last' is not supported
   - In total, up to 64 bytes of mask is allowed across all headers
@@ -255,16 +255,16 @@ Generic Flow API is supported. The baseline support is:
 - **1300 and later series VICS with advanced filters enabled**
 
   - Attributes: ingress
-  - Items: eth, ipv4, ipv6, udp, tcp, vxlan, inner eth, ipv4, ipv6, udp, tcp
-  - Actions: queue, mark, drop, flag and void
+  - Items: eth, vlan, ipv4, ipv6, udp, tcp, vxlan, raw, inner eth, vlan, ipv4, ipv6, udp, tcp
+  - Actions: queue, mark, drop, flag, rss, passthru, and void
   - Selectors: 'is', 'spec' and 'mask'. 'last' is not supported
   - In total, up to 64 bytes of mask is allowed across all headers
 
-- **1400 and later series VICS with advanced filters enabled**
-
-  All the above plus:
-
-  - Action: count
+The VIC performs packet matching after applying VLAN strip. If VLAN
+stripping is enabled, EtherType in the ETH item corresponds to the
+stripped VLAN header's EtherType. Stripping does not affect the VLAN
+item. TCI and EtherType in the VLAN item are matched against those in
+the (stripped) VLAN header whether stripping is enabled or disabled.
 
 More features may be added in future firmware and new versions of the VIC.
 Please refer to the release notes.
@@ -450,6 +450,12 @@ PKT_RX_VLAN_STRIPPED mbuf flags would not be set. This mode is enabled with the
     1000 for 1300 series VICs). Filters are checked for matching in the order they
     were added. Since there currently is no grouping or priority support,
     'catch-all' filters should be added last.
+  - The supported range of IDs for the 'MARK' action is 0 - 0xFFFD.
+  - RSS and PASSTHRU actions only support "receive normally". They are limited
+    to supporting MARK + RSS and PASSTHRU + MARK to allow the application to mark
+    packets and then receive them normally. These require 1400 series VIC adapters
+    and latest firmware.
+  - RAW items are limited to matching UDP tunnel headers like VXLAN.
 
 - **Statistics**
 
@@ -572,7 +578,7 @@ PMD.  Typically, the limit has to be raised to higher than 2GB.
 e.g., 2621440
 
 The compilation of any unused drivers can be disabled using the
-configuration file in config/ directory (e.g., config/common_linuxapp).
+configuration file in config/ directory (e.g., config/common_linux).
 This would help in bringing down the time taken for building the
 libraries and the initialization time of the application.
 

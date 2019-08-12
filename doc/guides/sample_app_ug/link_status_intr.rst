@@ -49,7 +49,7 @@ where,
 
 *   -T PERIOD: statistics will be refreshed each PERIOD seconds (0 to disable, 10 default)
 
-To run the application in a linuxapp environment with 4 lcores, 4 memory channels, 16 ports and 8 RX queues per lcore,
+To run the application in a linux environment with 4 lcores, 4 memory channels, 16 ports and 8 RX queues per lcore,
 issue the command:
 
 .. code-block:: console
@@ -311,11 +311,11 @@ The processing is very simple: processes the TX port from the RX port and then r
     static void
     lsi_simple_forward(struct rte_mbuf *m, unsigned portid)
     {
-        struct ether_hdr *eth;
+        struct rte_ether_hdr *eth;
         void *tmp;
         unsigned dst_port = lsi_dst_ports[portid];
 
-        eth = rte_pktmbuf_mtod(m, struct ether_hdr *);
+        eth = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
 
         /* 02:00:00:00:00:xx */
 
@@ -324,7 +324,7 @@ The processing is very simple: processes the TX port from the RX port and then r
         *((uint64_t *)tmp) = 0x000000000002 + (dst_port << 40);
 
         /* src addr */
-        ether_addr_copy(&lsi_ports_eth_addr[dst_port], &eth->s_addr);
+        rte_ether_addr_copy(&lsi_ports_eth_addr[dst_port], &eth->s_addr);
 
         lsi_send_packet(m, dst_port);
     }

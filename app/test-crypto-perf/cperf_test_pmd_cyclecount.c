@@ -16,7 +16,7 @@
 #define PRETTY_HDR_FMT "%12s%12s%12s%12s%12s%12s%12s%12s%12s%12s\n\n"
 #define PRETTY_LINE_FMT "%12u%12u%12u%12u%12u%12u%12u%12.0f%12.0f%12.0f\n"
 #define CSV_HDR_FMT "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n"
-#define CSV_LINE_FMT "%10u;%10u;%u;%u;%u;%u;%u;%.f3;%.f3;%.f3\n"
+#define CSV_LINE_FMT "%10u;%10u;%u;%u;%u;%u;%u;%.3f;%.3f;%.3f\n"
 
 struct cperf_pmd_cyclecount_ctx {
 	uint8_t dev_id;
@@ -80,6 +80,7 @@ cperf_pmd_cyclecount_test_free(struct cperf_pmd_cyclecount_ctx *ctx)
 
 void *
 cperf_pmd_cyclecount_test_constructor(struct rte_mempool *sess_mp,
+		struct rte_mempool *sess_priv_mp,
 		uint8_t dev_id, uint16_t qp_id,
 		const struct cperf_options *options,
 		const struct cperf_test_vector *test_vector,
@@ -106,8 +107,8 @@ cperf_pmd_cyclecount_test_constructor(struct rte_mempool *sess_mp,
 	uint16_t iv_offset = sizeof(struct rte_crypto_op) +
 			sizeof(struct rte_crypto_sym_op);
 
-	ctx->sess = op_fns->sess_create(
-			sess_mp, dev_id, options, test_vector, iv_offset);
+	ctx->sess = op_fns->sess_create(sess_mp, sess_priv_mp, dev_id, options,
+			test_vector, iv_offset);
 	if (ctx->sess == NULL)
 		goto err;
 
@@ -390,7 +391,7 @@ cperf_pmd_cyclecount_test_runner(void *test_ctx)
 	state.lcore = rte_lcore_id();
 	state.linearize = 0;
 
-	static int only_once;
+	static rte_atomic16_t display_once = RTE_ATOMIC16_INIT(0);
 	static bool warmup = true;
 
 	/*
@@ -436,13 +437,12 @@ cperf_pmd_cyclecount_test_runner(void *test_ctx)
 		}
 
 		if (!opts->csv) {
-			if (!only_once)
+			if (rte_atomic16_test_and_set(&display_once))
 				printf(PRETTY_HDR_FMT, "lcore id", "Buf Size",
 						"Burst Size", "Enqueued",
 						"Dequeued", "Enq Retries",
 						"Deq Retries", "Cycles/Op",
 						"Cycles/Enq", "Cycles/Deq");
-			only_once = 1;
 
 			printf(PRETTY_LINE_FMT, state.ctx->lcore_id,
 					opts->test_buffer_size, test_burst_size,
@@ -453,13 +453,12 @@ cperf_pmd_cyclecount_test_runner(void *test_ctx)
 					state.cycles_per_enq,
 					state.cycles_per_deq);
 		} else {
-			if (!only_once)
+			if (rte_atomic16_test_and_set(&display_once))
 				printf(CSV_HDR_FMT, "# lcore id", "Buf Size",
 						"Burst Size", "Enqueued",
 						"Dequeued", "Enq Retries",
 						"Deq Retries", "Cycles/Op",
 						"Cycles/Enq", "Cycles/Deq");
-			only_once = 1;
 
 			printf(CSV_LINE_FMT, state.ctx->lcore_id,
 					opts->test_buffer_size, test_burst_size,

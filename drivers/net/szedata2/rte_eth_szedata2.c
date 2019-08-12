@@ -105,7 +105,7 @@ struct szedata2_tx_queue {
 int szedata2_logtype_init;
 int szedata2_logtype_driver;
 
-static struct ether_addr eth_addr = {
+static struct rte_ether_addr eth_addr = {
 	.addr_bytes = { 0x00, 0x11, 0x17, 0x00, 0x00, 0x00 }
 };
 
@@ -1093,7 +1093,6 @@ eth_stats_get(struct rte_eth_dev *dev,
 		if (i < RTE_ETHDEV_QUEUE_STAT_CNTRS) {
 			stats->q_opackets[i] = txq->tx_pkts;
 			stats->q_obytes[i] = txq->tx_bytes;
-			stats->q_errors[i] = txq->err_pkts;
 		}
 		tx_total += txq->tx_pkts;
 		tx_total_bytes += txq->tx_bytes;
@@ -1332,7 +1331,7 @@ eth_tx_queue_setup(struct rte_eth_dev *dev,
 
 static int
 eth_mac_addr_set(struct rte_eth_dev *dev __rte_unused,
-		struct ether_addr *mac_addr __rte_unused)
+		struct rte_ether_addr *mac_addr __rte_unused)
 {
 	return 0;
 }
@@ -1514,7 +1513,7 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev, struct port_info *pi)
 	eth_link_update(dev, 0);
 
 	/* Allocate space for one mac address */
-	data->mac_addrs = rte_zmalloc(data->name, sizeof(struct ether_addr),
+	data->mac_addrs = rte_zmalloc(data->name, sizeof(struct rte_ether_addr),
 			RTE_CACHE_LINE_SIZE);
 	if (data->mac_addrs == NULL) {
 		PMD_INIT_LOG(ERR, "Could not alloc space for MAC address!");
@@ -1522,7 +1521,7 @@ rte_szedata2_eth_dev_init(struct rte_eth_dev *dev, struct port_info *pi)
 		return -ENOMEM;
 	}
 
-	ether_addr_copy(&eth_addr, data->mac_addrs);
+	rte_ether_addr_copy(&eth_addr, data->mac_addrs);
 
 	PMD_INIT_LOG(INFO, "%s device %s successfully initialized",
 			RTE_STR(RTE_SZEDATA2_DRIVER_NAME), data->name);
@@ -1567,6 +1566,14 @@ static const struct rte_pci_id rte_szedata2_pci_id_table[] = {
 	{
 		RTE_PCI_DEVICE(PCI_VENDOR_ID_NETCOPE,
 				PCI_DEVICE_ID_NETCOPE_NFB200G2QL)
+	},
+	{
+		RTE_PCI_DEVICE(PCI_VENDOR_ID_SILICOM,
+				PCI_DEVICE_ID_FB2CGG3)
+	},
+	{
+		RTE_PCI_DEVICE(PCI_VENDOR_ID_SILICOM,
+				PCI_DEVICE_ID_FB2CGG3D)
 	},
 	{
 		.vendor_id = 0,

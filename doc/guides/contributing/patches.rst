@@ -8,7 +8,7 @@ Contributing Code to DPDK
 
 This document outlines the guidelines for submitting code to DPDK.
 
-The DPDK development process is modelled (loosely) on the Linux Kernel development model so it is worth reading the
+The DPDK development process is modeled (loosely) on the Linux Kernel development model so it is worth reading the
 Linux kernel guide on submitting patches:
 `How to Get Your Change Into the Linux Kernel <https://www.kernel.org/doc/html/latest/process/submitting-patches.html>`_.
 The rationale for many of the DPDK guidelines is explained in greater detail in the kernel guidelines.
@@ -31,6 +31,10 @@ The DPDK development process has the following features:
 The mailing list for DPDK development is `dev@dpdk.org <http://mails.dpdk.org/archives/dev/>`_.
 Contributors will need to `register for the mailing list <http://mails.dpdk.org/listinfo/dev>`_ in order to submit patches.
 It is also worth registering for the DPDK `Patchwork <http://patches.dpdk.org/project/dpdk/list/>`_
+
+If you are using the GitHub service, you can link your repository to
+the ``travis-ci.org`` build service.  When you push patches to your GitHub
+repository, the travis service will automatically build your changes.
 
 The development process requires some familiarity with the ``git`` version control system.
 Refer to the `Pro Git Book <http://www.git-scm.com/book/>`_ for further information.
@@ -71,7 +75,6 @@ Trees and maintainers are listed in the ``MAINTAINERS`` file. For example::
     Crypto Drivers
     --------------
     M: Some Name <some.name@email.com>
-    B: Another Name <another.name@email.com>
     T: git://dpdk.org/next/dpdk-next-crypto
 
     Intel AES-NI GCM PMD
@@ -82,7 +85,6 @@ Trees and maintainers are listed in the ``MAINTAINERS`` file. For example::
 Where:
 
 * ``M`` is a tree or component maintainer.
-* ``B`` is a tree backup maintainer.
 * ``T`` is a repository tree.
 * ``F`` is a maintained file or directory.
 
@@ -143,6 +145,16 @@ Make your planned changes in the cloned ``dpdk`` repo. Here are some guidelines 
 * Follow the :ref:`coding_style` guidelines.
 
 * If you add new files or directories you should add your name to the ``MAINTAINERS`` file.
+
+* Initial submission of new PMDs should be prepared against a corresponding repo.
+
+  * Thus, for example, initial submission of a new network PMD should be
+    prepared against dpdk-next-net repo.
+
+  * Likewise, initial submission of a new crypto or compression PMD should be
+    prepared against dpdk-next-crypto repo.
+
+  * For other PMDs and more info, refer to the ``MAINTAINERS`` file.
 
 * New external functions should be added to the local ``version.map`` file.
   See the :doc:`Guidelines for ABI policy and versioning </contributing/versioning>`.
@@ -431,10 +443,13 @@ Where the range is a ``git log`` option.
 Checking Compilation
 --------------------
 
+Makefile System
+~~~~~~~~~~~~~~~
+
 Compilation of patches and changes should be tested using the ``test-build.sh`` script in the ``devtools``
 directory of the DPDK repo::
 
-  devtools/test-build.sh x86_64-native-linuxapp-gcc+next+shared
+  devtools/test-build.sh x86_64-native-linux-gcc+next+shared
 
 The script usage is::
 
@@ -449,9 +464,9 @@ Where:
 
 Examples of configs are::
 
-   x86_64-native-linuxapp-gcc
-   x86_64-native-linuxapp-gcc+next+shared
-   x86_64-native-linuxapp-clang+shared
+   x86_64-native-linux-gcc
+   x86_64-native-linux-gcc+next+shared
+   x86_64-native-linux-clang+shared
 
 The builds can be modified via the following environmental variables:
 
@@ -465,13 +480,21 @@ These can be set from the command line or in the config files shown above in the
 
 The recommended configurations and options to test compilation prior to submitting patches are::
 
-   x86_64-native-linuxapp-gcc+shared+next
-   x86_64-native-linuxapp-clang+shared
-   i686-native-linuxapp-gcc
+   x86_64-native-linux-gcc+shared+next
+   x86_64-native-linux-clang+shared
+   i686-native-linux-gcc
 
    export DPDK_DEP_ZLIB=y
    export DPDK_DEP_PCAP=y
    export DPDK_DEP_SSL=y
+
+Meson System
+~~~~~~~~~~~~
+
+Compilation of patches is to be tested with ``devtools/test-meson-builds.sh`` script.
+
+The script internally checks for dependencies, then builds for several
+combinations of compilation configuration.
 
 
 Sending Patches
@@ -633,12 +656,3 @@ patch accepted. The general cycle for patch review and acceptance is:
      than rework of the original.
    * Trivial patches may be merged sooner than described above at the tree committer's
      discretion.
-
-DPDK Maintainers
-----------------
-
-The following are the DPDK maintainers as listed in the ``MAINTAINERS`` file
-in the DPDK root directory.
-
-.. literalinclude:: ../../../MAINTAINERS
-   :lines: 3-

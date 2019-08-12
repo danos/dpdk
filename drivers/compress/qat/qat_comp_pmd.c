@@ -1,9 +1,13 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2015-2018 Intel Corporation
+ * Copyright(c) 2015-2019 Intel Corporation
  */
+
+#include <rte_malloc.h>
 
 #include "qat_comp.h"
 #include "qat_comp_pmd.h"
+
+#define QAT_PMD_COMP_SGL_DEF_SEGMENTS 16
 
 static const struct rte_compressdev_capabilities qat_comp_gen_capabilities[] = {
 	{/* COMPRESSION - deflate */
@@ -60,12 +64,24 @@ static int
 qat_comp_qp_release(struct rte_compressdev *dev, uint16_t queue_pair_id)
 {
 	struct qat_comp_dev_private *qat_private = dev->data->dev_private;
+	struct qat_qp **qp_addr =
+		(struct qat_qp **)&(dev->data->queue_pairs[queue_pair_id]);
+	struct qat_qp *qp = (struct qat_qp *)*qp_addr;
+	uint32_t i;
 
 	QAT_LOG(DEBUG, "Release comp qp %u on device %d",
 				queue_pair_id, dev->data->dev_id);
 
 	qat_private->qat_dev->qps_in_use[QAT_SERVICE_COMPRESSION][queue_pair_id]
 						= NULL;
+
+	for (i = 0; i < qp->nb_descriptors; i++) {
+
+		struct qat_comp_op_cookie *cookie = qp->op_cookies[i];
+
+		rte_free(cookie->qat_sgl_src_d);
+		rte_free(cookie->qat_sgl_dst_d);
+	}
 
 	return qat_qp_release((struct qat_qp **)
 			&(dev->data->queue_pairs[queue_pair_id]));
@@ -122,15 +138,38 @@ qat_comp_qp_setup(struct rte_compressdev *dev, uint16_t qp_id,
 		struct qat_comp_op_cookie *cookie =
 				qp->op_cookies[i];
 
+		cookie->qat_sgl_src_d = rte_zmalloc_socket(NULL,
+					sizeof(struct qat_sgl) +
+					sizeof(struct qat_flat_buf) *
+					QAT_PMD_COMP_SGL_DEF_SEGMENTS,
+					64, dev->data->socket_id);
+
+		cookie->qat_sgl_dst_d = rte_zmalloc_socket(NULL,
+					sizeof(struct qat_sgl) +
+					sizeof(struct qat_flat_buf) *
+					QAT_PMD_COMP_SGL_DEF_SEGMENTS,
+					64, dev->data->socket_id);
+
+		if (cookie->qat_sgl_src_d == NULL ||
+				cookie->qat_sgl_dst_d == NULL) {
+			QAT_LOG(ERR, "Can't allocate SGL"
+				     " for device %s",
+				     qat_private->qat_dev->name);
+			return -ENOMEM;
+		}
+
 		cookie->qat_sgl_src_phys_addr =
-				rte_mempool_virt2iova(cookie) +
-				offsetof(struct qat_comp_op_cookie,
-				qat_sgl_src);
+				rte_malloc_virt2iova(cookie->qat_sgl_src_d);
 
 		cookie->qat_sgl_dst_phys_addr =
-				rte_mempool_virt2iova(cookie) +
-				offsetof(struct qat_comp_op_cookie,
-				qat_sgl_dst);
+				rte_malloc_virt2iova(cookie->qat_sgl_dst_d);
+
+		cookie->dst_nb_elems = cookie->src_nb_elems =
+				QAT_PMD_COMP_SGL_DEF_SEGMENTS;
+
+		cookie->socket_id = dev->data->socket_id;
+
+		cookie->error = 0;
 	}
 
 	return ret;
@@ -185,7 +224,7 @@ qat_comp_setup_inter_buffers(struct qat_comp_dev_private *comp_dev,
 
 	memzone = rte_memzone_reserve_aligned(inter_buff_mz_name, full_size,
 			comp_dev->compressdev->data->socket_id,
-			RTE_MEMZONE_2MB, QAT_64_BYTE_ALIGN);
+			RTE_MEMZONE_IOVA_CONTIG, QAT_64_BYTE_ALIGN);
 	if (memzone == NULL) {
 		QAT_LOG(ERR, "Can't allocate intermediate buffers"
 				" for device %s", comp_dev->qat_dev->name);
@@ -239,7 +278,8 @@ qat_comp_setup_inter_buffers(struct qat_comp_dev_private *comp_dev,
 
 static struct rte_mempool *
 qat_comp_create_xform_pool(struct qat_comp_dev_private *comp_dev,
-			      uint32_t num_elements)
+			   struct rte_compressdev_config *config,
+			   uint32_t num_elements)
 {
 	char xform_pool_name[RTE_MEMPOOL_NAMESIZE];
 	struct rte_mempool *mp;
@@ -264,7 +304,7 @@ qat_comp_create_xform_pool(struct qat_comp_dev_private *comp_dev,
 		mp = rte_mempool_create(xform_pool_name,
 				num_elements,
 				qat_comp_xform_size(), 0, 0,
-				NULL, NULL, NULL, NULL, rte_socket_id(),
+				NULL, NULL, NULL, NULL, config->socket_id,
 				0);
 	if (mp == NULL) {
 		QAT_LOG(ERR, "Err creating mempool %s w %d elements of size %d",
@@ -320,7 +360,7 @@ qat_comp_dev_config(struct rte_compressdev *dev,
 		}
 	}
 
-	comp_dev->xformpool = qat_comp_create_xform_pool(comp_dev,
+	comp_dev->xformpool = qat_comp_create_xform_pool(comp_dev, config,
 					config->max_nb_priv_xforms);
 	if (comp_dev->xformpool == NULL) {
 
@@ -484,10 +524,6 @@ static const struct rte_driver compdev_qat_driver = {
 int
 qat_comp_dev_create(struct qat_pci_device *qat_pci_dev)
 {
-	if (qat_pci_dev->qat_dev_gen == QAT_GEN1) {
-		QAT_LOG(ERR, "Compression PMD not supported on QAT dh895xcc");
-		return 0;
-	}
 	if (qat_pci_dev->qat_dev_gen == QAT_GEN3) {
 		QAT_LOG(ERR, "Compression PMD not supported on QAT c4xxx");
 		return 0;

@@ -31,6 +31,7 @@ The public API headers are grouped by topics:
   [latency]            (@ref rte_latencystats.h),
   [devargs]            (@ref rte_devargs.h),
   [PCI]                (@ref rte_pci.h),
+  [vdev]               (@ref rte_bus_vdev.h),
   [vfio]               (@ref rte_vfio.h)
 
 - **device specific**:
@@ -43,6 +44,7 @@ The public API headers are grouped by topics:
   [i40e]               (@ref rte_pmd_i40e.h),
   [bnxt]               (@ref rte_pmd_bnxt.h),
   [dpaa]               (@ref rte_pmd_dpaa.h),
+  [dpaa2]              (@ref rte_pmd_dpaa2.h),
   [dpaa2_mempool]      (@ref rte_dpaa2_mempool.h),
   [dpaa2_cmdif]        (@ref rte_pmd_dpaa2_cmdif.h),
   [dpaa2_qdma]         (@ref rte_pmd_dpaa2_qdma.h),
@@ -62,8 +64,11 @@ The public API headers are grouped by topics:
 
 - **locks**:
   [atomic]             (@ref rte_atomic.h),
+  [mcslock]            (@ref rte_mcslock.h),
   [rwlock]             (@ref rte_rwlock.h),
-  [spinlock]           (@ref rte_spinlock.h)
+  [spinlock]           (@ref rte_spinlock.h),
+  [ticketlock]         (@ref rte_ticketlock.h),
+  [RCU]                (@ref rte_rcu_qsbr.h)
 
 - **CPU arch**:
   [branch prediction]  (@ref rte_branch_prediction.h),
@@ -123,6 +128,7 @@ The public API headers are grouped by topics:
   [mbuf]               (@ref rte_mbuf.h),
   [mbuf pool ops]      (@ref rte_mbuf_pool_ops.h),
   [ring]               (@ref rte_ring.h),
+  [stack]              (@ref rte_stack.h),
   [tailq]              (@ref rte_tailq.h),
   [bitmap]             (@ref rte_bitmap.h)
 

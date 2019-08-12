@@ -3,8 +3,9 @@
 
 allow_experimental_apis = true
 
-if host_machine.system() != 'linux'
-        build = false
+if not is_linux
+	build = false
+	reason = 'only supported on linux'
 endif
 
 sources = files('dpaax_iova_table.c')

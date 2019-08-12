@@ -100,7 +100,8 @@ int bnxt_mq_rx_configure(struct bnxt *bp)
 		}
 	}
 	nb_q_per_grp = bp->rx_cp_nr_rings / pools;
-	PMD_DRV_LOG(ERR, "pools = %u nb_q_per_grp = %u\n", pools, nb_q_per_grp);
+	PMD_DRV_LOG(DEBUG, "pools = %u nb_q_per_grp = %u\n",
+		    pools, nb_q_per_grp);
 	start_grp_id = 0;
 	end_grp_id = nb_q_per_grp;
 
@@ -287,7 +288,7 @@ int bnxt_rx_queue_setup_op(struct rte_eth_dev *eth_dev,
 			       const struct rte_eth_rxconf *rx_conf,
 			       struct rte_mempool *mp)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	uint64_t rx_offloads = eth_dev->data->dev_conf.rxmode.offloads;
 	struct bnxt_rx_queue *rxq;
 	int rc = 0;
@@ -333,14 +334,14 @@ int bnxt_rx_queue_setup_op(struct rte_eth_dev *eth_dev,
 	rxq->queue_id = queue_idx;
 	rxq->port_id = eth_dev->data->port_id;
 	if (rx_offloads & DEV_RX_OFFLOAD_KEEP_CRC)
-		rxq->crc_len = ETHER_CRC_LEN;
+		rxq->crc_len = RTE_ETHER_CRC_LEN;
 	else
 		rxq->crc_len = 0;
 
 	eth_dev->data->rx_queues[queue_idx] = rxq;
 	/* Allocate RX ring hardware descriptors */
 	if (bnxt_alloc_rings(bp, queue_idx, NULL, rxq, rxq->cp_ring,
-			"rxr")) {
+			rxq->nq_ring, "rxr")) {
 		PMD_DRV_LOG(ERR,
 			"ring_dma_zone_reserve for rx_ring failed!\n");
 		bnxt_rx_queue_release_op(rxq);
@@ -354,6 +355,7 @@ int bnxt_rx_queue_setup_op(struct rte_eth_dev *eth_dev,
 						RTE_ETH_QUEUE_STATE_STARTED;
 	eth_dev->data->rx_queue_state[queue_idx] = queue_state;
 	rte_spinlock_init(&rxq->lock);
+
 out:
 	return rc;
 }
@@ -372,7 +374,7 @@ bnxt_rx_queue_intr_enable_op(struct rte_eth_dev *eth_dev, uint16_t queue_id)
 			return rc;
 		}
 		cpr = rxq->cp_ring;
-		B_CP_DB_ARM(cpr);
+		B_CP_DB_REARM(cpr, cpr->cp_raw_cons);
 	}
 	return rc;
 }
@@ -398,7 +400,7 @@ bnxt_rx_queue_intr_disable_op(struct rte_eth_dev *eth_dev, uint16_t queue_id)
 
 int bnxt_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct rte_eth_conf *dev_conf = &bp->eth_dev->data->dev_conf;
 	struct bnxt_rx_queue *rxq = bp->rx_queues[rx_queue_id];
 	struct bnxt_vnic_info *vnic = NULL;
@@ -409,43 +411,58 @@ int bnxt_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 		return -EINVAL;
 	}
 
-	dev->data->rx_queue_state[rx_queue_id] = RTE_ETH_QUEUE_STATE_STARTED;
-
 	bnxt_free_hwrm_rx_ring(bp, rx_queue_id);
-	bnxt_alloc_hwrm_rx_ring(bp, rx_queue_id);
+	rc = bnxt_alloc_hwrm_rx_ring(bp, rx_queue_id);
+	if (rc)
+		return rc;
+
 	PMD_DRV_LOG(INFO, "Rx queue started %d\n", rx_queue_id);
 
 	if (dev_conf->rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) {
 		vnic = rxq->vnic;
 
-		if (vnic->fw_grp_ids[rx_queue_id] != INVALID_HW_RING_ID)
-			return 0;
+		if (BNXT_HAS_RING_GRPS(bp)) {
+			if (vnic->fw_grp_ids[rx_queue_id] != INVALID_HW_RING_ID)
+				return 0;
+
+			vnic->fw_grp_ids[rx_queue_id] =
+					bp->grp_info[rx_queue_id].fw_grp_id;
+		}
 
 		PMD_DRV_LOG(DEBUG,
 			    "vnic = %p fw_grp_id = %d\n",
 			    vnic, bp->grp_info[rx_queue_id].fw_grp_id);
 
-		vnic->fw_grp_ids[rx_queue_id] =
-					bp->grp_info[rx_queue_id].fw_grp_id;
 		rc = bnxt_vnic_rss_configure(bp, vnic);
 	}
 
-	if (rc == 0)
+	if (rc == 0) {
+		dev->data->rx_queue_state[rx_queue_id] =
+				RTE_ETH_QUEUE_STATE_STARTED;
 		rxq->rx_deferred_start = false;
+	}
+
+	PMD_DRV_LOG(INFO,
+		    "queue %d, rx_deferred_start %d, state %d!\n",
+		    rx_queue_id, rxq->rx_deferred_start,
+		    bp->eth_dev->data->rx_queue_state[rx_queue_id]);
 
 	return rc;
 }
 
 int bnxt_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct rte_eth_conf *dev_conf = &bp->eth_dev->data->dev_conf;
 	struct bnxt_vnic_info *vnic = NULL;
 	struct bnxt_rx_queue *rxq = NULL;
 	int rc = 0;
 
-	/* Rx CQ 0 also works as Default CQ for async notifications */
-	if (!rx_queue_id) {
+	/* For the stingray platform and other platforms needing tighter
+	 * control of resource utilization, Rx CQ 0 also works as
+	 * Default CQ for async notifications
+	 */
+	if (!BNXT_NUM_ASYNC_CPR(bp) && !rx_queue_id) {
 		PMD_DRV_LOG(ERR, "Cannot stop Rx queue id %d\n", rx_queue_id);
 		return -EINVAL;
 	}
@@ -463,7 +480,8 @@ int bnxt_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 
 	if (dev_conf->rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) {
 		vnic = rxq->vnic;
-		vnic->fw_grp_ids[rx_queue_id] = INVALID_HW_RING_ID;
+		if (BNXT_HAS_RING_GRPS(bp))
+			vnic->fw_grp_ids[rx_queue_id] = INVALID_HW_RING_ID;
 		rc = bnxt_vnic_rss_configure(bp, vnic);
 	}
 

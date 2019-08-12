@@ -36,6 +36,13 @@ struct bnxt_cp_ring_info;
 #define HWRM_SPEC_CODE_1_9_0		0x10900
 #define HWRM_SPEC_CODE_1_9_2		0x10902
 
+#define FUNC_BACKING_STORE_CFG_INPUT_DFLT_ENABLES              \
+	(HWRM_FUNC_BACKING_STORE_CFG_INPUT_ENABLES_QP |        \
+	HWRM_FUNC_BACKING_STORE_CFG_INPUT_ENABLES_SRQ |        \
+	HWRM_FUNC_BACKING_STORE_CFG_INPUT_ENABLES_CQ |         \
+	HWRM_FUNC_BACKING_STORE_CFG_INPUT_ENABLES_VNIC |       \
+	HWRM_FUNC_BACKING_STORE_CFG_INPUT_ENABLES_STAT)
+
 int bnxt_hwrm_cfa_l2_clear_rx_mask(struct bnxt *bp,
 				   struct bnxt_vnic_info *vnic);
 int bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt *bp, struct bnxt_vnic_info *vnic,
@@ -94,8 +101,10 @@ int bnxt_hwrm_vnic_alloc(struct bnxt *bp, struct bnxt_vnic_info *vnic);
 int bnxt_hwrm_vnic_cfg(struct bnxt *bp, struct bnxt_vnic_info *vnic);
 int bnxt_hwrm_vnic_qcfg(struct bnxt *bp, struct bnxt_vnic_info *vnic,
 				int16_t fw_vf_id);
-int bnxt_hwrm_vnic_ctx_alloc(struct bnxt *bp, struct bnxt_vnic_info *vnic);
-int bnxt_hwrm_vnic_ctx_free(struct bnxt *bp, struct bnxt_vnic_info *vnic);
+int bnxt_hwrm_vnic_ctx_alloc(struct bnxt *bp, struct bnxt_vnic_info *vnic,
+			     uint16_t ctx_idx);
+int bnxt_hwrm_vnic_ctx_free(struct bnxt *bp, struct bnxt_vnic_info *vnic,
+			    uint16_t ctx_idx);
 int bnxt_hwrm_vnic_free(struct bnxt *bp, struct bnxt_vnic_info *vnic);
 int bnxt_hwrm_vnic_rss_cfg(struct bnxt *bp,
 			   struct bnxt_vnic_info *vnic);
@@ -110,6 +119,8 @@ int bnxt_free_all_hwrm_stat_ctxs(struct bnxt *bp);
 int bnxt_free_all_hwrm_rings(struct bnxt *bp);
 int bnxt_free_all_hwrm_ring_grps(struct bnxt *bp);
 int bnxt_alloc_all_hwrm_ring_grps(struct bnxt *bp);
+void bnxt_free_cp_ring(struct bnxt *bp, struct bnxt_cp_ring_info *cpr);
+void bnxt_free_nq_ring(struct bnxt *bp, struct bnxt_cp_ring_info *cpr);
 int bnxt_set_hwrm_vnic_filters(struct bnxt *bp, struct bnxt_vnic_info *vnic);
 int bnxt_clear_hwrm_vnic_filters(struct bnxt *bp, struct bnxt_vnic_info *vnic);
 void bnxt_free_all_hwrm_resources(struct bnxt *bp);
@@ -118,7 +129,7 @@ void bnxt_free_hwrm_rx_ring(struct bnxt *bp, int queue_index);
 int bnxt_alloc_hwrm_resources(struct bnxt *bp);
 int bnxt_get_hwrm_link_config(struct bnxt *bp, struct rte_eth_link *link);
 int bnxt_set_hwrm_link_config(struct bnxt *bp, bool link_up);
-int bnxt_hwrm_func_qcfg(struct bnxt *bp);
+int bnxt_hwrm_func_qcfg(struct bnxt *bp, uint16_t *mtu);
 int bnxt_hwrm_func_resc_qcaps(struct bnxt *bp);
 int bnxt_hwrm_func_reserve_vf_resc(struct bnxt *bp, bool test);
 int bnxt_hwrm_allocate_pf_only(struct bnxt *bp);
@@ -130,7 +141,7 @@ int bnxt_hwrm_func_bw_cfg(struct bnxt *bp, uint16_t vf,
 			uint16_t max_bw, uint16_t enables);
 int bnxt_hwrm_set_vf_vlan(struct bnxt *bp, int vf);
 int bnxt_hwrm_func_qcfg_vf_default_mac(struct bnxt *bp, uint16_t vf,
-				       struct ether_addr *mac);
+				       struct rte_ether_addr *mac);
 int bnxt_hwrm_func_qcfg_current_vf_vlan(struct bnxt *bp, int vf);
 int bnxt_hwrm_tunnel_dst_port_alloc(struct bnxt *bp, uint16_t port,
 				uint8_t tunnel_type);
@@ -179,4 +190,13 @@ int bnxt_hwrm_set_ring_coal(struct bnxt *bp,
 			struct bnxt_coal *coal, uint16_t ring_id);
 int bnxt_hwrm_check_vf_rings(struct bnxt *bp);
 int bnxt_hwrm_ext_port_qstats(struct bnxt *bp);
+int bnxt_hwrm_func_backing_store_qcaps(struct bnxt *bp);
+int bnxt_hwrm_func_backing_store_cfg(struct bnxt *bp, uint32_t enables);
+int bnxt_alloc_ctx_mem(struct bnxt *bp);
+int bnxt_hwrm_tunnel_redirect(struct bnxt *bp, uint8_t type);
+int bnxt_hwrm_tunnel_redirect_free(struct bnxt *bp, uint8_t type);
+int bnxt_hwrm_tunnel_redirect_query(struct bnxt *bp, uint32_t *type);
+int bnxt_hwrm_tunnel_redirect_info(struct bnxt *bp, uint8_t tun_type,
+				   uint16_t *dst_fid);
+int bnxt_hwrm_set_mac(struct bnxt *bp);
 #endif

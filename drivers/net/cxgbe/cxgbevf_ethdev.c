@@ -28,7 +28,7 @@
 /*
  *... and the PCI ID Table itself ...
  */
-#include "t4_pci_id_tbl.h"
+#include "base/t4_pci_id_tbl.h"
 
 /*
  * Get port statistics.
@@ -36,7 +36,7 @@
 static int cxgbevf_dev_stats_get(struct rte_eth_dev *eth_dev,
 				 struct rte_eth_stats *eth_stats)
 {
-	struct port_info *pi = (struct port_info *)(eth_dev->data->dev_private);
+	struct port_info *pi = eth_dev->data->dev_private;
 	struct adapter *adapter = pi->adapter;
 	struct sge *s = &adapter->sge;
 	struct port_stats ps;
@@ -69,7 +69,6 @@ static int cxgbevf_dev_stats_get(struct rte_eth_dev *eth_dev,
 
 		eth_stats->q_opackets[i] = txq->stats.pkts;
 		eth_stats->q_obytes[i] = txq->stats.tx_bytes;
-		eth_stats->q_errors[i] = txq->stats.mapping_err;
 	}
 	return 0;
 }
@@ -107,7 +106,7 @@ static const struct eth_dev_ops cxgbevf_eth_dev_ops = {
  */
 static int eth_cxgbevf_dev_init(struct rte_eth_dev *eth_dev)
 {
-	struct port_info *pi = (struct port_info *)(eth_dev->data->dev_private);
+	struct port_info *pi = eth_dev->data->dev_private;
 	struct rte_pci_device *pci_dev;
 	char name[RTE_ETH_NAME_MAX_LEN];
 	struct adapter *adapter = NULL;
@@ -179,7 +178,7 @@ out_free_adapter:
 
 static int eth_cxgbevf_dev_uninit(struct rte_eth_dev *eth_dev)
 {
-	struct port_info *pi = (struct port_info *)(eth_dev->data->dev_private);
+	struct port_info *pi = eth_dev->data->dev_private;
 	struct adapter *adap = pi->adapter;
 
 	/* Free up other ports and all resources */

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
  *   Copyright 2016 Freescale Semiconductor, Inc. All rights reserved.
- *   Copyright 2017 NXP
+ *   Copyright 2017,2019 NXP
  *
  */
 
@@ -198,44 +198,45 @@ static inline void dpaa_eth_packet_info(struct rte_mbuf *m, void *fd_virt_addr)
 
 static inline void dpaa_checksum(struct rte_mbuf *mbuf)
 {
-	struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+	struct rte_ether_hdr *eth_hdr =
+		rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
 	char *l3_hdr = (char *)eth_hdr + mbuf->l2_len;
-	struct ipv4_hdr *ipv4_hdr = (struct ipv4_hdr *)l3_hdr;
-	struct ipv6_hdr *ipv6_hdr = (struct ipv6_hdr *)l3_hdr;
+	struct rte_ipv4_hdr *ipv4_hdr = (struct rte_ipv4_hdr *)l3_hdr;
+	struct rte_ipv6_hdr *ipv6_hdr = (struct rte_ipv6_hdr *)l3_hdr;
 
 	DPAA_DP_LOG(DEBUG, "Calculating checksum for mbuf: %p", mbuf);
 
 	if (((mbuf->packet_type & RTE_PTYPE_L3_MASK) == RTE_PTYPE_L3_IPV4) ||
 	    ((mbuf->packet_type & RTE_PTYPE_L3_MASK) ==
 	    RTE_PTYPE_L3_IPV4_EXT)) {
-		ipv4_hdr = (struct ipv4_hdr *)l3_hdr;
+		ipv4_hdr = (struct rte_ipv4_hdr *)l3_hdr;
 		ipv4_hdr->hdr_checksum = 0;
 		ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
 	} else if (((mbuf->packet_type & RTE_PTYPE_L3_MASK) ==
 		   RTE_PTYPE_L3_IPV6) ||
 		   ((mbuf->packet_type & RTE_PTYPE_L3_MASK) ==
 		   RTE_PTYPE_L3_IPV6_EXT))
-		ipv6_hdr = (struct ipv6_hdr *)l3_hdr;
+		ipv6_hdr = (struct rte_ipv6_hdr *)l3_hdr;
 
 	if ((mbuf->packet_type & RTE_PTYPE_L4_MASK) == RTE_PTYPE_L4_TCP) {
-		struct tcp_hdr *tcp_hdr = (struct tcp_hdr *)(l3_hdr +
+		struct rte_tcp_hdr *tcp_hdr = (struct rte_tcp_hdr *)(l3_hdr +
 					  mbuf->l3_len);
 		tcp_hdr->cksum = 0;
-		if (eth_hdr->ether_type == htons(ETHER_TYPE_IPv4))
+		if (eth_hdr->ether_type == htons(RTE_ETHER_TYPE_IPV4))
 			tcp_hdr->cksum = rte_ipv4_udptcp_cksum(ipv4_hdr,
 							       tcp_hdr);
-		else /* assume ethertype == ETHER_TYPE_IPv6 */
+		else /* assume ethertype == RTE_ETHER_TYPE_IPV6 */
 			tcp_hdr->cksum = rte_ipv6_udptcp_cksum(ipv6_hdr,
 							       tcp_hdr);
 	} else if ((mbuf->packet_type & RTE_PTYPE_L4_MASK) ==
 		   RTE_PTYPE_L4_UDP) {
-		struct udp_hdr *udp_hdr = (struct udp_hdr *)(l3_hdr +
+		struct rte_udp_hdr *udp_hdr = (struct rte_udp_hdr *)(l3_hdr +
 							     mbuf->l3_len);
 		udp_hdr->dgram_cksum = 0;
-		if (eth_hdr->ether_type == htons(ETHER_TYPE_IPv4))
+		if (eth_hdr->ether_type == htons(RTE_ETHER_TYPE_IPV4))
 			udp_hdr->dgram_cksum = rte_ipv4_udptcp_cksum(ipv4_hdr,
 								     udp_hdr);
-		else /* assume ethertype == ETHER_TYPE_IPv6 */
+		else /* assume ethertype == RTE_ETHER_TYPE_IPV6 */
 			udp_hdr->dgram_cksum = rte_ipv6_udptcp_cksum(ipv6_hdr,
 								     udp_hdr);
 	}
@@ -598,6 +599,10 @@ uint16_t dpaa_eth_queue_rx(void *q,
 	int num_rx_bufs, ret;
 	uint32_t vdqcr_flags = 0;
 
+	if (unlikely(rte_dpaa_bpid_info == NULL &&
+				rte_eal_process_type() == RTE_PROC_SECONDARY))
+		rte_dpaa_bpid_info = fq->bp_array;
+
 	if (likely(fq->is_static))
 		return dpaa_eth_queue_portal_rx(fq, bufs, nb_bufs);
 
@@ -952,6 +957,16 @@ dpaa_eth_queue_tx(void *q, struct rte_mbuf **bufs, uint16_t nb_bufs)
 					goto send_pkts;
 				}
 			} else {
+				/* TODO not supporting sg for external bufs*/
+				if (unlikely(mbuf->nb_segs > 1)) {
+					/* Set frames_to_send & nb_bufs so
+					 * that packets are transmitted till
+					 * previous frame.
+					 */
+					frames_to_send = loop;
+					nb_bufs = loop;
+					goto send_pkts;
+				}
 				state = tx_on_external_pool(q, mbuf,
 							    &fd_arr[loop]);
 				if (unlikely(state)) {

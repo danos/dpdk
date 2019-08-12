@@ -43,7 +43,7 @@ static const char *valid_arguments[] = {
 	NULL
 };
 
-static struct ether_addr base_eth_addr = {
+static struct rte_ether_addr base_eth_addr = {
 	.addr_bytes = {
 		0x56 /* V */,
 		0x48 /* H */,
@@ -325,12 +325,12 @@ static inline void
 vhost_count_multicast_broadcast(struct vhost_queue *vq,
 				struct rte_mbuf *mbuf)
 {
-	struct ether_addr *ea = NULL;
+	struct rte_ether_addr *ea = NULL;
 	struct vhost_stats *pstats = &vq->stats;
 
-	ea = rte_pktmbuf_mtod(mbuf, struct ether_addr *);
-	if (is_multicast_ether_addr(ea)) {
-		if (is_broadcast_ether_addr(ea))
+	ea = rte_pktmbuf_mtod(mbuf, struct rte_ether_addr *);
+	if (rte_is_multicast_ether_addr(ea)) {
+		if (rte_is_broadcast_ether_addr(ea))
 			pstats->xstats[VHOST_BROADCAST_PKT]++;
 		else
 			pstats->xstats[VHOST_MULTICAST_PKT]++;
@@ -1000,12 +1000,14 @@ eth_dev_close(struct rte_eth_dev *dev)
 		for (i = 0; i < dev->data->nb_tx_queues; i++)
 			rte_free(dev->data->tx_queues[i]);
 
-	rte_free(dev->data->mac_addrs);
 	free(internal->dev_name);
 	free(internal->iface_name);
 	rte_free(internal);
 
 	dev->data->dev_private = NULL;
+
+	rte_free(vring_states[dev->data->port_id]);
+	vring_states[dev->data->port_id] = NULL;
 }
 
 static int
@@ -1079,7 +1081,7 @@ static int
 eth_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 {
 	unsigned i;
-	unsigned long rx_total = 0, tx_total = 0, tx_missed_total = 0;
+	unsigned long rx_total = 0, tx_total = 0;
 	unsigned long rx_total_bytes = 0, tx_total_bytes = 0;
 	struct vhost_queue *vq;
 
@@ -1101,7 +1103,6 @@ eth_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 			continue;
 		vq = dev->data->tx_queues[i];
 		stats->q_opackets[i] = vq->stats.pkts;
-		tx_missed_total += vq->stats.missed_pkts;
 		tx_total += stats->q_opackets[i];
 
 		stats->q_obytes[i] = vq->stats.bytes;
@@ -1110,7 +1111,6 @@ eth_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 
 	stats->ipackets = rx_total;
 	stats->opackets = tx_total;
-	stats->oerrors = tx_missed_total;
 	stats->ibytes = rx_total_bytes;
 	stats->obytes = tx_total_bytes;
 
@@ -1197,8 +1197,6 @@ static const struct eth_dev_ops ops = {
 	.rx_queue_intr_disable = eth_rxq_intr_disable,
 };
 
-static struct rte_vdev_driver pmd_vhost_drv;
-
 static int
 eth_dev_vhost_create(struct rte_vdev_device *dev, char *iface_name,
 	int16_t queues, const unsigned int numa_node, uint64_t flags)
@@ -1207,7 +1205,7 @@ eth_dev_vhost_create(struct rte_vdev_device *dev, char *iface_name,
 	struct rte_eth_dev_data *data;
 	struct pmd_internal *internal = NULL;
 	struct rte_eth_dev *eth_dev = NULL;
-	struct ether_addr *eth_addr = NULL;
+	struct rte_ether_addr *eth_addr = NULL;
 	struct rte_vhost_vring_state *vring_state = NULL;
 	struct internal_list *list = NULL;
 
@@ -1262,7 +1260,7 @@ eth_dev_vhost_create(struct rte_vdev_device *dev, char *iface_name,
 	internal->max_queues = queues;
 	internal->vid = -1;
 	data->dev_link = pmd_link;
-	data->dev_flags = RTE_ETH_DEV_INTR_LSC;
+	data->dev_flags = RTE_ETH_DEV_INTR_LSC | RTE_ETH_DEV_CLOSE_REMOVE;
 
 	eth_dev->dev_ops = &ops;
 
@@ -1443,15 +1441,12 @@ rte_pmd_vhost_remove(struct rte_vdev_device *dev)
 	/* find an ethdev entry */
 	eth_dev = rte_eth_dev_allocated(name);
 	if (eth_dev == NULL)
-		return -ENODEV;
+		return 0;
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return rte_eth_dev_release_port(eth_dev);
 
 	eth_dev_close(eth_dev);
-
-	rte_free(vring_states[eth_dev->data->port_id]);
-	vring_states[eth_dev->data->port_id] = NULL;
 
 	rte_eth_dev_release_port(eth_dev);
 

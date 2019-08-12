@@ -33,6 +33,12 @@
 #define BNXT_MAX_RX_RING_DESC	8192
 #define BNXT_DB_SIZE		0x80
 
+#ifdef RTE_ARCH_ARM64
+#define BNXT_NUM_ASYNC_CPR(bp) (BNXT_STINGRAY(bp) ? 0 : 1)
+#else
+#define BNXT_NUM_ASYNC_CPR(bp) 1
+#endif
+
 /* Chimp Communication Channel */
 #define GRCPF_REG_CHIMP_CHANNEL_OFFSET		0x0
 #define GRCPF_REG_CHIMP_COMM_TRIGGER		0x100
@@ -239,6 +245,94 @@ struct bnxt_coal {
 	uint16_t			cmpl_aggr_dma_tmr_during_int;
 };
 
+/* 64-bit doorbell */
+#define DBR_XID_SFT				32
+#define DBR_PATH_L2				(0x1ULL << 56)
+#define DBR_TYPE_SQ				(0x0ULL << 60)
+#define DBR_TYPE_SRQ				(0x2ULL << 60)
+#define DBR_TYPE_CQ				(0x4ULL << 60)
+#define DBR_TYPE_NQ				(0xaULL << 60)
+#define DBR_TYPE_NQ_ARM				(0xbULL << 60)
+
+#define BNXT_RSS_TBL_SIZE_THOR		512
+#define BNXT_RSS_ENTRIES_PER_CTX_THOR	64
+#define BNXT_MAX_RSS_CTXTS_THOR \
+	(BNXT_RSS_TBL_SIZE_THOR / BNXT_RSS_ENTRIES_PER_CTX_THOR)
+
+#define BNXT_MAX_TC    8
+#define BNXT_MAX_QUEUE 8
+#define BNXT_MAX_TC_Q  (BNXT_MAX_TC + 1)
+#define BNXT_MAX_Q     (bp->max_q + 1)
+#define BNXT_PAGE_SHFT 12
+#define BNXT_PAGE_SIZE (1 << BNXT_PAGE_SHFT)
+#define MAX_CTX_PAGES  (BNXT_PAGE_SIZE / 8)
+
+#define PTU_PTE_VALID             0x1UL
+#define PTU_PTE_LAST              0x2UL
+#define PTU_PTE_NEXT_TO_LAST      0x4UL
+
+struct bnxt_ring_mem_info {
+	int				nr_pages;
+	int				page_size;
+	uint32_t			flags;
+#define BNXT_RMEM_VALID_PTE_FLAG	1
+#define BNXT_RMEM_RING_PTE_FLAG		2
+
+	void				**pg_arr;
+	rte_iova_t			*dma_arr;
+	const struct rte_memzone	*mz;
+
+	uint64_t			*pg_tbl;
+	rte_iova_t			pg_tbl_map;
+	const struct rte_memzone	*pg_tbl_mz;
+
+	int				vmem_size;
+	void				**vmem;
+};
+
+struct bnxt_ctx_pg_info {
+	uint32_t	entries;
+	void		*ctx_pg_arr[MAX_CTX_PAGES];
+	rte_iova_t	ctx_dma_arr[MAX_CTX_PAGES];
+	struct bnxt_ring_mem_info ring_mem;
+};
+
+struct bnxt_ctx_mem_info {
+	uint32_t        qp_max_entries;
+	uint16_t        qp_min_qp1_entries;
+	uint16_t        qp_max_l2_entries;
+	uint16_t        qp_entry_size;
+	uint16_t        srq_max_l2_entries;
+	uint32_t        srq_max_entries;
+	uint16_t        srq_entry_size;
+	uint16_t        cq_max_l2_entries;
+	uint32_t        cq_max_entries;
+	uint16_t        cq_entry_size;
+	uint16_t        vnic_max_vnic_entries;
+	uint16_t        vnic_max_ring_table_entries;
+	uint16_t        vnic_entry_size;
+	uint32_t        stat_max_entries;
+	uint16_t        stat_entry_size;
+	uint16_t        tqm_entry_size;
+	uint32_t        tqm_min_entries_per_ring;
+	uint32_t        tqm_max_entries_per_ring;
+	uint32_t        mrav_max_entries;
+	uint16_t        mrav_entry_size;
+	uint16_t        tim_entry_size;
+	uint32_t        tim_max_entries;
+	uint8_t         tqm_entries_multiple;
+
+	uint32_t        flags;
+#define BNXT_CTX_FLAG_INITED    0x01
+
+	struct bnxt_ctx_pg_info qp_mem;
+	struct bnxt_ctx_pg_info srq_mem;
+	struct bnxt_ctx_pg_info cq_mem;
+	struct bnxt_ctx_pg_info vnic_mem;
+	struct bnxt_ctx_pg_info stat_mem;
+	struct bnxt_ctx_pg_info *tqm_mem[BNXT_MAX_TC_Q];
+};
+
 #define BNXT_HWRM_SHORT_REQ_LEN		sizeof(struct hwrm_short_input)
 struct bnxt {
 	void				*bar0;
@@ -262,8 +356,11 @@ struct bnxt {
 #define BNXT_FLAG_KONG_MB_EN	(1 << 10)
 #define BNXT_FLAG_TRUSTED_VF_EN	(1 << 11)
 #define BNXT_FLAG_DFLT_VNIC_SET	(1 << 12)
+#define BNXT_FLAG_THOR_CHIP	(1 << 13)
+#define BNXT_FLAG_STINGRAY	(1 << 14)
+#define BNXT_FLAG_EXT_STATS_SUPPORTED	(1 << 29)
 #define BNXT_FLAG_NEW_RM	(1 << 30)
-#define BNXT_FLAG_INIT_DONE	(1 << 31)
+#define BNXT_FLAG_INIT_DONE	(1U << 31)
 #define BNXT_PF(bp)		(!((bp)->flags & BNXT_FLAG_VF))
 #define BNXT_VF(bp)		((bp)->flags & BNXT_FLAG_VF)
 #define BNXT_NPAR(bp)		((bp)->port_partition_type)
@@ -272,6 +369,10 @@ struct bnxt {
 #define BNXT_USE_CHIMP_MB	0 //For non-CFA commands, everything uses Chimp.
 #define BNXT_USE_KONG(bp)	((bp)->flags & BNXT_FLAG_KONG_MB_EN)
 #define BNXT_VF_IS_TRUSTED(bp)	((bp)->flags & BNXT_FLAG_TRUSTED_VF_EN)
+#define BNXT_CHIP_THOR(bp)	((bp)->flags & BNXT_FLAG_THOR_CHIP)
+#define BNXT_STINGRAY(bp)	((bp)->flags & BNXT_FLAG_STINGRAY)
+#define BNXT_HAS_NQ(bp)		BNXT_CHIP_THOR(bp)
+#define BNXT_HAS_RING_GRPS(bp)	(!BNXT_CHIP_THOR(bp))
 
 	unsigned int		rx_nr_rings;
 	unsigned int		rx_cp_nr_rings;
@@ -294,12 +395,13 @@ struct bnxt {
 	uint16_t		fw_tx_port_stats_ext_size;
 
 	/* Default completion ring */
-	struct bnxt_cp_ring_info	*def_cp_ring;
+	struct bnxt_cp_ring_info	*async_cp_ring;
 	uint32_t		max_ring_grps;
 	struct bnxt_ring_grp_info	*grp_info;
 
 	unsigned int		nr_vnics;
 
+#define BNXT_GET_DEFAULT_VNIC(bp)	(&(bp)->vnic_info[0])
 	struct bnxt_vnic_info	*vnic_info;
 	STAILQ_HEAD(, bnxt_vnic_info)	free_vnic_list;
 
@@ -309,7 +411,7 @@ struct bnxt {
 	struct bnxt_irq         *irq_tbl;
 
 #define MAX_NUM_MAC_ADDR	32
-	uint8_t			mac_addr[ETHER_ADDR_LEN];
+	uint8_t			mac_addr[RTE_ETHER_ADDR_LEN];
 
 	uint16_t			hwrm_cmd_seq;
 	uint16_t			kong_cmd_seq;
@@ -320,22 +422,29 @@ struct bnxt {
 	rte_spinlock_t			hwrm_lock;
 	uint16_t			max_req_len;
 	uint16_t			max_resp_len;
+	uint16_t                        hwrm_max_ext_req_len;
 
 	struct bnxt_link_info	link_info;
 	struct bnxt_cos_queue_info	cos_queue[BNXT_COS_QUEUE_COUNT];
 	uint8_t			tx_cosq_id;
+	uint8_t                 max_tc;
+	uint8_t                 max_lltc;
+	uint8_t                 max_q;
 
 	uint16_t		fw_fid;
-	uint8_t			dflt_mac_addr[ETHER_ADDR_LEN];
+	uint8_t			dflt_mac_addr[RTE_ETHER_ADDR_LEN];
 	uint16_t		max_rsscos_ctx;
 	uint16_t		max_cp_rings;
 	uint16_t		max_tx_rings;
 	uint16_t		max_rx_rings;
+	uint16_t		max_nq_rings;
 	uint16_t		max_l2_ctx;
+	uint16_t		max_rx_em_flows;
 	uint16_t		max_vnics;
 	uint16_t		max_stat_ctx;
+	uint16_t		first_vf_id;
 	uint16_t		vlan;
-	struct bnxt_pf_info		pf;
+	struct bnxt_pf_info	pf;
 	uint8_t			port_partition_type;
 	uint8_t			dev_stopped;
 	uint8_t			vxlan_port_cnt;
@@ -351,6 +460,7 @@ struct bnxt {
 	uint8_t			num_leds;
 	struct bnxt_ptp_cfg     *ptp_cfg;
 	uint16_t		vf_resv_strategy;
+	struct bnxt_ctx_mem_info        *ctx;
 };
 
 int bnxt_link_update_op(struct rte_eth_dev *eth_dev, int wait_to_complete);

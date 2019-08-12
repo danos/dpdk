@@ -132,6 +132,7 @@ static int kni_config_network_interface(uint16_t port_id, uint8_t if_up);
 static int kni_config_mac_address(uint16_t port_id, uint8_t mac_addr[]);
 
 static rte_atomic32_t kni_stop = RTE_ATOMIC32_INIT(0);
+static rte_atomic32_t kni_pause = RTE_ATOMIC32_INIT(0);
 
 /* Print out statistics on packets handled */
 static void
@@ -276,6 +277,7 @@ main_loop(__rte_unused void *arg)
 {
 	uint16_t i;
 	int32_t f_stop;
+	int32_t f_pause;
 	const unsigned lcore_id = rte_lcore_id();
 	enum lcore_rxtx {
 		LCORE_NONE,
@@ -304,8 +306,11 @@ main_loop(__rte_unused void *arg)
 					kni_port_params_array[i]->port_id);
 		while (1) {
 			f_stop = rte_atomic32_read(&kni_stop);
+			f_pause = rte_atomic32_read(&kni_pause);
 			if (f_stop)
 				break;
+			if (f_pause)
+				continue;
 			kni_ingress(kni_port_params_array[i]);
 		}
 	} else if (flag == LCORE_TX) {
@@ -314,8 +319,11 @@ main_loop(__rte_unused void *arg)
 					kni_port_params_array[i]->port_id);
 		while (1) {
 			f_stop = rte_atomic32_read(&kni_stop);
+			f_pause = rte_atomic32_read(&kni_pause);
 			if (f_stop)
 				break;
+			if (f_pause)
+				continue;
 			kni_egress(kni_port_params_array[i]);
 		}
 	} else
@@ -752,7 +760,7 @@ kni_change_mtu(uint16_t port_id, unsigned int new_mtu)
 
 	memcpy(&conf, &port_conf, sizeof(conf));
 	/* Set new MTU */
-	if (new_mtu > ETHER_MAX_LEN)
+	if (new_mtu > RTE_ETHER_MAX_LEN)
 		conf.rxmode.offloads |= DEV_RX_OFFLOAD_JUMBO_FRAME;
 	else
 		conf.rxmode.offloads &= ~DEV_RX_OFFLOAD_JUMBO_FRAME;
@@ -807,11 +815,15 @@ kni_config_network_interface(uint16_t port_id, uint8_t if_up)
 	RTE_LOG(INFO, APP, "Configure network interface of %d %s\n",
 					port_id, if_up ? "up" : "down");
 
+	rte_atomic32_inc(&kni_pause);
+
 	if (if_up != 0) { /* Configure network interface up */
 		rte_eth_dev_stop(port_id);
 		ret = rte_eth_dev_start(port_id);
 	} else /* Configure network interface down */
 		rte_eth_dev_stop(port_id);
+
+	rte_atomic32_dec(&kni_pause);
 
 	if (ret < 0)
 		RTE_LOG(ERR, APP, "Failed to start port %d\n", port_id);
@@ -820,10 +832,10 @@ kni_config_network_interface(uint16_t port_id, uint8_t if_up)
 }
 
 static void
-print_ethaddr(const char *name, struct ether_addr *mac_addr)
+print_ethaddr(const char *name, struct rte_ether_addr *mac_addr)
 {
-	char buf[ETHER_ADDR_FMT_SIZE];
-	ether_format_addr(buf, ETHER_ADDR_FMT_SIZE, mac_addr);
+	char buf[RTE_ETHER_ADDR_FMT_SIZE];
+	rte_ether_format_addr(buf, RTE_ETHER_ADDR_FMT_SIZE, mac_addr);
 	RTE_LOG(INFO, APP, "\t%s%s\n", name, buf);
 }
 
@@ -839,10 +851,10 @@ kni_config_mac_address(uint16_t port_id, uint8_t mac_addr[])
 	}
 
 	RTE_LOG(INFO, APP, "Configure mac address of %d\n", port_id);
-	print_ethaddr("Address:", (struct ether_addr *)mac_addr);
+	print_ethaddr("Address:", (struct rte_ether_addr *)mac_addr);
 
 	ret = rte_eth_dev_default_mac_addr_set(port_id,
-					       (struct ether_addr *)mac_addr);
+					(struct rte_ether_addr *)mac_addr);
 	if (ret < 0)
 		RTE_LOG(ERR, APP, "Failed to config mac_addr for port %d\n",
 			port_id);
@@ -885,22 +897,13 @@ kni_alloc(uint16_t port_id)
 		if (i == 0) {
 			struct rte_kni_ops ops;
 			struct rte_eth_dev_info dev_info;
-			const struct rte_pci_device *pci_dev;
-			const struct rte_bus *bus = NULL;
 
 			memset(&dev_info, 0, sizeof(dev_info));
 			rte_eth_dev_info_get(port_id, &dev_info);
 
-			if (dev_info.device)
-				bus = rte_bus_find_by_device(dev_info.device);
-			if (bus && !strcmp(bus->name, "pci")) {
-				pci_dev = RTE_DEV_TO_PCI(dev_info.device);
-				conf.addr = pci_dev->addr;
-				conf.id = pci_dev->id;
-			}
 			/* Get the interface default mac address */
 			rte_eth_macaddr_get(port_id,
-					(struct ether_addr *)&conf.mac_addr);
+				(struct rte_ether_addr *)&conf.mac_addr);
 
 			rte_eth_dev_get_mtu(port_id, &conf.mtu);
 

@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright(c) 2017-2018 Intel Corporation
 
-if host_machine.system() != 'linux'
+if not is_linux
 	build = false
+	reason = 'only supported on linux'
 endif
 if has_libnuma == 1
 	dpdk_conf.set10('RTE_LIBRTE_VHOST_NUMA', true)

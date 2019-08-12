@@ -74,25 +74,6 @@
 				nb_lcores*MEMPOOL_CACHE_SIZE),		\
 				(unsigned)8192)
 
-/*
- * RX and TX Prefetch, Host, and Write-back threshold values should be
- * carefully set for optimal performance. Consult the network
- * controller's datasheet and supporting DPDK documentation for guidance
- * on how these parameters should be set.
- */
-#define RX_PTHRESH 8 /**< Default values of RX prefetch threshold reg. */
-#define RX_HTHRESH 8 /**< Default values of RX host threshold reg. */
-#define RX_WTHRESH 4 /**< Default values of RX write-back threshold reg. */
-
-/*
- * These default values are optimized for use with the Intel(R) 82599 10 GbE
- * Controller and the DPDK ixgbe PMD. Consider using other values for other
- * network controllers and/or network drivers.
- */
-#define TX_PTHRESH 36 /**< Default values of TX prefetch threshold reg. */
-#define TX_HTHRESH 0  /**< Default values of TX host threshold reg. */
-#define TX_WTHRESH 0  /**< Default values of TX write-back threshold reg. */
-
 #define MAX_PKT_BURST 32
 #define BURST_TX_DRAIN_US 100 /* TX drain every ~100us */
 
@@ -112,7 +93,7 @@ static uint16_t nb_rxd = RTE_TEST_RX_DESC_DEFAULT;
 static uint16_t nb_txd = RTE_TEST_TX_DESC_DEFAULT;
 
 /* ethernet addresses of ports */
-static struct ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
+static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
 
 /* mask of enabled ports */
 static uint32_t enabled_port_mask = 0;
@@ -159,7 +140,7 @@ static uint16_t nb_lcore_params = sizeof(lcore_params_array_default) /
 static struct rte_eth_conf port_conf = {
 	.rxmode = {
 		.mq_mode	= ETH_MQ_RX_RSS,
-		.max_rx_pkt_len = ETHER_MAX_LEN,
+		.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
 		.split_hdr_size = 0,
 		.offloads = DEV_RX_OFFLOAD_CHECKSUM,
 	},
@@ -201,10 +182,10 @@ struct l3fwd_route {
 };
 
 static struct l3fwd_route l3fwd_route_array[] = {
-	{{IPv4(100,10,0,1), IPv4(200,10,0,1), 101, 11, IPPROTO_TCP}, 0},
-	{{IPv4(100,20,0,2), IPv4(200,20,0,2), 102, 12, IPPROTO_TCP}, 1},
-	{{IPv4(100,30,0,3), IPv4(200,30,0,3), 103, 13, IPPROTO_TCP}, 2},
-	{{IPv4(100,40,0,4), IPv4(200,40,0,4), 104, 14, IPPROTO_TCP}, 3},
+	{{RTE_IPV4(100,10,0,1), RTE_IPV4(200,10,0,1), 101, 11, IPPROTO_TCP}, 0},
+	{{RTE_IPV4(100,20,0,2), RTE_IPV4(200,20,0,2), 102, 12, IPPROTO_TCP}, 1},
+	{{RTE_IPV4(100,30,0,3), RTE_IPV4(200,30,0,3), 103, 13, IPPROTO_TCP}, 2},
+	{{RTE_IPV4(100,40,0,4), RTE_IPV4(200,40,0,4), 104, 14, IPPROTO_TCP}, 3},
 };
 
 typedef struct rte_hash lookup_struct_t;
@@ -234,14 +215,14 @@ struct l3fwd_route {
 };
 
 static struct l3fwd_route l3fwd_route_array[] = {
-	{IPv4(1,1,1,0), 24, 0},
-	{IPv4(2,1,1,0), 24, 1},
-	{IPv4(3,1,1,0), 24, 2},
-	{IPv4(4,1,1,0), 24, 3},
-	{IPv4(5,1,1,0), 24, 4},
-	{IPv4(6,1,1,0), 24, 5},
-	{IPv4(7,1,1,0), 24, 6},
-	{IPv4(8,1,1,0), 24, 7},
+	{RTE_IPV4(1,1,1,0), 24, 0},
+	{RTE_IPV4(2,1,1,0), 24, 1},
+	{RTE_IPV4(3,1,1,0), 24, 2},
+	{RTE_IPV4(4,1,1,0), 24, 3},
+	{RTE_IPV4(5,1,1,0), 24, 4},
+	{RTE_IPV4(6,1,1,0), 24, 5},
+	{RTE_IPV4(7,1,1,0), 24, 6},
+	{RTE_IPV4(8,1,1,0), 24, 7},
 };
 
 #define L3FWD_NUM_ROUTES \
@@ -314,14 +295,14 @@ send_single_packet(struct rte_mbuf *m, uint16_t port)
 
 #ifdef DO_RFC_1812_CHECKS
 static inline int
-is_valid_ipv4_pkt(struct ipv4_hdr *pkt, uint32_t link_len)
+is_valid_ipv4_pkt(struct rte_ipv4_hdr *pkt, uint32_t link_len)
 {
 	/* From http://www.rfc-editor.org/rfc/rfc1812.txt section 5.2.2 */
 	/*
 	 * 1. The packet length reported by the Link Layer must be large
 	 * enough to hold the minimum length legal IP datagram (20 bytes).
 	 */
-	if (link_len < sizeof(struct ipv4_hdr))
+	if (link_len < sizeof(struct rte_ipv4_hdr))
 		return -1;
 
 	/* 2. The IP checksum must be correct. */
@@ -346,7 +327,7 @@ is_valid_ipv4_pkt(struct ipv4_hdr *pkt, uint32_t link_len)
 	 * datagram header, whose length is specified in the IP header length
 	 * field.
 	 */
-	if (rte_cpu_to_be_16(pkt->total_length) < sizeof(struct ipv4_hdr))
+	if (rte_cpu_to_be_16(pkt->total_length) < sizeof(struct rte_ipv4_hdr))
 		return -5;
 
 	return 0;
@@ -362,12 +343,12 @@ print_key(struct ipv4_5tuple key)
 }
 
 static inline uint16_t
-get_dst_port(struct ipv4_hdr *ipv4_hdr, uint16_t portid,
+get_dst_port(struct rte_ipv4_hdr *ipv4_hdr, uint16_t portid,
 	      lookup_struct_t *l3fwd_lookup_struct)
 {
 	struct ipv4_5tuple key;
-	struct tcp_hdr *tcp;
-	struct udp_hdr *udp;
+	struct rte_tcp_hdr *tcp;
+	struct rte_udp_hdr *udp;
 	int ret = 0;
 
 	key.ip_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
@@ -376,15 +357,15 @@ get_dst_port(struct ipv4_hdr *ipv4_hdr, uint16_t portid,
 
 	switch (ipv4_hdr->next_proto_id) {
 	case IPPROTO_TCP:
-		tcp = (struct tcp_hdr *)((unsigned char *) ipv4_hdr +
-					sizeof(struct ipv4_hdr));
+		tcp = (struct rte_tcp_hdr *)((unsigned char *) ipv4_hdr +
+					sizeof(struct rte_ipv4_hdr));
 		key.port_dst = rte_be_to_cpu_16(tcp->dst_port);
 		key.port_src = rte_be_to_cpu_16(tcp->src_port);
 		break;
 
 	case IPPROTO_UDP:
-		udp = (struct udp_hdr *)((unsigned char *) ipv4_hdr +
-					sizeof(struct ipv4_hdr));
+		udp = (struct rte_udp_hdr *)((unsigned char *) ipv4_hdr +
+					sizeof(struct rte_ipv4_hdr));
 		key.port_dst = rte_be_to_cpu_16(udp->dst_port);
 		key.port_src = rte_be_to_cpu_16(udp->src_port);
 		break;
@@ -402,7 +383,7 @@ get_dst_port(struct ipv4_hdr *ipv4_hdr, uint16_t portid,
 
 #if (APP_LOOKUP_METHOD == APP_LOOKUP_LPM)
 static inline uint32_t
-get_dst_port(struct ipv4_hdr *ipv4_hdr, uint16_t portid,
+get_dst_port(struct rte_ipv4_hdr *ipv4_hdr, uint16_t portid,
 	      lookup_struct_t *l3fwd_lookup_struct)
 {
 	uint32_t next_hop;
@@ -417,15 +398,15 @@ static inline void
 l3fwd_simple_forward(struct rte_mbuf *m, uint16_t portid,
 		      lookup_struct_t *l3fwd_lookup_struct)
 {
-	struct ether_hdr *eth_hdr;
-	struct ipv4_hdr *ipv4_hdr;
+	struct rte_ether_hdr *eth_hdr;
+	struct rte_ipv4_hdr *ipv4_hdr;
 	void *tmp;
 	uint16_t dst_port;
 
-	eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+	eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
 
-	ipv4_hdr = rte_pktmbuf_mtod_offset(m, struct ipv4_hdr *,
-					   sizeof(struct ether_hdr));
+	ipv4_hdr = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr *,
+					   sizeof(struct rte_ether_hdr));
 
 #ifdef DO_RFC_1812_CHECKS
 	/* Check to make sure the packet is valid (RFC1812) */
@@ -450,7 +431,7 @@ l3fwd_simple_forward(struct rte_mbuf *m, uint16_t portid,
 #endif
 
 	/* src addr */
-	ether_addr_copy(&ports_eth_addr[dst_port], &eth_hdr->s_addr);
+	rte_ether_addr_copy(&ports_eth_addr[dst_port], &eth_hdr->s_addr);
 
 	send_single_packet(m, dst_port);
 
@@ -788,10 +769,10 @@ parse_args(int argc, char **argv)
 }
 
 static void
-print_ethaddr(const char *name, const struct ether_addr *eth_addr)
+print_ethaddr(const char *name, const struct rte_ether_addr *eth_addr)
 {
-	char buf[ETHER_ADDR_FMT_SIZE];
-	ether_format_addr(buf, ETHER_ADDR_FMT_SIZE, eth_addr);
+	char buf[RTE_ETHER_ADDR_FMT_SIZE];
+	rte_ether_format_addr(buf, RTE_ETHER_ADDR_FMT_SIZE, eth_addr);
 	printf("%s%s", name, buf);
 }
 
@@ -1041,13 +1022,8 @@ main(int argc, char **argv)
 		fflush(stdout);
 		/* init RX queues */
 		for(queue = 0; queue < qconf->n_rx_queue; ++queue) {
-			struct rte_eth_dev *dev;
-			struct rte_eth_conf *conf;
-
 			portid = qconf->rx_queue_list[queue].port_id;
 			queueid = qconf->rx_queue_list[queue].queue_id;
-			dev = &rte_eth_devices[portid];
-			conf = &dev->data->dev_conf;
 
 			if (numa_on)
 				socketid = (uint8_t)rte_lcore_to_socket_id(lcore_id);
@@ -1059,7 +1035,7 @@ main(int argc, char **argv)
 
 			rte_eth_dev_info_get(portid, &dev_info);
 			rxq_conf = dev_info.default_rxconf;
-			rxq_conf.offloads = conf->rxmode.offloads;
+			rxq_conf.offloads = port_conf.rxmode.offloads;
 			ret = rte_eth_rx_queue_setup(portid, queueid, nb_rxd,
 						socketid, &rxq_conf,
 						pktmbuf_pool[socketid]);

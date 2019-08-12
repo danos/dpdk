@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <rte_string_fns.h>
 #include <rte_branch_prediction.h>
 #include <rte_debug.h>
 #include <rte_lcore.h>
@@ -755,7 +756,7 @@ int
 opdl_stage_disclaim(struct opdl_stage *s, uint32_t num_entries, bool block)
 {
 	if (num_entries != s->num_event) {
-		rte_errno = -EINVAL;
+		rte_errno = EINVAL;
 		return 0;
 	}
 	if (s->threadsafe == false) {
@@ -944,7 +945,7 @@ opdl_ring_create(const char *name, uint32_t num_slots, uint32_t slot_size,
 
 	/* Initialise opdl_ring queue */
 	memset(t, 0, sizeof(*t));
-	snprintf(t->name, sizeof(t->name), "%s", name);
+	strlcpy(t->name, name, sizeof(t->name));
 	t->socket = socket;
 	t->num_slots = num_slots;
 	t->mask = num_slots - 1;

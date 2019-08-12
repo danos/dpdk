@@ -13,24 +13,17 @@ extern "C" {
 #include <sys/un.h>
 #include <rte_atomic.h>
 
-/* Maximum number of CPUs */
-#define CHANNEL_CMDS_MAX_CPUS        64
-#if CHANNEL_CMDS_MAX_CPUS > 64
-#error Maximum number of cores is 64, overflow is guaranteed to \
-    cause problems with VM Power Management
-#endif
-
 /* Maximum name length including '\0' terminator */
 #define CHANNEL_MGR_MAX_NAME_LEN    64
-
-/* Maximum number of channels to each Virtual Machine */
-#define CHANNEL_MGR_MAX_CHANNELS    64
 
 /* Hypervisor Path for libvirt(qemu/KVM) */
 #define CHANNEL_MGR_DEFAULT_HV_PATH "qemu:///system"
 
 /* File socket directory */
 #define CHANNEL_MGR_SOCKET_PATH     "/tmp/powermonitor/"
+
+/* FIFO file name template */
+#define CHANNEL_MGR_FIFO_PATTERN_NAME   "fifo"
 
 #ifndef UNIX_PATH_MAX
 struct sockaddr_un _sockaddr_un;
@@ -82,9 +75,9 @@ struct channel_info {
 struct vm_info {
 	char name[CHANNEL_MGR_MAX_NAME_LEN];          /**< VM name */
 	enum vm_status status;                        /**< libvirt status */
-	uint64_t pcpu_mask[CHANNEL_CMDS_MAX_CPUS];    /**< pCPU mask for each vCPU */
+	uint16_t pcpu_map[RTE_MAX_LCORE];             /**< pCPU map to vCPU */
 	unsigned num_vcpus;                           /**< number of vCPUS */
-	struct channel_info channels[CHANNEL_MGR_MAX_CHANNELS]; /**< Array of channel_info */
+	struct channel_info channels[RTE_MAX_LCORE];  /**< channel_info array */
 	unsigned num_channels;                        /**< Number of channels */
 };
 
@@ -115,8 +108,7 @@ int channel_manager_init(const char *path);
 void channel_manager_exit(void);
 
 /**
- * Get the Physical CPU mask for VM lcore channel(vcpu), result is assigned to
- * core_mask.
+ * Get the Physical CPU for VM lcore channel(vcpu).
  * It is not thread-safe.
  *
  * @param chan_info
@@ -130,26 +122,7 @@ void channel_manager_exit(void);
  *  - 0 on error.
  *  - >0 on success.
  */
-uint64_t get_pcpus_mask(struct channel_info *chan_info, unsigned vcpu);
-
-/**
- * Set the Physical CPU mask for the specified vCPU.
- * It is not thread-safe.
- *
- * @param name
- *  Virtual Machine name to lookup
- *
- * @param vcpu
- *  The virtual CPU to set.
- *
- * @param core_mask
- *  The core mask of the physical CPU(s) to bind the vCPU
- *
- * @return
- *  - 0 on success.
- *  - Negative on error.
- */
-int set_pcpus_mask(char *vm_name, unsigned vcpu, uint64_t core_mask);
+uint16_t get_pcpu(struct channel_info *chan_info, unsigned int vcpu);
 
 /**
  * Set the Physical CPU for the specified vCPU.
@@ -168,7 +141,8 @@ int set_pcpus_mask(char *vm_name, unsigned vcpu, uint64_t core_mask);
  *  - 0 on success.
  *  - Negative on error.
  */
-int set_pcpu(char *vm_name, unsigned vcpu, unsigned core_num);
+int set_pcpu(char *vm_name, unsigned int vcpu, unsigned int pcpu);
+
 /**
  * Add a VM as specified by name to the Channel Manager. The name must
  * correspond to a valid libvirt domain name.
@@ -235,13 +209,13 @@ int add_channels(const char *vm_name, unsigned *channel_list,
 		unsigned num_channels);
 
 /**
- * Set up a fifo by which host applications can send command an policies
+ * Set up fifos by which host applications can send command an policies
  * through a fifo to the vm_power_manager
  *
  * @return
  *  - 0 for success
  */
-int add_host_channel(void);
+int add_host_channels(void);
 
 /**
  * Remove a channel definition from the channel manager. This must only be

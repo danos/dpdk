@@ -52,6 +52,7 @@
 
 #define VMXNET3_RX_OFFLOAD_CAP		\
 	(DEV_RX_OFFLOAD_VLAN_STRIP |	\
+	 DEV_RX_OFFLOAD_VLAN_FILTER |   \
 	 DEV_RX_OFFLOAD_SCATTER |	\
 	 DEV_RX_OFFLOAD_IPV4_CKSUM |	\
 	 DEV_RX_OFFLOAD_UDP_CKSUM |	\
@@ -91,7 +92,7 @@ static int vmxnet3_dev_vlan_filter_set(struct rte_eth_dev *dev,
 				       uint16_t vid, int on);
 static int vmxnet3_dev_vlan_offload_set(struct rte_eth_dev *dev, int mask);
 static int vmxnet3_mac_addr_set(struct rte_eth_dev *dev,
-				 struct ether_addr *mac_addr);
+				 struct rte_ether_addr *mac_addr);
 static void vmxnet3_interrupt_handler(void *param);
 
 int vmxnet3_logtype_init;
@@ -266,7 +267,11 @@ eth_vmxnet3_dev_init(struct rte_eth_dev *eth_dev)
 	ver = VMXNET3_READ_BAR1_REG(hw, VMXNET3_REG_VRRS);
 	PMD_INIT_LOG(DEBUG, "Hardware version : %d", ver);
 
-	if (ver & (1 << VMXNET3_REV_3)) {
+	if (ver & (1 << VMXNET3_REV_4)) {
+		VMXNET3_WRITE_BAR1_REG(hw, VMXNET3_REG_VRRS,
+				       1 << VMXNET3_REV_4);
+		hw->version = VMXNET3_REV_4 + 1;
+	} else if (ver & (1 << VMXNET3_REV_3)) {
 		VMXNET3_WRITE_BAR1_REG(hw, VMXNET3_REG_VRRS,
 				       1 << VMXNET3_REV_3);
 		hw->version = VMXNET3_REV_3 + 1;
@@ -302,16 +307,16 @@ eth_vmxnet3_dev_init(struct rte_eth_dev *eth_dev)
 	memcpy(hw->perm_addr + 4, &mac_hi, 2);
 
 	/* Allocate memory for storing MAC addresses */
-	eth_dev->data->mac_addrs = rte_zmalloc("vmxnet3", ETHER_ADDR_LEN *
+	eth_dev->data->mac_addrs = rte_zmalloc("vmxnet3", RTE_ETHER_ADDR_LEN *
 					       VMXNET3_MAX_MAC_ADDRS, 0);
 	if (eth_dev->data->mac_addrs == NULL) {
 		PMD_INIT_LOG(ERR,
 			     "Failed to allocate %d bytes needed to store MAC addresses",
-			     ETHER_ADDR_LEN * VMXNET3_MAX_MAC_ADDRS);
+			     RTE_ETHER_ADDR_LEN * VMXNET3_MAX_MAC_ADDRS);
 		return -ENOMEM;
 	}
 	/* Copy the permanent MAC address */
-	ether_addr_copy((struct ether_addr *) hw->perm_addr,
+	rte_ether_addr_copy((struct rte_ether_addr *)hw->perm_addr,
 			&eth_dev->data->mac_addrs[0]);
 
 	PMD_INIT_LOG(DEBUG, "MAC Address : %02x:%02x:%02x:%02x:%02x:%02x",
@@ -764,6 +769,15 @@ vmxnet3_dev_start(struct rte_eth_dev *dev)
 		PMD_INIT_LOG(DEBUG, "Failed to setup memory region\n");
 	}
 
+	if (VMXNET3_VERSION_GE_4(hw)) {
+		/* Check for additional RSS  */
+		ret = vmxnet3_v4_rss_configure(dev);
+		if (ret != VMXNET3_SUCCESS) {
+			PMD_INIT_LOG(ERR, "Failed to configure v4 RSS");
+			return ret;
+		}
+	}
+
 	/* Disable interrupts */
 	vmxnet3_disable_intr(hw);
 
@@ -1118,8 +1132,8 @@ vmxnet3_dev_stats_reset(struct rte_eth_dev *dev)
 {
 	unsigned int i;
 	struct vmxnet3_hw *hw = dev->data->dev_private;
-	struct UPT1_TxStats txStats;
-	struct UPT1_RxStats rxStats;
+	struct UPT1_TxStats txStats = {0};
+	struct UPT1_RxStats rxStats = {0};
 
 	VMXNET3_WRITE_BAR1_REG(hw, VMXNET3_REG_CMD, VMXNET3_CMD_GET_STATS);
 
@@ -1141,6 +1155,8 @@ static void
 vmxnet3_dev_info_get(struct rte_eth_dev *dev __rte_unused,
 		     struct rte_eth_dev_info *dev_info)
 {
+	struct vmxnet3_hw *hw = dev->data->dev_private;
+
 	dev_info->max_rx_queues = VMXNET3_MAX_RX_QUEUES;
 	dev_info->max_tx_queues = VMXNET3_MAX_TX_QUEUES;
 	dev_info->min_rx_bufsize = 1518 + RTE_PKTMBUF_HEADROOM;
@@ -1149,6 +1165,10 @@ vmxnet3_dev_info_get(struct rte_eth_dev *dev __rte_unused,
 	dev_info->max_mac_addrs = VMXNET3_MAX_MAC_ADDRS;
 
 	dev_info->flow_type_rss_offloads = VMXNET3_RSS_OFFLOAD_ALL;
+
+	if (VMXNET3_VERSION_GE_4(hw)) {
+		dev_info->flow_type_rss_offloads |= VMXNET3_V4_RSS_MASK;
+	}
 
 	dev_info->rx_desc_lim = (struct rte_eth_desc_lim) {
 		.nb_max = VMXNET3_RX_RING_MAX_SIZE,
@@ -1185,11 +1205,11 @@ vmxnet3_dev_supported_ptypes_get(struct rte_eth_dev *dev)
 }
 
 static int
-vmxnet3_mac_addr_set(struct rte_eth_dev *dev, struct ether_addr *mac_addr)
+vmxnet3_mac_addr_set(struct rte_eth_dev *dev, struct rte_ether_addr *mac_addr)
 {
 	struct vmxnet3_hw *hw = dev->data->dev_private;
 
-	ether_addr_copy(mac_addr, (struct ether_addr *)(hw->perm_addr));
+	rte_ether_addr_copy(mac_addr, (struct rte_ether_addr *)(hw->perm_addr));
 	vmxnet3_write_mac(hw, mac_addr->addr_bytes);
 	return 0;
 }
@@ -1406,7 +1426,7 @@ vmxnet3_interrupt_handler(void *param)
 
 	vmxnet3_process_events(dev);
 
-	if (rte_intr_enable(&pci_dev->intr_handle) < 0)
+	if (rte_intr_ack(&pci_dev->intr_handle) < 0)
 		PMD_DRV_LOG(ERR, "interrupt enable failed");
 }
 

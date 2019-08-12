@@ -5,6 +5,7 @@
  */
 
 #include "qede_ethdev.h"
+#include <rte_string_fns.h>
 #include <rte_alarm.h>
 #include <rte_version.h>
 #include <rte_kvargs.h>
@@ -247,8 +248,8 @@ qede_interrupt_handler_intx(void *param)
 	if (status & 0x1) {
 		qede_interrupt_action(ECORE_LEADING_HWFN(edev));
 
-		if (rte_intr_enable(eth_dev->intr_handle))
-			DP_ERR(edev, "rte_intr_enable failed\n");
+		if (rte_intr_ack(eth_dev->intr_handle))
+			DP_ERR(edev, "rte_intr_ack failed\n");
 	}
 }
 
@@ -260,8 +261,8 @@ qede_interrupt_handler(void *param)
 	struct ecore_dev *edev = &qdev->edev;
 
 	qede_interrupt_action(ECORE_LEADING_HWFN(edev));
-	if (rte_intr_enable(eth_dev->intr_handle))
-		DP_ERR(edev, "rte_intr_enable failed\n");
+	if (rte_intr_ack(eth_dev->intr_handle))
+		DP_ERR(edev, "rte_intr_ack failed\n");
 }
 
 static void
@@ -558,13 +559,13 @@ qede_ucast_filter(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
 	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
 	struct qede_ucast_entry *tmp = NULL;
 	struct qede_ucast_entry *u;
-	struct ether_addr *mac_addr;
+	struct rte_ether_addr *mac_addr;
 
-	mac_addr  = (struct ether_addr *)ucast->mac;
+	mac_addr  = (struct rte_ether_addr *)ucast->mac;
 	if (add) {
 		SLIST_FOREACH(tmp, &qdev->uc_list_head, list) {
 			if ((memcmp(mac_addr, &tmp->mac,
-				    ETHER_ADDR_LEN) == 0) &&
+				    RTE_ETHER_ADDR_LEN) == 0) &&
 			     ucast->vni == tmp->vni &&
 			     ucast->vlan == tmp->vlan) {
 				DP_INFO(edev, "Unicast MAC is already added"
@@ -579,7 +580,7 @@ qede_ucast_filter(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
 			DP_ERR(edev, "Did not allocate memory for ucast\n");
 			return -ENOMEM;
 		}
-		ether_addr_copy(mac_addr, &u->mac);
+		rte_ether_addr_copy(mac_addr, &u->mac);
 		u->vlan = ucast->vlan;
 		u->vni = ucast->vni;
 		SLIST_INSERT_HEAD(&qdev->uc_list_head, u, list);
@@ -587,7 +588,7 @@ qede_ucast_filter(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
 	} else {
 		SLIST_FOREACH(tmp, &qdev->uc_list_head, list) {
 			if ((memcmp(mac_addr, &tmp->mac,
-				    ETHER_ADDR_LEN) == 0) &&
+				    RTE_ETHER_ADDR_LEN) == 0) &&
 			    ucast->vlan == tmp->vlan	  &&
 			    ucast->vni == tmp->vni)
 			break;
@@ -604,8 +605,9 @@ qede_ucast_filter(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
 }
 
 static int
-qede_add_mcast_filters(struct rte_eth_dev *eth_dev, struct ether_addr *mc_addrs,
-		       uint32_t mc_addrs_num)
+qede_add_mcast_filters(struct rte_eth_dev *eth_dev,
+		struct rte_ether_addr *mc_addrs,
+		uint32_t mc_addrs_num)
 {
 	struct qede_dev *qdev = QEDE_INIT_QDEV(eth_dev);
 	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
@@ -621,14 +623,14 @@ qede_add_mcast_filters(struct rte_eth_dev *eth_dev, struct ether_addr *mc_addrs,
 			DP_ERR(edev, "Did not allocate memory for mcast\n");
 			return -ENOMEM;
 		}
-		ether_addr_copy(&mc_addrs[i], &m->mac);
+		rte_ether_addr_copy(&mc_addrs[i], &m->mac);
 		SLIST_INSERT_HEAD(&qdev->mc_list_head, m, list);
 	}
 	memset(&mcast, 0, sizeof(mcast));
 	mcast.num_mc_addrs = mc_addrs_num;
 	mcast.opcode = ECORE_FILTER_ADD;
 	for (i = 0; i < mc_addrs_num; i++)
-		ether_addr_copy(&mc_addrs[i], (struct ether_addr *)
+		rte_ether_addr_copy(&mc_addrs[i], (struct rte_ether_addr *)
 							&mcast.mac[i]);
 	rc = ecore_filter_mcast_cmd(edev, &mcast, ECORE_SPQ_MODE_CB, NULL);
 	if (rc != ECORE_SUCCESS) {
@@ -653,7 +655,8 @@ static int qede_del_mcast_filters(struct rte_eth_dev *eth_dev)
 	mcast.opcode = ECORE_FILTER_REMOVE;
 	j = 0;
 	SLIST_FOREACH(tmp, &qdev->mc_list_head, list) {
-		ether_addr_copy(&tmp->mac, (struct ether_addr *)&mcast.mac[j]);
+		rte_ether_addr_copy(&tmp->mac,
+				(struct rte_ether_addr *)&mcast.mac[j]);
 		j++;
 	}
 	rc = ecore_filter_mcast_cmd(edev, &mcast, ECORE_SPQ_MODE_CB, NULL);
@@ -700,19 +703,19 @@ qede_mac_int_ops(struct rte_eth_dev *eth_dev, struct ecore_filter_ucast *ucast,
 }
 
 static int
-qede_mac_addr_add(struct rte_eth_dev *eth_dev, struct ether_addr *mac_addr,
+qede_mac_addr_add(struct rte_eth_dev *eth_dev, struct rte_ether_addr *mac_addr,
 		  __rte_unused uint32_t index, __rte_unused uint32_t pool)
 {
 	struct ecore_filter_ucast ucast;
 	int re;
 
-	if (!is_valid_assigned_ether_addr(mac_addr))
+	if (!rte_is_valid_assigned_ether_addr(mac_addr))
 		return -EINVAL;
 
 	qede_set_ucast_cmn_params(&ucast);
 	ucast.opcode = ECORE_FILTER_ADD;
 	ucast.type = ECORE_FILTER_MAC;
-	ether_addr_copy(mac_addr, (struct ether_addr *)&ucast.mac);
+	rte_ether_addr_copy(mac_addr, (struct rte_ether_addr *)&ucast.mac);
 	re = (int)qede_mac_int_ops(eth_dev, &ucast, 1);
 	return re;
 }
@@ -732,7 +735,7 @@ qede_mac_addr_remove(struct rte_eth_dev *eth_dev, uint32_t index)
 		return;
 	}
 
-	if (!is_valid_assigned_ether_addr(&eth_dev->data->mac_addrs[index]))
+	if (!rte_is_valid_assigned_ether_addr(&eth_dev->data->mac_addrs[index]))
 		return;
 
 	qede_set_ucast_cmn_params(&ucast);
@@ -740,14 +743,14 @@ qede_mac_addr_remove(struct rte_eth_dev *eth_dev, uint32_t index)
 	ucast.type = ECORE_FILTER_MAC;
 
 	/* Use the index maintained by rte */
-	ether_addr_copy(&eth_dev->data->mac_addrs[index],
-			(struct ether_addr *)&ucast.mac);
+	rte_ether_addr_copy(&eth_dev->data->mac_addrs[index],
+			(struct rte_ether_addr *)&ucast.mac);
 
 	qede_mac_int_ops(eth_dev, &ucast, false);
 }
 
 static int
-qede_mac_addr_set(struct rte_eth_dev *eth_dev, struct ether_addr *mac_addr)
+qede_mac_addr_set(struct rte_eth_dev *eth_dev, struct rte_ether_addr *mac_addr)
 {
 	struct qede_dev *qdev = QEDE_INIT_QDEV(eth_dev);
 	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
@@ -1213,7 +1216,7 @@ static int qede_dev_configure(struct rte_eth_dev *eth_dev)
 	if (rxmode->offloads & DEV_RX_OFFLOAD_JUMBO_FRAME)
 		eth_dev->data->mtu =
 			eth_dev->data->dev_conf.rxmode.max_rx_pkt_len -
-			ETHER_HDR_LEN - QEDE_ETH_OVERHEAD;
+			RTE_ETHER_HDR_LEN - QEDE_ETH_OVERHEAD;
 
 	if (rxmode->offloads & DEV_RX_OFFLOAD_SCATTER)
 		eth_dev->data->scattered_rx = 1;
@@ -1423,7 +1426,6 @@ static void qede_poll_sp_sb_cb(void *param)
 	if (rc != 0) {
 		DP_ERR(edev, "Unable to start periodic"
 			     " timer rc %d\n", rc);
-		assert(false && "Unable to start periodic timer");
 	}
 }
 
@@ -1591,27 +1593,24 @@ qede_get_xstats_names(struct rte_eth_dev *dev,
 
 	if (xstats_names != NULL) {
 		for (i = 0; i < RTE_DIM(qede_xstats_strings); i++) {
-			snprintf(xstats_names[stat_idx].name,
-				sizeof(xstats_names[stat_idx].name),
-				"%s",
-				qede_xstats_strings[i].name);
+			strlcpy(xstats_names[stat_idx].name,
+				qede_xstats_strings[i].name,
+				sizeof(xstats_names[stat_idx].name));
 			stat_idx++;
 		}
 
 		if (ECORE_IS_BB(edev)) {
 			for (i = 0; i < RTE_DIM(qede_bb_xstats_strings); i++) {
-				snprintf(xstats_names[stat_idx].name,
-					sizeof(xstats_names[stat_idx].name),
-					"%s",
-					qede_bb_xstats_strings[i].name);
+				strlcpy(xstats_names[stat_idx].name,
+					qede_bb_xstats_strings[i].name,
+					sizeof(xstats_names[stat_idx].name));
 				stat_idx++;
 			}
 		} else {
 			for (i = 0; i < RTE_DIM(qede_ah_xstats_strings); i++) {
-				snprintf(xstats_names[stat_idx].name,
-					sizeof(xstats_names[stat_idx].name),
-					"%s",
-					qede_ah_xstats_strings[i].name);
+				strlcpy(xstats_names[stat_idx].name,
+					qede_ah_xstats_strings[i].name,
+					sizeof(xstats_names[stat_idx].name));
 				stat_idx++;
 			}
 		}
@@ -1759,8 +1758,9 @@ static void qede_allmulticast_disable(struct rte_eth_dev *eth_dev)
 }
 
 static int
-qede_set_mc_addr_list(struct rte_eth_dev *eth_dev, struct ether_addr *mc_addrs,
-		      uint32_t mc_addrs_num)
+qede_set_mc_addr_list(struct rte_eth_dev *eth_dev,
+		struct rte_ether_addr *mc_addrs,
+		uint32_t mc_addrs_num)
 {
 	struct qede_dev *qdev = QEDE_INIT_QDEV(eth_dev);
 	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
@@ -1773,7 +1773,7 @@ qede_set_mc_addr_list(struct rte_eth_dev *eth_dev, struct ether_addr *mc_addrs,
 	}
 
 	for (i = 0; i < mc_addrs_num; i++) {
-		if (!is_multicast_ether_addr(&mc_addrs[i])) {
+		if (!rte_is_multicast_ether_addr(&mc_addrs[i])) {
 			DP_ERR(edev, "Not a valid multicast MAC\n");
 			return -EINVAL;
 		}
@@ -2231,9 +2231,9 @@ static int qede_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	qede_dev_info_get(dev, &dev_info);
 	max_rx_pkt_len = mtu + QEDE_MAX_ETHER_HDR_LEN;
 	frame_size = max_rx_pkt_len;
-	if ((mtu < ETHER_MIN_MTU) || (frame_size > dev_info.max_rx_pktlen)) {
+	if (mtu < RTE_ETHER_MIN_MTU || frame_size > dev_info.max_rx_pktlen) {
 		DP_ERR(edev, "MTU %u out of range, %u is maximum allowable\n",
-		       mtu, dev_info.max_rx_pktlen - ETHER_HDR_LEN -
+		       mtu, dev_info.max_rx_pktlen - RTE_ETHER_HDR_LEN -
 		       QEDE_ETH_OVERHEAD);
 		return -EINVAL;
 	}
@@ -2273,7 +2273,7 @@ static int qede_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 			fp->rxq->rx_buf_size = rc;
 		}
 	}
-	if (max_rx_pkt_len > ETHER_MAX_LEN)
+	if (max_rx_pkt_len > RTE_ETHER_MAX_LEN)
 		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_JUMBO_FRAME;
 	else
 		dev->data->dev_conf.rxmode.offloads &= ~DEV_RX_OFFLOAD_JUMBO_FRAME;
@@ -2407,7 +2407,7 @@ static int qede_common_dev_init(struct rte_eth_dev *eth_dev, bool is_vf)
 	struct qed_slowpath_params params;
 	static bool do_once = true;
 	uint8_t bulletin_change;
-	uint8_t vf_mac[ETHER_ADDR_LEN];
+	uint8_t vf_mac[RTE_ETHER_ADDR_LEN];
 	uint8_t is_mac_forced;
 	bool is_mac_exist;
 	/* Fix up ecore debug level */
@@ -2537,7 +2537,7 @@ static int qede_common_dev_init(struct rte_eth_dev *eth_dev, bool is_vf)
 
 	/* Allocate memory for storing MAC addr */
 	eth_dev->data->mac_addrs = rte_zmalloc(edev->name,
-					(ETHER_ADDR_LEN *
+					(RTE_ETHER_ADDR_LEN *
 					adapter->dev_info.num_mac_filters),
 					RTE_CACHE_LINE_SIZE);
 
@@ -2551,10 +2551,10 @@ static int qede_common_dev_init(struct rte_eth_dev *eth_dev, bool is_vf)
 	}
 
 	if (!is_vf) {
-		ether_addr_copy((struct ether_addr *)edev->hwfns[0].
+		rte_ether_addr_copy((struct rte_ether_addr *)edev->hwfns[0].
 				hw_info.hw_mac_addr,
 				&eth_dev->data->mac_addrs[0]);
-		ether_addr_copy(&eth_dev->data->mac_addrs[0],
+		rte_ether_addr_copy(&eth_dev->data->mac_addrs[0],
 				&adapter->primary_mac);
 	} else {
 		ecore_vf_read_bulletin(ECORE_LEADING_HWFN(edev),
@@ -2567,10 +2567,12 @@ static int qede_common_dev_init(struct rte_eth_dev *eth_dev, bool is_vf)
 						&is_mac_forced);
 			if (is_mac_exist) {
 				DP_INFO(edev, "VF macaddr received from PF\n");
-				ether_addr_copy((struct ether_addr *)&vf_mac,
-						&eth_dev->data->mac_addrs[0]);
-				ether_addr_copy(&eth_dev->data->mac_addrs[0],
-						&adapter->primary_mac);
+				rte_ether_addr_copy(
+					(struct rte_ether_addr *)&vf_mac,
+					&eth_dev->data->mac_addrs[0]);
+				rte_ether_addr_copy(
+					&eth_dev->data->mac_addrs[0],
+					&adapter->primary_mac);
 			} else {
 				DP_ERR(edev, "No VF macaddr assigned\n");
 			}
@@ -2593,7 +2595,7 @@ static int qede_common_dev_init(struct rte_eth_dev *eth_dev, bool is_vf)
 	SLIST_INIT(&adapter->vlan_list_head);
 	SLIST_INIT(&adapter->uc_list_head);
 	SLIST_INIT(&adapter->mc_list_head);
-	adapter->mtu = ETHER_MTU;
+	adapter->mtu = RTE_ETHER_MTU;
 	adapter->vport_started = false;
 
 	/* VF tunnel offloads is enabled by default in PF driver */

@@ -14,7 +14,7 @@
 
 #include <netinet/in.h>
 #include <net/if.h>
-#ifdef RTE_EXEC_ENV_LINUXAPP
+#ifdef RTE_EXEC_ENV_LINUX
 #include <linux/if_tun.h>
 #endif
 #include <fcntl.h>
@@ -156,7 +156,7 @@ signal_handler(int signum)
 	}
 }
 
-#ifdef RTE_EXEC_ENV_LINUXAPP
+#ifdef RTE_EXEC_ENV_LINUX
 /*
  * Create a tap network interface, or use existing one with same name.
  * If name[0]='\0' then a name is automatically assigned and returned in name.
@@ -176,7 +176,7 @@ static int tap_create(char *name)
 	ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
 
 	if (name && *name)
-		snprintf(ifr.ifr_name, IFNAMSIZ, "%s", name);
+		strlcpy(ifr.ifr_name, name, IFNAMSIZ);
 
 	ret = ioctl(fd, TUNSETIFF, (void *) &ifr);
 	if (ret < 0) {
@@ -185,7 +185,7 @@ static int tap_create(char *name)
 	}
 
 	if (name)
-		snprintf(name, IFNAMSIZ, "%s", ifr.ifr_name);
+		strlcpy(name, ifr.ifr_name, IFNAMSIZ);
 
 	return fd;
 }

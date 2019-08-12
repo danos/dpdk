@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- *   Copyright 2016 NXP
+ *   Copyright 2016,2018 NXP
  *
  */
 
@@ -33,7 +33,7 @@ uint8_t dpaa2_virt_mode;
 uint32_t
 rte_fslmc_get_device_count(enum rte_dpaa2_dev_type device_type)
 {
-	if (device_type > DPAA2_DEVTYPE_MAX)
+	if (device_type >= DPAA2_DEVTYPE_MAX)
 		return 0;
 	return rte_fslmc_bus.device_count[device_type];
 }
@@ -135,10 +135,11 @@ static int
 scan_one_fslmc_device(char *dev_name)
 {
 	char *dup_dev_name, *t_ptr;
-	struct rte_dpaa2_device *dev;
+	struct rte_dpaa2_device *dev = NULL;
+	int ret = -1;
 
 	if (!dev_name)
-		return -1;
+		return ret;
 
 	/* Ignore the Container name itself */
 	if (!strncmp("dprc", dev_name, 4))
@@ -168,7 +169,8 @@ scan_one_fslmc_device(char *dev_name)
 	/* Parse the device name and ID */
 	t_ptr = strtok(dup_dev_name, ".");
 	if (!t_ptr) {
-		DPAA2_BUS_ERR("Incorrect device name observed");
+		DPAA2_BUS_ERR("Invalid device found: (%s)", dup_dev_name);
+		ret = -EINVAL;
 		goto cleanup;
 	}
 	if (!strncmp("dpni", t_ptr, 4))
@@ -187,15 +189,15 @@ scan_one_fslmc_device(char *dev_name)
 		dev->dev_type = DPAA2_MPORTAL;
 	else if (!strncmp("dpdmai", t_ptr, 6))
 		dev->dev_type = DPAA2_QDMA;
+	else if (!strncmp("dpdmux", t_ptr, 6))
+		dev->dev_type = DPAA2_MUX;
 	else
 		dev->dev_type = DPAA2_UNKNOWN;
 
-	/* Update the device found into the device_count table */
-	rte_fslmc_bus.device_count[dev->dev_type]++;
-
 	t_ptr = strtok(NULL, ".");
 	if (!t_ptr) {
-		DPAA2_BUS_ERR("Incorrect device string observed (%s)", t_ptr);
+		DPAA2_BUS_ERR("Skipping invalid device (%s)", dup_dev_name);
+		ret = 0;
 		goto cleanup;
 	}
 
@@ -203,9 +205,13 @@ scan_one_fslmc_device(char *dev_name)
 	dev->device.name = strdup(dev_name);
 	if (!dev->device.name) {
 		DPAA2_BUS_ERR("Unable to clone device name. Out of memory");
+		ret = -ENOMEM;
 		goto cleanup;
 	}
 	dev->device.devargs = fslmc_devargs_lookup(dev);
+
+	/* Update the device found into the device_count table */
+	rte_fslmc_bus.device_count[dev->dev_type]++;
 
 	/* Add device in the fslmc device list */
 	insert_in_device_list(dev);
@@ -220,7 +226,7 @@ cleanup:
 		free(dup_dev_name);
 	if (dev)
 		free(dev);
-	return -1;
+	return ret;
 }
 
 static int
@@ -228,47 +234,71 @@ rte_fslmc_parse(const char *name, void *addr)
 {
 	uint16_t dev_id;
 	char *t_ptr;
-	char *sep = strchr(name, ':');
+	char *sep = NULL;
+	uint8_t sep_exists = 0;
 
-	if (strncmp(name, RTE_STR(FSLMC_BUS_NAME),
-		strlen(RTE_STR(FSLMC_BUS_NAME)))) {
-		return -EINVAL;
-	}
+	DPAA2_BUS_DEBUG("Parsing dev=(%s)", name);
 
+	/* There are multiple ways this can be called, with bus:dev, name=dev
+	 * or just dev. In all cases, the 'addr' is actually a string.
+	 */
+	sep = strchr(name, ':');
 	if (!sep) {
-		DPAA2_BUS_ERR("Incorrect device name observed");
-		return -EINVAL;
+		/* check for '=' */
+		sep = strchr(name, '=');
+		if (!sep)
+			sep_exists = 0;
+		else
+			sep_exists = 1;
+	} else
+		sep_exists = 1;
+
+	/* Check if starting part if either of 'fslmc:' or 'name=', separator
+	 * exists.
+	 */
+	if (sep_exists) {
+		/* If either of "fslmc" or "name" are starting part */
+		if (!strncmp(name, RTE_STR(FSLMC_BUS_NAME),
+			     strlen(RTE_STR(FSLMC_BUS_NAME))) ||
+		   (!strncmp(name, "name", strlen("name")))) {
+			goto jump_out;
+		} else {
+			DPAA2_BUS_DEBUG("Invalid device for matching (%s).",
+					name);
+			goto err_out;
+		}
+	} else
+		sep = strdup(name);
+
+jump_out:
+	/* Validate device name */
+	if (strncmp("dpni", sep, 4) &&
+	    strncmp("dpseci", sep, 6) &&
+	    strncmp("dpcon", sep, 5) &&
+	    strncmp("dpbp", sep, 4) &&
+	    strncmp("dpio", sep, 4) &&
+	    strncmp("dpci", sep, 4) &&
+	    strncmp("dpmcp", sep, 5) &&
+	    strncmp("dpdmai", sep, 6) &&
+	    strncmp("dpdmux", sep, 6)) {
+		DPAA2_BUS_DEBUG("Unknown or unsupported device (%s)", sep);
+		goto err_out;
 	}
 
-	t_ptr = (char *)(sep + 1);
-
-	if (strncmp("dpni", t_ptr, 4) &&
-	    strncmp("dpseci", t_ptr, 6) &&
-	    strncmp("dpcon", t_ptr, 5) &&
-	    strncmp("dpbp", t_ptr, 4) &&
-	    strncmp("dpio", t_ptr, 4) &&
-	    strncmp("dpci", t_ptr, 4) &&
-	    strncmp("dpmcp", t_ptr, 5) &&
-	    strncmp("dpdmai", t_ptr, 6)) {
-		DPAA2_BUS_ERR("Unknown or unsupported device");
-		return -EINVAL;
-	}
-
-	t_ptr = strchr(name, '.');
-	if (!t_ptr) {
-		DPAA2_BUS_ERR("Incorrect device string observed (%s)", t_ptr);
-		return -EINVAL;
-	}
-
-	t_ptr = (char *)(t_ptr + 1);
-	if (sscanf(t_ptr, "%hu", &dev_id) <= 0) {
-		DPAA2_BUS_ERR("Incorrect device string observed (%s)", t_ptr);
-		return -EINVAL;
+	t_ptr = strchr(sep, '.');
+	if (!t_ptr || sscanf(t_ptr + 1, "%hu", &dev_id) != 1) {
+		DPAA2_BUS_ERR("Missing device id in device name (%s)", sep);
+		goto err_out;
 	}
 
 	if (addr)
-		strcpy(addr, (char *)(sep + 1));
+		strcpy(addr, sep);
+
 	return 0;
+err_out:
+	if (!sep_exists && sep)
+		free(sep);
+	return -EINVAL;
 }
 
 static int
@@ -293,8 +323,8 @@ rte_fslmc_scan(void)
 		goto scan_fail;
 
 	/* Scan devices on the group */
-	sprintf(fslmc_dirpath, "%s/%d/devices", VFIO_IOMMU_GROUP_PATH,
-		groupid);
+	snprintf(fslmc_dirpath, sizeof(fslmc_dirpath), "%s/%d/devices",
+			VFIO_IOMMU_GROUP_PATH, groupid);
 	dir = opendir(fslmc_dirpath);
 	if (!dir) {
 		DPAA2_BUS_ERR("Unable to open VFIO group directory");
@@ -327,7 +357,7 @@ scan_fail_cleanup:
 	/* Remove all devices in the list */
 	cleanup_fslmc_device_list();
 scan_fail:
-	DPAA2_BUS_DEBUG("FSLMC Bus Not Available. Skipping");
+	DPAA2_BUS_DEBUG("FSLMC Bus Not Available. Skipping (%d)", ret);
 	/* Irrespective of failure, scan only return success */
 	return 0;
 }
@@ -440,6 +470,13 @@ rte_fslmc_find_device(const struct rte_device *start, rte_dev_cmp_t cmp,
 	const struct rte_dpaa2_device *dstart;
 	struct rte_dpaa2_device *dev;
 
+	DPAA2_BUS_DEBUG("Finding a device named %s\n", (const char *)data);
+
+	/* find_device is always called with an opaque object which should be
+	 * passed along to the 'cmp' function iterating over all device obj
+	 * on the bus.
+	 */
+
 	if (start != NULL) {
 		dstart = RTE_DEV_TO_FSLMC_CONST(start);
 		dev = TAILQ_NEXT(dstart, next);
@@ -447,8 +484,11 @@ rte_fslmc_find_device(const struct rte_device *start, rte_dev_cmp_t cmp,
 		dev = TAILQ_FIRST(&rte_fslmc_bus.device_list);
 	}
 	while (dev != NULL) {
-		if (cmp(&dev->device, data) == 0)
+		if (cmp(&dev->device, data) == 0) {
+			DPAA2_BUS_DEBUG("Found device (%s)\n",
+					dev->device.name);
 			return &dev->device;
+		}
 		dev = TAILQ_NEXT(dev, next);
 	}
 
@@ -537,6 +577,57 @@ rte_dpaa2_get_iommu_class(void)
 	return RTE_IOVA_PA;
 }
 
+static int
+fslmc_bus_plug(struct rte_device *dev __rte_unused)
+{
+	/* No operation is performed while plugging the device */
+	return 0;
+}
+
+static int
+fslmc_bus_unplug(struct rte_device *dev __rte_unused)
+{
+	/* No operation is performed while unplugging the device */
+	return 0;
+}
+
+static void *
+fslmc_bus_dev_iterate(const void *start, const char *str,
+		      const struct rte_dev_iterator *it __rte_unused)
+{
+	const struct rte_dpaa2_device *dstart;
+	struct rte_dpaa2_device *dev;
+	char *dup, *dev_name = NULL;
+
+	/* Expectation is that device would be name=device_name */
+	if (strncmp(str, "name=", 5) != 0) {
+		DPAA2_BUS_DEBUG("Invalid device string (%s)\n", str);
+		return NULL;
+	}
+
+	/* Now that name=device_name format is available, split */
+	dup = strdup(str);
+	dev_name = dup + strlen("name=");
+
+	if (start != NULL) {
+		dstart = RTE_DEV_TO_FSLMC_CONST(start);
+		dev = TAILQ_NEXT(dstart, next);
+	} else {
+		dev = TAILQ_FIRST(&rte_fslmc_bus.device_list);
+	}
+
+	while (dev != NULL) {
+		if (strcmp(dev->device.name, dev_name) == 0) {
+			free(dup);
+			return &dev->device;
+		}
+		dev = TAILQ_NEXT(dev, next);
+	}
+
+	free(dup);
+	return NULL;
+}
+
 struct rte_fslmc_bus rte_fslmc_bus = {
 	.bus = {
 		.scan = rte_fslmc_scan,
@@ -544,6 +635,9 @@ struct rte_fslmc_bus rte_fslmc_bus = {
 		.parse = rte_fslmc_parse,
 		.find_device = rte_fslmc_find_device,
 		.get_iommu_class = rte_dpaa2_get_iommu_class,
+		.plug = fslmc_bus_plug,
+		.unplug = fslmc_bus_unplug,
+		.dev_iterate = fslmc_bus_dev_iterate,
 	},
 	.device_list = TAILQ_HEAD_INITIALIZER(rte_fslmc_bus.device_list),
 	.driver_list = TAILQ_HEAD_INITIALIZER(rte_fslmc_bus.driver_list),

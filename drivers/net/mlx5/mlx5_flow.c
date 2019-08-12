@@ -21,7 +21,6 @@
 
 #include <rte_common.h>
 #include <rte_ether.h>
-#include <rte_eth_ctrl.h>
 #include <rte_ethdev_driver.h>
 #include <rte_flow.h>
 #include <rte_flow_driver.h>
@@ -30,9 +29,10 @@
 
 #include "mlx5.h"
 #include "mlx5_defs.h"
-#include "mlx5_prm.h"
-#include "mlx5_glue.h"
 #include "mlx5_flow.h"
+#include "mlx5_glue.h"
+#include "mlx5_prm.h"
+#include "mlx5_rxtx.h"
 
 /* Dev ops structure defined in mlx5.c */
 extern const struct eth_dev_ops mlx5_dev_ops;
@@ -42,7 +42,6 @@ extern const struct eth_dev_ops mlx5_dev_ops_isolate;
 #ifdef HAVE_IBV_FLOW_DV_SUPPORT
 extern const struct mlx5_flow_driver_ops mlx5_flow_dv_drv_ops;
 #endif
-extern const struct mlx5_flow_driver_ops mlx5_flow_tcf_drv_ops;
 extern const struct mlx5_flow_driver_ops mlx5_flow_verbs_drv_ops;
 
 const struct mlx5_flow_driver_ops mlx5_flow_null_drv_ops;
@@ -52,7 +51,6 @@ const struct mlx5_flow_driver_ops *flow_drv_ops[] = {
 #ifdef HAVE_IBV_FLOW_DV_SUPPORT
 	[MLX5_FLOW_TYPE_DV] = &mlx5_flow_dv_drv_ops,
 #endif
-	[MLX5_FLOW_TYPE_TCF] = &mlx5_flow_tcf_drv_ops,
 	[MLX5_FLOW_TYPE_VERBS] = &mlx5_flow_verbs_drv_ops,
 	[MLX5_FLOW_TYPE_MAX] = &mlx5_flow_null_drv_ops
 };
@@ -129,7 +127,9 @@ static const struct rte_flow_expand_node mlx5_support_expansion[] = {
 		.next = RTE_FLOW_EXPAND_RSS_NEXT
 			(MLX5_EXPANSION_OUTER_IPV4_UDP,
 			 MLX5_EXPANSION_OUTER_IPV4_TCP,
-			 MLX5_EXPANSION_GRE),
+			 MLX5_EXPANSION_GRE,
+			 MLX5_EXPANSION_IPV4,
+			 MLX5_EXPANSION_IPV6),
 		.type = RTE_FLOW_ITEM_TYPE_IPV4,
 		.rss_types = ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4 |
 			ETH_RSS_NONFRAG_IPV4_OTHER,
@@ -147,7 +147,9 @@ static const struct rte_flow_expand_node mlx5_support_expansion[] = {
 	[MLX5_EXPANSION_OUTER_IPV6] = {
 		.next = RTE_FLOW_EXPAND_RSS_NEXT
 			(MLX5_EXPANSION_OUTER_IPV6_UDP,
-			 MLX5_EXPANSION_OUTER_IPV6_TCP),
+			 MLX5_EXPANSION_OUTER_IPV6_TCP,
+			 MLX5_EXPANSION_IPV4,
+			 MLX5_EXPANSION_IPV6),
 		.type = RTE_FLOW_ITEM_TYPE_IPV6,
 		.rss_types = ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6 |
 			ETH_RSS_NONFRAG_IPV6_OTHER,
@@ -300,6 +302,10 @@ static struct mlx5_flow_tunnel_info tunnels_info[] = {
 		.tunnel = MLX5_FLOW_LAYER_MPLS,
 		.ptype = RTE_PTYPE_TUNNEL_MPLS_IN_GRE,
 	},
+	{
+		.tunnel = MLX5_FLOW_LAYER_NVGRE,
+		.ptype = RTE_PTYPE_TUNNEL_NVGRE,
+	},
 };
 
 /**
@@ -315,6 +321,7 @@ static struct mlx5_flow_tunnel_info tunnels_info[] = {
 int
 mlx5_flow_discover_priorities(struct rte_eth_dev *dev)
 {
+	struct mlx5_priv *priv = dev->data->dev_private;
 	struct {
 		struct ibv_flow_attr attr;
 		struct ibv_flow_spec_eth eth;
@@ -322,6 +329,7 @@ mlx5_flow_discover_priorities(struct rte_eth_dev *dev)
 	} flow_attr = {
 		.attr = {
 			.num_of_specs = 2,
+			.port = (uint8_t)priv->ibv_port,
 		},
 		.eth = {
 			.type = IBV_FLOW_SPEC_ETH,
@@ -350,6 +358,7 @@ mlx5_flow_discover_priorities(struct rte_eth_dev *dev)
 		claim_zero(mlx5_glue->destroy_flow(flow));
 		priority = vprio[i];
 	}
+	mlx5_hrxq_drop_release(dev);
 	switch (priority) {
 	case 8:
 		priority = RTE_DIM(priority_map_3);
@@ -361,10 +370,9 @@ mlx5_flow_discover_priorities(struct rte_eth_dev *dev)
 		rte_errno = ENOTSUP;
 		DRV_LOG(ERR,
 			"port %u verbs maximum priority: %d expected 8/16",
-			dev->data->port_id, vprio[i]);
+			dev->data->port_id, priority);
 		return -rte_errno;
 	}
-	mlx5_hrxq_drop_release(dev);
 	DRV_LOG(INFO, "port %u flow maximum priority: %d",
 		dev->data->port_id, priority);
 	return priority;
@@ -387,7 +395,7 @@ uint32_t mlx5_flow_adjust_priority(struct rte_eth_dev *dev, int32_t priority,
 				   uint32_t subpriority)
 {
 	uint32_t res = 0;
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 
 	switch (priv->config.flow_prio) {
 	case RTE_DIM(priority_map_3):
@@ -473,7 +481,7 @@ mlx5_flow_item_acceptable(const struct rte_flow_item *item,
  *   Item hash fields.
  *
  * @return
- *   The hash fileds that should be used.
+ *   The hash fields that should be used.
  */
 uint64_t
 mlx5_flow_hashfields_adjust(struct mlx5_flow *dev_flow,
@@ -536,7 +544,7 @@ flow_rxq_tunnel_ptype_update(struct mlx5_rxq_ctrl *rxq_ctrl)
 static void
 flow_drv_rxq_flags_set(struct rte_eth_dev *dev, struct mlx5_flow *dev_flow)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	struct rte_flow *flow = dev_flow->flow;
 	const int mark = !!(flow->actions &
 			    (MLX5_FLOW_ACTION_FLAG | MLX5_FLOW_ACTION_MARK));
@@ -599,7 +607,7 @@ flow_rxq_flags_set(struct rte_eth_dev *dev, struct rte_flow *flow)
 static void
 flow_drv_rxq_flags_trim(struct rte_eth_dev *dev, struct mlx5_flow *dev_flow)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	struct rte_flow *flow = dev_flow->flow;
 	const int mark = !!(flow->actions &
 			    (MLX5_FLOW_ACTION_FLAG | MLX5_FLOW_ACTION_MARK));
@@ -661,7 +669,7 @@ flow_rxq_flags_trim(struct rte_eth_dev *dev, struct rte_flow *flow)
 static void
 flow_rxq_flags_clear(struct rte_eth_dev *dev)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	unsigned int i;
 
 	for (i = 0; i != priv->rxqs_n; ++i) {
@@ -786,7 +794,7 @@ mlx5_flow_validate_action_mark(const struct rte_flow_action *action,
  *   Pointer to error structure.
  *
  * @return
- *   0 on success, a negative errno value otherwise and rte_ernno is set.
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 int
 mlx5_flow_validate_action_drop(uint64_t action_flags,
@@ -829,7 +837,7 @@ mlx5_flow_validate_action_drop(uint64_t action_flags,
  *   Pointer to error structure.
  *
  * @return
- *   0 on success, a negative errno value otherwise and rte_ernno is set.
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 int
 mlx5_flow_validate_action_queue(const struct rte_flow_action *action,
@@ -838,7 +846,7 @@ mlx5_flow_validate_action_queue(const struct rte_flow_action *action,
 				const struct rte_flow_attr *attr,
 				struct rte_flow_error *error)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	const struct rte_flow_action_queue *queue = action->conf;
 
 	if (action_flags & MLX5_FLOW_FATE_ACTIONS)
@@ -846,6 +854,10 @@ mlx5_flow_validate_action_queue(const struct rte_flow_action *action,
 					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
 					  "can't have 2 fate actions in"
 					  " same flow");
+	if (!priv->rxqs_n)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
+					  NULL, "No Rx queues configured");
 	if (queue->index >= priv->rxqs_n)
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
@@ -875,21 +887,25 @@ mlx5_flow_validate_action_queue(const struct rte_flow_action *action,
  *   Pointer to the Ethernet device structure.
  * @param[in] attr
  *   Attributes of flow that includes this action.
+ * @param[in] item_flags
+ *   Items that were detected.
  * @param[out] error
  *   Pointer to error structure.
  *
  * @return
- *   0 on success, a negative errno value otherwise and rte_ernno is set.
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 int
 mlx5_flow_validate_action_rss(const struct rte_flow_action *action,
 			      uint64_t action_flags,
 			      struct rte_eth_dev *dev,
 			      const struct rte_flow_attr *attr,
+			      uint64_t item_flags,
 			      struct rte_flow_error *error)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	const struct rte_flow_action_rss *rss = action->conf;
+	int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
 	unsigned int i;
 
 	if (action_flags & MLX5_FLOW_FATE_ACTIONS)
@@ -939,6 +955,14 @@ mlx5_flow_validate_action_rss(const struct rte_flow_action *action,
 					  &rss->types,
 					  "some RSS protocols are not"
 					  " supported");
+	if (!priv->rxqs_n)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
+					  NULL, "No Rx queues configured");
+	if (!rss->queue_num)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
+					  NULL, "No queues configured");
 	for (i = 0; i != rss->queue_num; ++i) {
 		if (!(*priv->rxqs)[rss->queue[i]])
 			return rte_flow_error_set
@@ -950,6 +974,11 @@ mlx5_flow_validate_action_rss(const struct rte_flow_action *action,
 					  RTE_FLOW_ERROR_TYPE_ATTR_EGRESS, NULL,
 					  "rss action not supported for "
 					  "egress");
+	if (rss->level > 1 &&  !tunnel)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION_CONF, NULL,
+					  "inner RSS is not supported for "
+					  "non-tunnel flows");
 	return 0;
 }
 
@@ -964,7 +993,7 @@ mlx5_flow_validate_action_rss(const struct rte_flow_action *action,
  *   Pointer to error structure.
  *
  * @return
- *   0 on success, a negative errno value otherwise and rte_ernno is set.
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 int
 mlx5_flow_validate_action_count(struct rte_eth_dev *dev __rte_unused,
@@ -998,7 +1027,7 @@ mlx5_flow_validate_attributes(struct rte_eth_dev *dev,
 			      const struct rte_flow_attr *attributes,
 			      struct rte_flow_error *error)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	uint32_t priority_max = priv->config.flow_prio - 1;
 
 	if (attributes->group)
@@ -1014,7 +1043,7 @@ mlx5_flow_validate_attributes(struct rte_eth_dev *dev,
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ATTR_EGRESS, NULL,
 					  "egress is not supported");
-	if (attributes->transfer)
+	if (attributes->transfer && !priv->config.dv_esw_en)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ATTR_TRANSFER,
 					  NULL, "transfer is not supported");
@@ -1023,6 +1052,110 @@ mlx5_flow_validate_attributes(struct rte_eth_dev *dev,
 					  RTE_FLOW_ERROR_TYPE_ATTR_INGRESS,
 					  NULL,
 					  "ingress attribute is mandatory");
+	return 0;
+}
+
+/**
+ * Validate ICMP6 item.
+ *
+ * @param[in] item
+ *   Item specification.
+ * @param[in] item_flags
+ *   Bit-fields that holds the items detected until now.
+ * @param[out] error
+ *   Pointer to error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_flow_validate_item_icmp6(const struct rte_flow_item *item,
+			       uint64_t item_flags,
+			       uint8_t target_protocol,
+			       struct rte_flow_error *error)
+{
+	const struct rte_flow_item_icmp6 *mask = item->mask;
+	const int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
+	const uint64_t l3m = tunnel ? MLX5_FLOW_LAYER_INNER_L3_IPV6 :
+				      MLX5_FLOW_LAYER_OUTER_L3_IPV6;
+	const uint64_t l4m = tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
+				      MLX5_FLOW_LAYER_OUTER_L4;
+	int ret;
+
+	if (target_protocol != 0xFF && target_protocol != IPPROTO_ICMPV6)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "protocol filtering not compatible"
+					  " with ICMP6 layer");
+	if (!(item_flags & l3m))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "IPv6 is mandatory to filter on"
+					  " ICMP6");
+	if (item_flags & l4m)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "multiple L4 layers not supported");
+	if (!mask)
+		mask = &rte_flow_item_icmp6_mask;
+	ret = mlx5_flow_item_acceptable
+		(item, (const uint8_t *)mask,
+		 (const uint8_t *)&rte_flow_item_icmp6_mask,
+		 sizeof(struct rte_flow_item_icmp6), error);
+	if (ret < 0)
+		return ret;
+	return 0;
+}
+
+/**
+ * Validate ICMP item.
+ *
+ * @param[in] item
+ *   Item specification.
+ * @param[in] item_flags
+ *   Bit-fields that holds the items detected until now.
+ * @param[out] error
+ *   Pointer to error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_flow_validate_item_icmp(const struct rte_flow_item *item,
+			     uint64_t item_flags,
+			     uint8_t target_protocol,
+			     struct rte_flow_error *error)
+{
+	const struct rte_flow_item_icmp *mask = item->mask;
+	const int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
+	const uint64_t l3m = tunnel ? MLX5_FLOW_LAYER_INNER_L3_IPV4 :
+				      MLX5_FLOW_LAYER_OUTER_L3_IPV4;
+	const uint64_t l4m = tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
+				      MLX5_FLOW_LAYER_OUTER_L4;
+	int ret;
+
+	if (target_protocol != 0xFF && target_protocol != IPPROTO_ICMP)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "protocol filtering not compatible"
+					  " with ICMP layer");
+	if (!(item_flags & l3m))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "IPv4 is mandatory to filter"
+					  " on ICMP");
+	if (item_flags & l4m)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "multiple L4 layers not supported");
+	if (!mask)
+		mask = &rte_flow_item_icmp_mask;
+	ret = mlx5_flow_item_acceptable
+		(item, (const uint8_t *)mask,
+		 (const uint8_t *)&rte_flow_item_icmp_mask,
+		 sizeof(struct rte_flow_item_icmp), error);
+	if (ret < 0)
+		return ret;
 	return 0;
 }
 
@@ -1075,6 +1208,8 @@ mlx5_flow_validate_item_eth(const struct rte_flow_item *item,
  *   Item specification.
  * @param[in] item_flags
  *   Bit-fields that holds the items detected until now.
+ * @param[in] dev
+ *   Ethernet device flow is being created on.
  * @param[out] error
  *   Pointer to error structure.
  *
@@ -1084,13 +1219,14 @@ mlx5_flow_validate_item_eth(const struct rte_flow_item *item,
 int
 mlx5_flow_validate_item_vlan(const struct rte_flow_item *item,
 			     uint64_t item_flags,
+			     struct rte_eth_dev *dev,
 			     struct rte_flow_error *error)
 {
 	const struct rte_flow_item_vlan *spec = item->spec;
 	const struct rte_flow_item_vlan *mask = item->mask;
 	const struct rte_flow_item_vlan nic_mask = {
-		.tci = RTE_BE16(0x0fff),
-		.inner_type = RTE_BE16(0xffff),
+		.tci = RTE_BE16(UINT16_MAX),
+		.inner_type = RTE_BE16(UINT16_MAX),
 	};
 	uint16_t vlan_tag = 0;
 	const int tunnel = !!(item_flags & MLX5_FLOW_LAYER_TUNNEL);
@@ -1118,6 +1254,25 @@ mlx5_flow_validate_item_vlan(const struct rte_flow_item *item,
 					error);
 	if (ret)
 		return ret;
+	if (!tunnel && mask->tci != RTE_BE16(0x0fff)) {
+		struct mlx5_priv *priv = dev->data->dev_private;
+
+		if (priv->vmwa_context) {
+			/*
+			 * Non-NULL context means we have a virtual machine
+			 * and SR-IOV enabled, we have to create VLAN interface
+			 * to make hypervisor to setup E-Switch vport
+			 * context correctly. We avoid creating the multiple
+			 * VLAN interfaces, so we cannot support VLAN tag mask.
+			 */
+			return rte_flow_error_set(error, EINVAL,
+						  RTE_FLOW_ERROR_TYPE_ITEM,
+						  item,
+						  "VLAN tag mask is not"
+						  " supported in virtual"
+						  " environment");
+		}
+	}
 	if (spec) {
 		vlan_tag = spec->tci;
 		vlan_tag &= mask->tci;
@@ -1141,6 +1296,9 @@ mlx5_flow_validate_item_vlan(const struct rte_flow_item *item,
  *   Item specification.
  * @param[in] item_flags
  *   Bit-fields that holds the items detected until now.
+ * @param[in] acc_mask
+ *   Acceptable mask, if NULL default internal default mask
+ *   will be used to check whether item fields are supported.
  * @param[out] error
  *   Pointer to error structure.
  *
@@ -1150,9 +1308,11 @@ mlx5_flow_validate_item_vlan(const struct rte_flow_item *item,
 int
 mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 			     uint64_t item_flags,
+			     const struct rte_flow_item_ipv4 *acc_mask,
 			     struct rte_flow_error *error)
 {
 	const struct rte_flow_item_ipv4 *mask = item->mask;
+	const struct rte_flow_item_ipv4 *spec = item->spec;
 	const struct rte_flow_item_ipv4 nic_mask = {
 		.hdr = {
 			.src_addr = RTE_BE32(0xffffffff),
@@ -1167,7 +1327,24 @@ mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 	const uint64_t l4m = tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
 				      MLX5_FLOW_LAYER_OUTER_L4;
 	int ret;
+	uint8_t next_proto = 0xFF;
 
+	if (item_flags & MLX5_FLOW_LAYER_IPIP) {
+		if (mask && spec)
+			next_proto = mask->hdr.next_proto_id &
+				     spec->hdr.next_proto_id;
+		if (next_proto == IPPROTO_IPIP || next_proto == IPPROTO_IPV6)
+			return rte_flow_error_set(error, EINVAL,
+						  RTE_FLOW_ERROR_TYPE_ITEM,
+						  item,
+						  "multiple tunnel "
+						  "not supported");
+	}
+	if (item_flags & MLX5_FLOW_LAYER_IPV6_ENCAP)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "wrong tunnel type - IPv6 specified "
+					  "but IPv4 item provided");
 	if (item_flags & l3m)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
@@ -1176,6 +1353,11 @@ mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "L3 cannot follow an L4 layer.");
+	else if ((item_flags & MLX5_FLOW_LAYER_NVGRE) &&
+		  !(item_flags & MLX5_FLOW_LAYER_INNER_L2))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "L3 cannot follow an NVGRE layer.");
 	if (!mask)
 		mask = &rte_flow_item_ipv4_mask;
 	else if (mask->hdr.next_proto_id != 0 &&
@@ -1185,7 +1367,8 @@ mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 					  "partial mask is not supported"
 					  " for protocol");
 	ret = mlx5_flow_item_acceptable(item, (const uint8_t *)mask,
-					(const uint8_t *)&nic_mask,
+					acc_mask ? (const uint8_t *)acc_mask
+						 : (const uint8_t *)&nic_mask,
 					sizeof(struct rte_flow_item_ipv4),
 					error);
 	if (ret < 0)
@@ -1200,6 +1383,9 @@ mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
  *   Item specification.
  * @param[in] item_flags
  *   Bit-fields that holds the items detected until now.
+ * @param[in] acc_mask
+ *   Acceptable mask, if NULL default internal default mask
+ *   will be used to check whether item fields are supported.
  * @param[out] error
  *   Pointer to error structure.
  *
@@ -1209,9 +1395,11 @@ mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 int
 mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
 			     uint64_t item_flags,
+			     const struct rte_flow_item_ipv6 *acc_mask,
 			     struct rte_flow_error *error)
 {
 	const struct rte_flow_item_ipv6 *mask = item->mask;
+	const struct rte_flow_item_ipv6 *spec = item->spec;
 	const struct rte_flow_item_ipv6 nic_mask = {
 		.hdr = {
 			.src_addr =
@@ -1231,7 +1419,23 @@ mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
 	const uint64_t l4m = tunnel ? MLX5_FLOW_LAYER_INNER_L4 :
 				      MLX5_FLOW_LAYER_OUTER_L4;
 	int ret;
+	uint8_t next_proto = 0xFF;
 
+	if (item_flags & MLX5_FLOW_LAYER_IPV6_ENCAP) {
+		if (mask && spec)
+			next_proto = mask->hdr.proto & spec->hdr.proto;
+		if (next_proto == IPPROTO_IPIP || next_proto == IPPROTO_IPV6)
+			return rte_flow_error_set(error, EINVAL,
+						  RTE_FLOW_ERROR_TYPE_ITEM,
+						  item,
+						  "multiple tunnel "
+						  "not supported");
+	}
+	if (item_flags & MLX5_FLOW_LAYER_IPIP)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "wrong tunnel type - IPv4 specified "
+					  "but IPv6 item provided");
 	if (item_flags & l3m)
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
@@ -1240,10 +1444,16 @@ mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "L3 cannot follow an L4 layer.");
+	else if ((item_flags & MLX5_FLOW_LAYER_NVGRE) &&
+		  !(item_flags & MLX5_FLOW_LAYER_INNER_L2))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "L3 cannot follow an NVGRE layer.");
 	if (!mask)
 		mask = &rte_flow_item_ipv6_mask;
 	ret = mlx5_flow_item_acceptable(item, (const uint8_t *)mask,
-					(const uint8_t *)&nic_mask,
+					acc_mask ? (const uint8_t *)acc_mask
+						 : (const uint8_t *)&nic_mask,
 					sizeof(struct rte_flow_item_ipv6),
 					error);
 	if (ret < 0)
@@ -1261,7 +1471,7 @@ mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
  * @param[in] target_protocol
  *   The next protocol in the previous item.
  * @param[in] flow_mask
- *   mlx5 flow-specific (TCF, DV, verbs, etc.) supported header fields mask.
+ *   mlx5 flow-specific (DV, verbs, etc.) supported header fields mask.
  * @param[out] error
  *   Pointer to error structure.
  *
@@ -1462,7 +1672,7 @@ mlx5_flow_validate_item_vxlan_gpe(const struct rte_flow_item *item,
 				  struct rte_eth_dev *dev,
 				  struct rte_flow_error *error)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	const struct rte_flow_item_vxlan_gpe *spec = item->spec;
 	const struct rte_flow_item_vxlan_gpe *mask = item->mask;
 	int ret;
@@ -1531,6 +1741,61 @@ mlx5_flow_validate_item_vxlan_gpe(const struct rte_flow_item *item,
 					  " defined");
 	return 0;
 }
+/**
+ * Validate GRE Key item.
+ *
+ * @param[in] item
+ *   Item specification.
+ * @param[in] item_flags
+ *   Bit flags to mark detected items.
+ * @param[in] gre_item
+ *   Pointer to gre_item
+ * @param[out] error
+ *   Pointer to error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_flow_validate_item_gre_key(const struct rte_flow_item *item,
+				uint64_t item_flags,
+				const struct rte_flow_item *gre_item,
+				struct rte_flow_error *error)
+{
+	const rte_be32_t *mask = item->mask;
+	int ret = 0;
+	rte_be32_t gre_key_default_mask = RTE_BE32(UINT32_MAX);
+	const struct rte_flow_item_gre *gre_spec = gre_item->spec;
+	const struct rte_flow_item_gre *gre_mask = gre_item->mask;
+
+	if (item_flags & MLX5_FLOW_LAYER_GRE_KEY)
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "Multiple GRE key not support");
+	if (!(item_flags & MLX5_FLOW_LAYER_GRE))
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "No preceding GRE header");
+	if (item_flags & MLX5_FLOW_LAYER_INNER)
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "GRE key following a wrong item");
+	if (!gre_mask)
+		gre_mask = &rte_flow_item_gre_mask;
+	if (gre_spec && (gre_mask->c_rsvd0_ver & RTE_BE16(0x2000)) &&
+			 !(gre_spec->c_rsvd0_ver & RTE_BE16(0x2000)))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "Key bit must be on");
+
+	if (!mask)
+		mask = &gre_key_default_mask;
+	ret = mlx5_flow_item_acceptable
+		(item, (const uint8_t *)mask,
+		 (const uint8_t *)&gre_key_default_mask,
+		 sizeof(rte_be32_t), error);
+	return ret;
+}
 
 /**
  * Validate GRE item.
@@ -1556,6 +1821,10 @@ mlx5_flow_validate_item_gre(const struct rte_flow_item *item,
 	const struct rte_flow_item_gre *spec __rte_unused = item->spec;
 	const struct rte_flow_item_gre *mask = item->mask;
 	int ret;
+	const struct rte_flow_item_gre nic_mask = {
+		.c_rsvd0_ver = RTE_BE16(0xB000),
+		.protocol = RTE_BE16(UINT16_MAX),
+	};
 
 	if (target_protocol != 0xff && target_protocol != IPPROTO_GRE)
 		return rte_flow_error_set(error, EINVAL,
@@ -1575,10 +1844,11 @@ mlx5_flow_validate_item_gre(const struct rte_flow_item *item,
 		mask = &rte_flow_item_gre_mask;
 	ret = mlx5_flow_item_acceptable
 		(item, (const uint8_t *)mask,
-		 (const uint8_t *)&rte_flow_item_gre_mask,
+		 (const uint8_t *)&nic_mask,
 		 sizeof(struct rte_flow_item_gre), error);
 	if (ret < 0)
 		return ret;
+#ifndef HAVE_MLX5DV_DR
 #ifndef HAVE_IBV_DEVICE_MPLS_SUPPORT
 	if (spec && (spec->protocol & mask->protocol))
 		return rte_flow_error_set(error, ENOTSUP,
@@ -1586,6 +1856,7 @@ mlx5_flow_validate_item_gre(const struct rte_flow_item *item,
 					  "without MPLS support the"
 					  " specification cannot be used for"
 					  " filtering");
+#endif
 #endif
 	return 0;
 }
@@ -1616,7 +1887,7 @@ mlx5_flow_validate_item_mpls(struct rte_eth_dev *dev __rte_unused,
 {
 #ifdef HAVE_IBV_DEVICE_MPLS_SUPPORT
 	const struct rte_flow_item_mpls *mask = item->mask;
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	int ret;
 
 	if (!priv->config.mpls_en)
@@ -1656,24 +1927,74 @@ mlx5_flow_validate_item_mpls(struct rte_eth_dev *dev __rte_unused,
 				  " update.");
 }
 
+/**
+ * Validate NVGRE item.
+ *
+ * @param[in] item
+ *   Item specification.
+ * @param[in] item_flags
+ *   Bit flags to mark detected items.
+ * @param[in] target_protocol
+ *   The next protocol in the previous item.
+ * @param[out] error
+ *   Pointer to error structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_flow_validate_item_nvgre(const struct rte_flow_item *item,
+			      uint64_t item_flags,
+			      uint8_t target_protocol,
+			      struct rte_flow_error *error)
+{
+	const struct rte_flow_item_nvgre *mask = item->mask;
+	int ret;
+
+	if (target_protocol != 0xff && target_protocol != IPPROTO_GRE)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "protocol filtering not compatible"
+					  " with this GRE layer");
+	if (item_flags & MLX5_FLOW_LAYER_TUNNEL)
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "multiple tunnel layers not"
+					  " supported");
+	if (!(item_flags & MLX5_FLOW_LAYER_OUTER_L3))
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "L3 Layer is missing");
+	if (!mask)
+		mask = &rte_flow_item_nvgre_mask;
+	ret = mlx5_flow_item_acceptable
+		(item, (const uint8_t *)mask,
+		 (const uint8_t *)&rte_flow_item_nvgre_mask,
+		 sizeof(struct rte_flow_item_nvgre), error);
+	if (ret < 0)
+		return ret;
+	return 0;
+}
+
 static int
 flow_null_validate(struct rte_eth_dev *dev __rte_unused,
 		   const struct rte_flow_attr *attr __rte_unused,
 		   const struct rte_flow_item items[] __rte_unused,
 		   const struct rte_flow_action actions[] __rte_unused,
-		   struct rte_flow_error *error __rte_unused)
+		   struct rte_flow_error *error)
 {
-	rte_errno = ENOTSUP;
-	return -rte_errno;
+	return rte_flow_error_set(error, ENOTSUP,
+				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, NULL);
 }
 
 static struct mlx5_flow *
 flow_null_prepare(const struct rte_flow_attr *attr __rte_unused,
 		  const struct rte_flow_item items[] __rte_unused,
 		  const struct rte_flow_action actions[] __rte_unused,
-		  struct rte_flow_error *error __rte_unused)
+		  struct rte_flow_error *error)
 {
-	rte_errno = ENOTSUP;
+	rte_flow_error_set(error, ENOTSUP,
+			   RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, NULL);
 	return NULL;
 }
 
@@ -1683,19 +2004,19 @@ flow_null_translate(struct rte_eth_dev *dev __rte_unused,
 		    const struct rte_flow_attr *attr __rte_unused,
 		    const struct rte_flow_item items[] __rte_unused,
 		    const struct rte_flow_action actions[] __rte_unused,
-		    struct rte_flow_error *error __rte_unused)
+		    struct rte_flow_error *error)
 {
-	rte_errno = ENOTSUP;
-	return -rte_errno;
+	return rte_flow_error_set(error, ENOTSUP,
+				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, NULL);
 }
 
 static int
 flow_null_apply(struct rte_eth_dev *dev __rte_unused,
 		struct rte_flow *flow __rte_unused,
-		struct rte_flow_error *error __rte_unused)
+		struct rte_flow_error *error)
 {
-	rte_errno = ENOTSUP;
-	return -rte_errno;
+	return rte_flow_error_set(error, ENOTSUP,
+				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, NULL);
 }
 
 static void
@@ -1715,10 +2036,10 @@ flow_null_query(struct rte_eth_dev *dev __rte_unused,
 		struct rte_flow *flow __rte_unused,
 		const struct rte_flow_action *actions __rte_unused,
 		void *data __rte_unused,
-		struct rte_flow_error *error __rte_unused)
+		struct rte_flow_error *error)
 {
-	rte_errno = ENOTSUP;
-	return -rte_errno;
+	return rte_flow_error_set(error, ENOTSUP,
+				  RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, NULL);
 }
 
 /* Void driver to protect from null pointer reference. */
@@ -1747,12 +2068,12 @@ const struct mlx5_flow_driver_ops mlx5_flow_null_drv_ops = {
 static enum mlx5_flow_drv_type
 flow_get_drv_type(struct rte_eth_dev *dev, const struct rte_flow_attr *attr)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	enum mlx5_flow_drv_type type = MLX5_FLOW_TYPE_MAX;
 
-	if (attr->transfer)
-		type = MLX5_FLOW_TYPE_TCF;
-	else
+	if (attr->transfer && priv->config.dv_esw_en)
+		type = MLX5_FLOW_TYPE_DV;
+	if (!attr->transfer)
 		type = priv->config.dv_flow_en ? MLX5_FLOW_TYPE_DV :
 						 MLX5_FLOW_TYPE_VERBS;
 	return type;
@@ -1776,7 +2097,7 @@ flow_get_drv_type(struct rte_eth_dev *dev, const struct rte_flow_attr *attr)
  *   Pointer to the error structure.
  *
  * @return
- *   0 on success, a negative errno value otherwise and rte_ernno is set.
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 static inline int
 flow_drv_validate(struct rte_eth_dev *dev,
@@ -1799,7 +2120,7 @@ flow_drv_validate(struct rte_eth_dev *dev,
  * initializes the device flow and returns the pointer.
  *
  * @note
- *   This function initializes device flow structure such as dv, tcf or verbs in
+ *   This function initializes device flow structure such as dv or verbs in
  *   struct mlx5_flow. However, it is caller's responsibility to initialize the
  *   rest. For example, adding returning device flow to flow->dev_flow list and
  *   setting backward reference to the flow should be done out of this function.
@@ -1815,7 +2136,7 @@ flow_drv_validate(struct rte_eth_dev *dev,
  *   Pointer to the error structure.
  *
  * @return
- *   Pointer to device flow on success, otherwise NULL and rte_ernno is set.
+ *   Pointer to device flow on success, otherwise NULL and rte_errno is set.
  */
 static inline struct mlx5_flow *
 flow_drv_prepare(const struct rte_flow *flow,
@@ -1859,7 +2180,7 @@ flow_drv_prepare(const struct rte_flow *flow,
  *   Pointer to the error structure.
  *
  * @return
- *   0 on success, a negative errno value otherwise and rte_ernno is set.
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 static inline int
 flow_drv_translate(struct rte_eth_dev *dev, struct mlx5_flow *dev_flow,
@@ -2059,7 +2380,13 @@ flow_list_create(struct rte_eth_dev *dev, struct mlx5_flows *list,
 	else
 		flow_size += RTE_ALIGN_CEIL(sizeof(uint16_t), sizeof(void *));
 	flow = rte_calloc(__func__, 1, flow_size, 0);
+	if (!flow) {
+		rte_errno = ENOMEM;
+		return NULL;
+	}
 	flow->drv_type = flow_get_drv_type(dev, attr);
+	flow->ingress = attr->ingress;
+	flow->transfer = attr->transfer;
 	assert(flow->drv_type > MLX5_FLOW_TYPE_MIN &&
 	       flow->drv_type < MLX5_FLOW_TYPE_MAX);
 	flow->queue = (void *)(flow + 1);
@@ -2121,8 +2448,9 @@ mlx5_flow_create(struct rte_eth_dev *dev,
 		 const struct rte_flow_action actions[],
 		 struct rte_flow_error *error)
 {
-	return flow_list_create(dev,
-				&((struct priv *)dev->data->dev_private)->flows,
+	struct mlx5_priv *priv = dev->data->dev_private;
+
+	return flow_list_create(dev, &priv->flows,
 				attr, items, actions, error);
 }
 
@@ -2232,7 +2560,7 @@ error:
 int
 mlx5_flow_verify(struct rte_eth_dev *dev)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	struct rte_flow *flow;
 	int ret = 0;
 
@@ -2268,7 +2596,7 @@ mlx5_ctrl_flow_vlan(struct rte_eth_dev *dev,
 		    struct rte_flow_item_vlan *vlan_spec,
 		    struct rte_flow_item_vlan *vlan_mask)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	const struct rte_flow_attr attr = {
 		.ingress = 1,
 		.priority = MLX5_FLOW_PRIO_RSVD,
@@ -2314,9 +2642,8 @@ mlx5_ctrl_flow_vlan(struct rte_eth_dev *dev,
 	struct rte_flow_error error;
 	unsigned int i;
 
-	if (!priv->reta_idx_n) {
-		rte_errno = EINVAL;
-		return -rte_errno;
+	if (!priv->reta_idx_n || !priv->rxqs_n) {
+		return 0;
 	}
 	for (i = 0; i != priv->reta_idx_n; ++i)
 		queue[i] = (*priv->reta_idx)[i];
@@ -2359,7 +2686,7 @@ mlx5_flow_destroy(struct rte_eth_dev *dev,
 		  struct rte_flow *flow,
 		  struct rte_flow_error *error __rte_unused)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 
 	flow_list_destroy(dev, &priv->flows, flow);
 	return 0;
@@ -2375,7 +2702,7 @@ int
 mlx5_flow_flush(struct rte_eth_dev *dev,
 		struct rte_flow_error *error __rte_unused)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 
 	mlx5_flow_list_flush(dev, &priv->flows);
 	return 0;
@@ -2392,7 +2719,7 @@ mlx5_flow_isolate(struct rte_eth_dev *dev,
 		  int enable,
 		  struct rte_flow_error *error)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 
 	if (dev->data->dev_started) {
 		rte_flow_error_set(error, EBUSY,
@@ -2470,7 +2797,7 @@ flow_fdir_filter_convert(struct rte_eth_dev *dev,
 			 const struct rte_eth_fdir_filter *fdir_filter,
 			 struct mlx5_fdir *attributes)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	const struct rte_eth_fdir_input *input = &fdir_filter->input;
 	const struct rte_eth_fdir_masks *mask =
 		&dev->data->dev_conf.fdir_conf.mask;
@@ -2513,13 +2840,13 @@ flow_fdir_filter_convert(struct rte_eth_dev *dev,
 	case RTE_ETH_FLOW_NONFRAG_IPV4_UDP:
 	case RTE_ETH_FLOW_NONFRAG_IPV4_TCP:
 	case RTE_ETH_FLOW_NONFRAG_IPV4_OTHER:
-		attributes->l3.ipv4.hdr = (struct ipv4_hdr){
+		attributes->l3.ipv4.hdr = (struct rte_ipv4_hdr){
 			.src_addr = input->flow.ip4_flow.src_ip,
 			.dst_addr = input->flow.ip4_flow.dst_ip,
 			.time_to_live = input->flow.ip4_flow.ttl,
 			.type_of_service = input->flow.ip4_flow.tos,
 		};
-		attributes->l3_mask.ipv4.hdr = (struct ipv4_hdr){
+		attributes->l3_mask.ipv4.hdr = (struct rte_ipv4_hdr){
 			.src_addr = mask->ipv4_mask.src_ip,
 			.dst_addr = mask->ipv4_mask.dst_ip,
 			.time_to_live = mask->ipv4_mask.ttl,
@@ -2535,7 +2862,7 @@ flow_fdir_filter_convert(struct rte_eth_dev *dev,
 	case RTE_ETH_FLOW_NONFRAG_IPV6_UDP:
 	case RTE_ETH_FLOW_NONFRAG_IPV6_TCP:
 	case RTE_ETH_FLOW_NONFRAG_IPV6_OTHER:
-		attributes->l3.ipv6.hdr = (struct ipv6_hdr){
+		attributes->l3.ipv6.hdr = (struct rte_ipv6_hdr){
 			.hop_limits = input->flow.ipv6_flow.hop_limits,
 			.proto = input->flow.ipv6_flow.proto,
 		};
@@ -2567,11 +2894,11 @@ flow_fdir_filter_convert(struct rte_eth_dev *dev,
 	/* Handle L4. */
 	switch (fdir_filter->input.flow_type) {
 	case RTE_ETH_FLOW_NONFRAG_IPV4_UDP:
-		attributes->l4.udp.hdr = (struct udp_hdr){
+		attributes->l4.udp.hdr = (struct rte_udp_hdr){
 			.src_port = input->flow.udp4_flow.src_port,
 			.dst_port = input->flow.udp4_flow.dst_port,
 		};
-		attributes->l4_mask.udp.hdr = (struct udp_hdr){
+		attributes->l4_mask.udp.hdr = (struct rte_udp_hdr){
 			.src_port = mask->src_port_mask,
 			.dst_port = mask->dst_port_mask,
 		};
@@ -2582,11 +2909,11 @@ flow_fdir_filter_convert(struct rte_eth_dev *dev,
 		};
 		break;
 	case RTE_ETH_FLOW_NONFRAG_IPV4_TCP:
-		attributes->l4.tcp.hdr = (struct tcp_hdr){
+		attributes->l4.tcp.hdr = (struct rte_tcp_hdr){
 			.src_port = input->flow.tcp4_flow.src_port,
 			.dst_port = input->flow.tcp4_flow.dst_port,
 		};
-		attributes->l4_mask.tcp.hdr = (struct tcp_hdr){
+		attributes->l4_mask.tcp.hdr = (struct rte_tcp_hdr){
 			.src_port = mask->src_port_mask,
 			.dst_port = mask->dst_port_mask,
 		};
@@ -2597,11 +2924,11 @@ flow_fdir_filter_convert(struct rte_eth_dev *dev,
 		};
 		break;
 	case RTE_ETH_FLOW_NONFRAG_IPV6_UDP:
-		attributes->l4.udp.hdr = (struct udp_hdr){
+		attributes->l4.udp.hdr = (struct rte_udp_hdr){
 			.src_port = input->flow.udp6_flow.src_port,
 			.dst_port = input->flow.udp6_flow.dst_port,
 		};
-		attributes->l4_mask.udp.hdr = (struct udp_hdr){
+		attributes->l4_mask.udp.hdr = (struct rte_udp_hdr){
 			.src_port = mask->src_port_mask,
 			.dst_port = mask->dst_port_mask,
 		};
@@ -2612,11 +2939,11 @@ flow_fdir_filter_convert(struct rte_eth_dev *dev,
 		};
 		break;
 	case RTE_ETH_FLOW_NONFRAG_IPV6_TCP:
-		attributes->l4.tcp.hdr = (struct tcp_hdr){
+		attributes->l4.tcp.hdr = (struct rte_tcp_hdr){
 			.src_port = input->flow.tcp6_flow.src_port,
 			.dst_port = input->flow.tcp6_flow.dst_port,
 		};
-		attributes->l4_mask.tcp.hdr = (struct tcp_hdr){
+		attributes->l4_mask.tcp.hdr = (struct rte_tcp_hdr){
 			.src_port = mask->src_port_mask,
 			.dst_port = mask->dst_port_mask,
 		};
@@ -2687,7 +3014,7 @@ flow_fdir_cmp(const struct mlx5_fdir *f1, const struct mlx5_fdir *f2)
 static struct rte_flow *
 flow_fdir_filter_lookup(struct rte_eth_dev *dev, struct mlx5_fdir *fdir_flow)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	struct rte_flow *flow = NULL;
 
 	assert(fdir_flow);
@@ -2716,7 +3043,7 @@ static int
 flow_fdir_filter_add(struct rte_eth_dev *dev,
 		     const struct rte_eth_fdir_filter *fdir_filter)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	struct mlx5_fdir *fdir_flow;
 	struct rte_flow *flow;
 	int ret;
@@ -2763,7 +3090,7 @@ static int
 flow_fdir_filter_delete(struct rte_eth_dev *dev,
 			const struct rte_eth_fdir_filter *fdir_filter)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 	struct rte_flow *flow;
 	struct mlx5_fdir fdir_flow = {
 		.attr.group = 0,
@@ -2816,7 +3143,7 @@ flow_fdir_filter_update(struct rte_eth_dev *dev,
 static void
 flow_fdir_filter_flush(struct rte_eth_dev *dev)
 {
-	struct priv *priv = dev->data->dev_private;
+	struct mlx5_priv *priv = dev->data->dev_private;
 
 	mlx5_flow_list_flush(dev, &priv->flows);
 }
@@ -2935,4 +3262,151 @@ mlx5_dev_filter_ctrl(struct rte_eth_dev *dev,
 		return -rte_errno;
 	}
 	return 0;
+}
+
+#define MLX5_POOL_QUERY_FREQ_US 1000000
+
+/**
+ * Set the periodic procedure for triggering asynchronous batch queries for all
+ * the counter pools.
+ *
+ * @param[in] sh
+ *   Pointer to mlx5_ibv_shared object.
+ */
+void
+mlx5_set_query_alarm(struct mlx5_ibv_shared *sh)
+{
+	struct mlx5_pools_container *cont = MLX5_CNT_CONTAINER(sh, 0, 0);
+	uint32_t pools_n = rte_atomic16_read(&cont->n_valid);
+	uint32_t us;
+
+	cont = MLX5_CNT_CONTAINER(sh, 1, 0);
+	pools_n += rte_atomic16_read(&cont->n_valid);
+	us = MLX5_POOL_QUERY_FREQ_US / pools_n;
+	DRV_LOG(DEBUG, "Set alarm for %u pools each %u us\n", pools_n, us);
+	if (rte_eal_alarm_set(us, mlx5_flow_query_alarm, sh)) {
+		sh->cmng.query_thread_on = 0;
+		DRV_LOG(ERR, "Cannot reinitialize query alarm\n");
+	} else {
+		sh->cmng.query_thread_on = 1;
+	}
+}
+
+/**
+ * The periodic procedure for triggering asynchronous batch queries for all the
+ * counter pools. This function is probably called by the host thread.
+ *
+ * @param[in] arg
+ *   The parameter for the alarm process.
+ */
+void
+mlx5_flow_query_alarm(void *arg)
+{
+	struct mlx5_ibv_shared *sh = arg;
+	struct mlx5_devx_obj *dcs;
+	uint16_t offset;
+	int ret;
+	uint8_t batch = sh->cmng.batch;
+	uint16_t pool_index = sh->cmng.pool_index;
+	struct mlx5_pools_container *cont;
+	struct mlx5_pools_container *mcont;
+	struct mlx5_flow_counter_pool *pool;
+
+	if (sh->cmng.pending_queries >= MLX5_MAX_PENDING_QUERIES)
+		goto set_alarm;
+next_container:
+	cont = MLX5_CNT_CONTAINER(sh, batch, 1);
+	mcont = MLX5_CNT_CONTAINER(sh, batch, 0);
+	/* Check if resize was done and need to flip a container. */
+	if (cont != mcont) {
+		if (cont->pools) {
+			/* Clean the old container. */
+			rte_free(cont->pools);
+			memset(cont, 0, sizeof(*cont));
+		}
+		rte_cio_wmb();
+		 /* Flip the host container. */
+		sh->cmng.mhi[batch] ^= (uint8_t)2;
+		cont = mcont;
+	}
+	if (!cont->pools) {
+		/* 2 empty containers case is unexpected. */
+		if (unlikely(batch != sh->cmng.batch))
+			goto set_alarm;
+		batch ^= 0x1;
+		pool_index = 0;
+		goto next_container;
+	}
+	pool = cont->pools[pool_index];
+	if (pool->raw_hw)
+		/* There is a pool query in progress. */
+		goto set_alarm;
+	pool->raw_hw =
+		LIST_FIRST(&sh->cmng.free_stat_raws);
+	if (!pool->raw_hw)
+		/* No free counter statistics raw memory. */
+		goto set_alarm;
+	dcs = (struct mlx5_devx_obj *)(uintptr_t)rte_atomic64_read
+							      (&pool->a64_dcs);
+	offset = batch ? 0 : dcs->id % MLX5_COUNTERS_PER_POOL;
+	ret = mlx5_devx_cmd_flow_counter_query(dcs, 0, MLX5_COUNTERS_PER_POOL -
+					       offset, NULL, NULL,
+					       pool->raw_hw->mem_mng->dm->id,
+					       (void *)(uintptr_t)
+					       (pool->raw_hw->data + offset),
+					       sh->devx_comp,
+					       (uint64_t)(uintptr_t)pool);
+	if (ret) {
+		DRV_LOG(ERR, "Failed to trigger asynchronous query for dcs ID"
+			" %d\n", pool->min_dcs->id);
+		pool->raw_hw = NULL;
+		goto set_alarm;
+	}
+	pool->raw_hw->min_dcs_id = dcs->id;
+	LIST_REMOVE(pool->raw_hw, next);
+	sh->cmng.pending_queries++;
+	pool_index++;
+	if (pool_index >= rte_atomic16_read(&cont->n_valid)) {
+		batch ^= 0x1;
+		pool_index = 0;
+	}
+set_alarm:
+	sh->cmng.batch = batch;
+	sh->cmng.pool_index = pool_index;
+	mlx5_set_query_alarm(sh);
+}
+
+/**
+ * Handler for the HW respond about ready values from an asynchronous batch
+ * query. This function is probably called by the host thread.
+ *
+ * @param[in] sh
+ *   The pointer to the shared IB device context.
+ * @param[in] async_id
+ *   The Devx async ID.
+ * @param[in] status
+ *   The status of the completion.
+ */
+void
+mlx5_flow_async_pool_query_handle(struct mlx5_ibv_shared *sh,
+				  uint64_t async_id, int status)
+{
+	struct mlx5_flow_counter_pool *pool =
+		(struct mlx5_flow_counter_pool *)(uintptr_t)async_id;
+	struct mlx5_counter_stats_raw *raw_to_free;
+
+	if (unlikely(status)) {
+		raw_to_free = pool->raw_hw;
+	} else {
+		raw_to_free = pool->raw;
+		rte_spinlock_lock(&pool->sl);
+		pool->raw = pool->raw_hw;
+		rte_spinlock_unlock(&pool->sl);
+		rte_atomic64_add(&pool->query_gen, 1);
+		/* Be sure the new raw counters data is updated in memory. */
+		rte_cio_wmb();
+	}
+	LIST_INSERT_HEAD(&sh->cmng.free_stat_raws, raw_to_free, next);
+	pool->raw_hw = NULL;
+	sh->cmng.pending_queries--;
 }

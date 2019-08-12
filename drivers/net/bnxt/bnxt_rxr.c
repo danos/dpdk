@@ -154,7 +154,7 @@ static void bnxt_tpa_start(struct bnxt_rx_queue *rxq,
 	if (tpa_start1->flags2 &
 	    rte_cpu_to_le_32(RX_TPA_START_CMPL_FLAGS2_META_FORMAT_VLAN)) {
 		mbuf->vlan_tci = rte_le_to_cpu_32(tpa_start1->metadata);
-		mbuf->ol_flags |= PKT_RX_VLAN;
+		mbuf->ol_flags |= PKT_RX_VLAN | PKT_RX_VLAN_STRIPPED;
 	}
 	if (likely(tpa_start1->flags2 &
 		   rte_cpu_to_le_32(RX_TPA_START_CMPL_FLAGS2_L4_CS_CALC)))
@@ -362,6 +362,7 @@ static int bnxt_rx_pkt(struct rte_mbuf **rx_pkt,
 	int rc = 0;
 	uint8_t agg_buf = 0;
 	uint16_t cmp_type;
+	uint32_t flags2_f = 0;
 
 	rxcmp = (struct rx_pkt_cmpl *)
 	    &cpr->cp_desc_ring[cp_cons];
@@ -437,22 +438,44 @@ static int bnxt_rx_pkt(struct rte_mbuf **rx_pkt,
 			(RX_PKT_CMPL_METADATA_VID_MASK |
 			RX_PKT_CMPL_METADATA_DE |
 			RX_PKT_CMPL_METADATA_PRI_MASK);
-		mbuf->ol_flags |= PKT_RX_VLAN;
+		mbuf->ol_flags |= PKT_RX_VLAN | PKT_RX_VLAN_STRIPPED;
 	}
 
-	if (likely(RX_CMP_IP_CS_OK(rxcmp1)))
-		mbuf->ol_flags |= PKT_RX_IP_CKSUM_GOOD;
-	else if (likely(RX_CMP_IP_CS_UNKNOWN(rxcmp1)))
-		mbuf->ol_flags |= PKT_RX_IP_CKSUM_UNKNOWN;
-	else
+	flags2_f = flags2_0xf(rxcmp1);
+	/* IP Checksum */
+	if (unlikely(((IS_IP_NONTUNNEL_PKT(flags2_f)) &&
+		      (RX_CMP_IP_CS_ERROR(rxcmp1))) ||
+		     (IS_IP_TUNNEL_PKT(flags2_f) &&
+		      (RX_CMP_IP_OUTER_CS_ERROR(rxcmp1))))) {
 		mbuf->ol_flags |= PKT_RX_IP_CKSUM_BAD;
+	} else if (unlikely(RX_CMP_IP_CS_UNKNOWN(rxcmp1))) {
+		mbuf->ol_flags |= PKT_RX_IP_CKSUM_UNKNOWN;
+	} else {
+		mbuf->ol_flags |= PKT_RX_IP_CKSUM_GOOD;
+	}
 
-	if (likely(RX_CMP_L4_CS_OK(rxcmp1)))
-		mbuf->ol_flags |= PKT_RX_L4_CKSUM_GOOD;
-	else if (likely(RX_CMP_L4_CS_UNKNOWN(rxcmp1)))
+	/* L4 Checksum */
+	if (likely(IS_L4_NONTUNNEL_PKT(flags2_f))) {
+		if (unlikely(RX_CMP_L4_INNER_CS_ERR2(rxcmp1)))
+			mbuf->ol_flags |= PKT_RX_L4_CKSUM_BAD;
+		else
+			mbuf->ol_flags |= PKT_RX_L4_CKSUM_GOOD;
+	} else if (IS_L4_TUNNEL_PKT(flags2_f)) {
+		if (unlikely(RX_CMP_L4_INNER_CS_ERR2(rxcmp1)))
+			mbuf->ol_flags |= PKT_RX_L4_CKSUM_BAD;
+		else
+			mbuf->ol_flags |= PKT_RX_L4_CKSUM_GOOD;
+		if (unlikely(RX_CMP_L4_OUTER_CS_ERR2(rxcmp1))) {
+			mbuf->ol_flags |= PKT_RX_OUTER_L4_CKSUM_BAD;
+		} else if (unlikely(IS_L4_TUNNEL_PKT_ONLY_INNER_L4_CS
+				    (flags2_f))) {
+			mbuf->ol_flags |= PKT_RX_OUTER_L4_CKSUM_UNKNOWN;
+		} else {
+			mbuf->ol_flags |= PKT_RX_OUTER_L4_CKSUM_GOOD;
+		}
+	} else if (unlikely(RX_CMP_L4_CS_UNKNOWN(rxcmp1))) {
 		mbuf->ol_flags |= PKT_RX_L4_CKSUM_UNKNOWN;
-	else
-		mbuf->ol_flags |= PKT_RX_L4_CKSUM_BAD;
+	}
 
 	mbuf->packet_type = bnxt_parse_pkt_type(rxcmp, rxcmp1);
 
@@ -541,7 +564,7 @@ uint16_t bnxt_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 				nb_rx_pkts++;
 			if (rc == -EBUSY)	/* partial completion */
 				break;
-		} else {
+		} else if (!BNXT_NUM_ASYNC_CPR(rxq->bp)) {
 			evt =
 			bnxt_event_hwrm_resp_handler(rxq->bp,
 						     (struct cmpl_base *)rxcmp);
@@ -552,7 +575,7 @@ uint16_t bnxt_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 			break;
 		/* Post some Rx buf early in case of larger burst processing */
 		if (nb_rx_pkts == BNXT_RX_POST_THRESH)
-			B_RX_DB(rxr->rx_doorbell, rxr->rx_prod);
+			bnxt_db_write(&rxr->rx_db, rxr->rx_prod);
 	}
 
 	cpr->cp_raw_cons = raw_cons;
@@ -565,13 +588,13 @@ uint16_t bnxt_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 	}
 
 	if (prod != rxr->rx_prod)
-		B_RX_DB(rxr->rx_doorbell, rxr->rx_prod);
+		bnxt_db_write(&rxr->rx_db, rxr->rx_prod);
 
 	/* Ring the AGG ring DB */
 	if (ag_prod != rxr->ag_prod)
-		B_RX_DB(rxr->ag_doorbell, rxr->ag_prod);
+		bnxt_db_write(&rxr->ag_db, rxr->ag_prod);
 
-	B_CP_DIS_DB(cpr, cpr->cp_raw_cons);
+	bnxt_db_cq(cpr);
 
 	/* Attempt to alloc Rx buf in case of a previous allocation failure. */
 	if (rc == -ENOMEM) {
@@ -588,7 +611,7 @@ uint16_t bnxt_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 			/* This slot is empty. Alloc buffer for Rx */
 			if (!bnxt_alloc_rx_data(rxq, rxr, i)) {
 				rxr->rx_prod = i;
-				B_RX_DB(rxr->rx_doorbell, rxr->rx_prod);
+				bnxt_db_write(&rxr->rx_db, rxr->rx_prod);
 			} else {
 				PMD_DRV_LOG(ERR, "Alloc  mbuf failed\n");
 				break;
@@ -637,11 +660,12 @@ void bnxt_free_rx_rings(struct bnxt *bp)
 int bnxt_init_rx_ring_struct(struct bnxt_rx_queue *rxq, unsigned int socket_id)
 {
 	struct bnxt_cp_ring_info *cpr;
+	struct bnxt_cp_ring_info *nqr;
 	struct bnxt_rx_ring_info *rxr;
 	struct bnxt_ring *ring;
 
-	rxq->rx_buf_use_size = BNXT_MAX_MTU + ETHER_HDR_LEN + ETHER_CRC_LEN +
-			       (2 * VLAN_TAG_SIZE);
+	rxq->rx_buf_use_size = BNXT_MAX_MTU + RTE_ETHER_HDR_LEN +
+		RTE_ETHER_CRC_LEN + (2 * VLAN_TAG_SIZE);
 	rxq->rx_buf_size = rxq->rx_buf_use_size + sizeof(struct rte_mbuf);
 
 	rxr = rte_zmalloc_socket("bnxt_rx_ring",
@@ -684,6 +708,32 @@ int bnxt_init_rx_ring_struct(struct bnxt_rx_queue *rxq, unsigned int socket_id)
 	ring->bd_dma = cpr->cp_desc_mapping;
 	ring->vmem_size = 0;
 	ring->vmem = NULL;
+
+	if (BNXT_HAS_NQ(rxq->bp)) {
+		nqr = rte_zmalloc_socket("bnxt_rx_ring_cq",
+					 sizeof(struct bnxt_cp_ring_info),
+					 RTE_CACHE_LINE_SIZE, socket_id);
+		if (nqr == NULL)
+			return -ENOMEM;
+
+		rxq->nq_ring = nqr;
+
+		ring = rte_zmalloc_socket("bnxt_rx_ring_struct",
+					  sizeof(struct bnxt_ring),
+					  RTE_CACHE_LINE_SIZE, socket_id);
+		if (ring == NULL)
+			return -ENOMEM;
+
+		nqr->cp_ring_struct = ring;
+		ring->ring_size =
+			rte_align32pow2(rxr->rx_ring_struct->ring_size *
+					(2 + AGG_RING_SIZE_FACTOR));
+		ring->ring_mask = ring->ring_size - 1;
+		ring->bd = (void *)nqr->cp_desc_ring;
+		ring->bd_dma = nqr->cp_desc_mapping;
+		ring->vmem_size = 0;
+		ring->vmem = NULL;
+	}
 
 	/* Allocate Aggregator rings */
 	ring = rte_zmalloc_socket("bnxt_rx_ring_struct",

@@ -4,15 +4,27 @@
 
 # Load config options:
 # - DPDK_CHECKPATCH_PATH
+# - DPDK_CHECKPATCH_CODESPELL
 # - DPDK_CHECKPATCH_LINE_LENGTH
-. $(dirname $(readlink -e $0))/load-devel-config
+# - DPDK_CHECKPATCH_OPTIONS
+. $(dirname $(readlink -f $0))/load-devel-config
 
-VALIDATE_NEW_API=$(dirname $(readlink -e $0))/check-symbol-change.sh
+VALIDATE_NEW_API=$(dirname $(readlink -f $0))/check-symbol-change.sh
 
+# Enable codespell by default. This can be overwritten from a config file.
+# Codespell can also be enabled by setting DPDK_CHECKPATCH_CODESPELL to a valid path
+# to a dictionary.txt file if dictionary.txt is not in the default location.
+codespell=${DPDK_CHECKPATCH_CODESPELL:-enable}
 length=${DPDK_CHECKPATCH_LINE_LENGTH:-80}
 
 # override default Linux options
 options="--no-tree"
+if [ "$codespell" = "enable" ] ; then
+    options="$options --codespell"
+elif [ -f "$codespell" ] ; then
+    options="$options --codespell"
+    options="$options --codespellfile $codespell"
+fi
 options="$options --max-line-length=$length"
 options="$options --show-types"
 options="$options --ignore=LINUX_VERSION_CODE,\
@@ -22,6 +34,7 @@ PREFER_KERNEL_TYPES,BIT_MACRO,CONST_STRUCT,\
 SPLIT_STRING,LONG_LINE_STRING,\
 LINE_SPACING,PARENTHESIS_ALIGNMENT,NETWORKING_BLOCK_COMMENT_STYLE,\
 NEW_TYPEDEFS,COMPARISON_TO_NULL"
+options="$options $DPDK_CHECKPATCH_OPTIONS"
 
 clean_tmp_files() {
 	if echo $tmpinput | grep -q '^checkpatches\.' ; then
@@ -33,42 +46,80 @@ trap "clean_tmp_files" INT
 
 print_usage () {
 	cat <<- END_OF_HELP
-	usage: $(basename $0) [-q] [-v] [-nX|patch1 [patch2] ...]]
+	usage: $(basename $0) [-q] [-v] [-nX|-r range|patch1 [patch2] ...]]
 
 	Run Linux kernel checkpatch.pl with DPDK options.
 	The environment variable DPDK_CHECKPATCH_PATH must be set.
 
 	The patches to check can be from stdin, files specified on the command line,
-	or latest git commits limited with -n option (default limit: origin/master).
+	latest git commits limited with -n option, or commits in the git range
+	specified with -r option (default: "origin/master..").
 	END_OF_HELP
 }
 
 check_forbidden_additions() { # <patch>
+	res=0
+
 	# refrain from new additions of rte_panic() and rte_exit()
 	# multiple folders and expressions are separated by spaces
 	awk -v FOLDERS="lib drivers" \
 		-v EXPRESSIONS="rte_panic\\\( rte_exit\\\(" \
 		-v RET_ON_FAIL=1 \
 		-v MESSAGE='Using rte_panic/rte_exit' \
-		-f $(dirname $(readlink -e $0))/check-forbidden-tokens.awk \
-		"$1"
+		-f $(dirname $(readlink -f $0))/check-forbidden-tokens.awk \
+		"$1" || res=1
+
 	# svg figures must be included with wildcard extension
 	# because of png conversion for pdf docs
 	awk -v FOLDERS='doc' \
 		-v EXPRESSIONS='::[[:space:]]*[^[:space:]]*\\.svg' \
 		-v RET_ON_FAIL=1 \
 		-v MESSAGE='Using explicit .svg extension instead of .*' \
-		-f $(dirname $(readlink -e $0))/check-forbidden-tokens.awk \
-		"$1"
+		-f $(dirname $(readlink -f $0))/check-forbidden-tokens.awk \
+		"$1" || res=1
+
+	return $res
+}
+
+check_experimental_tags() { # <patch>
+	res=0
+
+	cat "$1" |awk '
+	BEGIN {
+		current_file = "";
+		ret = 0;
+	}
+	/^+++ b\// {
+		current_file = $2;
+	}
+	/^+.*__rte_experimental/ {
+		if (current_file ~ ".c$" ) {
+			print "Please only put __rte_experimental tags in " \
+				"headers ("current_file")";
+			ret = 1;
+		}
+		if ($1 != "+__rte_experimental" || $2 != "") {
+			print "__rte_experimental must appear alone on the line" \
+				" immediately preceding the return type of a function."
+			ret = 1;
+		}
+	}
+	END {
+		exit ret;
+	}' || res=1
+
+	return $res
 }
 
 number=0
+range='origin/master..'
 quiet=false
 verbose=false
-while getopts hn:qv ARG ; do
+while getopts hn:qr:v ARG ; do
 	case $ARG in
 		n ) number=$OPTARG ;;
 		q ) quiet=true ;;
+		r ) range=$OPTARG ;;
 		v ) verbose=true ;;
 		h ) print_usage ; exit 0 ;;
 		? ) print_usage ; exit 1 ;;
@@ -132,6 +183,14 @@ check () { # <patch> <commit> <title>
 		ret=1
 	fi
 
+	! $verbose || printf '\nChecking __rte_experimental tags:\n'
+	report=$(check_experimental_tags "$tmpinput")
+	if [ $? -ne 0 ] ; then
+		$headline_printed || print_headline "$3"
+		printf '%s\n' "$report"
+		ret=1
+	fi
+
 	clean_tmp_files
 	[ $ret -eq 0 ] && return 0
 
@@ -156,7 +215,7 @@ elif [ ! -t 0 ] ; then # stdin
 	check '' '' "$subject"
 else
 	if [ $number -eq 0 ] ; then
-		commits=$(git rev-list --reverse origin/master..)
+		commits=$(git rev-list --reverse $range)
 	else
 		commits=$(git rev-list --reverse --max-count=$number HEAD)
 	fi

@@ -120,7 +120,7 @@ static struct rte_mempool *mbuf_pool;
 static struct rte_eth_conf port_conf = {
 	.rxmode = {
 		.mq_mode = ETH_MQ_RX_NONE,
-		.max_rx_pkt_len = ETHER_MAX_LEN,
+		.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
 		.split_hdr_size = 0,
 	},
 	.rx_adv_conf = {
@@ -201,7 +201,7 @@ slave_port_init(uint16_t portid, struct rte_mempool *mbuf_pool)
 				"Start port %d failed (res=%d)",
 				portid, retval);
 
-	struct ether_addr addr;
+	struct rte_ether_addr addr;
 
 	rte_eth_macaddr_get(portid, &addr);
 	printf("Port %u MAC: ", portid);
@@ -220,6 +220,7 @@ bond_port_init(struct rte_mempool *mbuf_pool)
 	struct rte_eth_rxconf rxq_conf;
 	struct rte_eth_txconf txq_conf;
 	struct rte_eth_conf local_port_conf = port_conf;
+	uint16_t wait_counter = 20;
 
 	retval = rte_eth_bond_create("net_bonding0", BONDING_MODE_ALB,
 			0 /*SOCKET_ID_ANY*/);
@@ -243,6 +244,13 @@ bond_port_init(struct rte_mempool *mbuf_pool)
 		rte_exit(EXIT_FAILURE, "port %u: rte_eth_dev_adjust_nb_rx_tx_desc "
 				"failed (res=%d)\n", BOND_PORT, retval);
 
+	for (i = 0; i < slaves_count; i++) {
+		if (rte_eth_bond_slave_add(BOND_PORT, slaves[i]) == -1)
+			rte_exit(-1, "Oooops! adding slave (%u) to bond (%u) failed!\n",
+					slaves[i], BOND_PORT);
+
+	}
+
 	/* RX setup */
 	rxq_conf = dev_info.default_rxconf;
 	rxq_conf.offloads = local_port_conf.rxmode.offloads;
@@ -263,20 +271,27 @@ bond_port_init(struct rte_mempool *mbuf_pool)
 		rte_exit(retval, "port %u: TX queue 0 setup failed (res=%d)",
 				BOND_PORT, retval);
 
-	for (i = 0; i < slaves_count; i++) {
-		if (rte_eth_bond_slave_add(BOND_PORT, slaves[i]) == -1)
-			rte_exit(-1, "Oooops! adding slave (%u) to bond (%u) failed!\n",
-					slaves[i], BOND_PORT);
-
-	}
-
 	retval  = rte_eth_dev_start(BOND_PORT);
 	if (retval < 0)
 		rte_exit(retval, "Start port %d failed (res=%d)", BOND_PORT, retval);
 
+	printf("Waiting for slaves to become active...");
+	while (wait_counter) {
+		uint16_t act_slaves[16] = {0};
+		if (rte_eth_bond_active_slaves_get(BOND_PORT, act_slaves, 16) ==
+				slaves_count) {
+			printf("\n");
+			break;
+		}
+		sleep(1);
+		printf("...");
+		if (--wait_counter == 0)
+			rte_exit(-1, "\nFailed to activate slaves\n");
+	}
+
 	rte_eth_promiscuous_enable(BOND_PORT);
 
-	struct ether_addr addr;
+	struct rte_ether_addr addr;
 
 	rte_eth_macaddr_get(BOND_PORT, &addr);
 	printf("Port %u MAC: ", (unsigned)BOND_PORT);
@@ -285,21 +300,22 @@ bond_port_init(struct rte_mempool *mbuf_pool)
 }
 
 static inline size_t
-get_vlan_offset(struct ether_hdr *eth_hdr, uint16_t *proto)
+get_vlan_offset(struct rte_ether_hdr *eth_hdr, uint16_t *proto)
 {
 	size_t vlan_offset = 0;
 
-	if (rte_cpu_to_be_16(ETHER_TYPE_VLAN) == *proto) {
-		struct vlan_hdr *vlan_hdr = (struct vlan_hdr *)(eth_hdr + 1);
+	if (rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN) == *proto) {
+		struct rte_vlan_hdr *vlan_hdr =
+			(struct rte_vlan_hdr *)(eth_hdr + 1);
 
-		vlan_offset = sizeof(struct vlan_hdr);
+		vlan_offset = sizeof(struct rte_vlan_hdr);
 		*proto = vlan_hdr->eth_proto;
 
-		if (rte_cpu_to_be_16(ETHER_TYPE_VLAN) == *proto) {
+		if (rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN) == *proto) {
 			vlan_hdr = vlan_hdr + 1;
 
 			*proto = vlan_hdr->eth_proto;
-			vlan_offset += sizeof(struct vlan_hdr);
+			vlan_offset += sizeof(struct rte_vlan_hdr);
 		}
 	}
 	return vlan_offset;
@@ -321,11 +337,11 @@ struct global_flag_stru_t *global_flag_stru_p = &global_flag_stru;
 static int lcore_main(__attribute__((unused)) void *arg1)
 {
 	struct rte_mbuf *pkts[MAX_PKT_BURST] __rte_cache_aligned;
-	struct ether_addr d_addr;
+	struct rte_ether_addr d_addr;
 
-	struct ether_hdr *eth_hdr;
-	struct arp_hdr *arp_hdr;
-	struct ipv4_hdr *ipv4_hdr;
+	struct rte_ether_hdr *eth_hdr;
+	struct rte_arp_hdr *arp_hdr;
+	struct rte_ipv4_hdr *ipv4_hdr;
 	uint16_t ether_type, offset;
 
 	uint16_t rx_cnt;
@@ -355,29 +371,32 @@ static int lcore_main(__attribute__((unused)) void *arg1)
 				global_flag_stru_p->port_packets[0]++;
 				rte_spinlock_unlock(&global_flag_stru_p->lock);
 			}
-			eth_hdr = rte_pktmbuf_mtod(pkts[i], struct ether_hdr *);
+			eth_hdr = rte_pktmbuf_mtod(pkts[i],
+						struct rte_ether_hdr *);
 			ether_type = eth_hdr->ether_type;
-			if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_VLAN))
+			if (ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN))
 				printf("VLAN taged frame, offset:");
 			offset = get_vlan_offset(eth_hdr, &ether_type);
 			if (offset > 0)
 				printf("%d\n", offset);
-			if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_ARP)) {
+			if (ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP)) {
 				if (rte_spinlock_trylock(&global_flag_stru_p->lock) == 1)     {
 					global_flag_stru_p->port_packets[1]++;
 					rte_spinlock_unlock(&global_flag_stru_p->lock);
 				}
-				arp_hdr = (struct arp_hdr *)((char *)(eth_hdr + 1) + offset);
+				arp_hdr = (struct rte_arp_hdr *)(
+					(char *)(eth_hdr + 1) + offset);
 				if (arp_hdr->arp_data.arp_tip == bond_ip) {
-					if (arp_hdr->arp_op == rte_cpu_to_be_16(ARP_OP_REQUEST)) {
-						arp_hdr->arp_op = rte_cpu_to_be_16(ARP_OP_REPLY);
+					if (arp_hdr->arp_opcode == rte_cpu_to_be_16(RTE_ARP_OP_REQUEST)) {
+						arp_hdr->arp_opcode = rte_cpu_to_be_16(RTE_ARP_OP_REPLY);
 						/* Switch src and dst data and set bonding MAC */
-						ether_addr_copy(&eth_hdr->s_addr, &eth_hdr->d_addr);
+						rte_ether_addr_copy(&eth_hdr->s_addr, &eth_hdr->d_addr);
 						rte_eth_macaddr_get(BOND_PORT, &eth_hdr->s_addr);
-						ether_addr_copy(&arp_hdr->arp_data.arp_sha, &arp_hdr->arp_data.arp_tha);
+						rte_ether_addr_copy(&arp_hdr->arp_data.arp_sha,
+								&arp_hdr->arp_data.arp_tha);
 						arp_hdr->arp_data.arp_tip = arp_hdr->arp_data.arp_sip;
 						rte_eth_macaddr_get(BOND_PORT, &d_addr);
-						ether_addr_copy(&d_addr, &arp_hdr->arp_data.arp_sha);
+						rte_ether_addr_copy(&d_addr, &arp_hdr->arp_data.arp_sha);
 						arp_hdr->arp_data.arp_sip = bond_ip;
 						rte_eth_tx_burst(BOND_PORT, 0, &pkts[i], 1);
 						is_free = 1;
@@ -385,14 +404,14 @@ static int lcore_main(__attribute__((unused)) void *arg1)
 						rte_eth_tx_burst(BOND_PORT, 0, NULL, 0);
 					}
 				}
-			} else if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_IPv4)) {
+			} else if (ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4)) {
 				if (rte_spinlock_trylock(&global_flag_stru_p->lock) == 1)     {
 					global_flag_stru_p->port_packets[2]++;
 					rte_spinlock_unlock(&global_flag_stru_p->lock);
 				 }
-				ipv4_hdr = (struct ipv4_hdr *)((char *)(eth_hdr + 1) + offset);
+				ipv4_hdr = (struct rte_ipv4_hdr *)((char *)(eth_hdr + 1) + offset);
 				if (ipv4_hdr->dst_addr == bond_ip) {
-					ether_addr_copy(&eth_hdr->s_addr, &eth_hdr->d_addr);
+					rte_ether_addr_copy(&eth_hdr->s_addr, &eth_hdr->d_addr);
 					rte_eth_macaddr_get(BOND_PORT, &eth_hdr->s_addr);
 					ipv4_hdr->dst_addr = ipv4_hdr->src_addr;
 					ipv4_hdr->src_addr = bond_ip;
@@ -434,8 +453,8 @@ static void cmd_obj_send_parsed(void *parsed_result,
 	char ip_str[INET6_ADDRSTRLEN];
 
 	struct rte_mbuf *created_pkt;
-	struct ether_hdr *eth_hdr;
-	struct arp_hdr *arp_hdr;
+	struct rte_ether_hdr *eth_hdr;
+	struct rte_arp_hdr *arp_hdr;
 
 	uint32_t bond_ip;
 	size_t pkt_size;
@@ -454,25 +473,26 @@ static void cmd_obj_send_parsed(void *parsed_result,
 		return;
 	}
 
-	pkt_size = sizeof(struct ether_hdr) + sizeof(struct arp_hdr);
+	pkt_size = sizeof(struct rte_ether_hdr) + sizeof(struct rte_arp_hdr);
 	created_pkt->data_len = pkt_size;
 	created_pkt->pkt_len = pkt_size;
 
-	eth_hdr = rte_pktmbuf_mtod(created_pkt, struct ether_hdr *);
+	eth_hdr = rte_pktmbuf_mtod(created_pkt, struct rte_ether_hdr *);
 	rte_eth_macaddr_get(BOND_PORT, &eth_hdr->s_addr);
-	memset(&eth_hdr->d_addr, 0xFF, ETHER_ADDR_LEN);
-	eth_hdr->ether_type = rte_cpu_to_be_16(ETHER_TYPE_ARP);
+	memset(&eth_hdr->d_addr, 0xFF, RTE_ETHER_ADDR_LEN);
+	eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP);
 
-	arp_hdr = (struct arp_hdr *)((char *)eth_hdr + sizeof(struct ether_hdr));
-	arp_hdr->arp_hrd = rte_cpu_to_be_16(ARP_HRD_ETHER);
-	arp_hdr->arp_pro = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
-	arp_hdr->arp_hln = ETHER_ADDR_LEN;
-	arp_hdr->arp_pln = sizeof(uint32_t);
-	arp_hdr->arp_op = rte_cpu_to_be_16(ARP_OP_REQUEST);
+	arp_hdr = (struct rte_arp_hdr *)(
+		(char *)eth_hdr + sizeof(struct rte_ether_hdr));
+	arp_hdr->arp_hardware = rte_cpu_to_be_16(RTE_ARP_HRD_ETHER);
+	arp_hdr->arp_protocol = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
+	arp_hdr->arp_hlen = RTE_ETHER_ADDR_LEN;
+	arp_hdr->arp_plen = sizeof(uint32_t);
+	arp_hdr->arp_opcode = rte_cpu_to_be_16(RTE_ARP_OP_REQUEST);
 
 	rte_eth_macaddr_get(BOND_PORT, &arp_hdr->arp_data.arp_sha);
 	arp_hdr->arp_data.arp_sip = bond_ip;
-	memset(&arp_hdr->arp_data.arp_tha, 0, ETHER_ADDR_LEN);
+	memset(&arp_hdr->arp_data.arp_tha, 0, RTE_ETHER_ADDR_LEN);
 	arp_hdr->arp_data.arp_tip =
 			  ((unsigned char *)&res->ip.addr.ipv4)[0]        |
 			 (((unsigned char *)&res->ip.addr.ipv4)[1] << 8)  |
@@ -511,8 +531,9 @@ static void cmd_start_parsed(__attribute__((unused)) void *parsed_result,
 	int slave_core_id = rte_lcore_id();
 
 	rte_spinlock_trylock(&global_flag_stru_p->lock);
-	if (global_flag_stru_p->LcoreMainIsRunning == 0)	{
-		if (lcore_config[global_flag_stru_p->LcoreMainCore].state != WAIT)	{
+	if (global_flag_stru_p->LcoreMainIsRunning == 0) {
+		if (rte_eal_get_lcore_state(global_flag_stru_p->LcoreMainCore)
+		    != WAIT) {
 			rte_spinlock_unlock(&global_flag_stru_p->lock);
 			return;
 		}
@@ -683,7 +704,7 @@ static void cmd_show_parsed(__attribute__((unused)) void *parsed_result,
 {
 	uint16_t slaves[16] = {0};
 	uint8_t len = 16;
-	struct ether_addr addr;
+	struct rte_ether_addr addr;
 	uint16_t i = 0;
 
 	while (i < slaves_count)	{
@@ -745,7 +766,7 @@ static void prompt(__attribute__((unused)) void *arg1)
 int
 main(int argc, char *argv[])
 {
-	int ret;
+	int ret, slave_core_id;
 	uint16_t nb_ports, i;
 
 	/* init EAL */
@@ -777,13 +798,13 @@ main(int argc, char *argv[])
 	bond_port_init(mbuf_pool);
 
 	rte_spinlock_init(&global_flag_stru_p->lock);
-	int slave_core_id = rte_lcore_id();
 
 	/* check state of lcores */
 	RTE_LCORE_FOREACH_SLAVE(slave_core_id) {
-	if (lcore_config[slave_core_id].state != WAIT)
-		return -EBUSY;
+		if (rte_eal_get_lcore_state(slave_core_id) != WAIT)
+			return -EBUSY;
 	}
+
 	/* start lcore main on core != master_core - ARP response thread */
 	slave_core_id = rte_get_next_lcore(rte_lcore_id(), 1, 0);
 	if ((slave_core_id >= RTE_MAX_LCORE) || (slave_core_id == 0))

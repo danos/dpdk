@@ -3,8 +3,9 @@
 
 version = 2
 
-if host_machine.system() != 'linux'
-        build = false
+if not is_linux
+	build = false
+	reason = 'only supported on linux'
 endif
 
 deps += ['common_dpaax', 'eventdev']
