@@ -1,3 +1,41 @@
+dpdk (19.08-1~git1) UNRELEASED; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * New upstream release 19.08; for a full list of changes see:
+    http://doc.dpdk.org/guides-19.08/rel_notes/release_19_08.html
+    - d/*.symbols: flat update for 19.08
+    - d/control: update to new major version number
+    - d/dpdk-dev.install: update new paths to dpdk-test
+    - d/control, d/librte-pmd-qede18.11.symbols: drop pmd-qede no more built
+      by default
+    - d/control, d/*.symbols: new PMDs librte-pmd-octeontx2
+      librte-pmd-bbdev-fpga-lte-fec librte-pmd-bbdev-turbo-sw librte-pmd-hinic
+      librte-pmd-ice librte-pmd-ipn3ke librte-pmd-memif
+      librte-pmd-octeontx2-event
+    - d/control, d/*.symbols: renamed PMDs
+      - librte-pmd-skeleton-rawdev -> librte-rawdev-skeleton
+      - librte-pmd-dpaa2-cmdif -> librte-rawdev-dpaa2-cmdif
+      - librte-pmd-dpaa2-qdma -> librte-rawdev-dpaa2-qdma
+      - librte-pmd-avf -> librte-pmd-iavf
+      - librte-pmd-ifpga-rawdev (somewhat indirectly replaced by
+        librte-pmd-ipn3ke)
+    - d/control: add new Homepage references
+    - d/control, d/*.symbols: new rawdev drivers librte-rawdev-ioat,
+      librte-rawdev-ntb and  librte-rawdev-octeontx2-dma
+    - d/control, d/*.symbols: add new libraries librte-common-octeontx2,
+      librte-ipsec, librte-mempool-octeontx2, librte-rcu and librte-stack
+    - d/dpdk-dev.install: new test binaries" debian/dpdk-dev.install
+    - d/dpdk-doc.install: add new examples path" debian/dpdk-doc.install
+    - d/*.symbols: add new and updated symbols
+    - d/p/fix-ppc64-mlx4-build.patch: fix FTBFS on ppc64el
+  * Drop patches now upstream
+    - 0004-build-bump-minimum-Meson-version-to-0.47.1.patch
+    - 0005-build-use-dependency-instead-of-find_library.patch
+    - 0006-build-reorder-libraries-and-build-eal-before-cmdline.patch
+    - 0007-build-use-dependency-for-libbsd-instead-of-manual-ap.patch
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 12 Aug 2019 13:23:49 +0200
+
 dpdk (18.11.2-1~git1) UNRELEASED; urgency=medium
 
   [ Christian Ehrhardt ]
