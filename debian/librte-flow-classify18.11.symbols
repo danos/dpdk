@@ -1,4 +1,4 @@
-librte_flow_classify.so.18.11 librte-flow-classify18.11 #MINVER#
+librte_flow_classify.so.19.08 librte-flow-classify19.08 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 17.11
  rte_flow_classifier_create@EXPERIMENTAL 17.11
  rte_flow_classifier_free@EXPERIMENTAL 17.11

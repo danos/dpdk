@@ -1,4 +1,4 @@
-librte_bpf.so.18.11 librte-bpf18.11 #MINVER#
+librte_bpf.so.19.08 librte-bpf19.08 #MINVER#
 # Only experimental symbols for now
  EXPERIMENTAL@EXPERIMENTAL 18.05
  rte_bpf_destroy@EXPERIMENTAL 18.05

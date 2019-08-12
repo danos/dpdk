@@ -1,4 +1,4 @@
-librte_power.so.18.11 librte-power18.11 #MINVER#
+librte_power.so.19.08 librte-power19.08 #MINVER#
  DPDK_17.11@DPDK_17.11 17.11
  DPDK_18.08@DPDK_18.08 18.08
  DPDK_2.0@DPDK_2.0 16.04

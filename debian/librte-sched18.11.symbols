@@ -1,4 +1,4 @@
-librte_sched.so.18.11 librte-sched18.11 #MINVER#
+librte_sched.so.19.08 librte-sched19.08 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
  EXPERIMENTAL@EXPERIMENTAL 18.05

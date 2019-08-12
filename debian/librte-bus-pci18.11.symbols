@@ -1,4 +1,4 @@
-librte_bus_pci.so.18.11 librte-bus-pci18.11 #MINVER#
+librte_bus_pci.so.19.08 librte-bus-pci19.08 #MINVER#
  DPDK_17.11@DPDK_17.11 17.11
  rte_pci_dump@DPDK_17.11 17.11
  rte_pci_get_sysfs_path@DPDK_17.11 17.11

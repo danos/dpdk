@@ -1,4 +1,4 @@
-librte_cmdline.so.18.11 librte-cmdline18.11 #MINVER#
+librte_cmdline.so.19.08 librte-cmdline19.08 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.1@DPDK_2.1 16.04
  cirbuf_add_buf_head@DPDK_2.0 16.04

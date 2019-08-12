@@ -1,4 +1,4 @@
-librte_eal.so.18.11 librte-eal18.11 #MINVER#
+librte_eal.so.19.08 librte-eal19.08 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_16.11@DPDK_16.11 16.11

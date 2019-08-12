@@ -1,4 +1,4 @@
-librte_kni.so.18.11 librte-kni18.11 #MINVER#
+librte_kni.so.19.08 librte-kni19.08 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  EXPERIMENTAL@EXPERIMENTAL 18.11
  rte_kni_alloc@DPDK_2.0 16.04

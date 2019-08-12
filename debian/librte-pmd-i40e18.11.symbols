@@ -1,4 +1,4 @@
-librte_pmd_i40e.so.18.11 librte-pmd-i40e18.11 #MINVER#
+librte_pmd_i40e.so.19.08 librte-pmd-i40e19.08 #MINVER#
  DPDK_17.02@DPDK_17.02 17.05
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_17.08@DPDK_17.08 17.08

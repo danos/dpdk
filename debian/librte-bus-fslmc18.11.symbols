@@ -1,4 +1,4 @@
-librte_bus_fslmc.so.18.11 librte-bus-fslmc18.11 #MINVER#
+librte_bus_fslmc.so.19.08 librte-bus-fslmc19.08 #MINVER#
  DPDK_17.05@DPDK_17.05 17.11
  DPDK_17.08@DPDK_17.08 17.11
  DPDK_17.11@DPDK_17.11 17.11

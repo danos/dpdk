@@ -1,4 +1,4 @@
-librte_port.so.18.11 librte-port18.11 #MINVER#
+librte_port.so.19.08 librte-port19.08 #MINVER#
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_16.11@DPDK_16.11 16.11
  DPDK_18.11@DPDK_18.11 18.11

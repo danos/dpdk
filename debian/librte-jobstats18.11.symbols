@@ -1,4 +1,4 @@
-librte_jobstats.so.18.11 librte-jobstats18.11 #MINVER#
+librte_jobstats.so.19.08 librte-jobstats19.08 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
  DPDK_2.0@DPDK_2.0 16.04
  rte_jobstats_abort@DPDK_16.04 16.04

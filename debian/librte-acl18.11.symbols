@@ -1,4 +1,4 @@
-librte_acl.so.18.11 librte-acl18.11 #MINVER#
+librte_acl.so.19.08 librte-acl19.08 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  rte_acl_add_rules@DPDK_2.0 16.04
  rte_acl_build@DPDK_2.0 16.04

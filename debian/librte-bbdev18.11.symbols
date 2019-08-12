@@ -1,4 +1,4 @@
-librte_bbdev.so.18.11 librte-bbdev18.11 #MINVER#
+librte_bbdev.so.19.08 librte-bbdev19.08 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 18.02
  rte_bbdev_allocate@EXPERIMENTAL 18.02
  rte_bbdev_callback_register@EXPERIMENTAL 18.02

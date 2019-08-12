@@ -1,4 +1,4 @@
-librte_kvargs.so.18.11 librte-kvargs18.11 #MINVER#
+librte_kvargs.so.19.08 librte-kvargs19.08 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  EXPERIMENTAL@EXPERIMENTAL 18.08
  rte_kvargs_count@DPDK_2.0 16.04

@@ -1,4 +1,4 @@
-librte_reorder.so.18.11 librte-reorder18.11 #MINVER#
+librte_reorder.so.19.08 librte-reorder19.08 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  rte_reorder_create@DPDK_2.0 16.04
  rte_reorder_drain@DPDK_2.0 16.04

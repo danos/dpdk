@@ -1,3 +1,3 @@
-librte_mempool_ring.so.18.11 librte-mempool-ring18.11 #MINVER#
+librte_mempool_ring.so.19.08 librte-mempool-ring19.08 #MINVER#
  DPDK_17.05@DPDK_17.05 17.05
 # INFO: this library exports no symbols, it is one of the drivers for mempool

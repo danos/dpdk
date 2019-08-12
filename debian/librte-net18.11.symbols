@@ -1,4 +1,4 @@
-librte_net.so.18.11 librte-net18.11 #MINVER#
+librte_net.so.19.08 librte-net19.08 #MINVER#
  DPDK_16.11@DPDK_16.11 16.11
  DPDK_17.05@DPDK_17.05 17.05
  EXPERIMENTAL@EXPERIMENTAL 18.02

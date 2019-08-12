@@ -1,3 +1,3 @@
-librte_gso.so.18.11 librte-gso18.11 #MINVER#
+librte_gso.so.19.08 librte-gso19.08 #MINVER#
  DPDK_17.11@DPDK_17.11 17.11
  rte_gso_segment@DPDK_17.11 17.11

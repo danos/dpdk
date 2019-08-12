@@ -1,4 +1,4 @@
-librte_vhost.so.18.11 librte-vhost18.11 #MINVER#
+librte_vhost.so.19.08 librte-vhost19.08 #MINVER#
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_17.08@DPDK_17.08 17.08

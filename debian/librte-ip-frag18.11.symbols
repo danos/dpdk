@@ -1,4 +1,4 @@
-librte_ip_frag.so.18.11 librte-ip-frag18.11 #MINVER#
+librte_ip_frag.so.19.08 librte-ip-frag19.08 #MINVER#
  DPDK_17.08@DPDK_17.08 17.08
  DPDK_2.0@DPDK_2.0 16.04
  EXPERIMENTAL@EXPERIMENTAL 18.11

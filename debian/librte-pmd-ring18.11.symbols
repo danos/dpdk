@@ -1,4 +1,4 @@
-librte_pmd_ring.so.18.11 librte-pmd-ring18.11 #MINVER#
+librte_pmd_ring.so.19.08 librte-pmd-ring19.08 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
  DPDK_2.2@DPDK_2.2 16.04
  rte_eth_from_ring@DPDK_2.2 16.04

@@ -1,4 +1,4 @@
-librte_pdump.so.18.11 librte-pdump18.11 #MINVER#
+librte_pdump.so.19.08 librte-pdump19.08 #MINVER#
  DPDK_16.07@DPDK_16.07 16.07~rc1
  rte_pdump_disable@DPDK_16.07 16.07~rc1
  rte_pdump_disable_by_deviceid@DPDK_16.07 16.07~rc1

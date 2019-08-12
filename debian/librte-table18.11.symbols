@@ -1,4 +1,4 @@
-librte_table.so.18.11 librte-table18.11 #MINVER#
+librte_table.so.19.08 librte-table19.08 #MINVER#
  DPDK_17.11@DPDK_17.11 17.11
  rte_table_acl_ops@DPDK_17.11 17.11
  rte_table_array_ops@DPDK_17.11 17.11

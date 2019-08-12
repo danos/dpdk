@@ -1,4 +1,4 @@
-librte_pmd_bond.so.18.11 librte-pmd-bond18.11 #MINVER#
+librte_pmd_bond.so.19.08 librte-pmd-bond19.08 #MINVER#
  DPDK_16.04@DPDK_16.04 16.07~rc1
  DPDK_16.07@DPDK_16.07 16.07~rc1
  DPDK_17.08@DPDK_17.08 17.08

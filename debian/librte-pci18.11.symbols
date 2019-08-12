@@ -1,4 +1,4 @@
-librte_pci.so.18.11 librte-pci18.11 #MINVER#
+librte_pci.so.19.08 librte-pci19.08 #MINVER#
  DPDK_17.11@DPDK_17.11 17.11
  eal_parse_pci_BDF@DPDK_17.11 17.11
  eal_parse_pci_DomBDF@DPDK_17.11 17.11

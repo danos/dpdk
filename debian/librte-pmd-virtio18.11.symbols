@@ -1,4 +1,4 @@
-librte_pmd_virtio.so.18.11 librte-pmd-virtio18.11 #MINVER#
+librte_pmd_virtio.so.19.08 librte-pmd-virtio19.08 #MINVER#
  DPDK_2.0@DPDK_2.0 16.04
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.

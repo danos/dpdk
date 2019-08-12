@@ -1,4 +1,4 @@
-librte_telemetry.so.18.11 librte-telemetry18.11 #MINVER#
+librte_telemetry.so.19.08 librte-telemetry19.08 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 18.11
  rte_telemetry_cleanup@EXPERIMENTAL 18.11
  rte_telemetry_init@EXPERIMENTAL 18.11

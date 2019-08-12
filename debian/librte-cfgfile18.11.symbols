@@ -1,4 +1,4 @@
-librte_cfgfile.so.18.11 librte-cfgfile18.11 #MINVER#
+librte_cfgfile.so.19.08 librte-cfgfile19.08 #MINVER#
  DPDK_16.04@DPDK_16.04 16.04
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_17.11@DPDK_17.11 17.11

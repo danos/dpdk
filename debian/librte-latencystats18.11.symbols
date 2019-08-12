@@ -1,4 +1,4 @@
-librte_latencystats.so.18.11 librte-latencystats18.11 #MINVER#
+librte_latencystats.so.19.08 librte-latencystats19.08 #MINVER#
  DPDK_17.05@DPDK_17.05 17.05
  rte_latencystats_get@DPDK_17.05 17.05
  rte_latencystats_get_names@DPDK_17.05 17.05

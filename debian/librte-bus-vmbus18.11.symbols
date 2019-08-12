@@ -1,4 +1,4 @@
-librte_bus_vmbus.so.18.11 librte-bus-vmbus18.11 #MINVER#
+librte_bus_vmbus.so.19.08 librte-bus-vmbus19.08 #MINVER#
  DPDK_18.08@DPDK_18.08 18.08
  DPDK_18.11@DPDK_18.11 18.11
  rte_vmbus_chan_close@DPDK_18.08 18.08

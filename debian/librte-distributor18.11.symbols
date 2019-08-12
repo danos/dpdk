@@ -1,4 +1,4 @@
-librte_distributor.so.18.11 librte-distributor18.11 #MINVER#
+librte_distributor.so.19.08 librte-distributor19.08 #MINVER#
  DPDK_17.05@DPDK_17.05 17.05
  DPDK_2.0@DPDK_2.0 16.04
  rte_distributor_clear_returns@DPDK_17.05 17.05

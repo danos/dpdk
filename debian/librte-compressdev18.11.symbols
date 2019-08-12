@@ -1,4 +1,4 @@
-librte_compressdev.so.18.11 librte-compressdev18.11 #MINVER#
+librte_compressdev.so.19.08 librte-compressdev19.08 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 18.05
  rte_comp_get_feature_name@EXPERIMENTAL 18.05
  rte_comp_op_alloc@EXPERIMENTAL 18.05

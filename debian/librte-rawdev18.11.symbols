@@ -1,4 +1,4 @@
-librte_rawdev.so.18.11 librte-rawdev18.11 #MINVER#
+librte_rawdev.so.19.08 librte-rawdev19.08 #MINVER#
  DPDK_18.08@DPDK_18.08 18.08
 #MISSING: 18.08# EXPERIMENTAL@EXPERIMENTAL 18.02
  rte_rawdev_close@DPDK_18.08 18.08

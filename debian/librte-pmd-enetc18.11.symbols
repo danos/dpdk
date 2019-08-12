@@ -1,4 +1,4 @@
-librte_pmd_enetc.so.18.11 librte-pmd-enetc18.11 #MINVER#
+librte_pmd_enetc.so.19.08 librte-pmd-enetc19.08 #MINVER#
  DPDK_18.11@DPDK_18.11 18.11
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.
