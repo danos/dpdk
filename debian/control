@@ -802,20 +802,6 @@ Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
  .
  This package contains the runtime libraries for librte_pmd_dpaa2.
 
-Package: librte-pmd-dpaa2-cmdif19.08
-Architecture: amd64 arm64 armhf i386 ppc64el
-Multi-Arch: same
-Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
-Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
-         ${shlibs:Depends},
-Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the runtime libraries for librte_pmd_dpaa2_cmdif.
-
 Package: librte-pmd-dpaa2-event19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
@@ -829,20 +815,6 @@ Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_pmd_dpaa2_event.
-
-Package: librte-pmd-dpaa2-qdma19.08
-Architecture: amd64 arm64 armhf i386 ppc64el
-Multi-Arch: same
-Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
-Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
-         ${shlibs:Depends},
-Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the runtime libraries for librte_pmd_dpaa2-qdma.
 
 Package: librte-pmd-dpaa2-sec19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1475,18 +1447,18 @@ Description: Data Plane Development Kit (librte_pmd_ark runtime library)
  .
  This package contains the runtime libraries for librte_pmd_ark.
 
-Package: librte-pmd-avf19.08
+Package: librte-pmd-iavf19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte_pmd_avf runtime library)
+Description: Data Plane Development Kit (librte_pmd_iavf runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for librte_pmd_avf.
+ This package contains the runtime libraries for librte_pmd_iavf.
 
 Package: librte-pmd-avp19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1765,19 +1737,6 @@ Description: Data Plane Development Kit (librte-pmd-bbdev-null runtime library)
  .
  This package contains the runtime libraries for librte-pmd-bbdev-null.
 
-Package: librte-pmd-skeleton-rawdev19.08
-Architecture: amd64 arm64 armhf i386 ppc64el
-Multi-Arch: same
-Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
-         ${shlibs:Depends},
-Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-skeleton-rawdev runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the runtime libraries for librte-pmd-skeleton-rawdev.
-
 Package: librte-pmd-vdev-netvsc19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
@@ -1819,20 +1778,6 @@ Description: Data Plane Development Kit (librte-pmd-axgbe runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte-pmd-axgbe.
-
-Package: librte-pmd-ifpga-rawdev19.08
-Architecture: amd64 arm64 armhf i386 ppc64el
-Multi-Arch: same
-Homepage: https://dpdk.org/doc/guides/rawdevs/ifpga_rawdev.html
-Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
-         ${shlibs:Depends},
-Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-ifpga-rawdev runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the runtime libraries for librte-pmd-ifpga-rawdev.
 
 Package: librte-pmd-virtio-crypto19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1960,4 +1905,43 @@ Description: Data Plane Development Kit (TODO runtime library)
  .
  This package contains the runtime libraries for TODO.
 
+Package: librte-rawdev-skeleton19.08
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-rawdev-skeleton runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte-rawdev-skeleton.
 
+Package: librte-rawdev-dpaa2-cmdif19.08
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-rawdev-dpaa2-cmdif runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte-rawdev-dpaa2-cmdif.
+
+Package: librte-rawdev-dpaa2-qdma19.08
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-rawdev-dpaa2-qdma runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte-rawdev-dpaa2-qdma.

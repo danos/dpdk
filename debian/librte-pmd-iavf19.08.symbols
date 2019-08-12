@@ -1,4 +1,4 @@
-librte_pmd_ifpga_rawdev.so.19.08 librte-pmd-ifpga-rawdev19.08 #MINVER#
- DPDK_18.05@DPDK_18.05 18.05
+librte_pmd_iavf.so.19.08 librte-pmd-iavf19.08 #MINVER#
+ DPDK_18.02@DPDK_18.02 18.02
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.
