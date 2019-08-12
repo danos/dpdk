@@ -1,2 +1,9 @@
 librte_rcu.so.19.08 librte-rcu19.08 #MINVER#
- DPDK_19.08@DPDK_19.08 19.08
+ EXPERIMENTAL@EXPERIMENTAL 19.08
+ rte_rcu_log_type@EXPERIMENTAL 19.08
+ rte_rcu_qsbr_dump@EXPERIMENTAL 19.08
+ rte_rcu_qsbr_get_memsize@EXPERIMENTAL 19.08
+ rte_rcu_qsbr_init@EXPERIMENTAL 19.08
+ rte_rcu_qsbr_synchronize@EXPERIMENTAL 19.08
+ rte_rcu_qsbr_thread_register@EXPERIMENTAL 19.08
+ rte_rcu_qsbr_thread_unregister@EXPERIMENTAL 19.08

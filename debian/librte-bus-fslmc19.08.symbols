@@ -5,6 +5,8 @@ librte_bus_fslmc.so.19.08 librte-bus-fslmc19.08 #MINVER#
  DPDK_18.02@DPDK_18.02 18.02
  DPDK_18.05@DPDK_18.05 18.05
  DPDK_18.11@DPDK_18.11 18.11
+ DPDK_19.05@DPDK_19.05 19.08
+ EXPERIMENTAL@EXPERIMENTAL 19.08
  dpaa2_affine_qbman_ethrx_swp@DPDK_18.05 18.05
  dpaa2_affine_qbman_swp@DPDK_17.05 18.02
  dpaa2_alloc_dpbp_dev@DPDK_17.05 18.02
@@ -14,7 +16,7 @@ librte_bus_fslmc.so.19.08 librte-bus-fslmc19.08 #MINVER#
  dpaa2_eqcr_size@DPDK_18.11 18.11
  dpaa2_free_dpbp_dev@DPDK_17.05 18.02
  dpaa2_free_dq_storage@DPDK_17.05 18.02
- dpaa2_get_qbman_swp@DPDK_17.08 18.02
+ dpaa2_free_eq_descriptors@DPDK_19.05 19.08
  dpaa2_io_portal@DPDK_17.08 18.02
  dpaa2_svr_family@DPDK_18.02 18.02
  dpaa2_virt_mode@DPDK_18.02 18.02
@@ -24,9 +26,7 @@ librte_bus_fslmc.so.19.08 librte-bus-fslmc19.08 #MINVER#
  dpbp_get_num_free_bufs@DPDK_17.05 18.02
  dpbp_open@DPDK_17.05 18.02
  dpbp_reset@DPDK_17.05 18.02
- dpci_get_link_state@DPDK_18.11 18.11
  dpci_get_opr@DPDK_18.11 18.11
- dpci_get_peer_attributes@DPDK_18.11 18.11
  dpci_set_opr@DPDK_18.11 18.11
  dpci_set_rx_queue@DPDK_17.08 18.02
  dpcon_get_attributes@DPDK_17.08 18.02
@@ -59,8 +59,10 @@ librte_bus_fslmc.so.19.08 librte-bus-fslmc19.08 #MINVER#
  qbman_eq_desc_set_dca@DPDK_17.08 18.02
  qbman_eq_desc_set_fq@DPDK_17.05 18.02
  qbman_eq_desc_set_no_orp@DPDK_17.05 18.02
+ qbman_eq_desc_set_orp@DPDK_19.05 19.08
  qbman_eq_desc_set_qd@DPDK_17.05 18.02
  qbman_eq_desc_set_response@DPDK_17.05 18.02
+ qbman_eq_desc_set_token@DPDK_19.05 19.08
  qbman_fq_query_state@DPDK_18.02 18.02
  qbman_fq_state_frame_count@DPDK_18.02 18.02
  qbman_get_dqrr_from_idx@DPDK_17.08 18.02
@@ -74,7 +76,13 @@ librte_bus_fslmc.so.19.08 librte-bus-fslmc19.08 #MINVER#
  qbman_result_DQ_fd@DPDK_17.05 18.02
  qbman_result_DQ_flags@DPDK_17.05 18.02
  qbman_result_DQ_fqd_ctx@DPDK_17.08 18.02
+ qbman_result_DQ_odpid@DPDK_19.05 19.08
+ qbman_result_DQ_seqnum@DPDK_19.05 19.08
  qbman_result_SCN_state@DPDK_17.08 18.02
+ qbman_result_eqresp_fd@DPDK_19.05 19.08
+ qbman_result_eqresp_rc@DPDK_19.05 19.08
+ qbman_result_eqresp_rspid@DPDK_19.05 19.08
+ qbman_result_eqresp_set_rspid@DPDK_19.05 19.08
  qbman_result_has_new_result@DPDK_17.05 18.02
  qbman_swp_acquire@DPDK_17.05 18.02
  qbman_swp_dqrr_consume@DPDK_17.08 18.02
@@ -82,6 +90,7 @@ librte_bus_fslmc.so.19.08 librte-bus-fslmc19.08 #MINVER#
  qbman_swp_dqrr_next@DPDK_17.08 18.02
  qbman_swp_enqueue_multiple@DPDK_17.08 18.02
  qbman_swp_enqueue_multiple_desc@DPDK_17.08 18.02
+ qbman_swp_enqueue_multiple_fd@DPDK_19.05 19.08
  qbman_swp_interrupt_clear_status@DPDK_17.08 18.02
  qbman_swp_prefetch_dqrr_next@DPDK_18.02 18.02
  qbman_swp_pull@DPDK_17.05 18.02
@@ -97,5 +106,6 @@ librte_bus_fslmc.so.19.08 librte-bus-fslmc19.08 #MINVER#
  rte_fslmc_get_device_count@DPDK_18.02 18.02
  rte_fslmc_object_register@DPDK_17.08 18.02
  rte_fslmc_vfio_dmamap@DPDK_17.05 18.02
+ rte_fslmc_vfio_mem_dmamap@EXPERIMENTAL 19.08
  rte_global_active_dqs_list@DPDK_17.08 18.02
  rte_mcp_ptr_list@DPDK_17.05 18.02

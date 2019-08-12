@@ -10,6 +10,7 @@ librte_vhost.so.19.08 librte-vhost19.08 #MINVER#
  rte_vdpa_get_device@EXPERIMENTAL 18.05
  rte_vdpa_get_device_num@EXPERIMENTAL 18.11
  rte_vdpa_register_device@EXPERIMENTAL 18.05
+ rte_vdpa_relay_vring_used@EXPERIMENTAL 19.08
  rte_vdpa_unregister_device@EXPERIMENTAL 18.05
  rte_vhost_avail_entries@DPDK_16.07 16.07~rc1
  rte_vhost_crypto_create@EXPERIMENTAL 18.05
@@ -29,10 +30,12 @@ librte_vhost.so.19.08 librte-vhost19.08 #MINVER#
  rte_vhost_driver_get_vdpa_device_id@EXPERIMENTAL 18.05
  rte_vhost_driver_register@DPDK_2.0 16.07~rc1
  rte_vhost_driver_set_features@DPDK_17.05 17.05
+ rte_vhost_driver_set_protocol_features@EXPERIMENTAL 19.08
  rte_vhost_driver_start@DPDK_17.05 17.05
  rte_vhost_driver_unregister@DPDK_2.1 16.07~rc1
  rte_vhost_enable_guest_notification@DPDK_2.0 16.07~rc1
  rte_vhost_enqueue_burst@DPDK_2.0 16.07~rc1
+ rte_vhost_extern_callback_register@EXPERIMENTAL 19.08
  rte_vhost_get_ifname@DPDK_16.07 16.07~rc1
  rte_vhost_get_log_base@EXPERIMENTAL 18.05
  rte_vhost_get_mem_table@DPDK_17.05 17.05
@@ -44,6 +47,7 @@ librte_vhost.so.19.08 librte-vhost19.08 #MINVER#
  rte_vhost_get_vhost_vring@DPDK_17.05 17.05
  rte_vhost_get_vring_base@EXPERIMENTAL 18.05
  rte_vhost_get_vring_num@DPDK_17.05 17.05
+ rte_vhost_host_notifier_ctrl@EXPERIMENTAL 19.08
  rte_vhost_log_used_vring@DPDK_17.05 17.05
  rte_vhost_log_write@DPDK_17.05 17.05
  rte_vhost_rx_queue_count@DPDK_17.08 17.08

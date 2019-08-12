@@ -40,8 +40,6 @@ librte_cryptodev.so.19.08 librte-cryptodev19.08 #MINVER#
  rte_cryptodev_get_cipher_algo_enum@DPDK_17.05 17.05
  rte_cryptodev_get_dev_id@DPDK_16.04 16.04
  rte_cryptodev_get_feature_name@DPDK_16.04 16.04
-#MISSING: 18.08# rte_cryptodev_get_header_session_size@DPDK_17.08 17.08
-#MISSING: 18.08# rte_cryptodev_get_private_session_size@DPDK_17.08 17.08
  rte_cryptodev_get_sec_ctx@DPDK_17.11 17.11
  rte_cryptodev_info_get@DPDK_16.04 16.04
  rte_cryptodev_name_get@DPDK_17.11 17.11
@@ -55,12 +53,8 @@ librte_cryptodev.so.19.08 librte-cryptodev19.08 #MINVER#
  rte_cryptodev_pmd_is_valid_dev@DPDK_17.02 17.05
  rte_cryptodev_pmd_parse_input_args@DPDK_17.11 17.11
  rte_cryptodev_pmd_release_device@DPDK_16.04 16.04
-#MISSING: 18.08# rte_cryptodev_queue_pair_attach_sym_session@DPDK_17.05 17.05
  rte_cryptodev_queue_pair_count@DPDK_16.04 16.04
-#MISSING: 18.08# rte_cryptodev_queue_pair_detach_sym_session@DPDK_17.05 17.05
  rte_cryptodev_queue_pair_setup@DPDK_16.04 16.04
-#MISSING: 18.08# rte_cryptodev_queue_pair_start@DPDK_16.04 16.04
-#MISSING: 18.08# rte_cryptodev_queue_pair_stop@DPDK_16.04 16.04
  rte_cryptodev_socket_id@DPDK_16.04 16.04
  rte_cryptodev_start@DPDK_16.04 16.04
  rte_cryptodev_stats_get@DPDK_16.04 16.04
@@ -70,14 +64,14 @@ librte_cryptodev.so.19.08 librte-cryptodev19.08 #MINVER#
  rte_cryptodev_sym_capability_check_auth@DPDK_17.02 17.05
  rte_cryptodev_sym_capability_check_cipher@DPDK_17.02 17.05
  rte_cryptodev_sym_capability_get@DPDK_17.02 17.05
+ rte_cryptodev_sym_get_existing_header_session_size@EXPERIMENTAL 19.08
  rte_cryptodev_sym_get_header_session_size@DPDK_18.05 18.05
  rte_cryptodev_sym_get_private_session_size@DPDK_18.05 18.05
  rte_cryptodev_sym_session_clear@DPDK_17.08 17.08
  rte_cryptodev_sym_session_create@DPDK_16.04 16.04
  rte_cryptodev_sym_session_free@DPDK_16.04 16.04
-#MISSING: 18.08# rte_cryptodev_sym_session_get_private_data@EXPERIMENTAL 18.05
  rte_cryptodev_sym_session_get_user_data@EXPERIMENTAL 18.08
  rte_cryptodev_sym_session_init@DPDK_17.08 17.08
-#MISSING: 18.08# rte_cryptodev_sym_session_set_private_data@EXPERIMENTAL 18.05
+ rte_cryptodev_sym_session_pool_create@EXPERIMENTAL 19.08
  rte_cryptodev_sym_session_set_user_data@EXPERIMENTAL 18.08
  rte_cryptodevs@DPDK_16.04 16.04
