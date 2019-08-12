@@ -732,10 +732,6 @@ cxgbe_rtef_parse_items(struct rte_flow *flow,
 						"parse items cannot be repeated (except void)");
 			repeat[i->type] = 1;
 
-			/* No spec found for this pattern item. Skip it */
-			if (!i->spec)
-				break;
-
 			/* validate the item */
 			ret = cxgbe_validate_item(i, e);
 			if (ret)

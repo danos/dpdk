@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <libgen.h>
 
 #include <rte_pci.h>
 #include <rte_bus_pci.h>

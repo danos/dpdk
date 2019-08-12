@@ -365,7 +365,6 @@ int
 rte_eal_memzone_init(void)
 {
 	struct rte_mem_config *mcfg;
-	int ret = 0;
 
 	/* get pointer to global configuration */
 	mcfg = rte_eal_get_configuration()->mem_config;
@@ -376,16 +375,17 @@ rte_eal_memzone_init(void)
 			rte_fbarray_init(&mcfg->memzones, "memzone",
 			RTE_MAX_MEMZONE, sizeof(struct rte_memzone))) {
 		RTE_LOG(ERR, EAL, "Cannot allocate memzone list\n");
-		ret = -1;
+		return -1;
 	} else if (rte_eal_process_type() == RTE_PROC_SECONDARY &&
 			rte_fbarray_attach(&mcfg->memzones)) {
 		RTE_LOG(ERR, EAL, "Cannot attach to memzone list\n");
-		ret = -1;
+		rte_rwlock_write_unlock(&mcfg->mlock);
+		return -1;
 	}
 
 	rte_rwlock_write_unlock(&mcfg->mlock);
 
-	return ret;
+	return 0;
 }
 
 /* Walk all reserved memory zones */

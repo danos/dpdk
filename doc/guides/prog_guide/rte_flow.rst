@@ -2314,10 +2314,7 @@ in pattern, Some PMDs will reject rule because behaviour will be undefined.
 Action: ``SET_MAC_SRC``
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Set source MAC address.
-
-It must be used with a valid RTE_FLOW_ITEM_TYPE_ETH flow pattern item.
-Otherwise, RTE_FLOW_ERROR_TYPE_ACTION error will be returned.
+Set source MAC address
 
 .. _table_rte_flow_action_set_mac_src:
 
@@ -2332,10 +2329,7 @@ Otherwise, RTE_FLOW_ERROR_TYPE_ACTION error will be returned.
 Action: ``SET_MAC_DST``
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Set destination MAC address.
-
-It must be used with a valid RTE_FLOW_ITEM_TYPE_ETH flow pattern item.
-Otherwise, RTE_FLOW_ERROR_TYPE_ACTION error will be returned.
+Set source MAC address
 
 .. _table_rte_flow_action_set_mac_dst:
 

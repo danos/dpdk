@@ -44,8 +44,6 @@ print_usage () {
 }
 
 check_forbidden_additions() { # <patch>
-	res=0
-
 	# refrain from new additions of rte_panic() and rte_exit()
 	# multiple folders and expressions are separated by spaces
 	awk -v FOLDERS="lib drivers" \
@@ -53,8 +51,7 @@ check_forbidden_additions() { # <patch>
 		-v RET_ON_FAIL=1 \
 		-v MESSAGE='Using rte_panic/rte_exit' \
 		-f $(dirname $(readlink -e $0))/check-forbidden-tokens.awk \
-		"$1" || res=1
-
+		"$1"
 	# svg figures must be included with wildcard extension
 	# because of png conversion for pdf docs
 	awk -v FOLDERS='doc' \
@@ -62,9 +59,7 @@ check_forbidden_additions() { # <patch>
 		-v RET_ON_FAIL=1 \
 		-v MESSAGE='Using explicit .svg extension instead of .*' \
 		-f $(dirname $(readlink -e $0))/check-forbidden-tokens.awk \
-		"$1" || res = 1
-
-	return $res
+		"$1"
 }
 
 number=0

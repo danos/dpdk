@@ -2,8 +2,7 @@
  * Copyright 2017 Mellanox Technologies, Ltd
  */
 
-#define MAX_PATTERN_NUM		3
-#define MAX_ACTION_NUM		2
+#define MAX_PATTERN_NUM		4
 
 struct rte_flow *
 generate_ipv4_flow(uint16_t port_id, uint16_t rx_q,
@@ -42,9 +41,11 @@ generate_ipv4_flow(uint16_t port_id, uint16_t rx_q,
 {
 	struct rte_flow_attr attr;
 	struct rte_flow_item pattern[MAX_PATTERN_NUM];
-	struct rte_flow_action action[MAX_ACTION_NUM];
+	struct rte_flow_action action[MAX_PATTERN_NUM];
 	struct rte_flow *flow = NULL;
 	struct rte_flow_action_queue queue = { .index = rx_q };
+	struct rte_flow_item_eth eth_spec;
+	struct rte_flow_item_eth eth_mask;
 	struct rte_flow_item_ipv4 ip_spec;
 	struct rte_flow_item_ipv4 ip_mask;
 	int res;
@@ -63,19 +64,26 @@ generate_ipv4_flow(uint16_t port_id, uint16_t rx_q,
 	 * create the action sequence.
 	 * one action only,  move packet to queue
 	 */
+
 	action[0].type = RTE_FLOW_ACTION_TYPE_QUEUE;
 	action[0].conf = &queue;
 	action[1].type = RTE_FLOW_ACTION_TYPE_END;
 
 	/*
-	 * set the first level of the pattern (ETH).
+	 * set the first level of the pattern (eth).
 	 * since in this example we just want to get the
 	 * ipv4 we set this level to allow all.
 	 */
+	memset(&eth_spec, 0, sizeof(struct rte_flow_item_eth));
+	memset(&eth_mask, 0, sizeof(struct rte_flow_item_eth));
+	eth_spec.type = 0;
+	eth_mask.type = 0;
 	pattern[0].type = RTE_FLOW_ITEM_TYPE_ETH;
+	pattern[0].spec = &eth_spec;
+	pattern[0].mask = &eth_mask;
 
 	/*
-	 * setting the second level of the pattern (IP).
+	 * setting the third level of the pattern (ip).
 	 * in this example this is the level we care about
 	 * so we set it according to the parameters.
 	 */

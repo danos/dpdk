@@ -47,7 +47,6 @@
 #define FALSE               0
 #define TRUE                1
 
-typedef int bool;
 #define false               0
 #define true                1
 #define min(a,b)        RTE_MIN(a,b)

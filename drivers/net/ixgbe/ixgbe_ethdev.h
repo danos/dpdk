@@ -490,9 +490,6 @@ struct ixgbe_adapter {
 	struct rte_timecounter      rx_tstamp_tc;
 	struct rte_timecounter      tx_tstamp_tc;
  	struct ixgbe_tm_conf        tm_conf;
-
-	/* For RSS reta table update */
-	uint8_t rss_reta_updated;
 };
 
 struct ixgbe_vf_representor {

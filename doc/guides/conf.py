@@ -9,7 +9,6 @@ from sphinx import __version__ as sphinx_version
 from sphinx.highlighting import PygmentsBridge
 from pygments.formatters.latex import LatexFormatter
 from os import listdir
-from os import environ
 from os.path import basename
 from os.path import dirname
 from os.path import join as path_join
@@ -38,9 +37,7 @@ html_add_permalinks = ""
 html_show_copyright = False
 highlight_language = 'none'
 
-# If MAKEFLAGS is exported by the user, garbage text might end up in version
-version = subprocess.check_output(['make', '-sRrC', '../../', 'showversion'],
-                                  env=dict(environ, MAKEFLAGS=""))
+version = subprocess.check_output(['make', '-sRrC', '../../', 'showversion'])
 version = version.decode('utf-8').rstrip()
 release = version
 

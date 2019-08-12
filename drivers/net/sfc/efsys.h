@@ -84,7 +84,7 @@ typedef bool boolean_t;
 #define P2ALIGN(_x, _a)		((_x) & -(_a))
 #endif
 
-#ifndef ISP2
+#ifndef IS2P
 #define ISP2(x)			rte_is_power_of_2(x)
 #endif
 

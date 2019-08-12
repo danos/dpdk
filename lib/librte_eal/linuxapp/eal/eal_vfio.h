@@ -5,8 +5,6 @@
 #ifndef EAL_VFIO_H_
 #define EAL_VFIO_H_
 
-#include <rte_common.h>
-
 /*
  * determine if VFIO is present on the system
  */
@@ -124,9 +122,6 @@ int vfio_get_default_container_fd(void);
 const struct vfio_iommu_type *
 vfio_set_iommu_type(int vfio_container_fd);
 
-int
-vfio_get_iommu_type(void);
-
 /* check if we have any supported extensions */
 int
 vfio_has_supported_extensions(int vfio_container_fd);
@@ -138,7 +133,6 @@ int vfio_mp_sync_setup(void);
 #define SOCKET_REQ_CONTAINER 0x100
 #define SOCKET_REQ_GROUP 0x200
 #define SOCKET_REQ_DEFAULT_CONTAINER 0x400
-#define SOCKET_REQ_IOMMU_TYPE 0x800
 #define SOCKET_OK 0x0
 #define SOCKET_NO_FD 0x1
 #define SOCKET_ERR 0xFF
@@ -146,11 +140,7 @@ int vfio_mp_sync_setup(void);
 struct vfio_mp_param {
 	int req;
 	int result;
-	RTE_STD_C11
-	union {
-		int group_num;
-		int iommu_type_id;
-	};
+	int group_num;
 };
 
 #endif /* VFIO_PRESENT */

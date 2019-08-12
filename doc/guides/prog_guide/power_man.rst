@@ -184,7 +184,7 @@ API Overview for Empty Poll Power Management
 
 * **Update Valid Poll Counter**: update the valid poll counter.
 
-* **Set the Frequency Index**: update the power state/frequency mapping.
+* **Set the Fequence Index**: update the power state/frequency mapping.
 
 * **Detect empty poll state change**: empty poll state change detection algorithm then take action.
 
@@ -195,8 +195,6 @@ The mechanism can applied to any device which is based on polling. e.g. NIC, FPG
 References
 ----------
 
-*   The :doc:`../sample_app_ug/l3_forward_power_man`
-    chapter in the :doc:`../sample_app_ug/index` section.
+*   l3fwd-power: The sample application in DPDK that performs L3 forwarding with power management.
 
-*   The :doc:`../sample_app_ug/vm_power_management`
-    chapter in the :doc:`../sample_app_ug/index` section.
+*   The "L3 Forwarding with Power Management Sample Application" chapter in the *DPDK Sample Application's User Guide*.

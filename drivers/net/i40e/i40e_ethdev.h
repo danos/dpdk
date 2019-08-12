@@ -1081,9 +1081,6 @@ struct i40e_adapter {
 
 	/* For devargs */
 	uint8_t use_latest_vec;
-
-	/* For RSS reta table update */
-	uint8_t rss_reta_updated;
 };
 
 /**

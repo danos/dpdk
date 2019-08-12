@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- *   Copyright 2016,2018 NXP
+ *   Copyright 2016 NXP
  *
  */
 
@@ -227,16 +227,20 @@ static int
 rte_fslmc_parse(const char *name, void *addr)
 {
 	uint16_t dev_id;
-	char *t_ptr = NULL, *dname = NULL;
+	char *t_ptr;
+	char *sep = strchr(name, ':');
 
-	/* 'name' is expected to contain name of device, for example, dpio.1,
-	 * dpni.2, etc.
-	 */
-
-	dname = strdup(name);
-	if (!dname)
+	if (strncmp(name, RTE_STR(FSLMC_BUS_NAME),
+		strlen(RTE_STR(FSLMC_BUS_NAME)))) {
 		return -EINVAL;
-	t_ptr = dname;
+	}
+
+	if (!sep) {
+		DPAA2_BUS_ERR("Incorrect device name observed");
+		return -EINVAL;
+	}
+
+	t_ptr = (char *)(sep + 1);
 
 	if (strncmp("dpni", t_ptr, 4) &&
 	    strncmp("dpseci", t_ptr, 6) &&
@@ -247,29 +251,24 @@ rte_fslmc_parse(const char *name, void *addr)
 	    strncmp("dpmcp", t_ptr, 5) &&
 	    strncmp("dpdmai", t_ptr, 6)) {
 		DPAA2_BUS_ERR("Unknown or unsupported device");
-		goto err_out;
+		return -EINVAL;
 	}
 
 	t_ptr = strchr(name, '.');
 	if (!t_ptr) {
 		DPAA2_BUS_ERR("Incorrect device string observed (%s)", t_ptr);
-		goto err_out;
+		return -EINVAL;
 	}
 
 	t_ptr = (char *)(t_ptr + 1);
 	if (sscanf(t_ptr, "%hu", &dev_id) <= 0) {
 		DPAA2_BUS_ERR("Incorrect device string observed (%s)", t_ptr);
-		goto err_out;
+		return -EINVAL;
 	}
-	free(dname);
 
 	if (addr)
-		strcpy(addr, name);
-
+		strcpy(addr, (char *)(sep + 1));
 	return 0;
-err_out:
-	free(dname);
-	return -EINVAL;
 }
 
 static int
@@ -294,8 +293,8 @@ rte_fslmc_scan(void)
 		goto scan_fail;
 
 	/* Scan devices on the group */
-	snprintf(fslmc_dirpath, sizeof(fslmc_dirpath), "%s/%d/devices",
-			VFIO_IOMMU_GROUP_PATH, groupid);
+	sprintf(fslmc_dirpath, "%s/%d/devices", VFIO_IOMMU_GROUP_PATH,
+		groupid);
 	dir = opendir(fslmc_dirpath);
 	if (!dir) {
 		DPAA2_BUS_ERR("Unable to open VFIO group directory");

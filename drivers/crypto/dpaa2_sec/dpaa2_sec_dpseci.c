@@ -108,7 +108,7 @@ build_proto_compound_fd(dpaa2_sec_session *sess,
 	/* Configure FD as a FRAME LIST */
 	DPAA2_SET_FD_ADDR(fd, DPAA2_VADDR_TO_IOVA(op_fle));
 	DPAA2_SET_FD_COMPOUND_FMT(fd);
-	DPAA2_SET_FD_FLC(fd, DPAA2_VADDR_TO_IOVA(flc));
+	DPAA2_SET_FD_FLC(fd, (ptrdiff_t)flc);
 
 	/* Configure Output FLE with dst mbuf data  */
 	DPAA2_SET_FLE_ADDR(op_fle, DPAA2_MBUF_VADDR_TO_IOVA(dst_mbuf));
@@ -160,7 +160,7 @@ build_proto_fd(dpaa2_sec_session *sess,
 	DPAA2_SET_FD_ADDR(fd, DPAA2_MBUF_VADDR_TO_IOVA(sym_op->m_src));
 	DPAA2_SET_FD_OFFSET(fd, sym_op->m_src->data_off);
 	DPAA2_SET_FD_LEN(fd, sym_op->m_src->pkt_len);
-	DPAA2_SET_FD_FLC(fd, DPAA2_VADDR_TO_IOVA(flc));
+	DPAA2_SET_FD_FLC(fd, (ptrdiff_t)flc);
 
 	/* save physical address of mbuf */
 	op->sym->aead.digest.phys_addr = mbuf->buf_iova;
@@ -3372,15 +3372,14 @@ dpaa2_sec_dev_init(struct rte_cryptodev *cryptodev)
 			     retcode);
 		goto init_error;
 	}
-	snprintf(cryptodev->data->name, sizeof(cryptodev->data->name),
-			"dpsec-%u", hw_id);
+	sprintf(cryptodev->data->name, "dpsec-%u", hw_id);
 
 	internals->max_nb_queue_pairs = attr.num_tx_queues;
 	cryptodev->data->nb_queue_pairs = internals->max_nb_queue_pairs;
 	internals->hw = dpseci;
 	internals->token = token;
 
-	snprintf(str, sizeof(str), "fle_pool_%d", cryptodev->data->dev_id);
+	sprintf(str, "fle_pool_%d", cryptodev->data->dev_id);
 	internals->fle_pool = rte_mempool_create((const char *)str,
 			FLE_POOL_NUM_BUFS,
 			FLE_POOL_BUF_SIZE,
@@ -3411,8 +3410,7 @@ cryptodev_dpaa2_sec_probe(struct rte_dpaa2_driver *dpaa2_drv __rte_unused,
 
 	int retval;
 
-	snprintf(cryptodev_name, sizeof(cryptodev_name), "dpsec-%d",
-			dpaa2_dev->object_id);
+	sprintf(cryptodev_name, "dpsec-%d", dpaa2_dev->object_id);
 
 	cryptodev = rte_cryptodev_pmd_allocate(cryptodev_name, rte_socket_id());
 	if (cryptodev == NULL)

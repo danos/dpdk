@@ -1435,7 +1435,8 @@ struct avf_aqc_add_remove_cloud_filters_element_data {
 };
 
 /* avf_aqc_add_rm_cloud_filt_elem_ext is used when
- * AVF_AQC_ADD_REM_CLOUD_CMD_BIG_BUFFER flag is set.
+ * AVF_AQC_ADD_REM_CLOUD_CMD_BIG_BUFFER flag is set. refer to
+ * DCR288
  */
 struct avf_aqc_add_rm_cloud_filt_elem_ext {
 	struct avf_aqc_add_remove_cloud_filters_element_data element;

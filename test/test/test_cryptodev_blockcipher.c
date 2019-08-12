@@ -401,14 +401,13 @@ test_blockcipher_one_case(const struct blockcipher_test_case *t,
 
 	/* Verify results */
 	if (op->status != RTE_CRYPTO_OP_STATUS_SUCCESS) {
-		if ((t->op_mask & BLOCKCIPHER_TEST_OP_AUTH_VERIFY) &&
-			(op->status == RTE_CRYPTO_OP_STATUS_AUTH_FAILED))
+		if (t->op_mask & BLOCKCIPHER_TEST_OP_AUTH_VERIFY)
 			snprintf(test_msg, BLOCKCIPHER_TEST_MSG_LEN, "line %u "
 				"FAILED: Digest verification failed "
 				"(0x%X)", __LINE__, op->status);
 		else
 			snprintf(test_msg, BLOCKCIPHER_TEST_MSG_LEN, "line %u "
-				"FAILED: Operation failed "
+				"FAILED: Digest verification failed "
 				"(0x%X)", __LINE__, op->status);
 		status = TEST_FAILED;
 		goto error_exit;

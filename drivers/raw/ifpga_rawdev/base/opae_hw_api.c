@@ -303,25 +303,25 @@ static struct opae_adapter_ops *match_ops(struct opae_adapter *adapter)
 }
 
 /**
- * opae_adapter_init - init opae_adapter data structure
- * @adapter: pointer of opae_adapter data structure
+ * opae_adapter_data_alloc - alloc opae_adapter_data data structure
  * @name: adapter name.
  * @data: private data of this adapter.
  *
- * Return: 0 on success.
+ * Return: opae_adapter on success, otherwise NULL.
  */
-int opae_adapter_init(struct opae_adapter *adapter,
-		const char *name, void *data)
+struct opae_adapter *opae_adapter_alloc(const char *name, void *data)
 {
+	struct opae_adapter *adapter = opae_zmalloc(sizeof(*adapter));
+
 	if (!adapter)
-		return -ENOMEM;
+		return NULL;
 
 	TAILQ_INIT(&adapter->acc_list);
 	adapter->data = data;
 	adapter->name = name;
 	adapter->ops = match_ops(adapter);
 
-	return 0;
+	return adapter;
 }
 
 /**
