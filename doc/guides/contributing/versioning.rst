@@ -548,29 +548,26 @@ utilities which can be installed via a package manager. For example::
 
 The syntax of the ``validate-abi.sh`` utility is::
 
-   ./devtools/validate-abi.sh <REV1> <REV2>
+   ./devtools/validate-abi.sh <REV1> <REV2> <TARGET>
 
 Where ``REV1`` and ``REV2`` are valid gitrevisions(7)
 https://www.kernel.org/pub/software/scm/git/docs/gitrevisions.html
-on the local repo.
+on the local repo and target is the usual DPDK compilation target.
 
 For example::
 
    # Check between the previous and latest commit:
-   ./devtools/validate-abi.sh HEAD~1 HEAD
-
-   # Check on a specific compilation target:
-   ./devtools/validate-abi.sh -t x86_64-native-linux-gcc HEAD~1 HEAD
+   ./devtools/validate-abi.sh HEAD~1 HEAD x86_64-native-linuxapp-gcc
 
    # Check between two tags:
-   ./devtools/validate-abi.sh v2.0.0 v2.1.0
+   ./devtools/validate-abi.sh v2.0.0 v2.1.0 x86_64-native-linuxapp-gcc
 
    # Check between git master and local topic-branch "vhost-hacking":
-   ./devtools/validate-abi.sh master vhost-hacking
+   ./devtools/validate-abi.sh master vhost-hacking x86_64-native-linuxapp-gcc
 
 After the validation script completes (it can take a while since it need to
 compile both tags) it will create compatibility reports in the
-``./abi-check/compat_report`` directory. Listed incompatibilities can be found
-as follows::
+``./compat_report`` directory. Listed incompatibilities can be found as
+follows::
 
-  grep -lr Incompatible abi-check/compat_reports/
+  grep -lr Incompatible compat_reports/

@@ -422,17 +422,16 @@ opdl_dump(struct rte_eventdev *dev, FILE *f)
 			else
 				p_type = "????";
 
-			snprintf(queue_id, sizeof(queue_id), "%02u",
-					port->external_qid);
+			sprintf(queue_id, "%02u", port->external_qid);
 			if (port->p_type == OPDL_REGULAR_PORT ||
 					port->p_type == OPDL_ASYNC_PORT)
-				snprintf(total_cyc, sizeof(total_cyc),
+				sprintf(total_cyc,
 					" %'16"PRIu64"",
 					(cpg != 0 ?
 					 port->port_stat[total_cycles] / cpg
 					 : 0));
 			else
-				snprintf(total_cyc, sizeof(total_cyc),
+				sprintf(total_cyc,
 					"             ----");
 			fprintf(f,
 				"%4s %10u %8u %9s %'16"PRIu64" %'16"PRIu64" %s "

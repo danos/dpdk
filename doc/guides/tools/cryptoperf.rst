@@ -59,7 +59,7 @@ To set on the linearization options add below definition to the
 **Step 3: Build the application**
 
 Execute the ``dpdk-setup.sh`` script to build the DPDK library together with the
-``dpdk-test-crypto-perf`` application.
+``dpdk-test-crypto-perf`` applcation.
 
 Initially, the user must select a DPDK target to choose the correct target type
 and compiler options to use when building the libraries.
@@ -80,7 +80,7 @@ EAL Options
 ~~~~~~~~~~~
 
 The following are the EAL command-line options that can be used in conjunction
-with the ``dpdk-test-crypto-perf`` application.
+with the ``dpdk-test-crypto-perf`` applcation.
 See the DPDK Getting Started Guides for more information on these options.
 
 *   ``-c <COREMASK>`` or ``-l <CORELIST>``
@@ -96,10 +96,10 @@ See the DPDK Getting Started Guides for more information on these options.
 
         Add a virtual device.
 
-Application Options
-~~~~~~~~~~~~~~~~~~~
+Appication Options
+~~~~~~~~~~~~~~~~~~
 
-The following are the application command-line options:
+The following are the appication command-line options:
 
 * ``--ptest type``
 
@@ -338,13 +338,13 @@ Test Vector File
 The test vector file is a text file contain information about test vectors.
 The file is made of the sections. The first section doesn't have header.
 It contain global information used in each test variant vectors -
-typically information about plaintext, ciphertext, cipher key, auth key,
+typically information about plaintext, ciphertext, cipher key, aut key,
 initial vector. All other sections begin header.
 The sections contain particular information typically digest.
 
 **Format of the file:**
 
-Each line beginning with sign '#' contain comment and it is ignored by parser::
+Each line beginig with sign '#' contain comment and it is ignored by parser::
 
    # <comment>
 
@@ -352,16 +352,16 @@ Header line is just name in square bracket::
 
    [<section name>]
 
-Data line contain information token then sign '=' and
+Data line contain information tocken then sign '=' and
 a string of bytes in C byte array format::
 
-   <token> = <C byte array>
+   <tocken> = <C byte array>
 
-**Tokens list:**
+**Tockens list:**
 
 * ``plaintext``
 
-        Original plaintext to be encrypted.
+        Original plaintext to be crypted.
 
 * ``ciphertext``
 

@@ -6,7 +6,6 @@
 march_opt = '-march=@0@'.format(machine)
 
 arm_force_native_march = false
-arm_force_default_march = (machine == 'default')
 
 machine_args_generic = [
 	['default', ['-march=armv8-a+crc+crypto']],
@@ -106,10 +105,7 @@ else
 	cmd_generic = ['generic', '', '', 'default', '']
 	cmd_output = cmd_generic # Set generic by default
 	machine_args = [] # Clear previous machine args
-	if arm_force_default_march and not meson.is_cross_build()
-		machine = impl_generic
-		impl_pn = 'default'
-	elif not meson.is_cross_build()
+	if not meson.is_cross_build()
 		# The script returns ['Implementer', 'Variant', 'Architecture',
 		# 'Primary Part number', 'Revision']
 		detect_vendor = find_program(join_paths(
@@ -119,8 +115,8 @@ else
 			cmd_output = cmd.stdout().to_lower().strip().split(' ')
 		endif
 		# Set to generic if variable is not found
-		machine = get_variable('impl_' + cmd_output[0], ['generic'])
-		if machine[0] == 'generic'
+		machine = get_variable('impl_' + cmd_output[0], 'generic')
+		if machine == 'generic'
 			machine = impl_generic
 			cmd_output = cmd_generic
 		endif

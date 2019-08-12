@@ -25,7 +25,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <zlib.h>
-#include <rte_string_fns.h>
 
 #define BNX2X_PMD_VER_PREFIX "BNX2X PMD"
 #define BNX2X_PMD_VERSION_MAJOR 1
@@ -124,7 +123,7 @@ static __rte_noinline
 int bnx2x_nic_load(struct bnx2x_softc *sc);
 
 static int bnx2x_handle_sp_tq(struct bnx2x_softc *sc);
-static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp);
+static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp, int scan_fp);
 static void bnx2x_ack_sb(struct bnx2x_softc *sc, uint8_t igu_sb_id,
 			 uint8_t storm, uint16_t index, uint8_t op,
 			 uint8_t update);
@@ -185,25 +184,11 @@ bnx2x_dma_alloc(struct bnx2x_softc *sc, size_t size, struct bnx2x_dma *dma,
 	}
 	dma->paddr = (uint64_t) z->iova;
 	dma->vaddr = z->addr;
-	dma->mzone = (const void *)z;
 
 	PMD_DRV_LOG(DEBUG, sc,
 		    "%s: virt=%p phys=%" PRIx64, msg, dma->vaddr, dma->paddr);
 
 	return 0;
-}
-
-void bnx2x_dma_free(struct bnx2x_dma *dma)
-{
-	if (dma->mzone == NULL)
-		return;
-
-	rte_memzone_free((const struct rte_memzone *)dma->mzone);
-	dma->sc = NULL;
-	dma->paddr = 0;
-	dma->vaddr = NULL;
-	dma->nseg = 0;
-	dma->mzone = NULL;
 }
 
 static int bnx2x_acquire_hw_lock(struct bnx2x_softc *sc, uint32_t resource)
@@ -1114,12 +1099,6 @@ bnx2x_sp_post(struct bnx2x_softc *sc, int command, int cid, uint32_t data_hi,
 		    atomic_load_acq_long(&sc->cq_spq_left),
 		    atomic_load_acq_long(&sc->eq_spq_left));
 
-	/* RAMROD completion is processed in bnx2x_intr_legacy()
-	 * which can run from different contexts.
-	 * Ask bnx2x_intr_intr() to process RAMROD
-	 * completion whenever it gets scheduled.
-	 */
-	rte_atomic32_set(&sc->scan_fp, 1);
 	bnx2x_sp_prod_update(sc);
 
 	return 0;
@@ -2456,7 +2435,6 @@ static int bnx2x_alloc_mem(struct bnx2x_softc *sc)
 
 static void bnx2x_free_fw_stats_mem(struct bnx2x_softc *sc)
 {
-	bnx2x_dma_free(&sc->fw_stats_dma);
 	sc->fw_stats_num = 0;
 
 	sc->fw_stats_req_size = 0;
@@ -4545,7 +4523,7 @@ static int bnx2x_handle_sp_tq(struct bnx2x_softc *sc)
 	return rc;
 }
 
-static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp)
+static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp, int scan_fp)
 {
 	struct bnx2x_softc *sc = fp->sc;
 	uint8_t more_rx = FALSE;
@@ -4560,14 +4538,14 @@ static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp)
 	/* update the fastpath index */
 	bnx2x_update_fp_sb_idx(fp);
 
-	if (rte_atomic32_read(&sc->scan_fp) == 1) {
+	if (scan_fp) {
 		if (bnx2x_has_rx_work(fp)) {
 			more_rx = bnx2x_rxeof(sc, fp);
 		}
 
 		if (more_rx) {
 			/* still more work to do */
-			bnx2x_handle_fp_tq(fp);
+			bnx2x_handle_fp_tq(fp, scan_fp);
 			return;
 		}
 	}
@@ -4583,7 +4561,7 @@ static void bnx2x_handle_fp_tq(struct bnx2x_fastpath *fp)
  * then calls a separate routine to handle the various
  * interrupt causes: link, RX, and TX.
  */
-int bnx2x_intr_legacy(struct bnx2x_softc *sc)
+int bnx2x_intr_legacy(struct bnx2x_softc *sc, int scan_fp)
 {
 	struct bnx2x_fastpath *fp;
 	uint32_t status, mask;
@@ -4615,7 +4593,7 @@ int bnx2x_intr_legacy(struct bnx2x_softc *sc)
 		/* acknowledge and disable further fastpath interrupts */
 			bnx2x_ack_sb(sc, fp->igu_sb_id, USTORM_ID,
 				     0, IGU_INT_DISABLE, 0);
-			bnx2x_handle_fp_tq(fp);
+			bnx2x_handle_fp_tq(fp, scan_fp);
 			status &= ~mask;
 		}
 	}
@@ -8102,27 +8080,6 @@ static int bnx2x_get_shmem_info(struct bnx2x_softc *sc)
 		sc->link_params.feature_config_flags &=
 		    ~ELINK_FEATURE_CONFIG_OVERRIDE_PREEMPHASIS_ENABLED;
 	}
-
-	val = sc->devinfo.bc_ver >> 8;
-	if (val < BNX2X_BC_VER) {
-		/* for now only warn later we might need to enforce this */
-		PMD_DRV_LOG(NOTICE, sc, "This driver needs bc_ver %X but found %X, please upgrade BC\n",
-			    BNX2X_BC_VER, val);
-	}
-	sc->link_params.feature_config_flags |=
-				(val >= REQ_BC_VER_4_VRFY_FIRST_PHY_OPT_MDL) ?
-				ELINK_FEATURE_CONFIG_BC_SUPPORTS_OPT_MDL_VRFY :
-				0;
-
-	sc->link_params.feature_config_flags |=
-		(val >= REQ_BC_VER_4_VRFY_SPECIFIC_PHY_OPT_MDL) ?
-		ELINK_FEATURE_CONFIG_BC_SUPPORTS_DUAL_PHY_OPT_MDL_VRFY : 0;
-	sc->link_params.feature_config_flags |=
-		(val >= REQ_BC_VER_4_VRFY_AFEX_SUPPORTED) ?
-		ELINK_FEATURE_CONFIG_BC_SUPPORTS_AFEX : 0;
-	sc->link_params.feature_config_flags |=
-		(val >= REQ_BC_VER_4_SFP_TX_DISABLE_SUPPORTED) ?
-		ELINK_FEATURE_CONFIG_BC_SUPPORTS_SFP_TX_DISABLED : 0;
 
 	/* get the initial value of the link params */
 	sc->link_params.multi_phy_config =
@@ -11784,13 +11741,13 @@ static const char *get_bnx2x_flags(uint32_t flags)
 
 	for (i = 0; i < 5; i++)
 		if (flags & (1 << i)) {
-			strlcat(flag_str, flag[i], sizeof(flag_str));
+			strcat(flag_str, flag[i]);
 			flags ^= (1 << i);
 		}
 	if (flags) {
 		static char unknown[BNX2X_INFO_STR_MAX];
 		snprintf(unknown, 32, "Unknown flag mask %x", flags);
-		strlcat(flag_str, unknown, sizeof(flag_str));
+		strcat(flag_str, unknown);
 	}
 	return flag_str;
 }

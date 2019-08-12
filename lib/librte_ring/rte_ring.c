@@ -189,8 +189,7 @@ rte_ring_free(struct rte_ring *r)
 	 * therefore, there is no memzone to free.
 	 */
 	if (r->memzone == NULL) {
-		RTE_LOG(ERR, RING,
-			"Cannot free ring, not created with rte_ring_create()\n");
+		RTE_LOG(ERR, RING, "Cannot free ring (not created with rte_ring_create()");
 		return;
 	}
 

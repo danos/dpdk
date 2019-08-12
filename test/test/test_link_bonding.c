@@ -201,7 +201,6 @@ configure_ethdev(uint16_t port_id, uint8_t start, uint8_t en_isr)
 }
 
 static int slaves_initialized;
-static int mac_slaves_initialized;
 
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cvar = PTHREAD_COND_INITIALIZER;
@@ -874,11 +873,10 @@ test_set_explicit_bonded_mac(void)
 static int
 test_set_bonded_port_initialization_mac_assignment(void)
 {
-	int i, slave_count;
+	int i, slave_count, bonded_port_id;
 
 	uint16_t slaves[RTE_MAX_ETHPORTS];
-	static int bonded_port_id = -1;
-	static int slave_port_ids[BONDED_INIT_MAC_ASSIGNMENT_SLAVE_COUNT];
+	int slave_port_ids[BONDED_INIT_MAC_ASSIGNMENT_SLAVE_COUNT];
 
 	struct ether_addr slave_mac_addr, bonded_mac_addr, read_mac_addr;
 
@@ -889,36 +887,29 @@ test_set_bonded_port_initialization_mac_assignment(void)
 	/*
 	 * 1. a - Create / configure  bonded / slave ethdevs
 	 */
-	if (bonded_port_id == -1) {
-		bonded_port_id = rte_eth_bond_create("net_bonding_mac_ass_test",
-				BONDING_MODE_ACTIVE_BACKUP, rte_socket_id());
-		TEST_ASSERT(bonded_port_id > 0, "failed to create bonded device");
+	bonded_port_id = rte_eth_bond_create("net_bonding_mac_ass_test",
+			BONDING_MODE_ACTIVE_BACKUP, rte_socket_id());
+	TEST_ASSERT(bonded_port_id > 0, "failed to create bonded device");
 
-		TEST_ASSERT_SUCCESS(configure_ethdev(bonded_port_id, 0, 0),
-					"Failed to configure bonded ethdev");
-	}
+	TEST_ASSERT_SUCCESS(configure_ethdev(bonded_port_id, 0, 0),
+				"Failed to configure bonded ethdev");
 
-	if (!mac_slaves_initialized) {
-		for (i = 0; i < BONDED_INIT_MAC_ASSIGNMENT_SLAVE_COUNT; i++) {
-			char pmd_name[RTE_ETH_NAME_MAX_LEN];
+	for (i = 0; i < BONDED_INIT_MAC_ASSIGNMENT_SLAVE_COUNT; i++) {
+		char pmd_name[RTE_ETH_NAME_MAX_LEN];
 
-			slave_mac_addr.addr_bytes[ETHER_ADDR_LEN-1] = i + 100;
+		slave_mac_addr.addr_bytes[ETHER_ADDR_LEN-1] = i + 100;
 
-			snprintf(pmd_name, RTE_ETH_NAME_MAX_LEN,
-				"eth_slave_%d", i);
+		snprintf(pmd_name, RTE_ETH_NAME_MAX_LEN, "eth_slave_%d", i);
 
-			slave_port_ids[i] = virtual_ethdev_create(pmd_name,
-					&slave_mac_addr, rte_socket_id(), 1);
+		slave_port_ids[i] = virtual_ethdev_create(pmd_name,
+				&slave_mac_addr, rte_socket_id(), 1);
 
-			TEST_ASSERT(slave_port_ids[i] >= 0,
-					"Failed to create slave ethdev %s",
-					pmd_name);
+		TEST_ASSERT(slave_port_ids[i] >= 0,
+				"Failed to create slave ethdev %s", pmd_name);
 
-			TEST_ASSERT_SUCCESS(configure_ethdev(slave_port_ids[i], 1, 0),
-					"Failed to configure virtual ethdev %s",
-					pmd_name);
-		}
-		mac_slaves_initialized = 1;
+		TEST_ASSERT_SUCCESS(configure_ethdev(slave_port_ids[i], 1, 0),
+				"Failed to configure virtual ethdev %s",
+				pmd_name);
 	}
 
 

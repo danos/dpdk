@@ -25,7 +25,7 @@ individual device. Since the metrics library is self-contained, the only
 restriction on port numbers is that they are less than ``RTE_MAX_ETHPORTS``
 - there is no requirement for the ports to actually exist.
 
-Initializing the library
+Initialising the library
 ------------------------
 
 Before the library can be used, it has to be initialized by calling

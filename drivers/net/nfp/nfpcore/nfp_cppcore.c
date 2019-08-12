@@ -801,8 +801,7 @@ __nfp_cpp_model_autodetect(struct nfp_cpp *cpp)
 	uint32_t arm_id = NFP_CPP_ID(NFP_CPP_TARGET_ARM, 0, 0);
 	uint32_t model = 0;
 
-	if (nfp_cpp_readl(cpp, arm_id, NFP6000_ARM_GCSR_SOFTMODEL0, &model))
-		return 0;
+	nfp_cpp_readl(cpp, arm_id, NFP6000_ARM_GCSR_SOFTMODEL0, &model);
 
 	if (NFP_CPP_MODEL_IS_6000(model)) {
 		uint32_t tmp;
@@ -811,10 +810,8 @@ __nfp_cpp_model_autodetect(struct nfp_cpp *cpp)
 
 		/* The PL's PluDeviceID revision code is authoratative */
 		model &= ~0xff;
-		if (nfp_xpb_readl(cpp, NFP_XPB_DEVICE(1, 1, 16) +
-				   NFP_PL_DEVICE_ID, &tmp))
-			return 0;
-
+		nfp_xpb_readl(cpp, NFP_XPB_DEVICE(1, 1, 16) +
+				   NFP_PL_DEVICE_ID, &tmp);
 		model |= (NFP_PL_DEVICE_ID_MASK & tmp) - 0x10;
 	}
 

@@ -36,7 +36,7 @@ struct rte_logs {
 	struct rte_log_dynamic_type *dynamic_types;
 };
 
-/** Global log information */
+/** Global log informations */
 extern struct rte_logs rte_logs;
 
 /* SDK log type */

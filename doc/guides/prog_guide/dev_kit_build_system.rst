@@ -216,6 +216,8 @@ Objects
 Misc
 ^^^^
 
+*   rte.doc.mk: Documentation in the development kit framework
+
 *   rte.gnuconfigure.mk: Build an application that is configure-based.
 
 *   rte.subdir.mk: Build several directories in the development kit framework.
@@ -247,7 +249,7 @@ Creates the following symbol:
 Which ``dpdk-pmdinfogen`` scans for.  Using this information other relevant
 bits of data can be exported from the object file and used to produce a
 hardware support description, that ``dpdk-pmdinfogen`` then encodes into a
-JSON formatted string in the following format:
+json formatted string in the following format:
 
 .. code-block:: c
 

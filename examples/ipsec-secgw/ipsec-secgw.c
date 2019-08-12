@@ -255,8 +255,7 @@ prepare_one_packet(struct rte_mbuf *pkt, struct ipsec_traffic *t)
 		}
 	} else {
 		/* Unknown/Unsupported type, drop the packet */
-		RTE_LOG(ERR, IPSEC, "Unsupported packet type 0x%x\n",
-			rte_be_to_cpu_16(eth->ether_type));
+		RTE_LOG(ERR, IPSEC, "Unsupported packet type\n");
 		rte_pktmbuf_free(pkt);
 	}
 
@@ -426,11 +425,11 @@ inbound_sp_sa(struct sp_ctx *sp, struct sa_ctx *sa, struct traffic_type *ip,
 	for (i = 0; i < ip->num; i++) {
 		m = ip->pkts[i];
 		res = ip->res[i];
-		if (res == BYPASS) {
+		if (res & BYPASS) {
 			ip->pkts[j++] = m;
 			continue;
 		}
-		if (res == DISCARD) {
+		if (res & DISCARD) {
 			rte_pktmbuf_free(m);
 			continue;
 		}
@@ -441,8 +440,9 @@ inbound_sp_sa(struct sp_ctx *sp, struct sa_ctx *sa, struct traffic_type *ip,
 			continue;
 		}
 
-		sa_idx = SPI2IDX(res);
-		if (!inbound_sa_check(sa, m, sa_idx)) {
+		sa_idx = ip->res[i] & PROTECT_MASK;
+		if (sa_idx >= IPSEC_SA_MAX_ENTRIES ||
+				!inbound_sa_check(sa, m, sa_idx)) {
 			rte_pktmbuf_free(m);
 			continue;
 		}
@@ -523,15 +523,16 @@ outbound_sp(struct sp_ctx *sp, struct traffic_type *ip,
 	j = 0;
 	for (i = 0; i < ip->num; i++) {
 		m = ip->pkts[i];
-		sa_idx = SPI2IDX(ip->res[i]);
-		if (ip->res[i] == DISCARD)
+		sa_idx = ip->res[i] & PROTECT_MASK;
+		if (ip->res[i] & DISCARD)
 			rte_pktmbuf_free(m);
-		else if (ip->res[i] == BYPASS)
+		else if (ip->res[i] & BYPASS)
 			ip->pkts[j++] = m;
-		else {
+		else if (sa_idx < IPSEC_SA_MAX_ENTRIES) {
 			ipsec->res[ipsec->num] = sa_idx;
 			ipsec->pkts[ipsec->num++] = m;
-		}
+		} else /* invalid SA idx */
+			rte_pktmbuf_free(m);
 	}
 	ip->num = j;
 }
@@ -931,8 +932,7 @@ main_loop(__attribute__((unused)) void *dummy)
 	qconf->outbound.session_pool = socket_ctx[socket_id].session_pool;
 
 	if (qconf->nb_rx_queue == 0) {
-		RTE_LOG(DEBUG, IPSEC, "lcore %u has nothing to do\n",
-			lcore_id);
+		RTE_LOG(INFO, IPSEC, "lcore %u has nothing to do\n", lcore_id);
 		return 0;
 	}
 

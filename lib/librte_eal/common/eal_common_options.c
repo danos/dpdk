@@ -216,7 +216,6 @@ eal_reset_internal_config(struct internal_config *internal_cfg)
 	internal_cfg->create_uio_dev = 0;
 	internal_cfg->iova_mode = RTE_IOVA_DC;
 	internal_cfg->user_mbuf_pool_ops_name = NULL;
-	CPU_ZERO(&internal_cfg->ctrl_cpuset);
 	internal_cfg->init_complete = 0;
 }
 
@@ -418,44 +417,21 @@ eal_service_cores_parsed(void)
 }
 
 static int
-update_lcore_config(int *cores)
+eal_parse_coremask(const char *coremask)
 {
 	struct rte_config *cfg = rte_eal_get_configuration();
-	unsigned int count = 0;
-	unsigned int i;
-	int ret = 0;
-
-	for (i = 0; i < RTE_MAX_LCORE; i++) {
-		if (cores[i] != -1) {
-			if (!lcore_config[i].detected) {
-				RTE_LOG(ERR, EAL, "lcore %u unavailable\n", i);
-				ret = -1;
-				continue;
-			}
-			cfg->lcore_role[i] = ROLE_RTE;
-			count++;
-		} else {
-			cfg->lcore_role[i] = ROLE_OFF;
-		}
-		lcore_config[i].core_index = cores[i];
-	}
-	if (!ret)
-		cfg->lcore_count = count;
-	return ret;
-}
-
-static int
-eal_parse_coremask(const char *coremask, int *cores)
-{
+	int i, j, idx = 0;
 	unsigned count = 0;
-	int i, j, idx;
-	int val;
 	char c;
+	int val;
 
-	for (idx = 0; idx < RTE_MAX_LCORE; idx++)
-		cores[idx] = -1;
-	idx = 0;
+	if (eal_service_cores_parsed())
+		RTE_LOG(WARNING, EAL,
+			"Service cores parsed before dataplane cores. "
+			"Please ensure -c is before -s or -S\n");
 
+	if (coremask == NULL)
+		return -1;
 	/* Remove all blank characters ahead and after .
 	 * Remove 0x/0X if exists.
 	 */
@@ -480,16 +456,32 @@ eal_parse_coremask(const char *coremask, int *cores)
 		for (j = 0; j < BITS_PER_HEX && idx < RTE_MAX_LCORE; j++, idx++)
 		{
 			if ((1 << j) & val) {
-				cores[idx] = count;
+				if (!lcore_config[idx].detected) {
+					RTE_LOG(ERR, EAL, "lcore %u "
+					        "unavailable\n", idx);
+					return -1;
+				}
+
+				cfg->lcore_role[idx] = ROLE_RTE;
+				lcore_config[idx].core_index = count;
 				count++;
+			} else {
+				cfg->lcore_role[idx] = ROLE_OFF;
+				lcore_config[idx].core_index = -1;
 			}
 		}
 	}
 	for (; i >= 0; i--)
 		if (coremask[i] != '0')
 			return -1;
+	for (; idx < RTE_MAX_LCORE; idx++) {
+		cfg->lcore_role[idx] = ROLE_OFF;
+		lcore_config[idx].core_index = -1;
+	}
 	if (count == 0)
 		return -1;
+	/* Update the count of enabled logical cores of the EAL configuration */
+	cfg->lcore_count = count;
 	return 0;
 }
 
@@ -570,19 +562,34 @@ eal_parse_service_corelist(const char *corelist)
 }
 
 static int
-eal_parse_corelist(const char *corelist, int *cores)
+eal_parse_corelist(const char *corelist)
 {
+	struct rte_config *cfg = rte_eal_get_configuration();
+	int i, idx = 0;
 	unsigned count = 0;
 	char *end = NULL;
 	int min, max;
-	int idx;
 
-	for (idx = 0; idx < RTE_MAX_LCORE; idx++)
-		cores[idx] = -1;
+	if (eal_service_cores_parsed())
+		RTE_LOG(WARNING, EAL,
+			"Service cores parsed before dataplane cores. "
+			"Please ensure -l is before -s or -S\n");
 
-	/* Remove all blank characters ahead */
+	if (corelist == NULL)
+		return -1;
+
+	/* Remove all blank characters ahead and after */
 	while (isblank(*corelist))
 		corelist++;
+	i = strlen(corelist);
+	while ((i > 0) && isblank(corelist[i - 1]))
+		i--;
+
+	/* Reset config */
+	for (idx = 0; idx < RTE_MAX_LCORE; idx++) {
+		cfg->lcore_role[idx] = ROLE_OFF;
+		lcore_config[idx].core_index = -1;
+	}
 
 	/* Get list of cores */
 	min = RTE_MAX_LCORE;
@@ -593,9 +600,9 @@ eal_parse_corelist(const char *corelist, int *cores)
 			return -1;
 		errno = 0;
 		idx = strtol(corelist, &end, 10);
-		if (errno || end == NULL)
+		if (idx < 0 || idx >= (int)cfg->lcore_count)
 			return -1;
-		if (idx < 0 || idx >= RTE_MAX_LCORE)
+		if (errno || end == NULL)
 			return -1;
 		while (isblank(*end))
 			end++;
@@ -606,8 +613,9 @@ eal_parse_corelist(const char *corelist, int *cores)
 			if (min == RTE_MAX_LCORE)
 				min = idx;
 			for (idx = min; idx <= max; idx++) {
-				if (cores[idx] == -1) {
-					cores[idx] = count;
+				if (cfg->lcore_role[idx] != ROLE_RTE) {
+					cfg->lcore_role[idx] = ROLE_RTE;
+					lcore_config[idx].core_index = count;
 					count++;
 				}
 			}
@@ -619,6 +627,10 @@ eal_parse_corelist(const char *corelist, int *cores)
 
 	if (count == 0)
 		return -1;
+
+	/* Update the count of enabled logical cores of the EAL configuration */
+	cfg->lcore_count = count;
+
 	return 0;
 }
 
@@ -1094,81 +1106,13 @@ eal_parse_iova_mode(const char *name)
 	return 0;
 }
 
-/* caller is responsible for freeing the returned string */
-static char *
-available_cores(void)
-{
-	char *str = NULL;
-	int previous;
-	int sequence;
-	char *tmp;
-	int idx;
-
-	/* find the first available cpu */
-	for (idx = 0; idx < RTE_MAX_LCORE; idx++) {
-		if (!lcore_config[idx].detected)
-			continue;
-		break;
-	}
-	if (idx >= RTE_MAX_LCORE)
-		return NULL;
-
-	/* first sequence */
-	if (asprintf(&str, "%d", idx) < 0)
-		return NULL;
-	previous = idx;
-	sequence = 0;
-
-	for (idx++ ; idx < RTE_MAX_LCORE; idx++) {
-		if (!lcore_config[idx].detected)
-			continue;
-
-		if (idx == previous + 1) {
-			previous = idx;
-			sequence = 1;
-			continue;
-		}
-
-		/* finish current sequence */
-		if (sequence) {
-			if (asprintf(&tmp, "%s-%d", str, previous) < 0) {
-				free(str);
-				return NULL;
-			}
-			free(str);
-			str = tmp;
-		}
-
-		/* new sequence */
-		if (asprintf(&tmp, "%s,%d", str, idx) < 0) {
-			free(str);
-			return NULL;
-		}
-		free(str);
-		str = tmp;
-		previous = idx;
-		sequence = 0;
-	}
-
-	/* finish last sequence */
-	if (sequence) {
-		if (asprintf(&tmp, "%s-%d", str, previous) < 0) {
-			free(str);
-			return NULL;
-		}
-		free(str);
-		str = tmp;
-	}
-
-	return str;
-}
-
 int
 eal_parse_common_option(int opt, const char *optarg,
 			struct internal_config *conf)
 {
 	static int b_used;
 	static int w_used;
+	struct rte_config *cfg = rte_eal_get_configuration();
 
 	switch (opt) {
 	/* blacklist */
@@ -1192,23 +1136,9 @@ eal_parse_common_option(int opt, const char *optarg,
 		w_used = 1;
 		break;
 	/* coremask */
-	case 'c': {
-		int lcore_indexes[RTE_MAX_LCORE];
-
-		if (eal_service_cores_parsed())
-			RTE_LOG(WARNING, EAL,
-				"Service cores parsed before dataplane cores. Please ensure -c is before -s or -S\n");
-		if (eal_parse_coremask(optarg, lcore_indexes) < 0) {
-			RTE_LOG(ERR, EAL, "invalid coremask syntax\n");
-			return -1;
-		}
-		if (update_lcore_config(lcore_indexes) < 0) {
-			char *available = available_cores();
-
-			RTE_LOG(ERR, EAL,
-				"invalid coremask, please check specified cores are part of %s\n",
-				available);
-			free(available);
+	case 'c':
+		if (eal_parse_coremask(optarg) < 0) {
+			RTE_LOG(ERR, EAL, "invalid coremask\n");
 			return -1;
 		}
 
@@ -1222,26 +1152,12 @@ eal_parse_common_option(int opt, const char *optarg,
 
 		core_parsed = LCORE_OPT_MSK;
 		break;
-	}
 	/* corelist */
-	case 'l': {
-		int lcore_indexes[RTE_MAX_LCORE];
-
-		if (eal_service_cores_parsed())
-			RTE_LOG(WARNING, EAL,
-				"Service cores parsed before dataplane cores. Please ensure -l is before -s or -S\n");
-
-		if (eal_parse_corelist(optarg, lcore_indexes) < 0) {
-			RTE_LOG(ERR, EAL, "invalid core list syntax\n");
-			return -1;
-		}
-		if (update_lcore_config(lcore_indexes) < 0) {
-			char *available = available_cores();
-
+	case 'l':
+		if (eal_parse_corelist(optarg) < 0) {
 			RTE_LOG(ERR, EAL,
-				"invalid core list, please check specified cores are part of %s\n",
-				available);
-			free(available);
+				"invalid core list, please check core numbers are in [0, %u] range\n",
+					cfg->lcore_count-1);
 			return -1;
 		}
 
@@ -1255,7 +1171,6 @@ eal_parse_common_option(int opt, const char *optarg,
 
 		core_parsed = LCORE_OPT_LST;
 		break;
-	}
 	/* service coremask */
 	case 's':
 		if (eal_parse_service_coremask(optarg) < 0) {
@@ -1427,9 +1342,10 @@ eal_auto_detect_cores(struct rte_config *cfg)
 	unsigned int lcore_id;
 	unsigned int removed = 0;
 	rte_cpuset_t affinity_set;
+	pthread_t tid = pthread_self();
 
-	if (pthread_getaffinity_np(pthread_self(), sizeof(rte_cpuset_t),
-				&affinity_set))
+	if (pthread_getaffinity_np(tid, sizeof(rte_cpuset_t),
+				&affinity_set) < 0)
 		CPU_ZERO(&affinity_set);
 
 	for (lcore_id = 0; lcore_id < RTE_MAX_LCORE; lcore_id++) {
@@ -1441,31 +1357,6 @@ eal_auto_detect_cores(struct rte_config *cfg)
 	}
 
 	cfg->lcore_count -= removed;
-}
-
-static void
-compute_ctrl_threads_cpuset(struct internal_config *internal_cfg)
-{
-	rte_cpuset_t *cpuset = &internal_cfg->ctrl_cpuset;
-	rte_cpuset_t default_set;
-	unsigned int lcore_id;
-
-	for (lcore_id = 0; lcore_id < RTE_MAX_LCORE; lcore_id++) {
-		if (eal_cpu_detected(lcore_id) &&
-				rte_lcore_has_role(lcore_id, ROLE_OFF)) {
-			CPU_SET(lcore_id, cpuset);
-		}
-	}
-
-	if (pthread_getaffinity_np(pthread_self(), sizeof(rte_cpuset_t),
-				&default_set))
-		CPU_ZERO(&default_set);
-
-	RTE_CPU_AND(cpuset, cpuset, &default_set);
-
-	/* if no detected CPU is off, use master core */
-	if (!CPU_COUNT(cpuset))
-		CPU_SET(rte_get_master_lcore(), cpuset);
 }
 
 int
@@ -1500,8 +1391,6 @@ eal_adjust_config(struct internal_config *internal_cfg)
 			return -1;
 		lcore_config[cfg->master_lcore].core_role = ROLE_RTE;
 	}
-
-	compute_ctrl_threads_cpuset(internal_cfg);
 
 	/* if no memory amounts were requested, this will result in 0 and
 	 * will be overridden later, right after eal_hugepage_info_init() */

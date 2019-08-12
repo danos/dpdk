@@ -4,7 +4,6 @@
 #include <string.h>
 #include <zlib.h>
 #include <math.h>
-#include <unistd.h>
 
 #include <rte_cycles.h>
 #include <rte_malloc.h>

@@ -11,7 +11,6 @@
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
 #include <rte_distributor.h>
-#include <rte_string_fns.h>
 
 #define ITER_POWER 20 /* log 2 of how many iterations we do when timing. */
 #define BURST 32
@@ -643,11 +642,9 @@ test_distributor(void)
 
 		worker_params.dist = dist[i];
 		if (i)
-			strlcpy(worker_params.name, "burst",
-					sizeof(worker_params.name));
+			sprintf(worker_params.name, "burst");
 		else
-			strlcpy(worker_params.name, "single",
-					sizeof(worker_params.name));
+			sprintf(worker_params.name, "single");
 
 		rte_eal_mp_remote_launch(handle_work,
 				&worker_params, SKIP_MASTER);

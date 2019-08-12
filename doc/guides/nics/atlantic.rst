@@ -18,7 +18,7 @@ Supported features
 - Port statistics
 - RSS (Receive Side Scaling)
 - Checksum offload
-- Jumbo Frame up to 16K
+- Jumbo Frame upto 16K
 
 Configuration Information
 ^^^^^^^^^^^^^^^^^^^^^^^^^

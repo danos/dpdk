@@ -107,15 +107,14 @@ bnx2x_link_update(struct rte_eth_dev *dev)
 }
 
 static void
-bnx2x_interrupt_action(struct rte_eth_dev *dev, int intr_cxt)
+bnx2x_interrupt_action(struct rte_eth_dev *dev)
 {
 	struct bnx2x_softc *sc = dev->data->dev_private;
 	uint32_t link_status;
 
-	bnx2x_intr_legacy(sc);
+	bnx2x_intr_legacy(sc, 0);
 
-	if ((atomic_load_acq_long(&sc->periodic_flags) == PERIODIC_GO) &&
-	    !intr_cxt)
+	if (sc->periodic_flags & PERIODIC_GO)
 		bnx2x_periodic_callout(sc);
 	link_status = REG_RD(sc, sc->link_params.shmem_base +
 			offsetof(struct shmem_region,
@@ -132,7 +131,9 @@ bnx2x_interrupt_handler(void *param)
 
 	PMD_DEBUG_PERIODIC_LOG(INFO, sc, "Interrupt handled");
 
-	bnx2x_interrupt_action(dev, 1);
+	atomic_store_rel_long(&sc->periodic_flags, PERIODIC_STOP);
+	bnx2x_interrupt_action(dev);
+	atomic_store_rel_long(&sc->periodic_flags, PERIODIC_GO);
 	rte_intr_enable(&sc->pci_dev->intr_handle);
 }
 
@@ -143,7 +144,7 @@ static void bnx2x_periodic_start(void *param)
 	int ret = 0;
 
 	atomic_store_rel_long(&sc->periodic_flags, PERIODIC_GO);
-	bnx2x_interrupt_action(dev, 0);
+	bnx2x_interrupt_action(dev);
 	if (IS_PF(sc)) {
 		ret = rte_eal_alarm_set(BNX2X_SP_TIMER_PERIOD,
 					bnx2x_periodic_start, (void *)dev);
@@ -163,8 +164,6 @@ void bnx2x_periodic_stop(void *param)
 	atomic_store_rel_long(&sc->periodic_flags, PERIODIC_STOP);
 
 	rte_eal_alarm_cancel(bnx2x_periodic_start, (void *)dev);
-
-	PMD_DRV_LOG(DEBUG, sc, "Periodic poll stopped");
 }
 
 /*
@@ -181,10 +180,8 @@ bnx2x_dev_configure(struct rte_eth_dev *dev)
 
 	PMD_INIT_FUNC_TRACE(sc);
 
-	if (rxmode->offloads & DEV_RX_OFFLOAD_JUMBO_FRAME) {
+	if (rxmode->offloads & DEV_RX_OFFLOAD_JUMBO_FRAME)
 		sc->mtu = dev->data->dev_conf.rxmode.max_rx_pkt_len;
-		dev->data->mtu = sc->mtu;
-	}
 
 	if (dev->data->nb_tx_queues > dev->data->nb_rx_queues) {
 		PMD_DRV_LOG(ERR, sc, "The number of TX queues is greater than number of RX queues");
@@ -213,7 +210,6 @@ bnx2x_dev_configure(struct rte_eth_dev *dev)
 		return -ENXIO;
 	}
 
-	bnx2x_dev_rxtx_init_dummy(dev);
 	return 0;
 }
 
@@ -226,10 +222,8 @@ bnx2x_dev_start(struct rte_eth_dev *dev)
 	PMD_INIT_FUNC_TRACE(sc);
 
 	/* start the periodic callout */
-	if (atomic_load_acq_long(&sc->periodic_flags) == PERIODIC_STOP) {
+	if (sc->periodic_flags & PERIODIC_STOP)
 		bnx2x_periodic_start(dev);
-		PMD_DRV_LOG(DEBUG, sc, "Periodic poll re-started");
-	}
 
 	ret = bnx2x_init(sc);
 	if (ret) {
@@ -245,7 +239,11 @@ bnx2x_dev_start(struct rte_eth_dev *dev)
 			PMD_DRV_LOG(ERR, sc, "rte_intr_enable failed");
 	}
 
-	bnx2x_dev_rxtx_init(dev);
+	ret = bnx2x_dev_rx_init(dev);
+	if (ret != 0) {
+		PMD_DRV_LOG(DEBUG, sc, "bnx2x_dev_rx_init returned error code");
+		return -3;
+	}
 
 	bnx2x_print_device_info(sc);
 
@@ -259,8 +257,6 @@ bnx2x_dev_stop(struct rte_eth_dev *dev)
 	int ret = 0;
 
 	PMD_INIT_FUNC_TRACE(sc);
-
-	bnx2x_dev_rxtx_init_dummy(dev);
 
 	if (IS_PF(sc)) {
 		rte_intr_disable(&sc->pci_dev->intr_handle);

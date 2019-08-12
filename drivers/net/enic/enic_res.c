@@ -61,9 +61,10 @@ int enic_get_vnic_config(struct enic *enic)
 	 * and will be 0 for legacy firmware and VICs
 	 */
 	if (c->max_pkt_size > ENIC_DEFAULT_RX_MAX_PKT_SIZE)
-		enic->max_mtu = c->max_pkt_size - ETHER_HDR_LEN;
+		enic->max_mtu = c->max_pkt_size - (ETHER_HDR_LEN + 4);
 	else
-		enic->max_mtu = ENIC_DEFAULT_RX_MAX_PKT_SIZE - ETHER_HDR_LEN;
+		enic->max_mtu = ENIC_DEFAULT_RX_MAX_PKT_SIZE
+				- (ETHER_HDR_LEN + 4);
 	if (c->mtu == 0)
 		c->mtu = 1500;
 

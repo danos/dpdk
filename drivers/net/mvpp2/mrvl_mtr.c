@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: BSD-3-Clause
+/*-
+ * SPDX-License-Identifier: BSD-3-Clause
  * Copyright(c) 2018 Marvell International Ltd.
  * Copyright(c) 2018 Semihalf.
  * All rights reserved.

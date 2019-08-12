@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: BSD-3-Clause
- * Copyright (C) 2015 Freescale Semiconductor, Inc.
+/* Copyright (C) 2015 Freescale Semiconductor, Inc.
+ *
+ * SPDX-License-Identifier:        BSD-3-Clause
  */
-
 struct qbman_swp;
 
 struct qbman_fq_query_np_rslt {

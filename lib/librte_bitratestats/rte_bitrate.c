@@ -67,7 +67,6 @@ rte_stats_bitrate_calc(struct rte_stats_bitrates *bitrate_data,
 	int64_t delta;
 	const int64_t alpha_percent = 20;
 	uint64_t values[6];
-	int ret;
 
 	if (bitrate_data == NULL)
 		return -EINVAL;
@@ -125,10 +124,7 @@ rte_stats_bitrate_calc(struct rte_stats_bitrates *bitrate_data,
 	values[3] = port_data->mean_obits;
 	values[4] = port_data->peak_ibits;
 	values[5] = port_data->peak_obits;
-	ret = rte_metrics_update_values(port_id, bitrate_data->id_stats_set,
+	rte_metrics_update_values(port_id, bitrate_data->id_stats_set,
 		values, ARRAY_SIZE(values));
-	if (ret < 0)
-		return ret;
-
 	return 0;
 }

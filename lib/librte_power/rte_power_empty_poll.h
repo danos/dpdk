@@ -59,7 +59,7 @@ struct freq_threshold {
 	uint32_t cur_train_iter;
 };
 
-/* Each Worker Thread Empty Poll Stats */
+/* Each Worder Thread Empty Poll Stats */
 struct priority_worker {
 
 	/* Current dequeue and throughput counts */

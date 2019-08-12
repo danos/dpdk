@@ -16,9 +16,7 @@
 
 #include <assert.h>
 #include <stdio.h>
-#if defined(RTE_BACKTRACE)
 #include <execinfo.h>
-#endif
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdint.h>
@@ -790,17 +788,17 @@ nfp6000_init(struct nfp_cpp *cpp, struct rte_pci_device *dev)
 	if (cpp->driver_lock_needed) {
 		ret = nfp_acquire_process_lock(desc);
 		if (ret)
-			goto error;
+			return -1;
 	}
 
 	if (nfp6000_set_model(dev, cpp) < 0)
-		goto error;
+		return -1;
 	if (nfp6000_set_interface(dev, cpp) < 0)
-		goto error;
+		return -1;
 	if (nfp6000_set_serial(dev, cpp) < 0)
-		goto error;
+		return -1;
 	if (nfp6000_set_barsz(dev, desc) < 0)
-		goto error;
+		return -1;
 
 	desc->cfg = (char *)dev->mem_resource[0].addr;
 
@@ -811,11 +809,7 @@ nfp6000_init(struct nfp_cpp *cpp, struct rte_pci_device *dev)
 	model = __nfp_cpp_model_autodetect(cpp);
 	nfp_cpp_model_set(cpp, model);
 
-	return 0;
-
-error:
-	free(desc);
-	return -1;
+	return ret;
 }
 
 static void
