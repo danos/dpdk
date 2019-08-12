@@ -9,3 +9,8 @@ usr/bin/dpdk-test-bbdev
 usr/bin/dpdk-test-crypto-perf
 usr/bin/dpdk-test-eventdev
 usr/bin/dpdk-testpmd
+usr/bin/dpdk-test-pipeline
+usr/bin/dpdk-test-compress-perf
+usr/bin/dpdk-test-acl
+usr/bin/dpdk-test
+usr/bin/dpdk-test-cmdline
