@@ -1796,7 +1796,7 @@ Description: Data Plane Development Kit (librte-pmd-virtio-crypto runtime librar
 Package: librte-pmd-bbdev-fpga-lte-fec19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: 
+Homepage: https://doc.dpdk.org/guides/bbdevs/fpga_lte_fec.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1810,7 +1810,7 @@ Description: Data Plane Development Kit (librte-pmd-bbdev-fpga-lte-fec runtime l
 Package: librte-pmd-bbdev-turbo-sw19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: 
+Homepage: https://doc.dpdk.org/guides/bbdevs/turbo_sw.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1824,7 +1824,7 @@ Description: Data Plane Development Kit (librte-pmd-bbdev-turbo-sw runtime libra
 Package: librte-pmd-hinic19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: 
+Homepage: https://doc.dpdk.org/guides/nics/hinic.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1838,7 +1838,7 @@ Description: Data Plane Development Kit (librte-pmd-hinic runtime library)
 Package: librte-pmd-ice19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: 
+Homepage: https://doc.dpdk.org/guides/nics/ice.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1852,7 +1852,7 @@ Description: Data Plane Development Kit (librte-pmd-ice runtime library)
 Package: librte-pmd-ipn3ke19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: 
+Homepage: https://doc.dpdk.org/guides/nics/ipn3ke.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1866,7 +1866,7 @@ Description: Data Plane Development Kit (librte-pmd-ipn3ke runtime library)
 Package: librte-pmd-memif19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: 
+Homepage: https://doc.dpdk.org/guides/nics/memif.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1880,7 +1880,7 @@ Description: Data Plane Development Kit (librte-pmd-memif runtime library)
 Package: librte-pmd-octeontx2-19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: 
+Homepage: https://doc.dpdk.org/guides/nics/octeontx2.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1894,7 +1894,7 @@ Description: Data Plane Development Kit (librte-pmd-octeontx2 runtime library)
 Package: librte-pmd-octeontx2-event19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: 
+Homepage: https://doc.dpdk.org/guides/nics/octeontx2.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1908,6 +1908,7 @@ Description: Data Plane Development Kit (TODO runtime library)
 Package: librte-rawdev-skeleton19.08
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/prog_guide/rawdev.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
