@@ -8,6 +8,17 @@
 #
 
 #
+# toolchain:
+#
+#   - define CC, LD, AR, AS, ...
+#   - define TOOLCHAIN_CFLAGS variable (overridden by cmdline value)
+#   - define TOOLCHAIN_LDFLAGS variable (overridden by cmdline value)
+#   - define TOOLCHAIN_ASFLAGS variable (overridden by cmdline value)
+#   - may override any previously defined variable
+#
+include $(RTE_SDK)/mk/toolchain/$(RTE_TOOLCHAIN)/rte.vars.mk
+
+#
 # machine:
 #
 #   - can define ARCH variable (overridden by cmdline value)
@@ -44,17 +55,6 @@ endif
 #   - may override any previously defined variable
 #
 include $(RTE_SDK)/mk/arch/$(RTE_ARCH)/rte.vars.mk
-
-#
-# toolchain:
-#
-#   - define CC, LD, AR, AS, ...
-#   - define TOOLCHAIN_CFLAGS variable (overridden by cmdline value)
-#   - define TOOLCHAIN_LDFLAGS variable (overridden by cmdline value)
-#   - define TOOLCHAIN_ASFLAGS variable (overridden by cmdline value)
-#   - may override any previously defined variable
-#
-include $(RTE_SDK)/mk/toolchain/$(RTE_TOOLCHAIN)/rte.vars.mk
 
 #
 # exec-env:
@@ -110,6 +110,11 @@ endif
 
 # always define _GNU_SOURCE
 CFLAGS += -D_GNU_SOURCE
+
+# define __BSD_VISIBLE when building for FreeBSD
+ifeq ($(CONFIG_RTE_EXEC_ENV_FREEBSD),y)
+CFLAGS += -D__BSD_VISIBLE
+endif
 
 export CFLAGS
 export LDFLAGS

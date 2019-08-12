@@ -23,7 +23,7 @@ extern "C" {
 /**
  * ICMP Header
  */
-struct icmp_hdr {
+struct rte_icmp_hdr {
 	uint8_t  icmp_type;   /* ICMP packet type. */
 	uint8_t  icmp_code;   /* ICMP packet code. */
 	uint16_t icmp_cksum;  /* ICMP packet checksum. */
@@ -32,8 +32,8 @@ struct icmp_hdr {
 } __attribute__((__packed__));
 
 /* ICMP packet types */
-#define IP_ICMP_ECHO_REPLY   0
-#define IP_ICMP_ECHO_REQUEST 8
+#define RTE_IP_ICMP_ECHO_REPLY   0
+#define RTE_IP_ICMP_ECHO_REQUEST 8
 
 #ifdef __cplusplus
 }

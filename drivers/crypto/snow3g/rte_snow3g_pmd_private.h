@@ -19,6 +19,7 @@ int snow3g_logtype_driver;
 					## __VA_ARGS__)
 
 #define SNOW3G_DIGEST_LENGTH 4
+#define SNOW3G_MAX_KEY_SIZE  128
 
 /** private data structure for each virtual SNOW 3G device */
 struct snow3g_private {
@@ -36,6 +37,8 @@ struct snow3g_qp {
 	/**< Ring for placing processed ops */
 	struct rte_mempool *sess_mp;
 	/**< Session Mempool */
+	struct rte_mempool *sess_mp_priv;
+	/**< Session Private Data Mempool */
 	struct rte_cryptodev_stats qp_stats;
 	/**< Queue pair statistics */
 	uint8_t temp_digest[SNOW3G_DIGEST_LENGTH];

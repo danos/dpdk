@@ -51,6 +51,10 @@ ifneq ($(filter $(AUTO_CPUFLAGS),__RDRND__),)
 CPUFLAGS += RDRAND
 endif
 
+ifneq ($(filter $(AUTO_CPUFLAGS),__RDSEED__),)
+CPUFLAGS += RDSEED
+endif
+
 ifneq ($(filter $(AUTO_CPUFLAGS),__FSGSBASE__),)
 CPUFLAGS += FSGSBASE
 endif
@@ -69,8 +73,8 @@ ifneq ($(filter $(AUTO_CPUFLAGS),__AVX512F__),)
 ifeq ($(CONFIG_RTE_ENABLE_AVX512),y)
 CPUFLAGS += AVX512F
 else
-# disable AVX512F support of gcc as a workaround for Bug 97
-ifeq ($(CONFIG_RTE_TOOLCHAIN_GCC),y)
+# disable AVX512F support for GCC & binutils 2.30 as a workaround for Bug 97
+ifeq ($(FORCE_DISABLE_AVX512),y)
 MACHINE_CFLAGS += -mno-avx512f
 endif
 endif

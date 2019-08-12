@@ -41,9 +41,9 @@ static int eth_ark_dev_stats_get(struct rte_eth_dev *dev,
 				  struct rte_eth_stats *stats);
 static void eth_ark_dev_stats_reset(struct rte_eth_dev *dev);
 static int eth_ark_set_default_mac_addr(struct rte_eth_dev *dev,
-					 struct ether_addr *mac_addr);
+					 struct rte_ether_addr *mac_addr);
 static int eth_ark_macaddr_add(struct rte_eth_dev *dev,
-			       struct ether_addr *mac_addr,
+			       struct rte_ether_addr *mac_addr,
 			       uint32_t index,
 			       uint32_t pool);
 static void eth_ark_macaddr_remove(struct rte_eth_dev *dev,
@@ -220,14 +220,14 @@ check_for_ext(struct ark_adapter *ark)
 		(void (*)(struct rte_eth_dev *, void *))
 		dlsym(ark->d_handle, "stats_reset");
 	ark->user_ext.mac_addr_add =
-		(void (*)(struct rte_eth_dev *, struct ether_addr *, uint32_t,
-			  uint32_t, void *))
+		(void (*)(struct rte_eth_dev *, struct rte_ether_addr *,
+			uint32_t, uint32_t, void *))
 		dlsym(ark->d_handle, "mac_addr_add");
 	ark->user_ext.mac_addr_remove =
 		(void (*)(struct rte_eth_dev *, uint32_t, void *))
 		dlsym(ark->d_handle, "mac_addr_remove");
 	ark->user_ext.mac_addr_set =
-		(void (*)(struct rte_eth_dev *, struct ether_addr *,
+		(void (*)(struct rte_eth_dev *, struct rte_ether_addr *,
 			  void *))
 		dlsym(ark->d_handle, "mac_addr_set");
 	ark->user_ext.set_mtu =
@@ -241,8 +241,7 @@ check_for_ext(struct ark_adapter *ark)
 static int
 eth_ark_dev_init(struct rte_eth_dev *dev)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 	struct rte_pci_device *pci_dev;
 	int ret;
 	int port_count = 1;
@@ -262,6 +261,8 @@ eth_ark_dev_init(struct rte_eth_dev *dev)
 	/* Use dummy function until setup */
 	dev->rx_pkt_burst = &eth_ark_recv_pkts_noop;
 	dev->tx_pkt_burst = &eth_ark_xmit_pkts_noop;
+	/* Let rte_eth_dev_close() release the port resources */
+	dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	ark->bar0 = (uint8_t *)pci_dev->mem_resource[0].addr;
 	ark->a_bar = (uint8_t *)pci_dev->mem_resource[2].addr;
@@ -318,7 +319,7 @@ eth_ark_dev_init(struct rte_eth_dev *dev)
 
 	dev->dev_ops = &ark_eth_dev_ops;
 
-	dev->data->mac_addrs = rte_zmalloc("ark", ETHER_ADDR_LEN, 0);
+	dev->data->mac_addrs = rte_zmalloc("ark", RTE_ETHER_ADDR_LEN, 0);
 	if (!dev->data->mac_addrs) {
 		PMD_DRV_LOG(ERR,
 			    "Failed to allocated memory for storing mac address"
@@ -385,7 +386,8 @@ eth_ark_dev_init(struct rte_eth_dev *dev)
 
 		rte_eth_copy_pci_info(eth_dev, pci_dev);
 
-		eth_dev->data->mac_addrs = rte_zmalloc(name, ETHER_ADDR_LEN, 0);
+		eth_dev->data->mac_addrs = rte_zmalloc(name,
+						RTE_ETHER_ADDR_LEN, 0);
 		if (!eth_dev->data->mac_addrs) {
 			PMD_DRV_LOG(ERR,
 				    "Memory allocation for MAC failed!"
@@ -403,9 +405,9 @@ eth_ark_dev_init(struct rte_eth_dev *dev)
 
 	return ret;
 
- error:
-	if (dev->data->mac_addrs)
-		rte_free(dev->data->mac_addrs);
+error:
+	rte_free(dev->data->mac_addrs);
+	dev->data->mac_addrs = NULL;
 	return -1;
 }
 
@@ -417,8 +419,7 @@ eth_ark_dev_init(struct rte_eth_dev *dev)
 static int
 ark_config_device(struct rte_eth_dev *dev)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 	uint16_t num_q, i;
 	struct ark_mpu_t *mpu;
 
@@ -493,8 +494,7 @@ ark_config_device(struct rte_eth_dev *dev)
 static int
 eth_ark_dev_uninit(struct rte_eth_dev *dev)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
@@ -516,8 +516,7 @@ static int
 eth_ark_dev_configure(struct rte_eth_dev *dev)
 {
 	PMD_FUNC_LOG(DEBUG, "\n");
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	eth_ark_dev_set_link_up(dev);
 	if (ark->user_ext.dev_configure)
@@ -543,8 +542,7 @@ delay_pg_start(void *arg)
 static int
 eth_ark_dev_start(struct rte_eth_dev *dev)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 	int i;
 
 	PMD_FUNC_LOG(DEBUG, "\n");
@@ -596,8 +594,7 @@ eth_ark_dev_stop(struct rte_eth_dev *dev)
 {
 	uint16_t i;
 	int status;
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 	struct ark_mpu_t *mpu;
 
 	PMD_FUNC_LOG(DEBUG, "\n");
@@ -687,8 +684,7 @@ eth_ark_dev_stop(struct rte_eth_dev *dev)
 static void
 eth_ark_dev_close(struct rte_eth_dev *dev)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 	uint16_t i;
 
 	if (ark->user_ext.dev_close)
@@ -712,14 +708,16 @@ eth_ark_dev_close(struct rte_eth_dev *dev)
 		eth_ark_dev_rx_queue_release(dev->data->rx_queues[i]);
 		dev->data->rx_queues[i] = 0;
 	}
+
+	rte_free(dev->data->mac_addrs);
+	dev->data->mac_addrs = 0;
 }
 
 static void
 eth_ark_dev_info_get(struct rte_eth_dev *dev,
 		     struct rte_eth_dev_info *dev_info)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 	struct ark_mpu_t *tx_mpu = RTE_PTR_ADD(ark->bar0, ARK_MPU_TX_BASE);
 	struct ark_mpu_t *rx_mpu = RTE_PTR_ADD(ark->bar0, ARK_MPU_RX_BASE);
 	uint16_t ports = ark->num_ports;
@@ -754,8 +752,7 @@ eth_ark_dev_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 {
 	PMD_DEBUG_LOG(DEBUG, "link status = %d\n",
 			dev->data->dev_link.link_status);
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	if (ark->user_ext.link_update) {
 		return ark->user_ext.link_update
@@ -769,8 +766,7 @@ static int
 eth_ark_dev_set_link_up(struct rte_eth_dev *dev)
 {
 	dev->data->dev_link.link_status = 1;
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	if (ark->user_ext.dev_set_link_up)
 		return ark->user_ext.dev_set_link_up(dev,
@@ -782,8 +778,7 @@ static int
 eth_ark_dev_set_link_down(struct rte_eth_dev *dev)
 {
 	dev->data->dev_link.link_status = 0;
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	if (ark->user_ext.dev_set_link_down)
 		return ark->user_ext.dev_set_link_down(dev,
@@ -795,8 +790,7 @@ static int
 eth_ark_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 {
 	uint16_t i;
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	stats->ipackets = 0;
 	stats->ibytes = 0;
@@ -819,8 +813,7 @@ static void
 eth_ark_dev_stats_reset(struct rte_eth_dev *dev)
 {
 	uint16_t i;
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	for (i = 0; i < dev->data->nb_tx_queues; i++)
 		eth_tx_queue_stats_reset(dev->data->tx_queues[i]);
@@ -833,12 +826,11 @@ eth_ark_dev_stats_reset(struct rte_eth_dev *dev)
 
 static int
 eth_ark_macaddr_add(struct rte_eth_dev *dev,
-		    struct ether_addr *mac_addr,
+		    struct rte_ether_addr *mac_addr,
 		    uint32_t index,
 		    uint32_t pool)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	if (ark->user_ext.mac_addr_add) {
 		ark->user_ext.mac_addr_add(dev,
@@ -854,8 +846,7 @@ eth_ark_macaddr_add(struct rte_eth_dev *dev,
 static void
 eth_ark_macaddr_remove(struct rte_eth_dev *dev, uint32_t index)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	if (ark->user_ext.mac_addr_remove)
 		ark->user_ext.mac_addr_remove(dev, index,
@@ -864,10 +855,9 @@ eth_ark_macaddr_remove(struct rte_eth_dev *dev, uint32_t index)
 
 static int
 eth_ark_set_default_mac_addr(struct rte_eth_dev *dev,
-			     struct ether_addr *mac_addr)
+			     struct rte_ether_addr *mac_addr)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	if (ark->user_ext.mac_addr_set) {
 		ark->user_ext.mac_addr_set(dev, mac_addr,
@@ -880,8 +870,7 @@ eth_ark_set_default_mac_addr(struct rte_eth_dev *dev,
 static int
 eth_ark_set_mtu(struct rte_eth_dev *dev, uint16_t  size)
 {
-	struct ark_adapter *ark =
-		(struct ark_adapter *)dev->data->dev_private;
+	struct ark_adapter *ark = dev->data->dev_private;
 
 	if (ark->user_ext.set_mtu)
 		return ark->user_ext.set_mtu(dev, size,

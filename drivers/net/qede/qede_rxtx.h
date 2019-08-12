@@ -70,7 +70,7 @@
 #define QEDE_ETH_OVERHEAD	(((2 * QEDE_VLAN_TAG_SIZE)) \
 				 + (QEDE_LLC_SNAP_HDR_LEN) + 2)
 
-#define QEDE_MAX_ETHER_HDR_LEN	(ETHER_HDR_LEN + QEDE_ETH_OVERHEAD)
+#define QEDE_MAX_ETHER_HDR_LEN	(RTE_ETHER_HDR_LEN + QEDE_ETH_OVERHEAD)
 
 #define QEDE_RSS_OFFLOAD_ALL    (ETH_RSS_IPV4			|\
 				 ETH_RSS_NONFRAG_IPV4_TCP	|\
@@ -192,6 +192,8 @@ struct qede_rx_queue {
 	uint16_t queue_id;
 	uint16_t port_id;
 	uint16_t rx_buf_size;
+	uint16_t rx_alloc_count;
+	uint16_t unused;
 	uint64_t rcv_pkts;
 	uint64_t rx_segs;
 	uint64_t rx_hw_errors;

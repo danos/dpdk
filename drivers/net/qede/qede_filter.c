@@ -221,7 +221,7 @@ qede_fdir_to_arfs_filter(struct rte_eth_dev *eth_dev,
 	case RTE_ETH_FLOW_NONFRAG_IPV4_TCP:
 	case RTE_ETH_FLOW_NONFRAG_IPV4_UDP:
 		/* fill the common ip header */
-		arfs->tuple.eth_proto = ETHER_TYPE_IPv4;
+		arfs->tuple.eth_proto = RTE_ETHER_TYPE_IPV4;
 		arfs->tuple.dst_ipv4 = input->flow.ip4_flow.dst_ip;
 		arfs->tuple.src_ipv4 = input->flow.ip4_flow.src_ip;
 		arfs->tuple.ip_proto = next_proto[input->flow_type];
@@ -237,7 +237,7 @@ qede_fdir_to_arfs_filter(struct rte_eth_dev *eth_dev,
 		break;
 	case RTE_ETH_FLOW_NONFRAG_IPV6_TCP:
 	case RTE_ETH_FLOW_NONFRAG_IPV6_UDP:
-		arfs->tuple.eth_proto = ETHER_TYPE_IPv6;
+		arfs->tuple.eth_proto = RTE_ETHER_TYPE_IPV6;
 		arfs->tuple.ip_proto = next_proto[input->flow_type];
 		rte_memcpy(arfs->tuple.dst_ipv6,
 			   &input->flow.ipv6_flow.dst_ip,
@@ -290,7 +290,7 @@ qede_config_arfs_filter(struct rte_eth_dev *eth_dev,
 	/* soft_id could have been used as memzone string, but soft_id is
 	 * not currently used so it has no significance.
 	 */
-	snprintf(mz_name, sizeof(mz_name) - 1, "%lx",
+	snprintf(mz_name, sizeof(mz_name), "%lx",
 		 (unsigned long)rte_get_timer_cycles());
 	mz = rte_memzone_reserve_aligned(mz_name, QEDE_MAX_FDIR_PKT_LEN,
 					 SOCKET_ID_ANY, 0, RTE_CACHE_LINE_SIZE);
@@ -457,57 +457,57 @@ qede_arfs_construct_pkt(struct rte_eth_dev *eth_dev,
 	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
 	uint16_t *ether_type;
 	uint8_t *raw_pkt;
-	struct ipv4_hdr *ip;
-	struct ipv6_hdr *ip6;
-	struct udp_hdr *udp;
-	struct tcp_hdr *tcp;
+	struct rte_ipv4_hdr *ip;
+	struct rte_ipv6_hdr *ip6;
+	struct rte_udp_hdr *udp;
+	struct rte_tcp_hdr *tcp;
 	uint16_t len;
 
 	raw_pkt = (uint8_t *)buff;
 
-	len =  2 * sizeof(struct ether_addr);
-	raw_pkt += 2 * sizeof(struct ether_addr);
+	len =  2 * sizeof(struct rte_ether_addr);
+	raw_pkt += 2 * sizeof(struct rte_ether_addr);
 	ether_type = (uint16_t *)raw_pkt;
 	raw_pkt += sizeof(uint16_t);
 	len += sizeof(uint16_t);
 
 	*ether_type = rte_cpu_to_be_16(arfs->tuple.eth_proto);
 	switch (arfs->tuple.eth_proto) {
-	case ETHER_TYPE_IPv4:
-		ip = (struct ipv4_hdr *)raw_pkt;
+	case RTE_ETHER_TYPE_IPV4:
+		ip = (struct rte_ipv4_hdr *)raw_pkt;
 		ip->version_ihl = QEDE_FDIR_IP_DEFAULT_VERSION_IHL;
-		ip->total_length = sizeof(struct ipv4_hdr);
+		ip->total_length = sizeof(struct rte_ipv4_hdr);
 		ip->next_proto_id = arfs->tuple.ip_proto;
 		ip->time_to_live = QEDE_FDIR_IPV4_DEF_TTL;
 		ip->dst_addr = arfs->tuple.dst_ipv4;
 		ip->src_addr = arfs->tuple.src_ipv4;
-		len += sizeof(struct ipv4_hdr);
+		len += sizeof(struct rte_ipv4_hdr);
 		params->ipv4 = true;
 
 		raw_pkt = (uint8_t *)buff;
 		/* UDP */
 		if (arfs->tuple.ip_proto == IPPROTO_UDP) {
-			udp = (struct udp_hdr *)(raw_pkt + len);
+			udp = (struct rte_udp_hdr *)(raw_pkt + len);
 			udp->dst_port = arfs->tuple.dst_port;
 			udp->src_port = arfs->tuple.src_port;
-			udp->dgram_len = sizeof(struct udp_hdr);
-			len += sizeof(struct udp_hdr);
+			udp->dgram_len = sizeof(struct rte_udp_hdr);
+			len += sizeof(struct rte_udp_hdr);
 			/* adjust ip total_length */
-			ip->total_length += sizeof(struct udp_hdr);
+			ip->total_length += sizeof(struct rte_udp_hdr);
 			params->udp = true;
 		} else { /* TCP */
-			tcp = (struct tcp_hdr *)(raw_pkt + len);
+			tcp = (struct rte_tcp_hdr *)(raw_pkt + len);
 			tcp->src_port = arfs->tuple.src_port;
 			tcp->dst_port = arfs->tuple.dst_port;
 			tcp->data_off = QEDE_FDIR_TCP_DEFAULT_DATAOFF;
-			len += sizeof(struct tcp_hdr);
+			len += sizeof(struct rte_tcp_hdr);
 			/* adjust ip total_length */
-			ip->total_length += sizeof(struct tcp_hdr);
+			ip->total_length += sizeof(struct rte_tcp_hdr);
 			params->tcp = true;
 		}
 		break;
-	case ETHER_TYPE_IPv6:
-		ip6 = (struct ipv6_hdr *)raw_pkt;
+	case RTE_ETHER_TYPE_IPV6:
+		ip6 = (struct rte_ipv6_hdr *)raw_pkt;
 		ip6->proto = arfs->tuple.ip_proto;
 		ip6->vtc_flow =
 			rte_cpu_to_be_32(QEDE_FDIR_IPV6_DEFAULT_VTC_FLOW);
@@ -516,23 +516,23 @@ qede_arfs_construct_pkt(struct rte_eth_dev *eth_dev,
 			   IPV6_ADDR_LEN);
 		rte_memcpy(&ip6->dst_addr, arfs->tuple.dst_ipv6,
 			   IPV6_ADDR_LEN);
-		len += sizeof(struct ipv6_hdr);
+		len += sizeof(struct rte_ipv6_hdr);
 		params->ipv6 = true;
 
 		raw_pkt = (uint8_t *)buff;
 		/* UDP */
 		if (arfs->tuple.ip_proto == IPPROTO_UDP) {
-			udp = (struct udp_hdr *)(raw_pkt + len);
+			udp = (struct rte_udp_hdr *)(raw_pkt + len);
 			udp->src_port = arfs->tuple.src_port;
 			udp->dst_port = arfs->tuple.dst_port;
-			len += sizeof(struct udp_hdr);
+			len += sizeof(struct rte_udp_hdr);
 			params->udp = true;
 		} else { /* TCP */
-			tcp = (struct tcp_hdr *)(raw_pkt + len);
+			tcp = (struct rte_tcp_hdr *)(raw_pkt + len);
 			tcp->src_port = arfs->tuple.src_port;
 			tcp->dst_port = arfs->tuple.dst_port;
 			tcp->data_off = QEDE_FDIR_TCP_DEFAULT_DATAOFF;
-			len += sizeof(struct tcp_hdr);
+			len += sizeof(struct rte_tcp_hdr);
 			params->tcp = true;
 		}
 		break;
@@ -992,25 +992,25 @@ qede_set_ucast_tunn_cmn_param(struct ecore_filter_ucast *ucast,
 	break;
 	case ECORE_FILTER_MAC:
 		memcpy(ucast->mac, conf->outer_mac.addr_bytes,
-		       ETHER_ADDR_LEN);
+		       RTE_ETHER_ADDR_LEN);
 	break;
 	case ECORE_FILTER_INNER_MAC:
 		memcpy(ucast->mac, conf->inner_mac.addr_bytes,
-		       ETHER_ADDR_LEN);
+		       RTE_ETHER_ADDR_LEN);
 	break;
 	case ECORE_FILTER_MAC_VNI_PAIR:
 		memcpy(ucast->mac, conf->outer_mac.addr_bytes,
-			ETHER_ADDR_LEN);
+			RTE_ETHER_ADDR_LEN);
 		ucast->vni = conf->tenant_id;
 	break;
 	case ECORE_FILTER_INNER_MAC_VNI_PAIR:
 		memcpy(ucast->mac, conf->inner_mac.addr_bytes,
-			ETHER_ADDR_LEN);
+			RTE_ETHER_ADDR_LEN);
 		ucast->vni = conf->tenant_id;
 	break;
 	case ECORE_FILTER_INNER_PAIR:
 		memcpy(ucast->mac, conf->inner_mac.addr_bytes,
-			ETHER_ADDR_LEN);
+			RTE_ETHER_ADDR_LEN);
 		ucast->vlan = conf->inner_vlan;
 	break;
 	default:
@@ -1266,7 +1266,8 @@ qede_flow_parse_pattern(__attribute__((unused))struct rte_eth_dev *dev,
 				spec = pattern->spec;
 				flow->entry.tuple.src_ipv4 = spec->hdr.src_addr;
 				flow->entry.tuple.dst_ipv4 = spec->hdr.dst_addr;
-				flow->entry.tuple.eth_proto = ETHER_TYPE_IPv4;
+				flow->entry.tuple.eth_proto =
+					RTE_ETHER_TYPE_IPV4;
 			}
 			break;
 
@@ -1283,7 +1284,8 @@ qede_flow_parse_pattern(__attribute__((unused))struct rte_eth_dev *dev,
 				rte_memcpy(flow->entry.tuple.dst_ipv6,
 					   spec->hdr.dst_addr,
 					   IPV6_ADDR_LEN);
-				flow->entry.tuple.eth_proto = ETHER_TYPE_IPv6;
+				flow->entry.tuple.eth_proto =
+					RTE_ETHER_TYPE_IPV6;
 			}
 			break;
 
@@ -1543,4 +1545,3 @@ int qede_dev_filter_ctrl(struct rte_eth_dev *eth_dev,
 
 	return 0;
 }
-

@@ -21,6 +21,7 @@
 #include "base/octeontx_pkovf.h"
 #include "base/octeontx_io.h"
 
+#define OCTEONTX_PMD				net_octeontx
 #define OCTEONTX_VDEV_DEFAULT_MAX_NR_PORT	12
 #define OCTEONTX_VDEV_NR_PORT_ARG		("nr_port")
 #define OCTEONTX_MAX_NAME_LEN			32
@@ -61,7 +62,7 @@ struct octeontx_nic {
 	uint8_t	duplex;
 	uint8_t speed;
 	uint16_t mtu;
-	uint8_t mac_addr[ETHER_ADDR_LEN];
+	uint8_t mac_addr[RTE_ETHER_ADDR_LEN];
 	/* Rx port parameters */
 	struct {
 		bool classifier_enable;

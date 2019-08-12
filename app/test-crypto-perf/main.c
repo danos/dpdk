@@ -21,6 +21,10 @@
 #include "cperf_test_verify.h"
 #include "cperf_test_pmd_cyclecount.h"
 
+static struct {
+	struct rte_mempool *sess_mp;
+	struct rte_mempool *priv_mp;
+} session_pool_socket[RTE_MAX_NUMA_NODES];
 
 const char *cperf_test_type_strs[] = {
 	[CPERF_TEST_TYPE_THROUGHPUT] = "throughput",
@@ -61,8 +65,58 @@ const struct cperf_test cperf_testmap[] = {
 };
 
 static int
-cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
-			struct rte_mempool *session_pool_socket[])
+fill_session_pool_socket(int32_t socket_id, uint32_t session_priv_size,
+		uint32_t nb_sessions)
+{
+	char mp_name[RTE_MEMPOOL_NAMESIZE];
+	struct rte_mempool *sess_mp;
+
+	if (session_pool_socket[socket_id].priv_mp == NULL) {
+		snprintf(mp_name, RTE_MEMPOOL_NAMESIZE,
+			"priv_sess_mp_%u", socket_id);
+
+		sess_mp = rte_mempool_create(mp_name,
+					nb_sessions,
+					session_priv_size,
+					0, 0, NULL, NULL, NULL,
+					NULL, socket_id,
+					0);
+
+		if (sess_mp == NULL) {
+			printf("Cannot create pool \"%s\" on socket %d\n",
+				mp_name, socket_id);
+			return -ENOMEM;
+		}
+
+		printf("Allocated pool \"%s\" on socket %d\n",
+			mp_name, socket_id);
+		session_pool_socket[socket_id].priv_mp = sess_mp;
+	}
+
+	if (session_pool_socket[socket_id].sess_mp == NULL) {
+
+		snprintf(mp_name, RTE_MEMPOOL_NAMESIZE,
+			"sess_mp_%u", socket_id);
+
+		sess_mp = rte_cryptodev_sym_session_pool_create(mp_name,
+					nb_sessions, 0, 0, 0, socket_id);
+
+		if (sess_mp == NULL) {
+			printf("Cannot create pool \"%s\" on socket %d\n",
+				mp_name, socket_id);
+			return -ENOMEM;
+		}
+
+		printf("Allocated pool \"%s\" on socket %d\n",
+			mp_name, socket_id);
+		session_pool_socket[socket_id].sess_mp = sess_mp;
+	}
+
+	return 0;
+}
+
+static int
+cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs)
 {
 	uint8_t enabled_cdev_count = 0, nb_lcores, cdev_id;
 	uint32_t sessions_needed = 0;
@@ -129,6 +183,11 @@ cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
 
 		struct rte_cryptodev_info cdev_info;
 		uint8_t socket_id = rte_cryptodev_socket_id(cdev_id);
+		/* range check the socket_id - negative values become big
+		 * positive ones due to use of unsigned value
+		 */
+		if (socket_id >= RTE_MAX_NUMA_NODES)
+			socket_id = 0;
 
 		rte_cryptodev_info_get(cdev_id, &cdev_info);
 		if (opts->nb_qps > cdev_info.max_nb_queue_pairs) {
@@ -141,7 +200,9 @@ cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
 		}
 		struct rte_cryptodev_config conf = {
 			.nb_queue_pairs = opts->nb_qps,
-			.socket_id = socket_id
+			.socket_id = socket_id,
+			.ff_disable = RTE_CRYPTODEV_FF_SECURITY |
+				      RTE_CRYPTODEV_FF_ASYMMETRIC_CRYPTO,
 		};
 
 		struct rte_cryptodev_qp_conf qp_conf = {
@@ -177,11 +238,11 @@ cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
 				rte_cryptodev_scheduler_slaves_get(cdev_id,
 								NULL);
 
-			sessions_needed = 2 * enabled_cdev_count *
+			sessions_needed = enabled_cdev_count *
 				opts->nb_qps * nb_slaves;
 #endif
 		} else
-			sessions_needed = 2 * enabled_cdev_count *
+			sessions_needed = enabled_cdev_count *
 						opts->nb_qps;
 
 		/*
@@ -194,29 +255,15 @@ cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
 				"%u sessions\n", opts->nb_qps);
 			return -ENOTSUP;
 		}
-		if (session_pool_socket[socket_id] == NULL) {
-			char mp_name[RTE_MEMPOOL_NAMESIZE];
-			struct rte_mempool *sess_mp;
 
-			snprintf(mp_name, RTE_MEMPOOL_NAMESIZE,
-				"sess_mp_%u", socket_id);
-			sess_mp = rte_mempool_create(mp_name,
-						sessions_needed,
-						max_sess_size,
-						0,
-						0, NULL, NULL, NULL,
-						NULL, socket_id,
-						0);
+		ret = fill_session_pool_socket(socket_id, max_sess_size,
+				sessions_needed);
+		if (ret < 0)
+			return ret;
 
-			if (sess_mp == NULL) {
-				printf("Cannot create session pool on socket %d\n",
-					socket_id);
-				return -ENOMEM;
-			}
-
-			printf("Allocated session pool on socket %d\n", socket_id);
-			session_pool_socket[socket_id] = sess_mp;
-		}
+		qp_conf.mp_session = session_pool_socket[socket_id].sess_mp;
+		qp_conf.mp_session_private =
+				session_pool_socket[socket_id].priv_mp;
 
 		ret = rte_cryptodev_configure(cdev_id, &conf);
 		if (ret < 0) {
@@ -226,8 +273,7 @@ cperf_initialize_cryptodev(struct cperf_options *opts, uint8_t *enabled_cdevs,
 
 		for (j = 0; j < opts->nb_qps; j++) {
 			ret = rte_cryptodev_queue_pair_setup(cdev_id, j,
-				&qp_conf, socket_id,
-				session_pool_socket[socket_id]);
+				&qp_conf, socket_id);
 			if (ret < 0) {
 				printf("Failed to setup queue pair %u on "
 					"cryptodev %u",	j, cdev_id);
@@ -451,10 +497,7 @@ main(int argc, char **argv)
 	struct cperf_options opts = {0};
 	struct cperf_test_vector *t_vec = NULL;
 	struct cperf_op_fns op_fns;
-
 	void *ctx[RTE_MAX_LCORE] = { };
-	struct rte_mempool *session_pool_socket[RTE_MAX_NUMA_NODES] = { 0 };
-
 	int nb_cryptodevs = 0;
 	uint16_t total_nb_qps = 0;
 	uint8_t cdev_id, i;
@@ -487,8 +530,7 @@ main(int argc, char **argv)
 		goto err;
 	}
 
-	nb_cryptodevs = cperf_initialize_cryptodev(&opts, enabled_cdevs,
-			session_pool_socket);
+	nb_cryptodevs = cperf_initialize_cryptodev(&opts, enabled_cdevs);
 
 	if (!opts.silent)
 		cperf_options_dump(&opts);
@@ -556,7 +598,9 @@ main(int argc, char **argv)
 		uint8_t socket_id = rte_cryptodev_socket_id(cdev_id);
 
 		ctx[i] = cperf_testmap[opts.test].constructor(
-				session_pool_socket[socket_id], cdev_id, qp_id,
+				session_pool_socket[socket_id].sess_mp,
+				session_pool_socket[socket_id].priv_mp,
+				cdev_id, qp_id,
 				&opts, t_vec, &op_fns);
 		if (ctx[i] == NULL) {
 			RTE_LOG(ERR, USER1, "Test run constructor failed\n");
@@ -622,9 +666,12 @@ main(int argc, char **argv)
 
 			if (i == total_nb_qps)
 				break;
-			rte_eal_wait_lcore(lcore_id);
+			ret |= rte_eal_wait_lcore(lcore_id);
 			i++;
 		}
+
+		if (ret != EXIT_SUCCESS)
+			goto err;
 	} else {
 
 		/* Get next size from range or list */
@@ -649,9 +696,12 @@ main(int argc, char **argv)
 
 				if (i == total_nb_qps)
 					break;
-				rte_eal_wait_lcore(lcore_id);
+				ret |= rte_eal_wait_lcore(lcore_id);
 				i++;
 			}
+
+			if (ret != EXIT_SUCCESS)
+				goto err;
 
 			/* Get next size from range or list */
 			if (opts.inc_buffer_size != 0)

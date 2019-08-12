@@ -5,7 +5,15 @@
 #ifndef _RTE_AESNI_MB_PMD_PRIVATE_H_
 #define _RTE_AESNI_MB_PMD_PRIVATE_H_
 
-#include "aesni_mb_ops.h"
+#include <intel-ipsec-mb.h>
+
+enum aesni_mb_vector_mode {
+	RTE_AESNI_MB_NOT_SUPPORTED = 0,
+	RTE_AESNI_MB_SSE,
+	RTE_AESNI_MB_AVX,
+	RTE_AESNI_MB_AVX2,
+	RTE_AESNI_MB_AVX512
+};
 
 #define CRYPTODEV_NAME_AESNI_MB_PMD	crypto_aesni_mb
 /**< AES-NI Multi buffer PMD device name */
@@ -25,6 +33,7 @@ int aesni_mb_logtype_driver;
 /* Maximum length for digest */
 #define DIGEST_LENGTH_MAX 64
 static const unsigned auth_blocksize[] = {
+		[NULL_HASH]	= 0,
 		[MD5]		= 64,
 		[SHA1]		= 64,
 		[SHA_224]	= 64,
@@ -33,6 +42,13 @@ static const unsigned auth_blocksize[] = {
 		[SHA_512]	= 128,
 		[AES_XCBC]	= 16,
 		[AES_CCM]	= 16,
+		[AES_CMAC]	= 16,
+		[AES_GMAC]	= 16,
+		[PLAIN_SHA1]	= 64,
+		[PLAIN_SHA_224]	= 64,
+		[PLAIN_SHA_256]	= 64,
+		[PLAIN_SHA_384]	= 128,
+		[PLAIN_SHA_512]	= 128
 };
 
 /**
@@ -57,7 +73,13 @@ static const unsigned auth_truncated_digest_byte_lengths[] = {
 		[AES_XCBC]	= 12,
 		[AES_CMAC]	= 12,
 		[AES_CCM]	= 8,
-		[NULL_HASH]	= 0
+		[NULL_HASH]	= 0,
+		[AES_GMAC]	= 16,
+		[PLAIN_SHA1]	= 20,
+		[PLAIN_SHA_224]	= 28,
+		[PLAIN_SHA_256]	= 32,
+		[PLAIN_SHA_384]	= 48,
+		[PLAIN_SHA_512]	= 64
 };
 
 /**
@@ -82,8 +104,16 @@ static const unsigned auth_digest_byte_lengths[] = {
 		[SHA_512]	= 64,
 		[AES_XCBC]	= 16,
 		[AES_CMAC]	= 16,
+		[AES_CCM]	= 16,
 		[AES_GMAC]	= 12,
-		[NULL_HASH]		= 0
+		[NULL_HASH]	= 0,
+		[PLAIN_SHA1]	= 20,
+		[PLAIN_SHA_224]	= 28,
+		[PLAIN_SHA_256]	= 32,
+		[PLAIN_SHA_384]	= 48,
+		[PLAIN_SHA_512]	= 64
+	/**< Vector mode dependent pointer table of the multi-buffer APIs */
+
 };
 
 /**
@@ -115,6 +145,8 @@ struct aesni_mb_private {
 	/**< CPU vector instruction set mode */
 	unsigned max_nb_queue_pairs;
 	/**< Max number of queue pairs supported by device */
+	MB_MGR *mb_mgr;
+	/**< Multi-buffer instance */
 };
 
 /** AESNI Multi buffer queue pair */
@@ -123,14 +155,14 @@ struct aesni_mb_qp {
 	/**< Queue Pair Identifier */
 	char name[RTE_CRYPTODEV_NAME_MAX_LEN];
 	/**< Unique Queue Pair Name */
-	const struct aesni_mb_op_fns *op_fns;
-	/**< Vector mode dependent pointer table of the multi-buffer APIs */
 	MB_MGR *mb_mgr;
 	/**< Multi-buffer instance */
 	struct rte_ring *ingress_queue;
-       /**< Ring for placing operations ready for processing */
+	/**< Ring for placing operations ready for processing */
 	struct rte_mempool *sess_mp;
 	/**< Session Mempool */
+	struct rte_mempool *sess_mp_priv;
+	/**< Session Private Data Mempool */
 	struct rte_cryptodev_stats stats;
 	/**< Queue pair statistics */
 	uint8_t digest_idx;
@@ -153,7 +185,9 @@ struct aesni_mb_session {
 	} iv;
 	/**< IV parameters */
 
-	/** Cipher Parameters */
+	/** Cipher Parameters */const struct aesni_mb_op_fns *op_fns;
+	/**< Vector mode dependent pointer table of the multi-buffer APIs */
+
 	struct {
 		/** Cipher direction - encrypt / decrypt */
 		JOB_CIPHER_DIRECTION direction;
@@ -233,15 +267,10 @@ struct aesni_mb_session {
 	} aead;
 } __rte_cache_aligned;
 
-
-/**
- *
- */
 extern int
-aesni_mb_set_session_parameters(const struct aesni_mb_op_fns *mb_ops,
+aesni_mb_set_session_parameters(const MB_MGR *mb_mgr,
 		struct aesni_mb_session *sess,
 		const struct rte_crypto_sym_xform *xform);
-
 
 /** device specific operations function pointer structure */
 extern struct rte_cryptodev_ops *rte_aesni_mb_pmd_ops;

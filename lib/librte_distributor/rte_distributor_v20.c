@@ -13,6 +13,7 @@
 #include <rte_string_fns.h>
 #include <rte_eal_memconfig.h>
 #include <rte_pause.h>
+#include <rte_tailq.h>
 
 #include "rte_distributor_v20.h"
 #include "rte_distributor_private.h"
@@ -386,15 +387,15 @@ rte_distributor_create_v20(const char *name,
 	}
 
 	d = mz->addr;
-	snprintf(d->name, sizeof(d->name), "%s", name);
+	strlcpy(d->name, name, sizeof(d->name));
 	d->num_workers = num_workers;
 
 	distributor_list = RTE_TAILQ_CAST(rte_distributor_tailq.head,
 					  rte_distributor_list);
 
-	rte_rwlock_write_lock(RTE_EAL_TAILQ_RWLOCK);
+	rte_mcfg_tailq_write_lock();
 	TAILQ_INSERT_TAIL(distributor_list, d, next);
-	rte_rwlock_write_unlock(RTE_EAL_TAILQ_RWLOCK);
+	rte_mcfg_tailq_write_unlock();
 
 	return d;
 }

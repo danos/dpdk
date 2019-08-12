@@ -20,8 +20,9 @@ LDLIBS += -lrte_common_cpt
 
 VPATH += $(RTE_SDK)/drivers/crypto/octeontx
 
-CFLAGS += -O3 -DCPT_MODEL=CRYPTO_OCTEONTX
+CFLAGS += -O3
 CFLAGS += -I$(RTE_SDK)/drivers/common/cpt
+CFLAGS += -DALLOW_EXPERIMENTAL_API
 
 # PMD code
 SRCS-$(CONFIG_RTE_LIBRTE_PMD_OCTEONTX_CRYPTO) += otx_cryptodev.c
@@ -35,12 +36,5 @@ SYMLINK-y-include +=
 
 # versioning export map
 EXPORT_MAP := rte_pmd_octeontx_crypto_version.map
-
-# library dependencies
-DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_OCTEONTX_CRYPTO) += lib/librte_eal
-DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_OCTEONTX_CRYPTO) += lib/librte_cryptodev
-DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_OCTEONTX_CRYPTO) += lib/librte_mempool
-DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_OCTEONTX_CRYPTO) += lib/librte_mbuf
-DEPDIRS-$(CONFIG_RTE_LIBRTE_PMD_OCTEONTX_CRYPTO) += lib/librte_malloc
 
 include $(RTE_SDK)/mk/rte.lib.mk

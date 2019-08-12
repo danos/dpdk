@@ -8,7 +8,6 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <fcntl.h>
-#include <libgen.h>
 
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
@@ -538,10 +537,10 @@ static void pick_rx_handler(struct enic *enic)
 	if (enic_use_vector_rx_handler(enic))
 		return;
 	if (enic->rq_count > 0 && enic->rq[0].data_queue_enable == 0) {
-		PMD_INIT_LOG(DEBUG, " use the non-scatter Rx handler");
+		ENICPMD_LOG(DEBUG, " use the non-scatter Rx handler");
 		eth_dev->rx_pkt_burst = &enic_noscatter_recv_pkts;
 	} else {
-		PMD_INIT_LOG(DEBUG, " use the normal Rx handler");
+		ENICPMD_LOG(DEBUG, " use the normal Rx handler");
 		eth_dev->rx_pkt_burst = &enic_recv_pkts;
 	}
 }
@@ -619,12 +618,12 @@ int enic_enable(struct enic *enic)
 		 DEV_TX_OFFLOAD_TCP_CKSUM);
 	if ((eth_dev->data->dev_conf.txmode.offloads &
 	     ~simple_tx_offloads) == 0) {
-		PMD_INIT_LOG(DEBUG, " use the simple tx handler");
+		ENICPMD_LOG(DEBUG, " use the simple tx handler");
 		eth_dev->tx_pkt_burst = &enic_simple_xmit_pkts;
 		for (index = 0; index < enic->wq_count; index++)
 			enic_prep_wq_for_simple_tx(enic, index);
 	} else {
-		PMD_INIT_LOG(DEBUG, " use the default tx handler");
+		ENICPMD_LOG(DEBUG, " use the default tx handler");
 		eth_dev->tx_pkt_burst = &enic_xmit_pkts;
 	}
 
@@ -1379,12 +1378,10 @@ int enic_get_link_status(struct enic *enic)
 
 static void enic_dev_deinit(struct enic *enic)
 {
-	struct rte_eth_dev *eth_dev = enic->rte_dev;
-
 	/* stop link status checking */
 	vnic_dev_notify_unset(enic->vdev);
 
-	rte_free(eth_dev->data->mac_addrs);
+	/* mac_addrs is freed by rte_eth_dev_release_port() */
 	rte_free(enic->cq);
 	rte_free(enic->intr);
 	rte_free(enic->rq);
@@ -1669,20 +1666,19 @@ static int enic_dev_init(struct enic *enic)
 	/* Get the supported filters */
 	enic_fdir_info(enic);
 
-	eth_dev->data->mac_addrs = rte_zmalloc("enic_mac_addr", ETH_ALEN
-						* ENIC_MAX_MAC_ADDR, 0);
+	eth_dev->data->mac_addrs = rte_zmalloc("enic_mac_addr",
+					sizeof(struct rte_ether_addr) *
+					ENIC_UNICAST_PERFECT_FILTERS, 0);
 	if (!eth_dev->data->mac_addrs) {
 		dev_err(enic, "mac addr storage alloc failed, aborting.\n");
 		return -1;
 	}
-	ether_addr_copy((struct ether_addr *) enic->mac_addr,
+	rte_ether_addr_copy((struct rte_ether_addr *)enic->mac_addr,
 			eth_dev->data->mac_addrs);
 
 	vnic_dev_set_reset_flag(enic->vdev, 0);
 
 	LIST_INIT(&enic->flows);
-	rte_spinlock_init(&enic->flows_lock);
-	enic->max_flow_counter = -1;
 
 	/* set up link status checking */
 	vnic_dev_notify_set(enic->vdev, -1); /* No Intr for notify */
@@ -1716,8 +1712,15 @@ static int enic_dev_init(struct enic *enic)
 			PKT_TX_OUTER_IP_CKSUM |
 			PKT_TX_TUNNEL_MASK;
 		enic->overlay_offload = true;
-		enic->vxlan_port = ENIC_DEFAULT_VXLAN_PORT;
 		dev_info(enic, "Overlay offload is enabled\n");
+	}
+	/*
+	 * Reset the vxlan port if HW vxlan parsing is available. It
+	 * is always enabled regardless of overlay offload
+	 * enable/disable.
+	 */
+	if (enic->vxlan) {
+		enic->vxlan_port = ENIC_DEFAULT_VXLAN_PORT;
 		/*
 		 * Reset the vxlan port to the default, as the NIC firmware
 		 * does not reset it automatically and keeps the old setting.
@@ -1739,7 +1742,7 @@ int enic_probe(struct enic *enic)
 	struct rte_pci_device *pdev = enic->pdev;
 	int err = -1;
 
-	dev_debug(enic, " Initializing ENIC PMD\n");
+	dev_debug(enic, "Initializing ENIC PMD\n");
 
 	/* if this is a secondary process the hardware is already initialized */
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
@@ -1763,20 +1766,14 @@ int enic_probe(struct enic *enic)
 		enic_free_consistent);
 
 	/*
-	 * Allocate the consistent memory for stats and counters upfront so
-	 * both primary and secondary processes can access them.
+	 * Allocate the consistent memory for stats upfront so both primary and
+	 * secondary processes can dump stats.
 	 */
 	err = vnic_dev_alloc_stats_mem(enic->vdev);
 	if (err) {
 		dev_err(enic, "Failed to allocate cmd memory, aborting\n");
 		goto err_out_unregister;
 	}
-	err = vnic_dev_alloc_counter_mem(enic->vdev);
-	if (err) {
-		dev_err(enic, "Failed to allocate counter memory, aborting\n");
-		goto err_out_unregister;
-	}
-
 	/* Issue device open to get device in known state */
 	err = enic_dev_open(enic);
 	if (err) {

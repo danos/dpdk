@@ -1,12 +1,12 @@
 ..  SPDX-License-Identifier: BSD-3-Clause
-    Copyright(c) 2015-2016 Intel Corporation.
+    Copyright(c) 2015-2019 Intel Corporation.
 
 Intel(R) QuickAssist (QAT) Crypto Poll Mode Driver
 ==================================================
 
 QAT documentation consists of three parts:
 
-* Details of the symmetric crypto service below.
+* Details of the symmetric and asymmetric crypto services below.
 * Details of the `compression service <http://doc.dpdk.org/guides/compressdevs/qat_comp.html>`_
   in the compressdev drivers section.
 * Details of building the common QAT infrastructure and the PMDs to support the
@@ -16,8 +16,8 @@ QAT documentation consists of three parts:
 Symmetric Crypto Service on QAT
 -------------------------------
 
-The QAT crypto PMD provides poll mode crypto driver support for the following
-hardware accelerator devices:
+The QAT symmetric crypto PMD (hereafter referred to as `QAT SYM [PMD]`) provides
+poll mode crypto driver support for the following hardware accelerator devices:
 
 * ``Intel QuickAssist Technology DH895xCC``
 * ``Intel QuickAssist Technology C62x``
@@ -29,7 +29,7 @@ hardware accelerator devices:
 Features
 ~~~~~~~~
 
-The QAT PMD has support for:
+The QAT SYM PMD has support for:
 
 Cipher algorithms:
 
@@ -41,6 +41,7 @@ Cipher algorithms:
 * ``RTE_CRYPTO_CIPHER_AES128_CTR``
 * ``RTE_CRYPTO_CIPHER_AES192_CTR``
 * ``RTE_CRYPTO_CIPHER_AES256_CTR``
+* ``RTE_CRYPTO_CIPHER_AES_XTS``
 * ``RTE_CRYPTO_CIPHER_SNOW3G_UEA2``
 * ``RTE_CRYPTO_CIPHER_NULL``
 * ``RTE_CRYPTO_CIPHER_KASUMI_F8``
@@ -79,9 +80,8 @@ Limitations
 * SNOW 3G (UIA2) and ZUC (EIA3) supported only if hash length and offset fields are byte-multiple.
 * No BSD support as BSD QAT kernel driver not available.
 * ZUC EEA3/EIA3 is not supported by dh895xcc devices
-* Maximum additional authenticated data (AAD) for GCM is 240 bytes long.
+* Maximum additional authenticated data (AAD) for GCM is 240 bytes long and must be passed to the device in a buffer rounded up to the nearest block-size multiple (x16) and padded with zeros.
 * Queue pairs are not thread-safe (that is, within a single queue pair, RX and TX from different lcores is not supported).
-
 
 Extra notes on KASUMI F9
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -101,7 +101,28 @@ of all the items described above, including the padding at the end.
 Also, offset of data to authenticate "op.sym.auth.data.offset"
 must be such that points at the start of the COUNT bytes.
 
+Asymmetric Crypto Service on QAT
+--------------------------------
 
+The QAT asymmetric crypto PMD (hereafter referred to as `QAT ASYM [PMD]`) provides
+poll mode crypto driver support for the following hardware accelerator devices:
+
+* ``Intel QuickAssist Technology DH895xCC``
+* ``Intel QuickAssist Technology C62x``
+* ``Intel QuickAssist Technology C3xxx``
+* ``Intel QuickAssist Technology D15xx``
+* ``Intel QuickAssist Technology C4xxx``
+
+The QAT ASYM PMD has support for:
+
+* ``RTE_CRYPTO_ASYM_XFORM_MODEX``
+* ``RTE_CRYPTO_ASYM_XFORM_MODINV``
+
+Limitations
+~~~~~~~~~~~
+
+* Big integers longer than 4096 bits are not supported.
+* Queue pairs are not thread-safe (that is, within a single queue pair, RX and TX from different lcores is not supported).
 
 .. _building_qat:
 
@@ -112,6 +133,7 @@ A QAT device can host multiple acceleration services:
 
 * symmetric cryptography
 * data compression
+* asymmetric cryptography
 
 These services are provided to DPDK applications via PMDs which register to
 implement the corresponding cryptodev and compressdev APIs. The PMDs use
@@ -134,6 +156,8 @@ Quick instructions for QAT cryptodev PMD are as follows:
 	cd to the top-level DPDK directory
 	make defconfig
 	sed -i 's,\(CONFIG_RTE_LIBRTE_PMD_QAT_SYM\)=n,\1=y,' build/.config
+	or/and
+	sed -i 's,\(CONFIG_RTE_LIBRTE_PMD_QAT_ASYM\)=n,\1=y,' build/.config
 	make
 
 Quick instructions for QAT compressdev PMD are as follows:
@@ -145,6 +169,8 @@ Quick instructions for QAT compressdev PMD are as follows:
 	make
 
 
+.. _building_qat_config:
+
 Build Configuration
 ~~~~~~~~~~~~~~~~~~~
 
@@ -154,14 +180,14 @@ These are the build configuration options affecting QAT, and their default value
 
 	CONFIG_RTE_LIBRTE_PMD_QAT=y
 	CONFIG_RTE_LIBRTE_PMD_QAT_SYM=n
+	CONFIG_RTE_LIBRTE_PMD_QAT_ASYM=n
 	CONFIG_RTE_PMD_QAT_MAX_PCI_DEVICES=48
-	CONFIG_RTE_PMD_QAT_COMP_SGL_MAX_SEGMENTS=16
 	CONFIG_RTE_PMD_QAT_COMP_IM_BUFFER_SIZE=65536
 
 CONFIG_RTE_LIBRTE_PMD_QAT must be enabled for any QAT PMD to be built.
 
-The QAT cryptodev PMD has an external dependency on libcrypto, so is not
-built by default. CONFIG_RTE_LIBRTE_PMD_QAT_SYM should be enabled to build it.
+Both QAT SYM PMD and QAT ASYM PMD have an external dependency on libcrypto, so are not
+built by default. CONFIG_RTE_LIBRTE_PMD_QAT_SYM/ASYM should be enabled to build them.
 
 The QAT compressdev PMD has no external dependencies, so needs no configuration
 options and is built by default.
@@ -169,44 +195,53 @@ options and is built by default.
 The number of VFs per PF varies - see table below. If multiple QAT packages are
 installed on a platform then CONFIG_RTE_PMD_QAT_MAX_PCI_DEVICES should be
 adjusted to the number of VFs which the QAT common code will need to handle.
-Note, there are separate config items for max cryptodevs CONFIG_RTE_CRYPTO_MAX_DEVS
-and max compressdevs CONFIG_RTE_COMPRESS_MAX_DEVS, if necessary these should be
-adjusted to handle the total of QAT and other devices which the process will use.
 
-QAT allocates internal structures to handle SGLs. For the compression service
-CONFIG_RTE_PMD_QAT_COMP_SGL_MAX_SEGMENTS can be changed if more segments are needed.
-An extra (max_inflight_ops x 16) bytes per queue_pair will be used for every increment.
+.. Note::
+
+        There are separate config items (not QAT-specific) for max cryptodevs
+        CONFIG_RTE_CRYPTO_MAX_DEVS and max compressdevs CONFIG_RTE_COMPRESS_MAX_DEVS,
+        if necessary these should be adjusted to handle the total of QAT and other
+        devices which the process will use. In particular for crypto, where each
+        QAT VF may expose two crypto devices, sym and asym, it may happen that the
+        number of devices will be bigger than MAX_DEVS and the process will show an error
+        during PMD initialisation. To avoid this problem CONFIG_RTE_CRYPTO_MAX_DEVS may be
+        increased or -w, pci-whitelist domain:bus:devid:func option may be used.
+
 
 QAT compression PMD needs intermediate buffers to support Deflate compression
 with Dynamic Huffman encoding. CONFIG_RTE_PMD_QAT_COMP_IM_BUFFER_SIZE
 specifies the size of a single buffer, the PMD will allocate a multiple of these,
-plus some extra space for associated meta-data. For GEN2 devices, 20 buffers plus
-1472 bytes are allocated.
+plus some extra space for associated meta-data. For GEN2 devices, 20 buffers are
+allocated while for GEN1 devices, 12 buffers are allocated, plus 1472 bytes overhead.
 
 .. Note::
 
 	If the compressed output of a Deflate operation using Dynamic Huffman
         Encoding is too big to fit in an intermediate buffer, then the
-        operation will return RTE_COMP_OP_STATUS_ERROR and an error will be
-        displayed. Options for the application in this case
-        are to split the input data into smaller chunks and resubmit
-        in multiple operations or to configure QAT with
-        larger intermediate buffers.
+	operation will fall back to fixed compression rather than failing the operation.
+	To avoid this less performant case, applications should configure
+	the intermediate buffer size to be larger than the expected input data size
+	(compressed output size is usually unknown, so the only option is to make
+	larger than the input size).
 
 
 Device and driver naming
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-* The qat cryptodev driver name is "crypto_qat".
-  The "rte_cryptodev_devices_get()" returns the devices exposed by this driver.
+* The qat cryptodev symmetric crypto driver name is "crypto_qat".
+* The qat cryptodev asymmetric crypto driver name is "crypto_qat_asym".
 
-* Each qat crypto device has a unique name, in format
+The "rte_cryptodev_devices_get()" returns the devices exposed by either of these drivers.
+
+* Each qat sym crypto device has a unique name, in format
   "<pci bdf>_<service>", e.g. "0000:41:01.0_qat_sym".
+* Each qat asym crypto device has a unique name, in format
+  "<pci bdf>_<service>", e.g. "0000:41:01.0_qat_asym".
   This name can be passed to "rte_cryptodev_get_dev_id()" to get the device_id.
 
 .. Note::
 
-	The qat crypto driver name is passed to the dpdk-test-crypto-perf tool in the "-devtype" parameter.
+	The cryptodev driver name is passed to the dpdk-test-crypto-perf tool in the "-devtype" parameter.
 
 	The qat crypto device name is in the format of the slave parameter passed to the crypto scheduler.
 
@@ -230,7 +265,8 @@ relationships between the PF/VF devices and the PMDs visible to
 DPDK applications.
 
 Each QuickAssist PF device exposes a number of VF devices. Each VF device can
-enable one cryptodev PMD and/or one compressdev PMD.
+enable one symmetric cryptodev PMD and/or one asymmetric cryptodev PMD and/or
+one compressdev PMD.
 These QAT PMDs share the same underlying device and pci-mgmt code, but are
 enumerated independently on their respective APIs and appear as independent
 devices to applications.
@@ -248,38 +284,45 @@ devices to applications.
 Available kernel drivers
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Kernel drivers for each device are listed in the following table. Scroll right
-to check that the driver and device supports the service you require.
+Kernel drivers for each device for each service are listed in the following table. (Scroll right
+to see the full table)
 
 
 .. _table_qat_pmds_drivers:
 
 .. table:: QAT device generations, devices and drivers
 
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
-   | Gen | Device   | Driver/ver    | Kernel Module | Pci Driver | PF Did | #PFs | VF Did | VFs/PF | cryptodev | compressdev |
-   +=====+==========+===============+===============+============+========+======+========+========+===========+=============+
-   | 1   | DH895xCC | linux/4.4+    | qat_dh895xcc  | dh895xcc   | 435    | 1    | 443    | 32     | Yes       | No          |
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
-   | "   | "        | 01.org/4.2.0+ | "             | "          | "      | "    | "      | "      | Yes       | No          |
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
-   | 2   | C62x     | linux/4.5+    | qat_c62x      | c6xx       | 37c8   | 3    | 37c9   | 16     | Yes       | No          |
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
-   | "   | "        | 01.org/4.2.0+ | "             | "          | "      | "    | "      | "      | Yes       | Yes         |
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
-   | 2   | C3xxx    | linux/4.5+    | qat_c3xxx     | c3xxx      | 19e2   | 1    | 19e3   | 16     | Yes       | No          |
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
-   | "   | "        | 01.org/4.2.0+ | "             | "          | "      | "    | "      | "      | Yes       | Yes         |
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
-   | 2   | D15xx    | p             | qat_d15xx     | d15xx      | 6f54   | 1    | 6f55   | 16     | Yes       | No          |
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
-   | 3   | C4xxx    | p             | qat_c4xxx     | c4xxx      | 18a0   | 1    | 18a1   | 128    | Yes       | No          |
-   +-----+----------+---------------+---------------+------------+--------+------+--------+--------+-----------+-------------+
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | S   | A   | C   | Gen | Device   | Driver/ver    | Kernel Module | Pci Driver | PF Did | #PFs | VF Did | VFs/PF |
+   +=====+=====+=====+=====+==========+===============+===============+============+========+======+========+========+
+   | Yes | No  | No  | 1   | DH895xCC | linux/4.4+    | qat_dh895xcc  | dh895xcc   | 435    | 1    | 443    | 32     |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | Yes | No  | "   | "        | 01.org/4.2.0+ | "             | "          | "      | "    | "      | "      |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | Yes | Yes | "   | "        | 01.org/4.3.0+ | "             | "          | "      | "    | "      | "      |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | No  | No  | 2   | C62x     | linux/4.5+    | qat_c62x      | c6xx       | 37c8   | 3    | 37c9   | 16     |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | Yes | Yes | "   | "        | 01.org/4.2.0+ | "             | "          | "      | "    | "      | "      |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | No  | No  | 2   | C3xxx    | linux/4.5+    | qat_c3xxx     | c3xxx      | 19e2   | 1    | 19e3   | 16     |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | Yes | Yes | "   | "        | 01.org/4.2.0+ | "             | "          | "      | "    | "      | "      |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | No  | No  | 2   | D15xx    | p             | qat_d15xx     | d15xx      | 6f54   | 1    | 6f55   | 16     |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | No  | No  | 3   | C4xxx    | p             | qat_c4xxx     | c4xxx      | 18a0   | 1    | 18a1   | 128    |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
 
+The first 3 columns indicate the service:
+
+* S = Symmetric crypto service (via cryptodev API)
+* A = Asymmetric crypto service  (via cryptodev API)
+* C = Compression service (via compressdev API)
 
 The ``Driver`` column indicates either the Linux kernel version in which
 support for this device was introduced or a driver available on Intel's 01.org
-website. There are both linux and 01.org kernel drivers available for some
+website. There are both linux in-tree and 01.org kernel drivers available for some
 devices. p = release pending.
 
 If you are running on a kernel which includes a driver for your device, see
@@ -526,19 +569,27 @@ Another way to bind the VFs to the DPDK UIO driver is by using the
 Testing
 ~~~~~~~
 
-QAT crypto PMD can be tested by running the test application::
+QAT SYM crypto PMD can be tested by running the test application::
 
     make defconfig
-    make test-build -j
+    make -j
     cd ./build/app
     ./test -l1 -n1 -w <your qat bdf>
     RTE>>cryptodev_qat_autotest
+
+QAT ASYM crypto PMD can be tested by running the test application::
+
+    make defconfig
+    make -j
+    cd ./build/app
+    ./test -l1 -n1 -w <your qat bdf>
+    RTE>>cryptodev_qat_asym_autotest
 
 QAT compression PMD can be tested by running the test application::
 
     make defconfig
     sed -i 's,\(CONFIG_RTE_COMPRESSDEV_TEST\)=n,\1=y,' build/.config
-    make test-build -j
+    make -j
     cd ./build/app
     ./test -l1 -n1 -w <your qat bdf>
     RTE>>compressdev_autotest

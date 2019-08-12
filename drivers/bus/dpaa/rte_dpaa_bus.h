@@ -30,6 +30,9 @@
 #define SVR_LS1046A_FAMILY	0x87070000
 #define SVR_MASK		0xffff0000
 
+#define RTE_DEV_TO_DPAA_CONST(ptr) \
+	container_of(ptr, const struct rte_dpaa_device, device)
+
 extern unsigned int dpaa_svr_family;
 
 extern RTE_DEFINE_PER_LCORE(bool, dpaa_io);
@@ -54,6 +57,7 @@ struct rte_dpaa_bus {
 	struct rte_dpaa_device_list device_list;
 	struct rte_dpaa_driver_list driver_list;
 	int device_count;
+	int detected;
 };
 
 struct dpaa_device_id {

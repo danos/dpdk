@@ -23,17 +23,13 @@
 #define lower_32_bits(x) ((uint32_t)(x))
 #define upper_32_bits(x) ((uint32_t)(((x) >> 16) >> 16))
 
-#define SVR_LS1080A             0x87030000
-#define SVR_LS2080A             0x87010000
-#define SVR_LS2088A             0x87090000
-#define SVR_LX2160A             0x87360000
-
 #ifndef VLAN_TAG_SIZE
 #define VLAN_TAG_SIZE   4 /** < Vlan Header Length */
 #endif
 
 /* Maximum number of slots available in TX ring */
 #define MAX_TX_RING_SLOTS			32
+#define MAX_EQ_RESP_ENTRIES			(MAX_TX_RING_SLOTS + 1)
 
 /* Maximum number of slots available in RX ring */
 #define DPAA2_EQCR_RING_SIZE		8
@@ -49,6 +45,15 @@
 #define DPAA2_EQCR_SHIFT		3
 /* EQCR shift to get EQCR size for LX2 (2 >> 5) = 32 for LX2 */
 #define DPAA2_LX2_EQCR_SHIFT		5
+
+/* Flag to determine an ordered queue mbuf */
+#define DPAA2_ENQUEUE_FLAG_ORP		(1ULL << 30)
+/* ORP ID shift and mask */
+#define DPAA2_EQCR_OPRID_SHIFT		16
+#define DPAA2_EQCR_OPRID_MASK		0x3FFF0000
+/* Sequence number shift and mask */
+#define DPAA2_EQCR_SEQNUM_SHIFT		0
+#define DPAA2_EQCR_SEQNUM_MASK		0x0000FFFF
 
 #define DPAA2_SWP_CENA_REGION		0
 #define DPAA2_SWP_CINH_REGION		1
@@ -67,15 +72,18 @@
 #define DPAA2_MBUF_HW_ANNOTATION	64
 #define DPAA2_FD_PTA_SIZE		0
 
-#if (DPAA2_MBUF_HW_ANNOTATION + DPAA2_FD_PTA_SIZE) > RTE_PKTMBUF_HEADROOM
-#error "Annotation requirement is more than RTE_PKTMBUF_HEADROOM"
-#endif
-
 /* we will re-use the HEADROOM for annotation in RX */
 #define DPAA2_HW_BUF_RESERVE	0
 #define DPAA2_PACKET_LAYOUT_ALIGN	64 /*changing from 256 */
 
 #define DPAA2_DPCI_MAX_QUEUES 2
+
+struct dpaa2_queue;
+
+struct eqresp_metadata {
+	struct dpaa2_queue *dpaa2_q;
+	struct rte_mempool *mp;
+};
 
 struct dpaa2_dpio_dev {
 	TAILQ_ENTRY(dpaa2_dpio_dev) next;
@@ -83,6 +91,10 @@ struct dpaa2_dpio_dev {
 	uint16_t index; /**< Index of a instance in the list */
 	rte_atomic16_t ref_count;
 		/**< How many thread contexts are sharing this.*/
+	uint16_t eqresp_ci;
+	uint16_t eqresp_pi;
+	struct qbman_result *eqresp;
+	struct eqresp_metadata *eqresp_meta;
 	struct fsl_mc_io *dpio; /** handle to DPIO portal object */
 	uint16_t token;
 	struct qbman_swp *sw_portal; /** SW portal object */
@@ -125,9 +137,14 @@ typedef void (dpaa2_queue_cb_dqrr_t)(struct qbman_swp *swp,
 		struct dpaa2_queue *rxq,
 		struct rte_event *ev);
 
+typedef void (dpaa2_queue_cb_eqresp_free_t)(uint16_t eqresp_ci);
+
 struct dpaa2_queue {
 	struct rte_mempool *mb_pool; /**< mbuf pool to populate RX ring. */
-	void *dev;
+	union {
+		struct rte_eth_dev_data *eth_data;
+		struct rte_cryptodev_data *crypto_data;
+	};
 	int32_t eventfd;	/*!< Event Fd of this queue */
 	uint32_t fqid;		/*!< Unique ID of this queue */
 	uint8_t tc_index;	/*!< traffic class identifier */
@@ -141,6 +158,8 @@ struct dpaa2_queue {
 	};
 	struct rte_event ev;
 	dpaa2_queue_cb_dqrr_t *cb;
+	dpaa2_queue_cb_eqresp_free_t *cb_eqresp_free;
+	struct dpaa2_bp_info *bp_array;
 };
 
 struct swp_active_dqs {
@@ -206,6 +225,7 @@ enum qbman_fd_format {
 	((fd)->simple.frc = (0x80000000 | (len)))
 #define DPAA2_GET_FD_FRC_PARSE_SUM(fd)	\
 			((uint16_t)(((fd)->simple.frc & 0xffff0000) >> 16))
+#define DPAA2_RESET_FD_FRC(fd)		((fd)->simple.frc = 0)
 #define DPAA2_SET_FD_FRC(fd, _frc)	((fd)->simple.frc = _frc)
 #define DPAA2_RESET_FD_CTRL(fd)	 ((fd)->simple.ctrl = 0)
 

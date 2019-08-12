@@ -12,7 +12,9 @@ Programmer's Guide
     overview
     env_abstraction_layer
     service_cores
+    rcu_lib
     ring_lib
+    stack_lib
     mempool_lib
     mbuf_lib
     poll_mode_drv
@@ -54,6 +56,7 @@ Programmer's Guide
     vhost_lib
     metrics_lib
     bpf_lib
+    ipsec_lib
     source_org
     dev_kit_build_system
     dev_kit_root_make_help

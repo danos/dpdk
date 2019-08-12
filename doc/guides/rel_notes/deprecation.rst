@@ -11,19 +11,21 @@ API and ABI deprecation notices are to be posted here.
 Deprecation Notices
 -------------------
 
-* linux: Linux kernel version 3.2 (which is the current minimum required
-  version for the DPDK) is not maintained anymore. Therefore the planned
-  minimum required kernel version for DPDK 19.02 will be the next oldest
-  Long Term Stable (LTS) version which is 3.16, but compatibility for
-  recent distribution kernels will be kept.
+* meson: The minimum supported version of meson for configuring and building
+  DPDK will be increased to v0.47.1 (from 0.41) from DPDK 19.05 onwards. For
+  those users with a version earlier than 0.47.1, an updated copy of meson
+  can be got using the ``pip``, or ``pip3``, tool for downloading python
+  packages.
 
 * kvargs: The function ``rte_kvargs_process`` will get a new parameter
   for returning key match count. It will ease handling of no-match case.
 
-* eal: function ``rte_bsf64`` in ``rte_bitmap.h`` has been renamed to
-  ``rte_bsf64_safe`` and moved to ``rte_common.h``. A new ``rte_bsf64`` function
-  will be added in the next release in ``rte_common.h`` that follows convention
-  set by existing ``rte_bsf32`` function.
+* eal: The function ``rte_eal_remote_launch`` will return new error codes
+  after read or write error on the pipe, instead of calling ``rte_panic``.
+
+* eal: The ``lcore_config`` struct and global symbol will be made private to
+  remove it from the externally visible ABI and allow it to be updated in the
+  future.
 
 * eal: both declaring and identifying devices will be streamlined in v18.11.
   New functions will appear to query a specific port from buses, classes of
@@ -35,6 +37,16 @@ Deprecation Notices
   - Functions previously deprecated will change or disappear:
 
     + ``rte_eal_devargs_type_count``
+
+* eal: The ``rte_cpu_check_supported`` function has been deprecated since
+  v17.08 and will be removed.
+
+* eal: The ``rte_malloc_virt2phy`` function has been deprecated and replaced
+  by ``rte_malloc_virt2iova`` since v17.11 and will be removed.
+
+* vfio: removal of ``rte_vfio_dma_map`` and ``rte_vfio_dma_unmap`` APIs which
+  have been replaced with ``rte_dev_dma_map`` and ``rte_dev_dma_unmap``
+  functions.  The due date for the removal targets DPDK 20.02.
 
 * pci: Several exposed functions are misnamed.
   The following functions are deprecated starting from v17.11 and are replaced:
@@ -49,22 +61,20 @@ Deprecation Notices
   structure would be made internal (or removed if all dependencies are cleared)
   in future releases.
 
-* mbuf: The opaque ``mbuf->hash.sched`` field will be updated to support generic
-  definition in line with the ethdev TM and MTR APIs. Currently, this field
-  is defined in librte_sched in a non-generic way. The new generic format
-  will contain: queue ID, traffic class, color. Field size will not change.
+* net: The Ethernet address and header definitions will change
+  attributes. The Ethernet address struct will no longer be marked as
+  packed since the packed attribute is meaningless on a byte
+  array. The Ethernet header will be marked as aligned on a 2-byte
+  boundary and will no longer have the packed attribute. This allows
+  for efficient access on CPU architectures where unaligned access is
+  expensive. These changes should not impact normal usage because drivers
+  naturally align the Ethernet header on receive and all known
+  encapsulations preserve the alignment of the header.
 
-* sched: Some API functions will change prototype due to the above
-  deprecation note for mbuf->hash.sched, e.g. ``rte_sched_port_pkt_write()``
-  and ``rte_sched_port_pkt_read()`` will likely have an additional parameter
-  of type ``struct rte_sched_port``.
-
-* mbuf: the macro ``RTE_MBUF_INDIRECT()`` will be removed in v18.08 or later and
-  replaced with ``RTE_MBUF_CLONED()`` which is already added in v18.05. As
-  ``EXT_ATTACHED_MBUF`` is newly introduced in v18.05, ``RTE_MBUF_INDIRECT()``
-  can no longer be mutually exclusive with ``RTE_MBUF_DIRECT()`` if the new
-  experimental API ``rte_pktmbuf_attach_extbuf()`` is used. Removal of the macro
-  is to fix this semantic inconsistency.
+* ethdev: The function ``rte_eth_dev_count`` will be removed in DPDK 20.02.
+  It is replaced by the function ``rte_eth_dev_count_avail``.
+  If the intent is to iterate over ports, ``RTE_ETH_FOREACH_*`` macros
+  are better port iterators.
 
 * ethdev: the legacy filter API, including
   ``rte_eth_dev_filter_supported()``, ``rte_eth_dev_filter_ctrl()`` as well
@@ -74,34 +84,64 @@ Deprecation Notices
   Target release for removal of the legacy API will be defined once most
   PMDs have switched to rte_flow.
 
-* ethdev: Maximum and minimum MTU values vary between hardware devices. In
-  hardware agnostic DPDK applications access to such information would allow
-  a more accurate way of validating and setting supported MTU values on a per
-  device basis rather than using a defined default for all devices. To
-  resolve this, the following members will be added to ``rte_eth_dev_info``.
-  Note: these can be added to fit a hole in the existing structure for amd64
-  but not for 32-bit, as such ABI change will occur as size of the structure
-  will increase.
+* ethdev: Update API functions returning ``void`` to return ``int`` with
+  negative errno values to indicate various error conditions (e.g.
+  invalid port ID, unsupported operation, failed operation):
 
-  - Member ``uint16_t min_mtu`` the minimum MTU allowed.
-  - Member ``uint16_t max_mtu`` the maximum MTU allowed.
+  - ``rte_eth_dev_info_get``
+  - ``rte_eth_promiscuous_enable`` and ``rte_eth_promiscuous_disable``
+  - ``rte_eth_allmulticast_enable`` and ``rte_eth_allmulticast_disable``
+  - ``rte_eth_link_get`` and ``rte_eth_link_get_nowait``
+  - ``rte_eth_dev_stop``
+  - ``rte_eth_dev_close``
+  - ``rte_eth_xstats_reset``
+  - ``rte_eth_macaddr_get``
+  - ``rte_eth_dev_owner_delete``
 
-* security: New field ``uint64_t opaque_data`` is planned to be added into
-  ``rte_security_session`` structure. That would allow upper layer to easily
-  associate/de-associate some user defined data with the security session.
+* ethdev: New offload flags ``DEV_RX_OFFLOAD_RSS_HASH`` and
+  ``DEV_RX_OFFLOAD_FLOW_MARK`` will be added in 19.11.
+  This will allow application to enable or disable PMDs from updating
+  ``rte_mbuf::hash::rss`` and ``rte_mbuf::hash::fdir`` respectively.
+  This scheme will allow PMDs to avoid writes to ``rte_mbuf`` fields on Rx and
+  thereby improve Rx performance if application wishes do so.
+  In 19.11 PMDs will still update the fields even when the offloads are not
+  enabled.
 
-* cryptodev: several API and ABI changes are planned for rte_cryptodev
-  in v19.02:
+* ethdev: New function ``rte_eth_dev_set_supported_ptypes`` will be added in
+  19.11.
+  This will allow application to request PMD to set specific ptypes defined
+  through ``rte_eth_dev_set_supported_ptypes`` in ``rte_mbuf::packet_type``.
+  If application doesn't want any ptype information it can call
+  ``rte_eth_dev_set_supported_ptypes(ethdev_id, RTE_PTYPE_UNKNOWN)`` and PMD
+  will set ``rte_mbuf::packet_type`` to ``0``.
+  If application doesn't call ``rte_eth_dev_set_supported_ptypes`` PMD can
+  return ``rte_mbuf::packet_type`` with ``rte_eth_dev_get_supported_ptypes``.
+  If application is interested only in L2/L3 layer, it can inform the PMD
+  to update ``rte_mbuf::packet_type`` with L2/L3 ptype by calling
+  ``rte_eth_dev_set_supported_ptypes(ethdev_id, RTE_PTYPE_L2_MASK | RTE_PTYPE_L3_MASK)``.
+  This scheme will allow PMDs to avoid lookup to internal ptype table on Rx and
+  thereby improve Rx performance if application wishes do so.
 
-  - The size and layout of ``rte_cryptodev_sym_session`` will change
-    to fix existing issues.
-  - The size and layout of ``rte_cryptodev_qp_conf`` and syntax of
-    ``rte_cryptodev_queue_pair_setup`` will change to to allow to use
-    two different mempools for crypto and device private sessions.
+* ethdev: New 32-bit fields may be added for maximum LRO session size, in
+  struct ``rte_eth_dev_info`` for the port capability and in struct
+  ``rte_eth_rxmode`` for the port configuration.
 
-* pdump: As we changed to use generic IPC, some changes in APIs and structure
-  are expected in subsequent release.
+* cryptodev: support for using IV with all sizes is added, J0 still can
+  be used but only when IV length in following structs ``rte_crypto_auth_xform``,
+  ``rte_crypto_aead_xform`` is set to zero. When IV length is greater or equal
+  to one it means it represents IV, when is set to zero it means J0 is used
+  directly, in this case 16 bytes of J0 need to be passed.
 
-  - ``rte_pdump_set_socket_dir`` will be removed;
-  - The parameter, ``path``, of ``rte_pdump_init`` will be removed;
-  - The enum ``rte_pdump_socktype`` will be removed.
+* sched: To allow more traffic classes, flexible mapping of pipe queues to
+  traffic classes, and subport level configuration of pipes and queues
+  changes will be made to macros, data structures and API functions defined
+  in "rte_sched.h". These changes are aligned to improvements suggested in the
+  RFC https://mails.dpdk.org/archives/dev/2018-November/120035.html.
+
+* metrics: The function ``rte_metrics_init`` will have a non-void return
+  in order to notify errors instead of calling ``rte_exit``.
+
+* power: ``rte_power_set_env`` function will no longer return 0 on attempt
+  to set new power environment if power environment was already initialized.
+  In this case the function will return -1 unless the environment is unset first
+  (using ``rte_power_unset_env``). Other function usage scenarios will not change.

@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
-# Copyright(c) 2017 Intel Corporation
+# Copyright(c) 2017-2019 Intel Corporation
+
+if is_windows
+	subdir_done()
+endif
 
 # Defines the order in which the drivers are buit.
-driver_classes = ['common',
+dpdk_driver_classes = ['common',
 	       'bus',
 	       'mempool', # depends on common and bus.
 	       'net',     # depends on common, bus and mempool.
@@ -17,10 +21,7 @@ if cc.has_argument('-Wno-format-truncation')
 	default_cflags += '-Wno-format-truncation'
 endif
 
-# specify -D_GNU_SOURCE unconditionally
-default_cflags += '-D_GNU_SOURCE'
-
-foreach class:driver_classes
+foreach class:dpdk_driver_classes
 	drivers = []
 	std_deps = []
 	config_flag_fmt = '' # format string used to set the value in dpdk_conf
@@ -36,6 +37,7 @@ foreach class:driver_classes
 
 		# set up empty variables used for build
 		build = true # set to false to disable, e.g. missing deps
+		reason = '<unknown reason>' # set if build == false to explain
 		name = drv
 		version = 1
 		allow_experimental_apis = false
@@ -46,17 +48,27 @@ foreach class:driver_classes
 		# set up internal deps. Drivers can append/override as necessary
 		deps = std_deps
 		# ext_deps: Stores external library dependency got
-		# using dependency() or cc.find_library(). For most cases, we
-		# probably also need to specify the "-l" flags in
-		# pkgconfig_extra_libs variable too, so that it can be reflected
-		# in the pkgconfig output for static builds
+		# using dependency() (preferred) or find_library().
+		# For the find_library() case (but not with dependency()) we also
+		# need to specify the "-l" flags in pkgconfig_extra_libs variable
+		# too, so that it can be reflected in the pkgconfig output for
+		# static builds.
 		ext_deps = []
 		pkgconfig_extra_libs = []
 
 		# pull in driver directory which should assign to each of the above
 		subdir(drv_path)
 
-		if build
+		if not build
+			# some driver directories are placeholders which
+			# are never built, so we allow suppression of the
+			# component disable printout in those cases
+			if reason != ''
+				dpdk_drvs_disabled += drv_path
+				set_variable(drv_path.underscorify() +
+						'_disable_reason', reason)
+			endif
+		else
 			class_drivers += name
 
 			dpdk_conf.set(config_flag_fmt.format(name.to_upper()),1)
@@ -148,8 +160,5 @@ foreach class:driver_classes
 		endif # build
 	endforeach
 
-	if meson.version().version_compare('>=0.47')
-		# prior to 0.47, set_variable can't take array params
-		set_variable(class + '_drivers', class_drivers)
-	endif
+	set_variable(class + '_drivers', class_drivers)
 endforeach

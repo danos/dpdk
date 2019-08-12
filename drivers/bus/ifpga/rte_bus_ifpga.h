@@ -13,10 +13,11 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif /* __cplusplus */
 
 #include <rte_bus.h>
 #include <rte_pci.h>
+#include <rte_spinlock.h>
 
 /** Name of Intel FPGA Bus */
 #define IFPGA_BUS_NAME ifpga
@@ -60,6 +61,11 @@ struct rte_afu_pr_conf {
 
 #define AFU_PRI_STR_SIZE (PCI_PRI_STR_SIZE + 8)
 
+struct rte_afu_shared {
+	rte_spinlock_t lock;
+	void *data;
+};
+
 /**
  * A structure describing a AFU device.
  */
@@ -71,6 +77,7 @@ struct rte_afu_device {
 	uint32_t num_region;   /**< number of regions found */
 	struct rte_mem_resource mem_resource[PCI_MAX_RESOURCE];
 						/**< AFU Memory Resource */
+	struct rte_afu_shared shared;
 	struct rte_intr_handle intr_handle;     /**< Interrupt handle */
 	struct rte_afu_driver *driver;          /**< Associated driver */
 	char path[IFPGA_BUS_BITSTREAM_PATH_MAX_LEN];
@@ -113,6 +120,15 @@ rte_ifpga_device_name(const struct rte_afu_device *afu)
 }
 
 /**
+ * Find AFU by AFU name.
+ *
+ * @param name
+ *   A pointer to AFU name string.
+ */
+struct rte_afu_device *
+rte_ifpga_find_afu_by_name(const char *name);
+
+/**
  * Register a ifpga afu device driver.
  *
  * @param driver
@@ -142,5 +158,9 @@ RTE_PMD_EXPORT_NAME(nm, __COUNTER__)
 
 #define RTE_PMD_REGISTER_AFU_ALIAS(nm, alias)\
 static const char *afudrvinit_ ## nm ## _alias = RTE_STR(alias)
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 #endif /* _RTE_BUS_IFPGA_H_ */

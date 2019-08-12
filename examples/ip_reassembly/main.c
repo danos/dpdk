@@ -95,7 +95,7 @@ static uint16_t nb_rxd = RTE_TEST_RX_DESC_DEFAULT;
 static uint16_t nb_txd = RTE_TEST_TX_DESC_DEFAULT;
 
 /* ethernet addresses of ports */
-static struct ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
+static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
 
 #ifndef IPv4_BYTES
 #define IPv4_BYTES_FMT "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8
@@ -190,14 +190,14 @@ struct l3fwd_ipv4_route {
 };
 
 struct l3fwd_ipv4_route l3fwd_ipv4_route_array[] = {
-		{IPv4(100,10,0,0), 16, 0},
-		{IPv4(100,20,0,0), 16, 1},
-		{IPv4(100,30,0,0), 16, 2},
-		{IPv4(100,40,0,0), 16, 3},
-		{IPv4(100,50,0,0), 16, 4},
-		{IPv4(100,60,0,0), 16, 5},
-		{IPv4(100,70,0,0), 16, 6},
-		{IPv4(100,80,0,0), 16, 7},
+		{RTE_IPV4(100,10,0,0), 16, 0},
+		{RTE_IPV4(100,20,0,0), 16, 1},
+		{RTE_IPV4(100,30,0,0), 16, 2},
+		{RTE_IPV4(100,40,0,0), 16, 3},
+		{RTE_IPV4(100,50,0,0), 16, 4},
+		{RTE_IPV4(100,60,0,0), 16, 5},
+		{RTE_IPV4(100,70,0,0), 16, 6},
+		{RTE_IPV4(100,80,0,0), 16, 7},
 };
 
 /*
@@ -308,7 +308,7 @@ static inline void
 reassemble(struct rte_mbuf *m, uint16_t portid, uint32_t queue,
 	struct lcore_queue_conf *qconf, uint64_t tms)
 {
-	struct ether_hdr *eth_hdr;
+	struct rte_ether_hdr *eth_hdr;
 	struct rte_ip_frag_tbl *tbl;
 	struct rte_ip_frag_death_row *dr;
 	struct rx_queue *rxq;
@@ -318,16 +318,16 @@ reassemble(struct rte_mbuf *m, uint16_t portid, uint32_t queue,
 
 	rxq = &qconf->rx_queue_list[queue];
 
-	eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+	eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
 
 	dst_port = portid;
 
 	/* if packet is IPv4 */
 	if (RTE_ETH_IS_IPV4_HDR(m->packet_type)) {
-		struct ipv4_hdr *ip_hdr;
+		struct rte_ipv4_hdr *ip_hdr;
 		uint32_t ip_dst;
 
-		ip_hdr = (struct ipv4_hdr *)(eth_hdr + 1);
+		ip_hdr = (struct rte_ipv4_hdr *)(eth_hdr + 1);
 
 		 /* if it is a fragmented packet, then try to reassemble. */
 		if (rte_ipv4_frag_pkt_is_fragmented(ip_hdr)) {
@@ -350,9 +350,12 @@ reassemble(struct rte_mbuf *m, uint16_t portid, uint32_t queue,
 			if (mo != m) {
 				m = mo;
 				eth_hdr = rte_pktmbuf_mtod(m,
-					struct ether_hdr *);
-				ip_hdr = (struct ipv4_hdr *)(eth_hdr + 1);
+					struct rte_ether_hdr *);
+				ip_hdr = (struct rte_ipv4_hdr *)(eth_hdr + 1);
 			}
+
+			/* update offloading flags */
+			m->ol_flags |= (PKT_TX_IPV4 | PKT_TX_IP_CKSUM);
 		}
 		ip_dst = rte_be_to_cpu_32(ip_hdr->dst_addr);
 
@@ -362,13 +365,13 @@ reassemble(struct rte_mbuf *m, uint16_t portid, uint32_t queue,
 			dst_port = next_hop;
 		}
 
-		eth_hdr->ether_type = rte_be_to_cpu_16(ETHER_TYPE_IPv4);
+		eth_hdr->ether_type = rte_be_to_cpu_16(RTE_ETHER_TYPE_IPV4);
 	} else if (RTE_ETH_IS_IPV6_HDR(m->packet_type)) {
 		/* if packet is IPv6 */
 		struct ipv6_extension_fragment *frag_hdr;
-		struct ipv6_hdr *ip_hdr;
+		struct rte_ipv6_hdr *ip_hdr;
 
-		ip_hdr = (struct ipv6_hdr *)(eth_hdr + 1);
+		ip_hdr = (struct rte_ipv6_hdr *)(eth_hdr + 1);
 
 		frag_hdr = rte_ipv6_frag_get_ipv6_fragment_header(ip_hdr);
 
@@ -388,8 +391,9 @@ reassemble(struct rte_mbuf *m, uint16_t portid, uint32_t queue,
 
 			if (mo != m) {
 				m = mo;
-				eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
-				ip_hdr = (struct ipv6_hdr *)(eth_hdr + 1);
+				eth_hdr = rte_pktmbuf_mtod(m,
+							struct rte_ether_hdr *);
+				ip_hdr = (struct rte_ipv6_hdr *)(eth_hdr + 1);
 			}
 		}
 
@@ -400,7 +404,7 @@ reassemble(struct rte_mbuf *m, uint16_t portid, uint32_t queue,
 			dst_port = next_hop;
 		}
 
-		eth_hdr->ether_type = rte_be_to_cpu_16(ETHER_TYPE_IPv6);
+		eth_hdr->ether_type = rte_be_to_cpu_16(RTE_ETHER_TYPE_IPV6);
 	}
 	/* if packet wasn't IPv4 or IPv6, it's forwarded to the port it came from */
 
@@ -409,7 +413,7 @@ reassemble(struct rte_mbuf *m, uint16_t portid, uint32_t queue,
 	*((uint64_t *)d_addr_bytes) = 0x000000000002 + ((uint64_t)dst_port << 40);
 
 	/* src addr */
-	ether_addr_copy(&ports_eth_addr[dst_port], &eth_hdr->s_addr);
+	rte_ether_addr_copy(&ports_eth_addr[dst_port], &eth_hdr->s_addr);
 
 	send_single_packet(m, dst_port);
 }
@@ -691,10 +695,10 @@ parse_args(int argc, char **argv)
 }
 
 static void
-print_ethaddr(const char *name, const struct ether_addr *eth_addr)
+print_ethaddr(const char *name, const struct rte_ether_addr *eth_addr)
 {
-	char buf[ETHER_ADDR_FMT_SIZE];
-	ether_format_addr(buf, ETHER_ADDR_FMT_SIZE, eth_addr);
+	char buf[RTE_ETHER_ADDR_FMT_SIZE];
+	rte_ether_format_addr(buf, RTE_ETHER_ADDR_FMT_SIZE, eth_addr);
 	printf("%s%s", name, buf);
 }
 

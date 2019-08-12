@@ -19,20 +19,21 @@ struct bnxt_filter_info {
 #define HWRM_CFA_L2_FILTER	0
 #define HWRM_CFA_EM_FILTER	1
 #define HWRM_CFA_NTUPLE_FILTER	2
-	uint8_t                 filter_type;    //L2 or EM or NTUPLE filter
+#define HWRM_CFA_TUNNEL_REDIRECT_FILTER	3
+	uint8_t                 filter_type;
 	uint32_t                dst_id;
 
 	/* Filter Characteristics */
 	uint32_t		flags;
 	uint32_t		enables;
-	uint8_t			l2_addr[ETHER_ADDR_LEN];
-	uint8_t			l2_addr_mask[ETHER_ADDR_LEN];
+	uint8_t			l2_addr[RTE_ETHER_ADDR_LEN];
+	uint8_t			l2_addr_mask[RTE_ETHER_ADDR_LEN];
 	uint16_t		l2_ovlan;
 	uint16_t		l2_ovlan_mask;
 	uint16_t		l2_ivlan;
 	uint16_t		l2_ivlan_mask;
-	uint8_t			t_l2_addr[ETHER_ADDR_LEN];
-	uint8_t			t_l2_addr_mask[ETHER_ADDR_LEN];
+	uint8_t			t_l2_addr[RTE_ETHER_ADDR_LEN];
+	uint8_t			t_l2_addr_mask[RTE_ETHER_ADDR_LEN];
 	uint16_t		t_l2_ovlan;
 	uint16_t		t_l2_ovlan_mask;
 	uint16_t		t_l2_ivlan;
@@ -120,6 +121,8 @@ struct bnxt_filter_info *bnxt_get_l2_filter(struct bnxt *bp,
 	HWRM_CFA_NTUPLE_FILTER_ALLOC_INPUT_TUNNEL_TYPE_VXLAN
 #define CFA_NTUPLE_FILTER_ALLOC_REQ_TUNNEL_TYPE_NVGRE	\
 	HWRM_CFA_NTUPLE_FILTER_ALLOC_INPUT_TUNNEL_TYPE_NVGRE
+#define CFA_NTUPLE_FILTER_ALLOC_REQ_TUNNEL_TYPE_IPGRE  \
+	HWRM_CFA_NTUPLE_FILTER_ALLOC_INPUT_TUNNEL_TYPE_IPGRE
 #define L2_FILTER_ALLOC_INPUT_EN_L2_ADDR_MASK	\
 	HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK
 #define NTUPLE_FLTR_ALLOC_INPUT_IP_PROTOCOL_UDP	\

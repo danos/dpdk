@@ -18,12 +18,9 @@
 #include <of.h>
 #include <netcfg.h>
 
+#define MAX_DPAA_CORES			4
 #define DPAA_MBUF_HW_ANNOTATION		64
 #define DPAA_FD_PTA_SIZE		64
-
-#if (DPAA_MBUF_HW_ANNOTATION + DPAA_FD_PTA_SIZE) > RTE_PKTMBUF_HEADROOM
-#error "Annotation requirement is more than RTE_PKTMBUF_HEADROOM"
-#endif
 
 /* mbuf->seqn will be used to store event entry index for
  * driver specific usage. For parallel mode queues, invalid
@@ -79,10 +76,14 @@
 #define DPAA_DEBUG_FQ_TX_ERROR   1
 
 #define DPAA_RSS_OFFLOAD_ALL ( \
-	ETH_RSS_IP | \
-	ETH_RSS_UDP | \
-	ETH_RSS_TCP | \
-	ETH_RSS_SCTP)
+	ETH_RSS_FRAG_IPV4 | \
+	ETH_RSS_NONFRAG_IPV4_TCP | \
+	ETH_RSS_NONFRAG_IPV4_UDP | \
+	ETH_RSS_NONFRAG_IPV4_SCTP | \
+	ETH_RSS_FRAG_IPV6 | \
+	ETH_RSS_NONFRAG_IPV6_TCP | \
+	ETH_RSS_NONFRAG_IPV6_UDP | \
+	ETH_RSS_NONFRAG_IPV6_SCTP)
 
 #define DPAA_TX_CKSUM_OFFLOAD_MASK (             \
 		PKT_TX_IP_CKSUM |                \

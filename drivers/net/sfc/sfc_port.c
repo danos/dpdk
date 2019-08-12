@@ -87,6 +87,18 @@ sfc_port_update_mac_stats(struct sfc_adapter *sa)
 	return 0;
 }
 
+static void
+sfc_port_reset_sw_stats(struct sfc_adapter *sa)
+{
+	struct sfc_port *port = &sa->port;
+
+	/*
+	 * Reset diff stats explicitly since check which does not allow
+	 * the statistics to grow backward could deny it.
+	 */
+	port->ipackets = 0;
+}
+
 int
 sfc_port_reset_mac_stats(struct sfc_adapter *sa)
 {
@@ -95,6 +107,8 @@ sfc_port_reset_mac_stats(struct sfc_adapter *sa)
 
 	rte_spinlock_lock(&port->mac_stats_lock);
 	rc = efx_mac_stats_clear(sa->nic);
+	if (rc == 0)
+		sfc_port_reset_sw_stats(sa);
 	rte_spinlock_unlock(&port->mac_stats_lock);
 
 	return rc;
@@ -212,8 +226,8 @@ sfc_port_start(struct sfc_adapter *sa)
 	if (rc != 0)
 		goto fail_mac_pdu_set;
 
-	if (!port->isolated) {
-		struct ether_addr *addr = &port->default_mac_addr;
+	if (!sfc_sa2shared(sa)->isolated) {
+		struct rte_ether_addr *addr = &port->default_mac_addr;
 
 		sfc_log_init(sa, "set MAC address");
 		rc = efx_mac_addr_set(sa->nic, addr->addr_bytes);
@@ -372,7 +386,7 @@ sfc_port_attach(struct sfc_adapter *sa)
 {
 	struct sfc_port *port = &sa->port;
 	const efx_nic_cfg_t *encp = efx_nic_cfg_get(sa->nic);
-	const struct ether_addr *from;
+	const struct rte_ether_addr *from;
 	uint32_t mac_nstats;
 	size_t mac_stats_size;
 	long kvarg_stats_update_period_ms;
@@ -387,8 +401,8 @@ sfc_port_attach(struct sfc_adapter *sa)
 	port->flow_ctrl_autoneg = B_TRUE;
 
 	RTE_BUILD_BUG_ON(sizeof(encp->enc_mac_addr) != sizeof(*from));
-	from = (const struct ether_addr *)(encp->enc_mac_addr);
-	ether_addr_copy(from, &port->default_mac_addr);
+	from = (const struct rte_ether_addr *)(encp->enc_mac_addr);
+	rte_ether_addr_copy(from, &port->default_mac_addr);
 
 	port->max_mcast_addrs = EFX_MAC_MULTICAST_LIST_MAX;
 	port->nb_mcast_addrs = 0;

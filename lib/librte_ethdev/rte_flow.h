@@ -20,7 +20,6 @@
 #include <rte_arp.h>
 #include <rte_common.h>
 #include <rte_ether.h>
-#include <rte_eth_ctrl.h>
 #include <rte_icmp.h>
 #include <rte_ip.h>
 #include <rte_sctp.h>
@@ -422,6 +421,19 @@ enum rte_flow_item_type {
 	 * See struct rte_flow_item_meta.
 	 */
 	RTE_FLOW_ITEM_TYPE_META,
+
+	/**
+	 * Matches a GRE optional key field.
+	 *
+	 * The value should a big-endian 32bit integer.
+	 *
+	 * When this item present the K bit is implicitly matched as "1"
+	 * in the default mask.
+	 *
+	 * @p spec/mask type:
+	 * @code rte_be32_t * @endcode
+	 */
+	RTE_FLOW_ITEM_TYPE_GRE_KEY,
 };
 
 /**
@@ -585,8 +597,8 @@ static const struct rte_flow_item_raw rte_flow_item_raw_mask = {
  * same order as on the wire.
  */
 struct rte_flow_item_eth {
-	struct ether_addr dst; /**< Destination MAC. */
-	struct ether_addr src; /**< Source MAC. */
+	struct rte_ether_addr dst; /**< Destination MAC. */
+	struct rte_ether_addr src; /**< Source MAC. */
 	rte_be16_t type; /**< EtherType or TPID. */
 };
 
@@ -605,8 +617,8 @@ static const struct rte_flow_item_eth rte_flow_item_eth_mask = {
  * Matches an 802.1Q/ad VLAN tag.
  *
  * The corresponding standard outer EtherType (TPID) values are
- * ETHER_TYPE_VLAN or ETHER_TYPE_QINQ. It can be overridden by the preceding
- * pattern item.
+ * RTE_ETHER_TYPE_VLAN or RTE_ETHER_TYPE_QINQ. It can be overridden by
+ * the preceding pattern item.
  */
 struct rte_flow_item_vlan {
 	rte_be16_t tci; /**< Tag control information. */
@@ -629,7 +641,7 @@ static const struct rte_flow_item_vlan rte_flow_item_vlan_mask = {
  * Note: IPv4 options are handled by dedicated pattern items.
  */
 struct rte_flow_item_ipv4 {
-	struct ipv4_hdr hdr; /**< IPv4 header definition. */
+	struct rte_ipv4_hdr hdr; /**< IPv4 header definition. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_IPV4. */
@@ -651,7 +663,7 @@ static const struct rte_flow_item_ipv4 rte_flow_item_ipv4_mask = {
  * RTE_FLOW_ITEM_TYPE_IPV6_EXT.
  */
 struct rte_flow_item_ipv6 {
-	struct ipv6_hdr hdr; /**< IPv6 header definition. */
+	struct rte_ipv6_hdr hdr; /**< IPv6 header definition. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_IPV6. */
@@ -674,7 +686,7 @@ static const struct rte_flow_item_ipv6 rte_flow_item_ipv6_mask = {
  * Matches an ICMP header.
  */
 struct rte_flow_item_icmp {
-	struct icmp_hdr hdr; /**< ICMP header definition. */
+	struct rte_icmp_hdr hdr; /**< ICMP header definition. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_ICMP. */
@@ -693,7 +705,7 @@ static const struct rte_flow_item_icmp rte_flow_item_icmp_mask = {
  * Matches a UDP header.
  */
 struct rte_flow_item_udp {
-	struct udp_hdr hdr; /**< UDP header definition. */
+	struct rte_udp_hdr hdr; /**< UDP header definition. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_UDP. */
@@ -712,7 +724,7 @@ static const struct rte_flow_item_udp rte_flow_item_udp_mask = {
  * Matches a TCP header.
  */
 struct rte_flow_item_tcp {
-	struct tcp_hdr hdr; /**< TCP header definition. */
+	struct rte_tcp_hdr hdr; /**< TCP header definition. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_TCP. */
@@ -731,7 +743,7 @@ static const struct rte_flow_item_tcp rte_flow_item_tcp_mask = {
  * Matches a SCTP header.
  */
 struct rte_flow_item_sctp {
-	struct sctp_hdr hdr; /**< SCTP header definition. */
+	struct rte_sctp_hdr hdr; /**< SCTP header definition. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_SCTP. */
@@ -769,7 +781,7 @@ static const struct rte_flow_item_vxlan rte_flow_item_vxlan_mask = {
  * Matches a E-tag header.
  *
  * The corresponding standard outer EtherType (TPID) value is
- * ETHER_TYPE_ETAG. It can be overridden by the preceding pattern item.
+ * RTE_ETHER_TYPE_ETAG. It can be overridden by the preceding pattern item.
  */
 struct rte_flow_item_e_tag {
 	/**
@@ -916,7 +928,7 @@ static const struct rte_flow_item_gtp rte_flow_item_gtp_mask = {
  * Matches an ESP header.
  */
 struct rte_flow_item_esp {
-	struct esp_hdr hdr; /**< ESP header definition. */
+	struct rte_esp_hdr hdr; /**< ESP header definition. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_ESP. */
@@ -982,9 +994,9 @@ struct rte_flow_item_arp_eth_ipv4 {
 	uint8_t hln; /**< Hardware address length, normally 6. */
 	uint8_t pln; /**< Protocol address length, normally 4. */
 	rte_be16_t op; /**< Opcode (1 for request, 2 for reply). */
-	struct ether_addr sha; /**< Sender hardware address. */
+	struct rte_ether_addr sha; /**< Sender hardware address. */
 	rte_be32_t spa; /**< Sender IPv4 address. */
-	struct ether_addr tha; /**< Target hardware address. */
+	struct rte_ether_addr tha; /**< Target hardware address. */
 	rte_be32_t tpa; /**< Target IPv4 address. */
 };
 
@@ -1128,7 +1140,7 @@ rte_flow_item_icmp6_nd_opt_mask = {
 struct rte_flow_item_icmp6_nd_opt_sla_eth {
 	uint8_t type; /**< ND option type, normally 1. */
 	uint8_t length; /**< ND option length, normally 1. */
-	struct ether_addr sla; /**< Source Ethernet LLA. */
+	struct rte_ether_addr sla; /**< Source Ethernet LLA. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_ICMP6_ND_OPT_SLA_ETH. */
@@ -1153,7 +1165,7 @@ rte_flow_item_icmp6_nd_opt_sla_eth_mask = {
 struct rte_flow_item_icmp6_nd_opt_tla_eth {
 	uint8_t type; /**< ND option type, normally 2. */
 	uint8_t length; /**< ND option length, normally 1. */
-	struct ether_addr tla; /**< Target Ethernet LLA. */
+	struct rte_ether_addr tla; /**< Target Ethernet LLA. */
 };
 
 /** Default mask for RTE_FLOW_ITEM_TYPE_ICMP6_ND_OPT_TLA_ETH. */
@@ -1245,9 +1257,10 @@ struct rte_flow_item {
 /**
  * Action types.
  *
- * Each possible action is represented by a type. Some have associated
- * configuration structures. Several actions combined in a list can be
- * assigned to a flow rule and are performed in order.
+ * Each possible action is represented by a type.
+ * An action can have an associated configuration object.
+ * Several actions combined in a list can be assigned
+ * to a flow rule and are performed in order.
  *
  * They fall in three categories:
  *
@@ -1651,6 +1664,62 @@ enum rte_flow_action_type {
 	 * See struct rte_flow_action_set_mac.
 	 */
 	RTE_FLOW_ACTION_TYPE_SET_MAC_DST,
+
+	/**
+	 * Increase sequence number in the outermost TCP header.
+	 *
+	 * Action configuration specifies the value to increase
+	 * TCP sequence number as a big-endian 32 bit integer.
+	 *
+	 * @p conf type:
+	 * @code rte_be32_t * @endcode
+	 *
+	 * Using this action on non-matching traffic will result in
+	 * undefined behavior.
+	 */
+	RTE_FLOW_ACTION_TYPE_INC_TCP_SEQ,
+
+	/**
+	 * Decrease sequence number in the outermost TCP header.
+	 *
+	 * Action configuration specifies the value to decrease
+	 * TCP sequence number as a big-endian 32 bit integer.
+	 *
+	 * @p conf type:
+	 * @code rte_be32_t * @endcode
+	 *
+	 * Using this action on non-matching traffic will result in
+	 * undefined behavior.
+	 */
+	RTE_FLOW_ACTION_TYPE_DEC_TCP_SEQ,
+
+	/**
+	 * Increase acknowledgment number in the outermost TCP header.
+	 *
+	 * Action configuration specifies the value to increase
+	 * TCP acknowledgment number as a big-endian 32 bit integer.
+	 *
+	 * @p conf type:
+	 * @code rte_be32_t * @endcode
+
+	 * Using this action on non-matching traffic will result in
+	 * undefined behavior.
+	 */
+	RTE_FLOW_ACTION_TYPE_INC_TCP_ACK,
+
+	/**
+	 * Decrease acknowledgment number in the outermost TCP header.
+	 *
+	 * Action configuration specifies the value to decrease
+	 * TCP acknowledgment number as a big-endian 32 bit integer.
+	 *
+	 * @p conf type:
+	 * @code rte_be32_t * @endcode
+	 *
+	 * Using this action on non-matching traffic will result in
+	 * undefined behavior.
+	 */
+	RTE_FLOW_ACTION_TYPE_DEC_TCP_ACK,
 };
 
 /**
@@ -1736,6 +1805,16 @@ struct rte_flow_query_count {
 	uint32_t reserved:29; /**< Reserved, must be zero [in, out]. */
 	uint64_t hits; /**< Number of hits for this rule [out]. */
 	uint64_t bytes; /**< Number of bytes through this rule [out]. */
+};
+
+/**
+ * Hash function types.
+ */
+enum rte_eth_hash_function {
+	RTE_ETH_HASH_FUNCTION_DEFAULT = 0,
+	RTE_ETH_HASH_FUNCTION_TOEPLITZ, /**< Toeplitz */
+	RTE_ETH_HASH_FUNCTION_SIMPLE_XOR, /**< Simple XOR */
+	RTE_ETH_HASH_FUNCTION_MAX,
 };
 
 /**
@@ -2119,7 +2198,7 @@ struct rte_flow_action_set_ttl {
  * Set MAC address from the matched flow
  */
 struct rte_flow_action_set_mac {
-	uint8_t mac_addr[ETHER_ADDR_LEN];
+	uint8_t mac_addr[RTE_ETHER_ADDR_LEN];
 };
 
 /*
@@ -2127,11 +2206,11 @@ struct rte_flow_action_set_mac {
  *
  * A list of actions is terminated by a END action.
  *
- * For simple actions without a configuration structure, conf remains NULL.
+ * For simple actions without a configuration object, conf remains NULL.
  */
 struct rte_flow_action {
 	enum rte_flow_action_type type; /**< Action type. */
-	const void *conf; /**< Pointer to action configuration structure. */
+	const void *conf; /**< Pointer to action configuration object. */
 };
 
 /**

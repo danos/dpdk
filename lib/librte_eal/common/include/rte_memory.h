@@ -22,9 +22,7 @@ extern "C" {
 #include <rte_common.h>
 #include <rte_compat.h>
 #include <rte_config.h>
-
-/* forward declaration for pointers */
-struct rte_memseg_list;
+#include <rte_fbarray.h>
 
 __extension__
 enum rte_page_sizes {
@@ -105,6 +103,26 @@ struct rte_memseg {
 } __rte_packed;
 
 /**
+ * memseg list is a special case as we need to store a bunch of other data
+ * together with the array itself.
+ */
+struct rte_memseg_list {
+	RTE_STD_C11
+	union {
+		void *base_va;
+		/**< Base virtual address for this memseg list. */
+		uint64_t addr_64;
+		/**< Makes sure addr is always 64-bits */
+	};
+	uint64_t page_sz; /**< Page size for all memsegs in this list. */
+	int socket_id; /**< Socket ID for all memsegs in this list. */
+	volatile uint32_t version; /**< version number for multiprocess sync. */
+	size_t len; /**< Length of memory area covered by this memseg list. */
+	unsigned int external; /**< 1 if this list points to external memory */
+	struct rte_fbarray memseg_arr;
+};
+
+/**
  * Lock page in physical memory and prevent from swapping.
  *
  * @param virt
@@ -148,7 +166,8 @@ rte_iova_t rte_mem_virt2iova(const void *virt);
  *   Virtual address corresponding to iova address (or NULL if address does not
  *   exist within DPDK memory map).
  */
-__rte_experimental void *
+__rte_experimental
+void *
 rte_mem_iova2virt(rte_iova_t iova);
 
 /**
@@ -162,7 +181,8 @@ rte_mem_iova2virt(rte_iova_t iova);
  * @return
  *   Memseg pointer on success, or NULL on error.
  */
-__rte_experimental struct rte_memseg *
+__rte_experimental
+struct rte_memseg *
 rte_mem_virt2memseg(const void *virt, const struct rte_memseg_list *msl);
 
 /**
@@ -173,7 +193,8 @@ rte_mem_virt2memseg(const void *virt, const struct rte_memseg_list *msl);
  * @return
  *   Memseg list to which this virtual address belongs to.
  */
-__rte_experimental struct rte_memseg_list *
+__rte_experimental
+struct rte_memseg_list *
 rte_mem_virt2memseg_list(const void *virt);
 
 /**
@@ -188,7 +209,7 @@ typedef int (*rte_memseg_walk_t)(const struct rte_memseg_list *msl,
 
 /**
  * Memseg contig walk function prototype. This will trigger a callback on every
- * VA-contiguous are starting at memseg ``ms``, so total valid VA space at each
+ * VA-contiguous area starting at memseg ``ms``, so total valid VA space at each
  * callback call will be [``ms->addr``, ``ms->addr + len``).
  *
  * Returning 0 will continue walk
@@ -227,7 +248,8 @@ typedef int (*rte_memseg_list_walk_t)(const struct rte_memseg_list *msl,
  *   1 if stopped by the user
  *   -1 if user function reported error
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_walk(rte_memseg_walk_t func, void *arg);
 
 /**
@@ -248,7 +270,8 @@ rte_memseg_walk(rte_memseg_walk_t func, void *arg);
  *   1 if stopped by the user
  *   -1 if user function reported error
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_contig_walk(rte_memseg_contig_walk_t func, void *arg);
 
 /**
@@ -269,7 +292,8 @@ rte_memseg_contig_walk(rte_memseg_contig_walk_t func, void *arg);
  *   1 if stopped by the user
  *   -1 if user function reported error
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_list_walk(rte_memseg_list_walk_t func, void *arg);
 
 /**
@@ -287,7 +311,8 @@ rte_memseg_list_walk(rte_memseg_list_walk_t func, void *arg);
  *   1 if stopped by the user
  *   -1 if user function reported error
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_walk_thread_unsafe(rte_memseg_walk_t func, void *arg);
 
 /**
@@ -305,7 +330,8 @@ rte_memseg_walk_thread_unsafe(rte_memseg_walk_t func, void *arg);
  *   1 if stopped by the user
  *   -1 if user function reported error
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_contig_walk_thread_unsafe(rte_memseg_contig_walk_t func, void *arg);
 
 /**
@@ -323,7 +349,8 @@ rte_memseg_contig_walk_thread_unsafe(rte_memseg_contig_walk_t func, void *arg);
  *   1 if stopped by the user
  *   -1 if user function reported error
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_list_walk_thread_unsafe(rte_memseg_list_walk_t func, void *arg);
 
 /**
@@ -347,7 +374,8 @@ rte_memseg_list_walk_thread_unsafe(rte_memseg_list_walk_t func, void *arg);
  *     - ENOENT  - ``ms`` is an unused segment
  *     - ENOTSUP - segment fd's are not supported
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_get_fd(const struct rte_memseg *ms);
 
 /**
@@ -371,7 +399,8 @@ rte_memseg_get_fd(const struct rte_memseg *ms);
  *     - ENOENT  - ``ms`` is an unused segment
  *     - ENOTSUP - segment fd's are not supported
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_get_fd_thread_unsafe(const struct rte_memseg *ms);
 
 /**
@@ -395,7 +424,8 @@ rte_memseg_get_fd_thread_unsafe(const struct rte_memseg *ms);
  *     - ENOENT  - ``ms`` is an unused segment
  *     - ENOTSUP - segment fd's are not supported
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_get_fd_offset(const struct rte_memseg *ms, size_t *offset);
 
 /**
@@ -419,9 +449,136 @@ rte_memseg_get_fd_offset(const struct rte_memseg *ms, size_t *offset);
  *     - ENOENT  - ``ms`` is an unused segment
  *     - ENOTSUP - segment fd's are not supported
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_memseg_get_fd_offset_thread_unsafe(const struct rte_memseg *ms,
 		size_t *offset);
+
+/**
+ * @warning
+ * @b EXPERIMENTAL: this API may change without prior notice
+ *
+ * Register external memory chunk with DPDK.
+ *
+ * @note Using this API is mutually exclusive with ``rte_malloc`` family of
+ *   API's.
+ *
+ * @note This API will not perform any DMA mapping. It is expected that user
+ *   will do that themselves.
+ *
+ * @note Before accessing this memory in other processes, it needs to be
+ *   attached in each of those processes by calling ``rte_extmem_attach`` in
+ *   each other process.
+ *
+ * @param va_addr
+ *   Start of virtual area to register. Must be aligned by ``page_sz``.
+ * @param len
+ *   Length of virtual area to register. Must be aligned by ``page_sz``.
+ * @param iova_addrs
+ *   Array of page IOVA addresses corresponding to each page in this memory
+ *   area. Can be NULL, in which case page IOVA addresses will be set to
+ *   RTE_BAD_IOVA.
+ * @param n_pages
+ *   Number of elements in the iova_addrs array. Ignored if  ``iova_addrs``
+ *   is NULL.
+ * @param page_sz
+ *   Page size of the underlying memory
+ *
+ * @return
+ *   - 0 on success
+ *   - -1 in case of error, with rte_errno set to one of the following:
+ *     EINVAL - one of the parameters was invalid
+ *     EEXIST - memory chunk is already registered
+ *     ENOSPC - no more space in internal config to store a new memory chunk
+ */
+__rte_experimental
+int
+rte_extmem_register(void *va_addr, size_t len, rte_iova_t iova_addrs[],
+		unsigned int n_pages, size_t page_sz);
+
+/**
+ * @warning
+ * @b EXPERIMENTAL: this API may change without prior notice
+ *
+ * Unregister external memory chunk with DPDK.
+ *
+ * @note Using this API is mutually exclusive with ``rte_malloc`` family of
+ *   API's.
+ *
+ * @note This API will not perform any DMA unmapping. It is expected that user
+ *   will do that themselves.
+ *
+ * @note Before calling this function, all other processes must call
+ *   ``rte_extmem_detach`` to detach from the memory area.
+ *
+ * @param va_addr
+ *   Start of virtual area to unregister
+ * @param len
+ *   Length of virtual area to unregister
+ *
+ * @return
+ *   - 0 on success
+ *   - -1 in case of error, with rte_errno set to one of the following:
+ *     EINVAL - one of the parameters was invalid
+ *     ENOENT - memory chunk was not found
+ */
+__rte_experimental
+int
+rte_extmem_unregister(void *va_addr, size_t len);
+
+/**
+ * @warning
+ * @b EXPERIMENTAL: this API may change without prior notice
+ *
+ * Attach to external memory chunk registered in another process.
+ *
+ * @note Using this API is mutually exclusive with ``rte_malloc`` family of
+ *   API's.
+ *
+ * @note This API will not perform any DMA mapping. It is expected that user
+ *   will do that themselves.
+ *
+ * @param va_addr
+ *   Start of virtual area to register
+ * @param len
+ *   Length of virtual area to register
+ *
+ * @return
+ *   - 0 on success
+ *   - -1 in case of error, with rte_errno set to one of the following:
+ *     EINVAL - one of the parameters was invalid
+ *     ENOENT - memory chunk was not found
+ */
+__rte_experimental
+int
+rte_extmem_attach(void *va_addr, size_t len);
+
+/**
+ * @warning
+ * @b EXPERIMENTAL: this API may change without prior notice
+ *
+ * Detach from external memory chunk registered in another process.
+ *
+ * @note Using this API is mutually exclusive with ``rte_malloc`` family of
+ *   API's.
+ *
+ * @note This API will not perform any DMA unmapping. It is expected that user
+ *   will do that themselves.
+ *
+ * @param va_addr
+ *   Start of virtual area to unregister
+ * @param len
+ *   Length of virtual area to unregister
+ *
+ * @return
+ *   - 0 on success
+ *   - -1 in case of error, with rte_errno set to one of the following:
+ *     EINVAL - one of the parameters was invalid
+ *     ENOENT - memory chunk was not found
+ */
+__rte_experimental
+int
+rte_extmem_detach(void *va_addr, size_t len);
 
 /**
  * Dump the physical memory layout to a file.
@@ -473,7 +630,8 @@ unsigned rte_memory_get_nrank(void);
  *  @param maskbits
  *    Address width to check against.
  */
-int __rte_experimental rte_mem_check_dma_mask(uint8_t maskbits);
+__rte_experimental
+int rte_mem_check_dma_mask(uint8_t maskbits);
 
 /**
  * @warning
@@ -491,7 +649,8 @@ int __rte_experimental rte_mem_check_dma_mask(uint8_t maskbits);
  *  @param maskbits
  *    Address width to check against.
  */
-int __rte_experimental rte_mem_check_dma_mask_thread_unsafe(uint8_t maskbits);
+__rte_experimental
+int rte_mem_check_dma_mask_thread_unsafe(uint8_t maskbits);
 
 /**
  * @warning
@@ -501,7 +660,8 @@ int __rte_experimental rte_mem_check_dma_mask_thread_unsafe(uint8_t maskbits);
  *  rte_mem_check_dma_mask and rte_mem_check_dma_mask_thread_unsafe can not be
  *  used safely until memory has been initialized.
  */
-void __rte_experimental rte_mem_set_dma_mask(uint8_t maskbits);
+__rte_experimental
+void rte_mem_set_dma_mask(uint8_t maskbits);
 
 /**
  * Drivers based on uio will not load unless physical
@@ -557,7 +717,8 @@ typedef void (*rte_mem_event_callback_t)(enum rte_mem_event event_type,
  *   -1 on unsuccessful callback register, with rte_errno value indicating
  *   reason for failure.
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_mem_event_callback_register(const char *name, rte_mem_event_callback_t clb,
 		void *arg);
 
@@ -575,7 +736,8 @@ rte_mem_event_callback_register(const char *name, rte_mem_event_callback_t clb,
  *   -1 on unsuccessful callback unregister, with rte_errno value indicating
  *   reason for failure.
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_mem_event_callback_unregister(const char *name, void *arg);
 
 
@@ -624,7 +786,8 @@ typedef int (*rte_mem_alloc_validator_t)(int socket_id,
  *   -1 on unsuccessful callback register, with rte_errno value indicating
  *   reason for failure.
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_mem_alloc_validator_register(const char *name,
 		rte_mem_alloc_validator_t clb, int socket_id, size_t limit);
 
@@ -642,7 +805,8 @@ rte_mem_alloc_validator_register(const char *name,
  *   -1 on unsuccessful callback unregister, with rte_errno value indicating
  *   reason for failure.
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_mem_alloc_validator_unregister(const char *name, int socket_id);
 
 #ifdef __cplusplus

@@ -4,7 +4,7 @@
 NXP QorIQ DPAA2 Board Support Package
 =====================================
 
-This doc has information about steps to setup NXP QoriQ DPAA2 platform
+This doc has information about steps to setup NXP QorIQ DPAA2 platform
 and information about common offload hw block drivers of
 **NXP QorIQ DPAA2** SoC family.
 
@@ -48,7 +48,7 @@ Common Offload HW Block Drivers
 Steps To Setup Platform
 -----------------------
 
-There are four main pre-requisities for executing DPAA2 PMD on a DPAA2
+There are four main pre-requisites for executing DPAA2 PMD on a DPAA2
 compatible board:
 
 1. **ARM 64 Tool Chain**
@@ -101,8 +101,8 @@ separately:
 
 Currently supported by DPDK:
 
-- NXP SDK **2.0+** (preferred: LSDK 18.09).
-- MC Firmware version **10.10.0** and higher.
+- NXP SDK **2.0+** (preferred: LSDK 19.03).
+- MC Firmware version **10.14.0** and higher.
 - Supported architectures:  **arm64 LE**.
 
 - Follow the DPDK :ref:`Getting Started Guide for Linux <linux_gsg>`

@@ -2,7 +2,7 @@
  * Copyright(c) 2018 Chelsio Communications.
  * All rights reserved.
  */
-#include "common.h"
+#include "base/common.h"
 #include "cxgbe_flow.h"
 
 #define __CXGBE_FILL_FS(__v, __m, fs, elem, e) \
@@ -115,12 +115,12 @@ ch_rte_parsetype_eth(const void *dmask, const struct rte_flow_item *item,
 	mask = umask ? umask : (const struct rte_flow_item_eth *)dmask;
 
 	/* we don't support SRC_MAC filtering*/
-	if (!is_zero_ether_addr(&mask->src))
+	if (!rte_is_zero_ether_addr(&mask->src))
 		return rte_flow_error_set(e, ENOTSUP, RTE_FLOW_ERROR_TYPE_ITEM,
 					  item,
 					  "src mac filtering not supported");
 
-	if (!is_zero_ether_addr(&mask->dst)) {
+	if (!rte_is_zero_ether_addr(&mask->dst)) {
 		const u8 *addr = (const u8 *)&spec->dst.addr_bytes[0];
 		const u8 *m = (const u8 *)&mask->dst.addr_bytes[0];
 		struct rte_flow *flow = (struct rte_flow *)fs->private;
@@ -233,7 +233,7 @@ ch_rte_parsetype_ipv4(const void *dmask, const struct rte_flow_item *item,
 					  item, "ttl/tos are not supported");
 
 	fs->type = FILTER_TYPE_IPV4;
-	CXGBE_FILL_FS(ETHER_TYPE_IPv4, 0xffff, ethtype);
+	CXGBE_FILL_FS(RTE_ETHER_TYPE_IPV4, 0xffff, ethtype);
 	if (!val)
 		return 0; /* ipv4 wild card */
 
@@ -262,7 +262,7 @@ ch_rte_parsetype_ipv6(const void *dmask, const struct rte_flow_item *item,
 					  "tc/flow/hop are not supported");
 
 	fs->type = FILTER_TYPE_IPV6;
-	CXGBE_FILL_FS(ETHER_TYPE_IPv6, 0xffff, ethtype);
+	CXGBE_FILL_FS(RTE_ETHER_TYPE_IPV6, 0xffff, ethtype);
 	if (!val)
 		return 0; /* ipv6 wild card */
 
@@ -448,7 +448,7 @@ ch_rte_parse_atype_switch(const struct rte_flow_action *a,
 	case RTE_FLOW_ACTION_TYPE_OF_PUSH_VLAN:
 		pushvlan = (const struct rte_flow_action_of_push_vlan *)
 			    a->conf;
-		if (pushvlan->ethertype != ETHER_TYPE_VLAN)
+		if (pushvlan->ethertype != RTE_ETHER_TYPE_VLAN)
 			return rte_flow_error_set(e, EINVAL,
 						  RTE_FLOW_ERROR_TYPE_ACTION, a,
 						  "only ethertype 0x8100 "
@@ -732,6 +732,10 @@ cxgbe_rtef_parse_items(struct rte_flow *flow,
 						"parse items cannot be repeated (except void)");
 			repeat[i->type] = 1;
 
+			/* No spec found for this pattern item. Skip it */
+			if (!i->spec)
+				break;
+
 			/* validate the item */
 			ret = cxgbe_validate_item(i, e);
 			if (ret)
@@ -943,6 +947,7 @@ cxgbe_flow_query(struct rte_eth_dev *dev, struct rte_flow *flow,
 		 const struct rte_flow_action *action, void *data,
 		 struct rte_flow_error *e)
 {
+	struct adapter *adap = ethdev2adap(flow->dev);
 	struct ch_filter_specification fs;
 	struct rte_flow_query_count *c;
 	struct filter_entry *f;
@@ -981,6 +986,8 @@ cxgbe_flow_query(struct rte_eth_dev *dev, struct rte_flow *flow,
 	/* Query was successful */
 	c->bytes_set = 1;
 	c->hits_set = 1;
+	if (c->reset)
+		cxgbe_clear_filter_count(adap, flow->fidx, f->fs.cap, true);
 
 	return 0; /* success / partial_success */
 }

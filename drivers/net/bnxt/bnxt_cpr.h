@@ -9,12 +9,19 @@
 
 #include <rte_io.h>
 
+struct bnxt_db_info;
+
 #define CMP_VALID(cmp, raw_cons, ring)					\
-	(!!(((struct cmpl_base *)(cmp))->info3_v & CMPL_BASE_V) ==	\
-	 !((raw_cons) & ((ring)->ring_size)))
+	(!!(rte_le_to_cpu_32(((struct cmpl_base *)(cmp))->info3_v) &	\
+	    CMPL_BASE_V) == !((raw_cons) & ((ring)->ring_size)))
 
 #define CMPL_VALID(cmp, v)						\
-	(!!(((struct cmpl_base *)(cmp))->info3_v & CMPL_BASE_V) == !(v))
+	(!!(rte_le_to_cpu_32(((struct cmpl_base *)(cmp))->info3_v) &	\
+	    CMPL_BASE_V) == !(v))
+
+#define NQ_CMP_VALID(nqcmp, raw_cons, ring)		\
+	(!!((nqcmp)->v & rte_cpu_to_le_32(NQ_CN_V)) ==	\
+	 !((raw_cons) & ((ring)->ring_size)))
 
 #define CMP_TYPE(cmp)						\
 	(((struct cmpl_base *)cmp)->type & CMPL_BASE_TYPE_MASK)
@@ -31,7 +38,7 @@
 
 #define NEXT_CMPL(cpr, idx, v, inc)	do { \
 	(idx) += (inc); \
-	if (unlikely((idx) == (cpr)->cp_ring_struct->ring_size)) { \
+	if (unlikely((idx) >= (cpr)->cp_ring_struct->ring_size)) { \
 		(v) = !(v); \
 		(idx) = 0; \
 	} \
@@ -39,37 +46,48 @@
 #define B_CP_DB_REARM(cpr, raw_cons)					\
 	rte_write32((DB_CP_REARM_FLAGS |				\
 		    RING_CMP(((cpr)->cp_ring_struct), raw_cons)),	\
-		    ((cpr)->cp_doorbell))
+		    ((cpr)->cp_db.doorbell))
 
-#define B_CP_DB_ARM(cpr)	rte_write32((DB_KEY_CP), ((cpr)->cp_doorbell))
-#define B_CP_DB_DISARM(cpr)	(*(uint32_t *)((cpr)->cp_doorbell) = \
+#define B_CP_DB_ARM(cpr)	rte_write32((DB_KEY_CP),		\
+					    ((cpr)->cp_db.doorbell))
+
+#define B_CP_DB_DISARM(cpr)	(*(uint32_t *)((cpr)->cp_db.doorbell) = \
 				 DB_KEY_CP | DB_IRQ_DIS)
 
 #define B_CP_DB_IDX_ARM(cpr, cons)					\
-		(*(uint32_t *)((cpr)->cp_doorbell) = (DB_CP_REARM_FLAGS | \
+		(*(uint32_t *)((cpr)->cp_db.doorbell) = (DB_CP_REARM_FLAGS | \
 				(cons)))
 
 #define B_CP_DB_IDX_DISARM(cpr, cons)	do {				\
 		rte_smp_wmb();						\
-		(*(uint32_t *)((cpr)->cp_doorbell) = (DB_CP_FLAGS |	\
+		(*(uint32_t *)((cpr)->cp_db.doorbell) = (DB_CP_FLAGS |	\
 				(cons));				\
 } while (0)
 #define B_CP_DIS_DB(cpr, raw_cons)					\
 	rte_write32((DB_CP_FLAGS |					\
 		    RING_CMP(((cpr)->cp_ring_struct), raw_cons)),	\
-		    ((cpr)->cp_doorbell))
+		    ((cpr)->cp_db.doorbell))
+
 #define B_CP_DB(cpr, raw_cons, ring_mask)				\
 	rte_write32((DB_CP_FLAGS |					\
 		    RING_CMPL((ring_mask), raw_cons)),	\
-		    ((cpr)->cp_doorbell))
+		    ((cpr)->cp_db.doorbell))
+
+struct bnxt_db_info {
+	void                    *doorbell;
+	union {
+		uint64_t        db_key64;
+		uint32_t        db_key32;
+	};
+	bool                    db_64;
+};
 
 struct bnxt_ring;
 struct bnxt_cp_ring_info {
 	uint32_t		cp_raw_cons;
-	void			*cp_doorbell;
 
 	struct cmpl_base	*cp_desc_ring;
-
+	struct bnxt_db_info     cp_db;
 	rte_iova_t		cp_desc_mapping;
 
 	struct ctx_hw_stats	*hw_stats;

@@ -21,7 +21,7 @@ The application is located in the ``skeleton`` sub-directory.
 Running the Application
 -----------------------
 
-To run the example in a ``linuxapp`` environment:
+To run the example in a ``linux`` environment:
 
 .. code-block:: console
 
@@ -115,7 +115,7 @@ Forwarding application is shown below:
     {
         struct rte_eth_conf port_conf = port_conf_default;
         const uint16_t rx_rings = 1, tx_rings = 1;
-        struct ether_addr addr;
+        struct rte_ether_addr addr;
         int retval;
         uint16_t q;
 
@@ -160,7 +160,7 @@ The Ethernet ports are configured with default settings using the
 .. code-block:: c
 
     static const struct rte_eth_conf port_conf_default = {
-        .rxmode = { .max_rx_pkt_len = ETHER_MAX_LEN }
+        .rxmode = { .max_rx_pkt_len = RTE_ETHER_MAX_LEN }
     };
 
 For this example the ports are set up with 1 RX and 1 TX queue using the

@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#include <rte_string_fns.h>
 #include <rte_ethdev_driver.h>
 #include <rte_ethdev_vdev.h>
 #include <rte_kni.h>
@@ -16,8 +17,10 @@
 /* Only single queue supported */
 #define KNI_MAX_QUEUE_PER_PORT 1
 
-#define MAX_PACKET_SZ 2048
 #define MAX_KNI_PORTS 8
+
+#define KNI_ETHER_MTU(mbuf_size)       \
+	((mbuf_size) - RTE_ETHER_HDR_LEN) /**< Ethernet MTU. */
 
 #define ETH_KNI_NO_REQUEST_THREAD_ARG	"no_request_thread"
 static const char * const valid_arguments[] = {
@@ -32,7 +35,6 @@ struct eth_kni_args {
 struct pmd_queue_stats {
 	uint64_t pkts;
 	uint64_t bytes;
-	uint64_t err_pkts;
 };
 
 struct pmd_queue {
@@ -51,7 +53,7 @@ struct pmd_internals {
 	int stop_thread;
 	int no_request_thread;
 
-	struct ether_addr eth_addr;
+	struct rte_ether_addr eth_addr;
 
 	struct pmd_queue rx_queues[KNI_MAX_QUEUE_PER_PORT];
 	struct pmd_queue tx_queues[KNI_MAX_QUEUE_PER_PORT];
@@ -80,7 +82,6 @@ eth_kni_rx(void *q, struct rte_mbuf **bufs, uint16_t nb_bufs)
 	nb_pkts = rte_kni_rx_burst(kni, bufs, nb_bufs);
 
 	kni_q->rx.pkts += nb_pkts;
-	kni_q->rx.err_pkts += nb_bufs - nb_pkts;
 
 	return nb_pkts;
 }
@@ -95,7 +96,6 @@ eth_kni_tx(void *q, struct rte_mbuf **bufs, uint16_t nb_bufs)
 	nb_pkts =  rte_kni_tx_burst(kni, bufs, nb_bufs);
 
 	kni_q->tx.pkts += nb_pkts;
-	kni_q->tx.err_pkts += nb_bufs - nb_pkts;
 
 	return nb_pkts;
 }
@@ -123,11 +123,13 @@ eth_kni_start(struct rte_eth_dev *dev)
 	struct rte_kni_conf conf;
 	const char *name = dev->device->name + 4; /* remove net_ */
 
-	snprintf(conf.name, RTE_KNI_NAMESIZE, "%s", name);
+	mb_pool = internals->rx_queues[0].mb_pool;
+	strlcpy(conf.name, name, RTE_KNI_NAMESIZE);
 	conf.force_bind = 0;
 	conf.group_id = port_id;
-	conf.mbuf_size = MAX_PACKET_SZ;
-	mb_pool = internals->rx_queues[0].mb_pool;
+	conf.mbuf_size =
+		rte_pktmbuf_data_room_size(mb_pool) - RTE_PKTMBUF_HEADROOM;
+	conf.mtu = KNI_ETHER_MTU(conf.mbuf_size);
 
 	internals->kni = rte_kni_alloc(mb_pool, &conf, NULL);
 	if (internals->kni == NULL) {
@@ -265,7 +267,6 @@ eth_kni_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	unsigned long rx_packets_total = 0, rx_bytes_total = 0;
 	unsigned long tx_packets_total = 0, tx_bytes_total = 0;
 	struct rte_eth_dev_data *data = dev->data;
-	unsigned long tx_packets_err_total = 0;
 	unsigned int i, num_stats;
 	struct pmd_queue *q;
 
@@ -285,17 +286,14 @@ eth_kni_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 		q = data->tx_queues[i];
 		stats->q_opackets[i] = q->tx.pkts;
 		stats->q_obytes[i] = q->tx.bytes;
-		stats->q_errors[i] = q->tx.err_pkts;
 		tx_packets_total += stats->q_opackets[i];
 		tx_bytes_total += stats->q_obytes[i];
-		tx_packets_err_total += stats->q_errors[i];
 	}
 
 	stats->ipackets = rx_packets_total;
 	stats->ibytes = rx_bytes_total;
 	stats->opackets = tx_packets_total;
 	stats->obytes = tx_bytes_total;
-	stats->oerrors = tx_packets_err_total;
 
 	return 0;
 }
@@ -316,7 +314,6 @@ eth_kni_stats_reset(struct rte_eth_dev *dev)
 		q = data->tx_queues[i];
 		q->tx.pkts = 0;
 		q->tx.bytes = 0;
-		q->tx.err_pkts = 0;
 	}
 }
 
@@ -358,7 +355,7 @@ eth_kni_create(struct rte_vdev_device *vdev,
 	data->dev_link = pmd_link;
 	data->mac_addrs = &internals->eth_addr;
 
-	eth_random_addr(internals->eth_addr.addr_bytes);
+	rte_eth_random_addr(internals->eth_addr.addr_bytes);
 
 	eth_dev->dev_ops = &eth_kni_ops;
 
@@ -454,6 +451,7 @@ eth_kni_remove(struct rte_vdev_device *vdev)
 	struct rte_eth_dev *eth_dev;
 	struct pmd_internals *internals;
 	const char *name;
+	int ret;
 
 	name = rte_vdev_device_name(vdev);
 	PMD_LOG(INFO, "Un-Initializing eth_kni for %s", name);
@@ -472,7 +470,9 @@ eth_kni_remove(struct rte_vdev_device *vdev)
 	eth_kni_dev_stop(eth_dev);
 
 	internals = eth_dev->data->dev_private;
-	rte_kni_release(internals->kni);
+	ret = rte_kni_release(internals->kni);
+	if (ret)
+		PMD_LOG(WARNING, "Not able to release kni for %s", name);
 
 	rte_eth_dev_release_port(eth_dev);
 

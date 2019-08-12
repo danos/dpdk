@@ -31,9 +31,15 @@
 #include "vm_power_cli.h"
 #include "oob_monitor.h"
 #include "parse.h"
+#ifdef RTE_LIBRTE_IXGBE_PMD
 #include <rte_pmd_ixgbe.h>
+#endif
+#ifdef RTE_LIBRTE_I40E_PMD
 #include <rte_pmd_i40e.h>
+#endif
+#ifdef RTE_LIBRTE_BNXT_PMD
 #include <rte_pmd_bnxt.h>
+#endif
 
 #define RX_RING_SIZE 1024
 #define TX_RING_SIZE 1024
@@ -48,7 +54,7 @@ static volatile bool force_quit;
 /****************/
 static const struct rte_eth_conf port_conf_default = {
 	.rxmode = {
-		.max_rx_pkt_len = ETHER_MAX_LEN,
+		.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
 	},
 };
 
@@ -99,7 +105,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 		return retval;
 
 	/* Display the port MAC address. */
-	struct ether_addr addr;
+	struct rte_ether_addr addr;
 	rte_eth_macaddr_get(port, &addr);
 	printf("Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
 			   " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
@@ -175,6 +181,7 @@ parse_args(int argc, char **argv)
 			if (cnt < 0) {
 				printf("Invalid core-list - [%s]\n",
 						optarg);
+				free(oob_enable);
 				break;
 			}
 			for (i = 0; i < ci->core_count; i++) {
@@ -348,7 +355,7 @@ main(int argc, char **argv)
 
 		/* Initialize ports. */
 		RTE_ETH_FOREACH_DEV(portid) {
-			struct ether_addr eth;
+			struct rte_ether_addr eth;
 			int w, j;
 			int ret;
 
@@ -369,14 +376,21 @@ main(int argc, char **argv)
 			for (w = 0; w < MAX_VFS; w++) {
 				eth.addr_bytes[5] = w + 0xf0;
 
+				ret = -ENOTSUP;
+#ifdef RTE_LIBRTE_IXGBE_PMD
 				ret = rte_pmd_ixgbe_set_vf_mac_addr(portid,
 							w, &eth);
+#endif
+#ifdef RTE_LIBRTE_I40E_PMD
 				if (ret == -ENOTSUP)
 					ret = rte_pmd_i40e_set_vf_mac_addr(
 							portid, w, &eth);
+#endif
+#ifdef RTE_LIBRTE_BNXT_PMD
 				if (ret == -ENOTSUP)
 					ret = rte_pmd_bnxt_set_vf_mac_addr(
 							portid, w, &eth);
+#endif
 
 				switch (ret) {
 				case 0:
@@ -390,7 +404,6 @@ main(int argc, char **argv)
 					break;
 				}
 				printf("\n");
-				break;
 			}
 		}
 	}
@@ -421,7 +434,7 @@ main(int argc, char **argv)
 		return -1;
 	}
 
-	add_host_channel();
+	add_host_channels();
 
 	printf("Running core monitor on lcore id %d\n", lcore_id);
 	rte_eal_remote_launch(run_core_monitor, NULL, lcore_id);

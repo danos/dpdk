@@ -54,7 +54,7 @@ static struct rte_mempool *pool = NULL;
 static struct rte_eth_conf port_conf = {
 	.rxmode = {
 		.mq_mode	= ETH_MQ_RX_RSS,
-		.max_rx_pkt_len = ETHER_MAX_LEN,
+		.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
 		.split_hdr_size = 0,
 		.offloads = DEV_RX_OFFLOAD_CHECKSUM,
 	},
@@ -145,7 +145,8 @@ app_pkt_handle(struct rte_mbuf *pkt, uint64_t time)
 {
 	uint8_t input_color, output_color;
 	uint8_t *pkt_data = rte_pktmbuf_mtod(pkt, uint8_t *);
-	uint32_t pkt_len = rte_pktmbuf_pkt_len(pkt) - sizeof(struct ether_hdr);
+	uint32_t pkt_len = rte_pktmbuf_pkt_len(pkt) -
+		sizeof(struct rte_ether_hdr);
 	uint8_t flow_id = (uint8_t)(pkt_data[APP_PKT_FLOW_POS] & (APP_FLOWS_MAX - 1));
 	input_color = pkt_data[APP_PKT_COLOR_POS];
 	enum policer_action action;
@@ -155,7 +156,7 @@ app_pkt_handle(struct rte_mbuf *pkt, uint64_t time)
 		&PROFILE,
 		time,
 		pkt_len,
-		(enum rte_meter_color) input_color);
+		(enum rte_color) input_color);
 
 	/* Apply policing and set the output color */
 	action = policer_table[input_color][output_color];

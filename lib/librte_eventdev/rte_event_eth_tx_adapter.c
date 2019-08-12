@@ -59,6 +59,20 @@ do {\
 		return -EINVAL; \
 } while (0)
 
+#define TXA_CHECK_TXQ(dev, queue) \
+do {\
+	if ((dev)->data->nb_tx_queues == 0) { \
+		RTE_EDEV_LOG_ERR("No tx queues configured"); \
+		return -EINVAL; \
+	} \
+	if ((queue) != -1 && \
+		(uint16_t)(queue) >= (dev)->data->nb_tx_queues) { \
+		RTE_EDEV_LOG_ERR("Invalid tx queue_id %" PRIu16, \
+				(uint16_t)(queue)); \
+		return -EINVAL; \
+	} \
+} while (0)
+
 /* Tx retry callback structure */
 struct txa_retry {
 	/* Ethernet port id */
@@ -795,20 +809,35 @@ txa_service_queue_del(uint8_t id,
 	struct rte_eth_dev_tx_buffer *tb;
 	uint16_t port_id;
 
-	if (tx_queue_id == -1) {
-		uint16_t i;
-		int ret = -1;
+	txa = txa_service_id_to_data(id);
+	port_id = dev->data->port_id;
 
-		for (i = 0; i < dev->data->nb_tx_queues; i++) {
-			ret = txa_service_queue_del(id, dev, i);
-			if (ret != 0)
-				break;
+	if (tx_queue_id == -1) {
+		uint16_t i, q, nb_queues;
+		int ret = 0;
+
+		nb_queues = txa->nb_queues;
+		if (nb_queues == 0)
+			return 0;
+
+		i = 0;
+		q = 0;
+		tqi = txa->txa_ethdev[port_id].queues;
+
+		while (i < nb_queues) {
+
+			if (tqi[q].added) {
+				ret = txa_service_queue_del(id, dev, q);
+				if (ret != 0)
+					break;
+			}
+			i++;
+			q++;
 		}
 		return ret;
 	}
 
 	txa = txa_service_id_to_data(id);
-	port_id = dev->data->port_id;
 
 	tqi = txa_service_queue(txa, port_id, tx_queue_id);
 	if (tqi == NULL || !tqi->added)
@@ -875,7 +904,7 @@ txa_service_stop(uint8_t id)
 }
 
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_create(uint8_t id, uint8_t dev_id,
 				struct rte_event_port_conf *port_conf)
 {
@@ -918,7 +947,7 @@ rte_event_eth_tx_adapter_create(uint8_t id, uint8_t dev_id,
 	return 0;
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_create_ext(uint8_t id, uint8_t dev_id,
 				rte_event_eth_tx_adapter_conf_cb conf_cb,
 				void *conf_arg)
@@ -960,7 +989,7 @@ rte_event_eth_tx_adapter_create_ext(uint8_t id, uint8_t dev_id,
 }
 
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_event_port_get(uint8_t id, uint8_t *event_port_id)
 {
 	TXA_CHECK_OR_ERR_RET(id);
@@ -968,7 +997,7 @@ rte_event_eth_tx_adapter_event_port_get(uint8_t id, uint8_t *event_port_id)
 	return txa_service_event_port_get(id, event_port_id);
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_free(uint8_t id)
 {
 	int ret;
@@ -986,7 +1015,7 @@ rte_event_eth_tx_adapter_free(uint8_t id)
 	return ret;
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_queue_add(uint8_t id,
 				uint16_t eth_dev_id,
 				int32_t queue)
@@ -999,11 +1028,7 @@ rte_event_eth_tx_adapter_queue_add(uint8_t id,
 	TXA_CHECK_OR_ERR_RET(id);
 
 	eth_dev = &rte_eth_devices[eth_dev_id];
-	if (queue != -1 && (uint16_t)queue >= eth_dev->data->nb_tx_queues) {
-		RTE_EDEV_LOG_ERR("Invalid tx queue_id %" PRIu16,
-				(uint16_t)queue);
-		return -EINVAL;
-	}
+	TXA_CHECK_TXQ(eth_dev, queue);
 
 	caps = 0;
 	if (txa_dev_caps_get(id))
@@ -1021,7 +1046,7 @@ rte_event_eth_tx_adapter_queue_add(uint8_t id,
 	return ret;
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_queue_del(uint8_t id,
 				uint16_t eth_dev_id,
 				int32_t queue)
@@ -1034,11 +1059,6 @@ rte_event_eth_tx_adapter_queue_del(uint8_t id,
 	TXA_CHECK_OR_ERR_RET(id);
 
 	eth_dev = &rte_eth_devices[eth_dev_id];
-	if (queue != -1 && (uint16_t)queue >= eth_dev->data->nb_tx_queues) {
-		RTE_EDEV_LOG_ERR("Invalid tx queue_id %" PRIu16,
-				(uint16_t)queue);
-		return -EINVAL;
-	}
 
 	caps = 0;
 
@@ -1056,7 +1076,7 @@ rte_event_eth_tx_adapter_queue_del(uint8_t id,
 	return ret;
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_service_id_get(uint8_t id, uint32_t *service_id)
 {
 	TXA_CHECK_OR_ERR_RET(id);
@@ -1064,7 +1084,7 @@ rte_event_eth_tx_adapter_service_id_get(uint8_t id, uint32_t *service_id)
 	return txa_service_id_get(id, service_id);
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_start(uint8_t id)
 {
 	int ret;
@@ -1077,7 +1097,7 @@ rte_event_eth_tx_adapter_start(uint8_t id)
 	return ret;
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_stats_get(uint8_t id,
 				struct rte_event_eth_tx_adapter_stats *stats)
 {
@@ -1110,7 +1130,7 @@ rte_event_eth_tx_adapter_stats_get(uint8_t id,
 	return ret;
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_stats_reset(uint8_t id)
 {
 	int ret;
@@ -1124,7 +1144,7 @@ rte_event_eth_tx_adapter_stats_reset(uint8_t id)
 	return ret;
 }
 
-int __rte_experimental
+int
 rte_event_eth_tx_adapter_stop(uint8_t id)
 {
 	int ret;

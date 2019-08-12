@@ -47,6 +47,7 @@
 #define FALSE               0
 #define TRUE                1
 
+typedef int bool;
 #define false               0
 #define true                1
 #define min(a,b)        RTE_MIN(a,b)
@@ -74,7 +75,8 @@
 
 /* MAC address operations */
 struct bnx2x_mac_ops {
-	void (*mac_addr_add)(struct rte_eth_dev *dev, struct ether_addr *addr,
+	void (*mac_addr_add)(struct rte_eth_dev *dev,
+			struct rte_ether_addr *addr,
 			uint16_t index, uint32_t pool);                           /* not implemented yet */
 	void (*mac_addr_remove)(struct rte_eth_dev *dev, uint16_t index); /* not implemented yet */
 };

@@ -69,6 +69,7 @@ void bnxt_tx_queue_release_op(void *tx_queue)
 		rte_memzone_free(txq->mz);
 		txq->mz = NULL;
 
+		rte_free(txq->free);
 		rte_free(txq);
 	}
 }
@@ -79,7 +80,7 @@ int bnxt_tx_queue_setup_op(struct rte_eth_dev *eth_dev,
 			       unsigned int socket_id,
 			       const struct rte_eth_txconf *tx_conf)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct bnxt_tx_queue *txq;
 	int rc = 0;
 
@@ -110,6 +111,16 @@ int bnxt_tx_queue_setup_op(struct rte_eth_dev *eth_dev,
 		rc = -ENOMEM;
 		goto out;
 	}
+
+	txq->free = rte_zmalloc_socket(NULL,
+				       sizeof(struct rte_mbuf *) * nb_desc,
+				       RTE_CACHE_LINE_SIZE, socket_id);
+	if (!txq->free) {
+		PMD_DRV_LOG(ERR, "allocation of tx mbuf free array failed!");
+		rte_free(txq);
+		rc = -ENOMEM;
+		goto out;
+	}
 	txq->bp = bp;
 	txq->nb_tx_desc = nb_desc;
 	txq->tx_free_thresh = tx_conf->tx_free_thresh;
@@ -123,7 +134,7 @@ int bnxt_tx_queue_setup_op(struct rte_eth_dev *eth_dev,
 
 	/* Allocate TX ring hardware descriptors */
 	if (bnxt_alloc_rings(bp, queue_idx, txq, NULL, txq->cp_ring,
-			"txr")) {
+			txq->nq_ring, "txr")) {
 		PMD_DRV_LOG(ERR, "ring_dma_zone_reserve for tx_ring failed!");
 		bnxt_tx_queue_release_op(txq);
 		rc = -ENOMEM;

@@ -14,6 +14,7 @@
 #include <rte_string_fns.h>
 #include <rte_eal_memconfig.h>
 #include <rte_pause.h>
+#include <rte_tailq.h>
 
 #include "rte_distributor_private.h"
 #include "rte_distributor.h"
@@ -541,6 +542,9 @@ rte_distributor_flush_v1705(struct rte_distributor *d)
 	while (total_outstanding(d) > 0)
 		rte_distributor_process(d, NULL, 0);
 
+	/* wait 10ms to allow all worker drain the pkts */
+	rte_delay_us(10000);
+
 	/*
 	 * Send empty burst to all workers to allow them to exit
 	 * gracefully, should they need to.
@@ -595,6 +599,12 @@ rte_distributor_create_v1705(const char *name,
 	RTE_BUILD_BUG_ON((sizeof(*d) & RTE_CACHE_LINE_MASK) != 0);
 	RTE_BUILD_BUG_ON((RTE_DISTRIB_MAX_WORKERS & 7) != 0);
 
+	if (name == NULL || num_workers >=
+		(unsigned int)RTE_MIN(RTE_DISTRIB_MAX_WORKERS, RTE_MAX_LCORE)) {
+		rte_errno = EINVAL;
+		return NULL;
+	}
+
 	if (alg_type == RTE_DIST_ALG_SINGLE) {
 		d = malloc(sizeof(struct rte_distributor));
 		if (d == NULL) {
@@ -612,11 +622,6 @@ rte_distributor_create_v1705(const char *name,
 		return d;
 	}
 
-	if (name == NULL || num_workers >= RTE_DISTRIB_MAX_WORKERS) {
-		rte_errno = EINVAL;
-		return NULL;
-	}
-
 	snprintf(mz_name, sizeof(mz_name), RTE_DISTRIB_PREFIX"%s", name);
 	mz = rte_memzone_reserve(mz_name, sizeof(*d), socket_id, NO_FLAGS);
 	if (mz == NULL) {
@@ -625,7 +630,7 @@ rte_distributor_create_v1705(const char *name,
 	}
 
 	d = mz->addr;
-	snprintf(d->name, sizeof(d->name), "%s", name);
+	strlcpy(d->name, name, sizeof(d->name));
 	d->num_workers = num_workers;
 	d->alg_type = alg_type;
 
@@ -645,9 +650,9 @@ rte_distributor_create_v1705(const char *name,
 					  rte_dist_burst_list);
 
 
-	rte_rwlock_write_lock(RTE_EAL_TAILQ_RWLOCK);
+	rte_mcfg_tailq_write_lock();
 	TAILQ_INSERT_TAIL(dist_burst_list, d, next);
-	rte_rwlock_write_unlock(RTE_EAL_TAILQ_RWLOCK);
+	rte_mcfg_tailq_write_unlock();
 
 	return d;
 }

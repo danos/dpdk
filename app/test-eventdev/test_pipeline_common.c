@@ -165,7 +165,7 @@ pipeline_ethdev_setup(struct evt_test *test, struct evt_options *opt)
 	struct rte_eth_conf port_conf = {
 		.rxmode = {
 			.mq_mode = ETH_MQ_RX_RSS,
-			.max_rx_pkt_len = ETHER_MAX_LEN,
+			.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
 		},
 		.rx_adv_conf = {
 			.rss_conf = {
@@ -396,6 +396,7 @@ pipeline_eventdev_destroy(struct evt_test *test, struct evt_options *opt)
 {
 	RTE_SET_USED(test);
 
+	rte_event_dev_stop(opt->dev_id);
 	rte_event_dev_close(opt->dev_id);
 }
 

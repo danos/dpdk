@@ -30,7 +30,7 @@
 
 #define DRV_MODULE_NAME		"bnxt"
 static const char bnxt_version[] =
-	"Broadcom NetXtreme driver " DRV_MODULE_NAME "\n";
+	"Broadcom NetXtreme driver " DRV_MODULE_NAME;
 int bnxt_logtype_driver;
 
 #define PCI_VENDOR_ID_BROADCOM 0x14E4
@@ -71,6 +71,11 @@ int bnxt_logtype_driver;
 #define BROADCOM_DEV_ID_57407_MF 0x16ea
 #define BROADCOM_DEV_ID_57414_MF 0x16ec
 #define BROADCOM_DEV_ID_57416_MF 0x16ee
+#define BROADCOM_DEV_ID_57508 0x1750
+#define BROADCOM_DEV_ID_57504 0x1751
+#define BROADCOM_DEV_ID_57502 0x1752
+#define BROADCOM_DEV_ID_57500_VF1 0x1806
+#define BROADCOM_DEV_ID_57500_VF2 0x1807
 #define BROADCOM_DEV_ID_58802 0xd802
 #define BROADCOM_DEV_ID_58804 0xd804
 #define BROADCOM_DEV_ID_58808 0x16f0
@@ -119,6 +124,11 @@ static const struct rte_pci_id bnxt_pci_id_map[] = {
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM, BROADCOM_DEV_ID_58804) },
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM, BROADCOM_DEV_ID_58808) },
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM, BROADCOM_DEV_ID_58802_VF) },
+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM, BROADCOM_DEV_ID_57508) },
+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM, BROADCOM_DEV_ID_57504) },
+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM, BROADCOM_DEV_ID_57502) },
+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM, BROADCOM_DEV_ID_57500_VF1) },
+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM, BROADCOM_DEV_ID_57500_VF2) },
 	{ .vendor_id = 0, /* sentinel */ },
 };
 
@@ -163,6 +173,24 @@ static int bnxt_dev_uninit(struct rte_eth_dev *eth_dev);
  * High level utility functions
  */
 
+static uint16_t bnxt_rss_ctxts(const struct bnxt *bp)
+{
+	if (!BNXT_CHIP_THOR(bp))
+		return 1;
+
+	return RTE_ALIGN_MUL_CEIL(bp->rx_nr_rings,
+				  BNXT_RSS_ENTRIES_PER_CTX_THOR) /
+				    BNXT_RSS_ENTRIES_PER_CTX_THOR;
+}
+
+static uint16_t  bnxt_rss_hash_tbl_size(const struct bnxt *bp)
+{
+	if (!BNXT_CHIP_THOR(bp))
+		return HW_HASH_INDEX_SIZE;
+
+	return bnxt_rss_ctxts(bp) * BNXT_RSS_ENTRIES_PER_CTX_THOR;
+}
+
 static void bnxt_free_mem(struct bnxt *bp)
 {
 	bnxt_free_filter_mem(bp);
@@ -172,11 +200,16 @@ static void bnxt_free_mem(struct bnxt *bp)
 	bnxt_free_stats(bp);
 	bnxt_free_tx_rings(bp);
 	bnxt_free_rx_rings(bp);
+	bnxt_free_async_cp_ring(bp);
 }
 
 static int bnxt_alloc_mem(struct bnxt *bp)
 {
 	int rc;
+
+	rc = bnxt_alloc_async_ring_struct(bp);
+	if (rc)
+		goto alloc_mem_err;
 
 	rc = bnxt_alloc_vnic_mem(bp);
 	if (rc)
@@ -187,6 +220,10 @@ static int bnxt_alloc_mem(struct bnxt *bp)
 		goto alloc_mem_err;
 
 	rc = bnxt_alloc_filter_mem(bp);
+	if (rc)
+		goto alloc_mem_err;
+
+	rc = bnxt_alloc_async_cp_ring(bp);
 	if (rc)
 		goto alloc_mem_err;
 
@@ -211,10 +248,7 @@ static int bnxt_init_chip(struct bnxt *bp)
 	unsigned int i, j;
 	int rc;
 
-	/* disable uio/vfio intr/eventfd mapping */
-	rte_intr_disable(intr_handle);
-
-	if (bp->eth_dev->data->mtu > ETHER_MTU) {
+	if (bp->eth_dev->data->mtu > RTE_ETHER_MTU) {
 		bp->eth_dev->data->dev_conf.rxmode.offloads |=
 			DEV_RX_OFFLOAD_JUMBO_FRAME;
 		bp->flags |= BNXT_FLAG_JUMBO;
@@ -223,6 +257,12 @@ static int bnxt_init_chip(struct bnxt *bp)
 			~DEV_RX_OFFLOAD_JUMBO_FRAME;
 		bp->flags &= ~BNXT_FLAG_JUMBO;
 	}
+
+	/* THOR does not support ring groups.
+	 * But we will use the array to save RSS context IDs.
+	 */
+	if (BNXT_CHIP_THOR(bp))
+		bp->max_ring_grps = BNXT_MAX_RSS_CTXTS_THOR;
 
 	rc = bnxt_alloc_all_hwrm_stat_ctxs(bp);
 	if (rc) {
@@ -276,13 +316,21 @@ static int bnxt_init_chip(struct bnxt *bp)
 
 		/* Alloc RSS context only if RSS mode is enabled */
 		if (dev_conf->rxmode.mq_mode & ETH_MQ_RX_RSS) {
-			rc = bnxt_hwrm_vnic_ctx_alloc(bp, vnic);
+			int j, nr_ctxs = bnxt_rss_ctxts(bp);
+
+			rc = 0;
+			for (j = 0; j < nr_ctxs; j++) {
+				rc = bnxt_hwrm_vnic_ctx_alloc(bp, vnic, j);
+				if (rc)
+					break;
+			}
 			if (rc) {
 				PMD_DRV_LOG(ERR,
-					"HWRM vnic %d ctx alloc failure rc: %x\n",
-					i, rc);
+				  "HWRM vnic %d ctx %d alloc failure rc: %x\n",
+				  i, j, rc);
 				goto err_out;
 			}
+			vnic->num_lb_ctxts = nr_ctxs;
 		}
 
 		/*
@@ -317,7 +365,7 @@ static int bnxt_init_chip(struct bnxt *bp)
 				    "rxq[%d]->vnic=%p vnic->fw_grp_ids=%p\n",
 				    j, rxq->vnic, rxq->vnic->fw_grp_ids);
 
-			if (rxq->rx_deferred_start)
+			if (BNXT_HAS_RING_GRPS(bp) && rxq->rx_deferred_start)
 				rxq->vnic->fw_grp_ids[j] = INVALID_HW_RING_ID;
 		}
 
@@ -354,8 +402,9 @@ static int bnxt_init_chip(struct bnxt *bp)
 					bp->rx_cp_nr_rings);
 			return -ENOTSUP;
 		}
-		if (rte_intr_efd_enable(intr_handle, intr_vector))
-			return -1;
+		rc = rte_intr_efd_enable(intr_handle, intr_vector);
+		if (rc)
+			return rc;
 	}
 
 	if (rte_intr_dp_is_en(intr_handle) && !intr_handle->intr_vec) {
@@ -366,28 +415,31 @@ static int bnxt_init_chip(struct bnxt *bp)
 		if (intr_handle->intr_vec == NULL) {
 			PMD_DRV_LOG(ERR, "Failed to allocate %d rx_queues"
 				" intr_vec", bp->eth_dev->data->nb_rx_queues);
-			return -ENOMEM;
+			rc = -ENOMEM;
+			goto err_disable;
 		}
 		PMD_DRV_LOG(DEBUG, "intr_handle->intr_vec = %p "
 			"intr_handle->nb_efd = %d intr_handle->max_intr = %d\n",
 			 intr_handle->intr_vec, intr_handle->nb_efd,
 			intr_handle->max_intr);
-	}
-
-	for (queue_id = 0; queue_id < bp->eth_dev->data->nb_rx_queues;
-	     queue_id++) {
-		intr_handle->intr_vec[queue_id] = vec;
-		if (vec < base + intr_handle->nb_efd - 1)
-			vec++;
+		for (queue_id = 0; queue_id < bp->eth_dev->data->nb_rx_queues;
+		     queue_id++) {
+			intr_handle->intr_vec[queue_id] =
+							vec + BNXT_RX_VEC_START;
+			if (vec < base + intr_handle->nb_efd - 1)
+				vec++;
+		}
 	}
 
 	/* enable uio/vfio intr/eventfd mapping */
-	rte_intr_enable(intr_handle);
+	rc = rte_intr_enable(intr_handle);
+	if (rc)
+		goto err_free;
 
 	rc = bnxt_get_hwrm_link_config(bp, &new);
 	if (rc) {
 		PMD_DRV_LOG(ERR, "HWRM Get link config failure rc: %x\n", rc);
-		goto err_out;
+		goto err_free;
 	}
 
 	if (!bp->link_info.link_up) {
@@ -395,16 +447,18 @@ static int bnxt_init_chip(struct bnxt *bp)
 		if (rc) {
 			PMD_DRV_LOG(ERR,
 				"HWRM link config failure rc: %x\n", rc);
-			goto err_out;
+			goto err_free;
 		}
 	}
 	bnxt_print_link_info(bp->eth_dev);
 
 	return 0;
 
+err_free:
+	rte_free(intr_handle->intr_vec);
+err_disable:
+	rte_intr_efd_disable(intr_handle);
 err_out:
-	bnxt_free_all_hwrm_resources(bp);
-
 	/* Some of the error status returned by FW may not be from errno.h */
 	if (rc > 0)
 		rc = -EIO;
@@ -424,9 +478,11 @@ static int bnxt_init_nic(struct bnxt *bp)
 {
 	int rc;
 
-	rc = bnxt_init_ring_grps(bp);
-	if (rc)
-		return rc;
+	if (BNXT_HAS_RING_GRPS(bp)) {
+		rc = bnxt_init_ring_grps(bp);
+		if (rc)
+			return rc;
+	}
 
 	bnxt_init_vnics(bp);
 	bnxt_init_filters(bp);
@@ -441,7 +497,7 @@ static int bnxt_init_nic(struct bnxt *bp)
 static void bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 				  struct rte_eth_dev_info *dev_info)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	uint16_t max_vnics, i, j, vpool, vrxq;
 	unsigned int max_rx_rings;
 
@@ -452,18 +508,18 @@ static void bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 	/* PF/VF specifics */
 	if (BNXT_PF(bp))
 		dev_info->max_vfs = bp->pdev->max_vfs;
-	max_rx_rings = RTE_MIN(bp->max_vnics, bp->max_stat_ctx);
+	max_rx_rings = RTE_MIN(bp->max_rx_rings, bp->max_stat_ctx);
 	/* For the sake of symmetry, max_rx_queues = max_tx_queues */
 	dev_info->max_rx_queues = max_rx_rings;
 	dev_info->max_tx_queues = max_rx_rings;
-	dev_info->reta_size = HW_HASH_INDEX_SIZE;
+	dev_info->reta_size = bnxt_rss_hash_tbl_size(bp);
 	dev_info->hash_key_size = 40;
 	max_vnics = bp->max_vnics;
 
 	/* Fast path specifics */
 	dev_info->min_rx_bufsize = 1;
-	dev_info->max_rx_pktlen = BNXT_MAX_MTU + ETHER_HDR_LEN + ETHER_CRC_LEN
-				  + VLAN_TAG_SIZE * 2;
+	dev_info->max_rx_pktlen = BNXT_MAX_MTU + RTE_ETHER_HDR_LEN +
+		RTE_ETHER_CRC_LEN + VLAN_TAG_SIZE * 2;
 
 	dev_info->rx_offload_capa = BNXT_DEV_RX_OFFLOAD_SUPPORT;
 	if (bp->flags & BNXT_FLAG_PTP_SUPPORTED)
@@ -537,7 +593,7 @@ found:
 /* Configure the device based on the configuration provided */
 static int bnxt_dev_configure_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	uint64_t rx_offloads = eth_dev->data->dev_conf.rxmode.offloads;
 	int rc;
 
@@ -570,37 +626,44 @@ static int bnxt_dev_configure_op(struct rte_eth_dev *eth_dev)
 	/* Inherit new configurations */
 	if (eth_dev->data->nb_rx_queues > bp->max_rx_rings ||
 	    eth_dev->data->nb_tx_queues > bp->max_tx_rings ||
+	    eth_dev->data->nb_rx_queues + eth_dev->data->nb_tx_queues
+		+ BNXT_NUM_ASYNC_CPR(bp) > bp->max_cp_rings ||
 	    eth_dev->data->nb_rx_queues + eth_dev->data->nb_tx_queues >
-	    bp->max_cp_rings ||
-	    eth_dev->data->nb_rx_queues + eth_dev->data->nb_tx_queues >
-	    bp->max_stat_ctx ||
-	    (uint32_t)(eth_dev->data->nb_rx_queues) > bp->max_ring_grps ||
-	    (!(eth_dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS) &&
-	     bp->max_vnics < eth_dev->data->nb_rx_queues)) {
-		PMD_DRV_LOG(ERR,
-			"Insufficient resources to support requested config\n");
-		PMD_DRV_LOG(ERR,
-			"Num Queues Requested: Tx %d, Rx %d\n",
-			eth_dev->data->nb_tx_queues,
-			eth_dev->data->nb_rx_queues);
-		PMD_DRV_LOG(ERR,
-			"MAX: TxQ %d, RxQ %d, CQ %d Stat %d, Grp %d, Vnic %d\n",
-			bp->max_tx_rings, bp->max_rx_rings, bp->max_cp_rings,
-			bp->max_stat_ctx, bp->max_ring_grps, bp->max_vnics);
-		return -ENOSPC;
-	}
+	    bp->max_stat_ctx)
+		goto resource_error;
+
+	if (BNXT_HAS_RING_GRPS(bp) &&
+	    (uint32_t)(eth_dev->data->nb_rx_queues) > bp->max_ring_grps)
+		goto resource_error;
+
+	if (!(eth_dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS) &&
+	    bp->max_vnics < eth_dev->data->nb_rx_queues)
+		goto resource_error;
 
 	bp->rx_cp_nr_rings = bp->rx_nr_rings;
 	bp->tx_cp_nr_rings = bp->tx_nr_rings;
 
 	if (rx_offloads & DEV_RX_OFFLOAD_JUMBO_FRAME) {
 		eth_dev->data->mtu =
-				eth_dev->data->dev_conf.rxmode.max_rx_pkt_len -
-				ETHER_HDR_LEN - ETHER_CRC_LEN - VLAN_TAG_SIZE *
-				BNXT_NUM_VLANS;
+			eth_dev->data->dev_conf.rxmode.max_rx_pkt_len -
+			RTE_ETHER_HDR_LEN - RTE_ETHER_CRC_LEN - VLAN_TAG_SIZE *
+			BNXT_NUM_VLANS;
 		bnxt_mtu_set_op(eth_dev, eth_dev->data->mtu);
 	}
 	return 0;
+
+resource_error:
+	PMD_DRV_LOG(ERR,
+		    "Insufficient resources to support requested config\n");
+	PMD_DRV_LOG(ERR,
+		    "Num Queues Requested: Tx %d, Rx %d\n",
+		    eth_dev->data->nb_tx_queues,
+		    eth_dev->data->nb_rx_queues);
+	PMD_DRV_LOG(ERR,
+		    "MAX: TxQ %d, RxQ %d, CQ %d Stat %d, Grp %d, Vnic %d\n",
+		    bp->max_tx_rings, bp->max_rx_rings, bp->max_cp_rings,
+		    bp->max_stat_ctx, bp->max_ring_grps, bp->max_vnics);
+	return -ENOSPC;
 }
 
 static void bnxt_print_link_info(struct rte_eth_dev *eth_dev)
@@ -618,15 +681,88 @@ static void bnxt_print_link_info(struct rte_eth_dev *eth_dev)
 			eth_dev->data->port_id);
 }
 
-static int bnxt_dev_lsc_intr_setup(struct rte_eth_dev *eth_dev)
+/*
+ * Determine whether the current configuration requires support for scattered
+ * receive; return 1 if scattered receive is required and 0 if not.
+ */
+static int bnxt_scattered_rx(struct rte_eth_dev *eth_dev)
 {
-	bnxt_print_link_info(eth_dev);
+	uint16_t buf_size;
+	int i;
+
+	for (i = 0; i < eth_dev->data->nb_rx_queues; i++) {
+		struct bnxt_rx_queue *rxq = eth_dev->data->rx_queues[i];
+
+		buf_size = (uint16_t)(rte_pktmbuf_data_room_size(rxq->mb_pool) -
+				      RTE_PKTMBUF_HEADROOM);
+		if (eth_dev->data->dev_conf.rxmode.max_rx_pkt_len > buf_size)
+			return 1;
+	}
 	return 0;
+}
+
+static eth_rx_burst_t
+bnxt_receive_function(__rte_unused struct rte_eth_dev *eth_dev)
+{
+#ifdef RTE_ARCH_X86
+	/*
+	 * Vector mode receive can be enabled only if scatter rx is not
+	 * in use and rx offloads are limited to VLAN stripping and
+	 * CRC stripping.
+	 */
+	if (!eth_dev->data->scattered_rx &&
+	    !(eth_dev->data->dev_conf.rxmode.offloads &
+	      ~(DEV_RX_OFFLOAD_VLAN_STRIP |
+		DEV_RX_OFFLOAD_KEEP_CRC |
+		DEV_RX_OFFLOAD_JUMBO_FRAME |
+		DEV_RX_OFFLOAD_IPV4_CKSUM |
+		DEV_RX_OFFLOAD_UDP_CKSUM |
+		DEV_RX_OFFLOAD_TCP_CKSUM |
+		DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM |
+		DEV_RX_OFFLOAD_VLAN_FILTER))) {
+		PMD_DRV_LOG(INFO, "Using vector mode receive for port %d\n",
+			    eth_dev->data->port_id);
+		return bnxt_recv_pkts_vec;
+	}
+	PMD_DRV_LOG(INFO, "Vector mode receive disabled for port %d\n",
+		    eth_dev->data->port_id);
+	PMD_DRV_LOG(INFO,
+		    "Port %d scatter: %d rx offload: %" PRIX64 "\n",
+		    eth_dev->data->port_id,
+		    eth_dev->data->scattered_rx,
+		    eth_dev->data->dev_conf.rxmode.offloads);
+#endif
+	return bnxt_recv_pkts;
+}
+
+static eth_tx_burst_t
+bnxt_transmit_function(__rte_unused struct rte_eth_dev *eth_dev)
+{
+#ifdef RTE_ARCH_X86
+	/*
+	 * Vector mode transmit can be enabled only if not using scatter rx
+	 * or tx offloads.
+	 */
+	if (!eth_dev->data->scattered_rx &&
+	    !eth_dev->data->dev_conf.txmode.offloads) {
+		PMD_DRV_LOG(INFO, "Using vector mode transmit for port %d\n",
+			    eth_dev->data->port_id);
+		return bnxt_xmit_pkts_vec;
+	}
+	PMD_DRV_LOG(INFO, "Vector mode transmit disabled for port %d\n",
+		    eth_dev->data->port_id);
+	PMD_DRV_LOG(INFO,
+		    "Port %d scatter: %d tx offload: %" PRIX64 "\n",
+		    eth_dev->data->port_id,
+		    eth_dev->data->scattered_rx,
+		    eth_dev->data->dev_conf.txmode.offloads);
+#endif
+	return bnxt_xmit_pkts;
 }
 
 static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	uint64_t rx_offloads = eth_dev->data->dev_conf.rxmode.offloads;
 	int vlan_mask = 0;
 	int rc;
@@ -636,11 +772,12 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 			"RxQ cnt %d > CONFIG_RTE_ETHDEV_QUEUE_STAT_CNTRS %d\n",
 			bp->rx_cp_nr_rings, RTE_ETHDEV_QUEUE_STAT_CNTRS);
 	}
-	bp->dev_stopped = 0;
 
 	rc = bnxt_init_chip(bp);
 	if (rc)
 		goto error;
+
+	eth_dev->data->scattered_rx = bnxt_scattered_rx(eth_dev);
 
 	bnxt_link_update_op(eth_dev, 1);
 
@@ -652,7 +789,11 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	if (rc)
 		goto error;
 
+	eth_dev->rx_pkt_burst = bnxt_receive_function(eth_dev);
+	eth_dev->tx_pkt_burst = bnxt_transmit_function(eth_dev);
+	bnxt_enable_int(bp);
 	bp->flags |= BNXT_FLAG_INIT_DONE;
+	bp->dev_stopped = 0;
 	return 0;
 
 error:
@@ -664,7 +805,7 @@ error:
 
 static int bnxt_dev_set_link_up_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	int rc = 0;
 
 	if (!bp->link_info.link_up)
@@ -678,7 +819,7 @@ static int bnxt_dev_set_link_up_op(struct rte_eth_dev *eth_dev)
 
 static int bnxt_dev_set_link_down_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 
 	eth_dev->data->dev_link.link_status = 0;
 	bnxt_set_hwrm_link_config(bp, false);
@@ -690,7 +831,14 @@ static int bnxt_dev_set_link_down_op(struct rte_eth_dev *eth_dev)
 /* Unload the driver, release resources */
 static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
+
+	bnxt_disable_int(bp);
+
+	/* disable uio/vfio intr/eventfd mapping */
+	rte_intr_disable(intr_handle);
 
 	bp->flags &= ~BNXT_FLAG_INIT_DONE;
 	if (bp->eth_dev->data->dev_started) {
@@ -698,6 +846,14 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 		eth_dev->data->dev_link.link_status = 0;
 	}
 	bnxt_set_hwrm_link_config(bp, false);
+
+	/* Clean queue intr-vector mapping */
+	rte_intr_efd_disable(intr_handle);
+	if (intr_handle->intr_vec != NULL) {
+		rte_free(intr_handle->intr_vec);
+		intr_handle->intr_vec = NULL;
+	}
+
 	bnxt_hwrm_port_clr_stats(bp);
 	bnxt_free_tx_mbufs(bp);
 	bnxt_free_rx_mbufs(bp);
@@ -707,7 +863,7 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 
 static void bnxt_dev_close_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 
 	if (bp->dev_stopped == 0)
 		bnxt_dev_stop_op(eth_dev);
@@ -727,7 +883,7 @@ static void bnxt_dev_close_op(struct rte_eth_dev *eth_dev)
 static void bnxt_mac_addr_remove_op(struct rte_eth_dev *eth_dev,
 				    uint32_t index)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	uint64_t pool_mask = eth_dev->data->mac_pool_sel[index];
 	struct bnxt_vnic_info *vnic;
 	struct bnxt_filter_info *filter, *temp_filter;
@@ -750,7 +906,7 @@ static void bnxt_mac_addr_remove_op(struct rte_eth_dev *eth_dev,
 						bnxt_filter_info, next);
 				bnxt_hwrm_clear_l2_filter(bp, filter);
 				filter->mac_index = INVALID_MAC_INDEX;
-				memset(&filter->l2_addr, 0, ETHER_ADDR_LEN);
+				memset(&filter->l2_addr, 0, RTE_ETHER_ADDR_LEN);
 				STAILQ_INSERT_TAIL(&bp->free_filter_list,
 						   filter, next);
 			}
@@ -760,12 +916,13 @@ static void bnxt_mac_addr_remove_op(struct rte_eth_dev *eth_dev,
 }
 
 static int bnxt_mac_addr_add_op(struct rte_eth_dev *eth_dev,
-				struct ether_addr *mac_addr,
+				struct rte_ether_addr *mac_addr,
 				uint32_t index, uint32_t pool)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct bnxt_vnic_info *vnic = &bp->vnic_info[pool];
 	struct bnxt_filter_info *filter;
+	int rc = 0;
 
 	if (BNXT_VF(bp) & !BNXT_VF_IS_TRUSTED(bp)) {
 		PMD_DRV_LOG(ERR, "Cannot add MAC address to a VF interface\n");
@@ -789,16 +946,26 @@ static int bnxt_mac_addr_add_op(struct rte_eth_dev *eth_dev,
 		PMD_DRV_LOG(ERR, "L2 filter alloc failed\n");
 		return -ENODEV;
 	}
-	STAILQ_INSERT_TAIL(&vnic->filter, filter, next);
+
 	filter->mac_index = index;
-	memcpy(filter->l2_addr, mac_addr, ETHER_ADDR_LEN);
-	return bnxt_hwrm_set_l2_filter(bp, vnic->fw_vnic_id, filter);
+	memcpy(filter->l2_addr, mac_addr, RTE_ETHER_ADDR_LEN);
+
+	rc = bnxt_hwrm_set_l2_filter(bp, vnic->fw_vnic_id, filter);
+	if (!rc) {
+		STAILQ_INSERT_TAIL(&vnic->filter, filter, next);
+	} else {
+		filter->mac_index = INVALID_MAC_INDEX;
+		memset(&filter->l2_addr, 0, RTE_ETHER_ADDR_LEN);
+		bnxt_free_filter(bp, filter);
+	}
+
+	return rc;
 }
 
 int bnxt_link_update_op(struct rte_eth_dev *eth_dev, int wait_to_complete)
 {
 	int rc = 0;
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_eth_link new;
 	unsigned int cnt = BNXT_LINK_WAIT_CNT;
 
@@ -813,11 +980,12 @@ int bnxt_link_update_op(struct rte_eth_dev *eth_dev, int wait_to_complete)
 				"Failed to retrieve link rc = 0x%x!\n", rc);
 			goto out;
 		}
-		rte_delay_ms(BNXT_LINK_WAIT_INTERVAL);
 
-		if (!wait_to_complete)
+		if (!wait_to_complete || new.link_status)
 			break;
-	} while (!new.link_status && cnt--);
+
+		rte_delay_ms(BNXT_LINK_WAIT_INTERVAL);
+	} while (cnt--);
 
 out:
 	/* Timed out or success */
@@ -838,7 +1006,7 @@ out:
 
 static void bnxt_promiscuous_enable_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct bnxt_vnic_info *vnic;
 
 	if (bp->vnic_info == NULL)
@@ -852,7 +1020,7 @@ static void bnxt_promiscuous_enable_op(struct rte_eth_dev *eth_dev)
 
 static void bnxt_promiscuous_disable_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct bnxt_vnic_info *vnic;
 
 	if (bp->vnic_info == NULL)
@@ -866,7 +1034,7 @@ static void bnxt_promiscuous_disable_op(struct rte_eth_dev *eth_dev)
 
 static void bnxt_allmulticast_enable_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct bnxt_vnic_info *vnic;
 
 	if (bp->vnic_info == NULL)
@@ -880,7 +1048,7 @@ static void bnxt_allmulticast_enable_op(struct rte_eth_dev *eth_dev)
 
 static void bnxt_allmulticast_disable_op(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct bnxt_vnic_info *vnic;
 
 	if (bp->vnic_info == NULL)
@@ -892,30 +1060,91 @@ static void bnxt_allmulticast_disable_op(struct rte_eth_dev *eth_dev)
 	bnxt_hwrm_cfa_l2_set_rx_mask(bp, vnic, 0, NULL);
 }
 
+/* Return bnxt_rx_queue pointer corresponding to a given rxq. */
+static struct bnxt_rx_queue *bnxt_qid_to_rxq(struct bnxt *bp, uint16_t qid)
+{
+	if (qid >= bp->rx_nr_rings)
+		return NULL;
+
+	return bp->eth_dev->data->rx_queues[qid];
+}
+
+/* Return rxq corresponding to a given rss table ring/group ID. */
+static uint16_t bnxt_rss_to_qid(struct bnxt *bp, uint16_t fwr)
+{
+	struct bnxt_rx_queue *rxq;
+	unsigned int i;
+
+	if (!BNXT_HAS_RING_GRPS(bp)) {
+		for (i = 0; i < bp->rx_nr_rings; i++) {
+			rxq = bp->eth_dev->data->rx_queues[i];
+			if (rxq->rx_ring->rx_ring_struct->fw_ring_id == fwr)
+				return rxq->index;
+		}
+	} else {
+		for (i = 0; i < bp->rx_nr_rings; i++) {
+			if (bp->grp_info[i].fw_grp_id == fwr)
+				return i;
+		}
+	}
+
+	return INVALID_HW_RING_ID;
+}
+
 static int bnxt_reta_update_op(struct rte_eth_dev *eth_dev,
 			    struct rte_eth_rss_reta_entry64 *reta_conf,
 			    uint16_t reta_size)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_eth_conf *dev_conf = &bp->eth_dev->data->dev_conf;
-	struct bnxt_vnic_info *vnic;
+	struct bnxt_vnic_info *vnic = &bp->vnic_info[0];
+	uint16_t tbl_size = bnxt_rss_hash_tbl_size(bp);
+	uint16_t idx, sft;
 	int i;
+
+	if (!vnic->rss_table)
+		return -EINVAL;
 
 	if (!(dev_conf->rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG))
 		return -EINVAL;
 
-	if (reta_size != HW_HASH_INDEX_SIZE) {
+	if (reta_size != tbl_size) {
 		PMD_DRV_LOG(ERR, "The configured hash table lookup size "
 			"(%d) must equal the size supported by the hardware "
-			"(%d)\n", reta_size, HW_HASH_INDEX_SIZE);
+			"(%d)\n", reta_size, tbl_size);
 		return -EINVAL;
 	}
-	/* Update the RSS VNIC(s) */
-	for (i = 0; i < bp->max_vnics; i++) {
-		vnic = &bp->vnic_info[i];
-		memcpy(vnic->rss_table, reta_conf, reta_size);
-		bnxt_hwrm_vnic_rss_cfg(bp, vnic);
+
+	for (i = 0; i < reta_size; i++) {
+		struct bnxt_rx_queue *rxq;
+
+		idx = i / RTE_RETA_GROUP_SIZE;
+		sft = i % RTE_RETA_GROUP_SIZE;
+
+		if (!(reta_conf[idx].mask & (1ULL << sft)))
+			continue;
+
+		rxq = bnxt_qid_to_rxq(bp, reta_conf[idx].reta[sft]);
+		if (!rxq) {
+			PMD_DRV_LOG(ERR, "Invalid ring in reta_conf.\n");
+			return -EINVAL;
+		}
+
+		if (BNXT_CHIP_THOR(bp)) {
+			vnic->rss_table[i * 2] =
+				rxq->rx_ring->rx_ring_struct->fw_ring_id;
+			vnic->rss_table[i * 2 + 1] =
+				rxq->cp_ring->cp_ring_struct->fw_ring_id;
+		} else {
+			vnic->rss_table[i] =
+			    vnic->fw_grp_ids[reta_conf[idx].reta[sft]];
+		}
+
+		vnic->rss_table[i] =
+		    vnic->fw_grp_ids[reta_conf[idx].reta[sft]];
 	}
+
+	bnxt_hwrm_vnic_rss_cfg(bp, vnic);
 	return 0;
 }
 
@@ -923,10 +1152,10 @@ static int bnxt_reta_query_op(struct rte_eth_dev *eth_dev,
 			      struct rte_eth_rss_reta_entry64 *reta_conf,
 			      uint16_t reta_size)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct bnxt_vnic_info *vnic = &bp->vnic_info[0];
-	struct rte_intr_handle *intr_handle
-		= &bp->pdev->intr_handle;
+	uint16_t tbl_size = bnxt_rss_hash_tbl_size(bp);
+	uint16_t idx, sft, i;
 
 	/* Retrieve from the default VNIC */
 	if (!vnic)
@@ -934,18 +1163,32 @@ static int bnxt_reta_query_op(struct rte_eth_dev *eth_dev,
 	if (!vnic->rss_table)
 		return -EINVAL;
 
-	if (reta_size != HW_HASH_INDEX_SIZE) {
+	if (reta_size != tbl_size) {
 		PMD_DRV_LOG(ERR, "The configured hash table lookup size "
 			"(%d) must equal the size supported by the hardware "
-			"(%d)\n", reta_size, HW_HASH_INDEX_SIZE);
+			"(%d)\n", reta_size, tbl_size);
 		return -EINVAL;
 	}
-	/* EW - need to revisit here copying from uint64_t to uint16_t */
-	memcpy(reta_conf, vnic->rss_table, reta_size);
 
-	if (rte_intr_allow_others(intr_handle)) {
-		if (eth_dev->data->dev_conf.intr_conf.lsc != 0)
-			bnxt_dev_lsc_intr_setup(eth_dev);
+	for (idx = 0, i = 0; i < reta_size; i++) {
+		idx = i / RTE_RETA_GROUP_SIZE;
+		sft = i % RTE_RETA_GROUP_SIZE;
+
+		if (reta_conf[idx].mask & (1ULL << sft)) {
+			uint16_t qid;
+
+			if (BNXT_CHIP_THOR(bp))
+				qid = bnxt_rss_to_qid(bp,
+						      vnic->rss_table[i * 2]);
+			else
+				qid = bnxt_rss_to_qid(bp, vnic->rss_table[i]);
+
+			if (qid == INVALID_HW_RING_ID) {
+				PMD_DRV_LOG(ERR, "Inv. entry in rss table.\n");
+				return -EINVAL;
+			}
+			reta_conf[idx].reta[sft] = qid;
+		}
 	}
 
 	return 0;
@@ -954,7 +1197,7 @@ static int bnxt_reta_query_op(struct rte_eth_dev *eth_dev,
 static int bnxt_rss_hash_update_op(struct rte_eth_dev *eth_dev,
 				   struct rte_eth_rss_conf *rss_conf)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_eth_conf *dev_conf = &bp->eth_dev->data->dev_conf;
 	struct bnxt_vnic_info *vnic;
 	uint16_t hash_type = 0;
@@ -1010,7 +1253,7 @@ static int bnxt_rss_hash_update_op(struct rte_eth_dev *eth_dev,
 static int bnxt_rss_hash_conf_get_op(struct rte_eth_dev *eth_dev,
 				     struct rte_eth_rss_conf *rss_conf)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	struct bnxt_vnic_info *vnic = &bp->vnic_info[0];
 	int len;
 	uint32_t hash_types;
@@ -1068,7 +1311,7 @@ static int bnxt_rss_hash_conf_get_op(struct rte_eth_dev *eth_dev,
 static int bnxt_flow_ctrl_get_op(struct rte_eth_dev *dev,
 			       struct rte_eth_fc_conf *fc_conf)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct rte_eth_link link_info;
 	int rc;
 
@@ -1100,7 +1343,7 @@ static int bnxt_flow_ctrl_get_op(struct rte_eth_dev *dev,
 static int bnxt_flow_ctrl_set_op(struct rte_eth_dev *dev,
 			       struct rte_eth_fc_conf *fc_conf)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 
 	if (!BNXT_SINGLE_PF(bp) || BNXT_VF(bp)) {
 		PMD_DRV_LOG(ERR, "Flow Control Settings cannot be modified\n");
@@ -1156,7 +1399,7 @@ static int
 bnxt_udp_tunnel_port_add_op(struct rte_eth_dev *eth_dev,
 			 struct rte_eth_udp_tunnel *udp_tunnel)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	uint16_t tunnel_type = 0;
 	int rc = 0;
 
@@ -1204,7 +1447,7 @@ static int
 bnxt_udp_tunnel_port_del_op(struct rte_eth_dev *eth_dev,
 			 struct rte_eth_udp_tunnel *udp_tunnel)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	uint16_t tunnel_type = 0;
 	uint16_t port = 0;
 	int rc = 0;
@@ -1263,148 +1506,105 @@ bnxt_udp_tunnel_port_del_op(struct rte_eth_dev *eth_dev,
 
 static int bnxt_del_vlan_filter(struct bnxt *bp, uint16_t vlan_id)
 {
-	struct bnxt_filter_info *filter, *temp_filter, *new_filter;
+	struct bnxt_filter_info *filter;
 	struct bnxt_vnic_info *vnic;
-	unsigned int i;
 	int rc = 0;
-	uint32_t chk = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_OVLAN;
+	uint32_t chk = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_IVLAN;
 
-	/* Cycle through all VNICs */
-	for (i = 0; i < bp->nr_vnics; i++) {
-		/*
-		 * For each VNIC and each associated filter(s)
-		 * if VLAN exists && VLAN matches vlan_id
-		 *      remove the MAC+VLAN filter
-		 *      add a new MAC only filter
-		 * else
-		 *      VLAN filter doesn't exist, just skip and continue
-		 */
-		vnic = &bp->vnic_info[i];
-		filter = STAILQ_FIRST(&vnic->filter);
-		while (filter) {
-			temp_filter = STAILQ_NEXT(filter, next);
+	/* if VLAN exists && VLAN matches vlan_id
+	 *      remove the MAC+VLAN filter
+	 *      add a new MAC only filter
+	 * else
+	 *      VLAN filter doesn't exist, just skip and continue
+	 */
+	vnic = BNXT_GET_DEFAULT_VNIC(bp);
+	filter = STAILQ_FIRST(&vnic->filter);
+	while (filter) {
+		/* Search for this matching MAC+VLAN filter */
+		if (filter->enables & chk && filter->l2_ivlan == vlan_id &&
+		    !memcmp(filter->l2_addr,
+			    bp->mac_addr,
+			    RTE_ETHER_ADDR_LEN)) {
+			/* Delete the filter */
+			rc = bnxt_hwrm_clear_l2_filter(bp, filter);
+			if (rc)
+				return rc;
+			STAILQ_REMOVE(&vnic->filter, filter,
+				      bnxt_filter_info, next);
+			STAILQ_INSERT_TAIL(&bp->free_filter_list, filter, next);
 
-			if (filter->enables & chk &&
-			    filter->l2_ovlan == vlan_id) {
-				/* Must delete the filter */
-				STAILQ_REMOVE(&vnic->filter, filter,
-					      bnxt_filter_info, next);
-				bnxt_hwrm_clear_l2_filter(bp, filter);
-				STAILQ_INSERT_TAIL(&bp->free_filter_list,
-						   filter, next);
-
-				/*
-				 * Need to examine to see if the MAC
-				 * filter already existed or not before
-				 * allocating a new one
-				 */
-
-				new_filter = bnxt_alloc_filter(bp);
-				if (!new_filter) {
-					PMD_DRV_LOG(ERR,
-							"MAC/VLAN filter alloc failed\n");
-					rc = -ENOMEM;
-					goto exit;
-				}
-				STAILQ_INSERT_TAIL(&vnic->filter,
-						new_filter, next);
-				/* Inherit MAC from previous filter */
-				new_filter->mac_index =
-					filter->mac_index;
-				memcpy(new_filter->l2_addr, filter->l2_addr,
-				       ETHER_ADDR_LEN);
-				/* MAC only filter */
-				rc = bnxt_hwrm_set_l2_filter(bp,
-							     vnic->fw_vnic_id,
-							     new_filter);
-				if (rc)
-					goto exit;
-				PMD_DRV_LOG(INFO,
-					    "Del Vlan filter for %d\n",
-					    vlan_id);
-			}
-			filter = temp_filter;
+			PMD_DRV_LOG(INFO,
+				    "Del Vlan filter for %d\n",
+				    vlan_id);
+			return rc;
 		}
+		filter = STAILQ_NEXT(filter, next);
 	}
-exit:
-	return rc;
+	return -ENOENT;
 }
 
 static int bnxt_add_vlan_filter(struct bnxt *bp, uint16_t vlan_id)
 {
-	struct bnxt_filter_info *filter, *temp_filter, *new_filter;
+	struct bnxt_filter_info *filter;
 	struct bnxt_vnic_info *vnic;
-	unsigned int i;
 	int rc = 0;
 	uint32_t en = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_IVLAN |
 		HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_IVLAN_MASK;
 	uint32_t chk = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_IVLAN;
 
-	/* Cycle through all VNICs */
-	for (i = 0; i < bp->nr_vnics; i++) {
-		/*
-		 * For each VNIC and each associated filter(s)
-		 * if VLAN exists:
-		 *   if VLAN matches vlan_id
-		 *      VLAN filter already exists, just skip and continue
-		 *   else
-		 *      add a new MAC+VLAN filter
-		 * else
-		 *   Remove the old MAC only filter
-		 *    Add a new MAC+VLAN filter
-		 */
-		vnic = &bp->vnic_info[i];
-		filter = STAILQ_FIRST(&vnic->filter);
-		while (filter) {
-			temp_filter = STAILQ_NEXT(filter, next);
+	/* Implementation notes on the use of VNIC in this command:
+	 *
+	 * By default, these filters belong to default vnic for the function.
+	 * Once these filters are set up, only destination VNIC can be modified.
+	 * If the destination VNIC is not specified in this command,
+	 * then the HWRM shall only create an l2 context id.
+	 */
 
-			if (filter->enables & chk) {
-				if (filter->l2_ivlan == vlan_id)
-					goto cont;
-			} else {
-				/* Must delete the MAC filter */
-				STAILQ_REMOVE(&vnic->filter, filter,
-						bnxt_filter_info, next);
-				bnxt_hwrm_clear_l2_filter(bp, filter);
-				filter->l2_ovlan = 0;
-				STAILQ_INSERT_TAIL(&bp->free_filter_list,
-						   filter, next);
-			}
-			new_filter = bnxt_alloc_filter(bp);
-			if (!new_filter) {
-				PMD_DRV_LOG(ERR,
-						"MAC/VLAN filter alloc failed\n");
-				rc = -ENOMEM;
-				goto exit;
-			}
-			STAILQ_INSERT_TAIL(&vnic->filter, new_filter, next);
-			/* Inherit MAC from the previous filter */
-			new_filter->mac_index = filter->mac_index;
-			memcpy(new_filter->l2_addr, filter->l2_addr,
-			       ETHER_ADDR_LEN);
-			/* MAC + VLAN ID filter */
-			new_filter->l2_ivlan = vlan_id;
-			new_filter->l2_ivlan_mask = 0xF000;
-			new_filter->enables |= en;
-			rc = bnxt_hwrm_set_l2_filter(bp,
-					vnic->fw_vnic_id,
-					new_filter);
-			if (rc)
-				goto exit;
-			PMD_DRV_LOG(INFO,
-				    "Added Vlan filter for %d\n", vlan_id);
-cont:
-			filter = temp_filter;
-		}
+	vnic = BNXT_GET_DEFAULT_VNIC(bp);
+	filter = STAILQ_FIRST(&vnic->filter);
+	/* Check if the VLAN has already been added */
+	while (filter) {
+		if (filter->enables & chk && filter->l2_ivlan == vlan_id &&
+		    !memcmp(filter->l2_addr, bp->mac_addr, RTE_ETHER_ADDR_LEN))
+			return -EEXIST;
+
+		filter = STAILQ_NEXT(filter, next);
 	}
-exit:
+
+	/* No match found. Alloc a fresh filter and issue the L2_FILTER_ALLOC
+	 * command to create MAC+VLAN filter with the right flags, enables set.
+	 */
+	filter = bnxt_alloc_filter(bp);
+	if (!filter) {
+		PMD_DRV_LOG(ERR,
+			    "MAC/VLAN filter alloc failed\n");
+		return -ENOMEM;
+	}
+	/* MAC + VLAN ID filter */
+	filter->l2_ivlan = vlan_id;
+	filter->l2_ivlan_mask = 0x0FFF;
+	filter->enables |= en;
+	rc = bnxt_hwrm_set_l2_filter(bp, vnic->fw_vnic_id, filter);
+	if (rc) {
+		/* Free the newly allocated filter as we were
+		 * not able to create the filter in hardware.
+		 */
+		filter->fw_l2_filter_id = UINT64_MAX;
+		STAILQ_INSERT_TAIL(&bp->free_filter_list, filter, next);
+		return rc;
+	}
+
+	/* Add this new filter to the list */
+	STAILQ_INSERT_TAIL(&vnic->filter, filter, next);
+	PMD_DRV_LOG(INFO,
+		    "Added Vlan filter for %d\n", vlan_id);
 	return rc;
 }
 
 static int bnxt_vlan_filter_set_op(struct rte_eth_dev *eth_dev,
 		uint16_t vlan_id, int on)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 
 	/* These operations apply to ALL existing MAC/VLAN filters */
 	if (on)
@@ -1416,7 +1616,7 @@ static int bnxt_vlan_filter_set_op(struct rte_eth_dev *eth_dev,
 static int
 bnxt_vlan_offload_set_op(struct rte_eth_dev *dev, int mask)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	uint64_t rx_offloads = dev->data->dev_conf.rxmode.offloads;
 	unsigned int i;
 
@@ -1451,9 +1651,10 @@ bnxt_vlan_offload_set_op(struct rte_eth_dev *dev, int mask)
 }
 
 static int
-bnxt_set_default_mac_addr_op(struct rte_eth_dev *dev, struct ether_addr *addr)
+bnxt_set_default_mac_addr_op(struct rte_eth_dev *dev,
+			struct rte_ether_addr *addr)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	/* Default Filter is tied to VNIC 0 */
 	struct bnxt_vnic_info *vnic = &bp->vnic_info[0];
 	struct bnxt_filter_info *filter;
@@ -1462,26 +1663,28 @@ bnxt_set_default_mac_addr_op(struct rte_eth_dev *dev, struct ether_addr *addr)
 	if (BNXT_VF(bp) && !BNXT_VF_IS_TRUSTED(bp))
 		return -EPERM;
 
-	memcpy(bp->mac_addr, addr, sizeof(bp->mac_addr));
+	if (rte_is_zero_ether_addr(addr))
+		return -EINVAL;
 
 	STAILQ_FOREACH(filter, &vnic->filter, next) {
 		/* Default Filter is at Index 0 */
 		if (filter->mac_index != 0)
 			continue;
-		rc = bnxt_hwrm_clear_l2_filter(bp, filter);
-		if (rc)
-			return rc;
-		memcpy(filter->l2_addr, bp->mac_addr, ETHER_ADDR_LEN);
-		memset(filter->l2_addr_mask, 0xff, ETHER_ADDR_LEN);
+
+		memcpy(filter->l2_addr, bp->mac_addr, RTE_ETHER_ADDR_LEN);
+		memset(filter->l2_addr_mask, 0xff, RTE_ETHER_ADDR_LEN);
 		filter->flags |= HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_PATH_RX;
 		filter->enables |=
 			HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR |
 			HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK;
+
 		rc = bnxt_hwrm_set_l2_filter(bp, vnic->fw_vnic_id, filter);
 		if (rc)
 			return rc;
-		filter->mac_index = 0;
+
+		memcpy(bp->mac_addr, addr, RTE_ETHER_ADDR_LEN);
 		PMD_DRV_LOG(DEBUG, "Set MAC addr\n");
+		return 0;
 	}
 
 	return 0;
@@ -1489,10 +1692,10 @@ bnxt_set_default_mac_addr_op(struct rte_eth_dev *dev, struct ether_addr *addr)
 
 static int
 bnxt_dev_set_mc_addr_list_op(struct rte_eth_dev *eth_dev,
-			  struct ether_addr *mc_addr_set,
+			  struct rte_ether_addr *mc_addr_set,
 			  uint32_t nb_mc_addr)
 {
-	struct bnxt *bp = (struct bnxt *)eth_dev->data->dev_private;
+	struct bnxt *bp = eth_dev->data->dev_private;
 	char *mc_addr_list = (char *)mc_addr_set;
 	struct bnxt_vnic_info *vnic;
 	uint32_t off = 0, i = 0;
@@ -1507,8 +1710,9 @@ bnxt_dev_set_mc_addr_list_op(struct rte_eth_dev *eth_dev,
 	/* TODO Check for Duplicate mcast addresses */
 	vnic->flags &= ~BNXT_VNIC_INFO_ALLMULTI;
 	for (i = 0; i < nb_mc_addr; i++) {
-		memcpy(vnic->mc_list + off, &mc_addr_list[i], ETHER_ADDR_LEN);
-		off += ETHER_ADDR_LEN;
+		memcpy(vnic->mc_list + off, &mc_addr_list[i],
+			RTE_ETHER_ADDR_LEN);
+		off += RTE_ETHER_ADDR_LEN;
 	}
 
 	vnic->mc_addr_cnt = i;
@@ -1520,7 +1724,7 @@ allmulti:
 static int
 bnxt_fw_version_get(struct rte_eth_dev *dev, char *fw_version, size_t fw_size)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	uint8_t fw_major = (bp->fw_ver >> 24) & 0xff;
 	uint8_t fw_minor = (bp->fw_ver >> 16) & 0xff;
 	uint8_t fw_updt = (bp->fw_ver >> 8) & 0xff;
@@ -1576,18 +1780,39 @@ static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 {
 	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_eth_dev_info dev_info;
+	uint32_t new_pkt_size;
 	uint32_t rc = 0;
 	uint32_t i;
 
+	new_pkt_size = new_mtu + RTE_ETHER_HDR_LEN + RTE_ETHER_CRC_LEN +
+		       VLAN_TAG_SIZE * BNXT_NUM_VLANS;
+
 	bnxt_dev_info_get_op(eth_dev, &dev_info);
 
-	if (new_mtu < ETHER_MIN_MTU || new_mtu > BNXT_MAX_MTU) {
+	if (new_mtu < RTE_ETHER_MIN_MTU || new_mtu > BNXT_MAX_MTU) {
 		PMD_DRV_LOG(ERR, "MTU requested must be within (%d, %d)\n",
-			ETHER_MIN_MTU, BNXT_MAX_MTU);
+			RTE_ETHER_MIN_MTU, BNXT_MAX_MTU);
 		return -EINVAL;
 	}
 
-	if (new_mtu > ETHER_MTU) {
+#ifdef RTE_ARCH_X86
+	/*
+	 * If vector-mode tx/rx is active, disallow any MTU change that would
+	 * require scattered receive support.
+	 */
+	if (eth_dev->data->dev_started &&
+	    (eth_dev->rx_pkt_burst == bnxt_recv_pkts_vec ||
+	     eth_dev->tx_pkt_burst == bnxt_xmit_pkts_vec) &&
+	    (new_pkt_size >
+	     eth_dev->data->min_rx_buf_size - RTE_PKTMBUF_HEADROOM)) {
+		PMD_DRV_LOG(ERR,
+			    "MTU change would require scattered rx support. ");
+		PMD_DRV_LOG(ERR, "Stop port before changing MTU.\n");
+		return -EINVAL;
+	}
+#endif
+
+	if (new_mtu > RTE_ETHER_MTU) {
 		bp->flags |= BNXT_FLAG_JUMBO;
 		bp->eth_dev->data->dev_conf.rxmode.offloads |=
 			DEV_RX_OFFLOAD_JUMBO_FRAME;
@@ -1597,8 +1822,7 @@ static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 		bp->flags &= ~BNXT_FLAG_JUMBO;
 	}
 
-	eth_dev->data->dev_conf.rxmode.max_rx_pkt_len =
-		new_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN + VLAN_TAG_SIZE * 2;
+	eth_dev->data->dev_conf.rxmode.max_rx_pkt_len = new_pkt_size;
 
 	eth_dev->data->mtu = new_mtu;
 	PMD_DRV_LOG(INFO, "New MTU is %d\n", eth_dev->data->mtu);
@@ -1607,8 +1831,8 @@ static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 		struct bnxt_vnic_info *vnic = &bp->vnic_info[i];
 		uint16_t size = 0;
 
-		vnic->mru = bp->eth_dev->data->mtu + ETHER_HDR_LEN +
-					ETHER_CRC_LEN + VLAN_TAG_SIZE * 2;
+		vnic->mru = bp->eth_dev->data->mtu + RTE_ETHER_HDR_LEN +
+					RTE_ETHER_CRC_LEN + VLAN_TAG_SIZE * 2;
 		rc = bnxt_hwrm_vnic_cfg(bp, vnic);
 		if (rc)
 			break;
@@ -1629,7 +1853,7 @@ static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 static int
 bnxt_vlan_pvid_set_op(struct rte_eth_dev *dev, uint16_t pvid, int on)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	uint16_t vlan = bp->vlan;
 	int rc;
 
@@ -1649,7 +1873,7 @@ bnxt_vlan_pvid_set_op(struct rte_eth_dev *dev, uint16_t pvid, int on)
 static int
 bnxt_dev_led_on_op(struct rte_eth_dev *dev)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 
 	return bnxt_hwrm_port_led_cfg(bp, true);
 }
@@ -1657,7 +1881,7 @@ bnxt_dev_led_on_op(struct rte_eth_dev *dev)
 static int
 bnxt_dev_led_off_op(struct rte_eth_dev *dev)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 
 	return bnxt_hwrm_port_led_cfg(bp, false);
 }
@@ -1793,8 +2017,8 @@ bnxt_match_and_validate_ether_filter(struct bnxt *bp,
 	int match = 0;
 	*ret = 0;
 
-	if (efilter->ether_type == ETHER_TYPE_IPv4 ||
-		efilter->ether_type == ETHER_TYPE_IPv6) {
+	if (efilter->ether_type == RTE_ETHER_TYPE_IPV4 ||
+		efilter->ether_type == RTE_ETHER_TYPE_IPV6) {
 		PMD_DRV_LOG(ERR, "invalid ether_type(0x%04x) in"
 			" ethertype filter.", efilter->ether_type);
 		*ret = -EINVAL;
@@ -1817,7 +2041,7 @@ bnxt_match_and_validate_ether_filter(struct bnxt *bp,
 	if (efilter->flags & RTE_ETHTYPE_FLAGS_DROP) {
 		STAILQ_FOREACH(mfilter, &vnic0->filter, next) {
 			if ((!memcmp(efilter->mac_addr.addr_bytes,
-				     mfilter->l2_addr, ETHER_ADDR_LEN) &&
+				     mfilter->l2_addr, RTE_ETHER_ADDR_LEN) &&
 			     mfilter->flags ==
 			     HWRM_CFA_NTUPLE_FILTER_ALLOC_INPUT_FLAGS_DROP &&
 			     mfilter->ethertype == efilter->ether_type)) {
@@ -1828,7 +2052,7 @@ bnxt_match_and_validate_ether_filter(struct bnxt *bp,
 	} else {
 		STAILQ_FOREACH(mfilter, &vnic->filter, next)
 			if ((!memcmp(efilter->mac_addr.addr_bytes,
-				     mfilter->l2_addr, ETHER_ADDR_LEN) &&
+				     mfilter->l2_addr, RTE_ETHER_ADDR_LEN) &&
 			     mfilter->ethertype == efilter->ether_type &&
 			     mfilter->flags ==
 			     HWRM_CFA_L2_FILTER_CFG_INPUT_FLAGS_PATH_RX)) {
@@ -1849,7 +2073,7 @@ bnxt_ethertype_filter(struct rte_eth_dev *dev,
 			enum rte_filter_op filter_op,
 			void *arg)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct rte_eth_ethertype_filter *efilter =
 			(struct rte_eth_ethertype_filter *)arg;
 	struct bnxt_filter_info *bfilter, *filter1;
@@ -1883,16 +2107,16 @@ bnxt_ethertype_filter(struct rte_eth_dev *dev,
 		}
 		bfilter->filter_type = HWRM_CFA_NTUPLE_FILTER;
 		memcpy(bfilter->l2_addr, efilter->mac_addr.addr_bytes,
-		       ETHER_ADDR_LEN);
+		       RTE_ETHER_ADDR_LEN);
 		memcpy(bfilter->dst_macaddr, efilter->mac_addr.addr_bytes,
-		       ETHER_ADDR_LEN);
+		       RTE_ETHER_ADDR_LEN);
 		bfilter->enables |= NTUPLE_FLTR_ALLOC_INPUT_EN_DST_MACADDR;
 		bfilter->ethertype = efilter->ether_type;
 		bfilter->enables |= NTUPLE_FLTR_ALLOC_INPUT_EN_ETHERTYPE;
 
 		filter1 = bnxt_get_l2_filter(bp, bfilter, vnic0);
 		if (filter1 == NULL) {
-			ret = -1;
+			ret = -EINVAL;
 			goto cleanup;
 		}
 		bfilter->enables |=
@@ -2086,7 +2310,7 @@ bnxt_cfg_ntuple_filter(struct bnxt *bp,
 	vnic0 = &bp->vnic_info[0];
 	filter1 = STAILQ_FIRST(&vnic0->filter);
 	if (filter1 == NULL) {
-		ret = -1;
+		ret = -EINVAL;
 		goto free_filter;
 	}
 
@@ -2153,7 +2377,7 @@ bnxt_ntuple_filter(struct rte_eth_dev *dev,
 			enum rte_filter_op filter_op,
 			void *arg)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	int ret;
 
 	if (filter_op == RTE_ETH_FILTER_NOP)
@@ -2396,7 +2620,7 @@ bnxt_parse_fdir_filter(struct bnxt *bp,
 		//filter1 = bnxt_get_l2_filter(bp, filter, vnic0);
 	} else {
 		filter->dst_id = vnic->fw_vnic_id;
-		for (i = 0; i < ETHER_ADDR_LEN; i++)
+		for (i = 0; i < RTE_ETHER_ADDR_LEN; i++)
 			if (filter->dst_macaddr[i] == 0x00)
 				filter1 = STAILQ_FIRST(&vnic0->filter);
 			else
@@ -2440,13 +2664,14 @@ bnxt_match_fdir(struct bnxt *bp, struct bnxt_filter_info *nf,
 			    mf->l2_ovlan_mask == nf->l2_ovlan_mask &&
 			    mf->l2_ivlan == nf->l2_ivlan &&
 			    mf->l2_ivlan_mask == nf->l2_ivlan_mask &&
-			    !memcmp(mf->l2_addr, nf->l2_addr, ETHER_ADDR_LEN) &&
+			    !memcmp(mf->l2_addr, nf->l2_addr,
+				    RTE_ETHER_ADDR_LEN) &&
 			    !memcmp(mf->l2_addr_mask, nf->l2_addr_mask,
-				    ETHER_ADDR_LEN) &&
+				    RTE_ETHER_ADDR_LEN) &&
 			    !memcmp(mf->src_macaddr, nf->src_macaddr,
-				    ETHER_ADDR_LEN) &&
+				    RTE_ETHER_ADDR_LEN) &&
 			    !memcmp(mf->dst_macaddr, nf->dst_macaddr,
-				    ETHER_ADDR_LEN) &&
+				    RTE_ETHER_ADDR_LEN) &&
 			    !memcmp(mf->src_ipaddr, nf->src_ipaddr,
 				    sizeof(nf->src_ipaddr)) &&
 			    !memcmp(mf->src_ipaddr_mask, nf->src_ipaddr_mask,
@@ -2469,7 +2694,7 @@ bnxt_fdir_filter(struct rte_eth_dev *dev,
 		 enum rte_filter_op filter_op,
 		 void *arg)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct rte_eth_fdir_filter *fdir  = (struct rte_eth_fdir_filter *)arg;
 	struct bnxt_filter_info *filter, *match;
 	struct bnxt_vnic_info *vnic, *mvnic;
@@ -2632,9 +2857,10 @@ bnxt_dev_supported_ptypes_get_op(struct rte_eth_dev *dev)
 		RTE_PTYPE_UNKNOWN
 	};
 
-	if (dev->rx_pkt_burst == bnxt_recv_pkts)
-		return ptypes;
-	return NULL;
+	if (!dev->rx_pkt_burst)
+		return NULL;
+
+	return ptypes;
 }
 
 static int bnxt_map_regs(struct bnxt *bp, uint32_t *reg_arr, int count,
@@ -2649,7 +2875,7 @@ static int bnxt_map_regs(struct bnxt *bp, uint32_t *reg_arr, int count,
 			return -ERANGE;
 	}
 	win_off = BNXT_GRCPF_REG_WINDOW_BASE_OUT + (reg_win - 1) * 4;
-	rte_cpu_to_le_32(rte_write32(reg_base, (uint8_t *)bp->bar0 + win_off));
+	rte_write32(reg_base, (uint8_t *)bp->bar0 + win_off);
 	return 0;
 }
 
@@ -2680,10 +2906,10 @@ static int bnxt_map_ptp_regs(struct bnxt *bp)
 
 static void bnxt_unmap_ptp_regs(struct bnxt *bp)
 {
-	rte_cpu_to_le_32(rte_write32(0, (uint8_t *)bp->bar0 +
-			 BNXT_GRCPF_REG_WINDOW_BASE_OUT + 16));
-	rte_cpu_to_le_32(rte_write32(0, (uint8_t *)bp->bar0 +
-			 BNXT_GRCPF_REG_WINDOW_BASE_OUT + 20));
+	rte_write32(0, (uint8_t *)bp->bar0 +
+			 BNXT_GRCPF_REG_WINDOW_BASE_OUT + 16);
+	rte_write32(0, (uint8_t *)bp->bar0 +
+			 BNXT_GRCPF_REG_WINDOW_BASE_OUT + 20);
 }
 
 static uint64_t bnxt_cc_read(struct bnxt *bp)
@@ -2733,8 +2959,8 @@ static int bnxt_get_rx_ts(struct bnxt *bp, uint64_t *ts)
 		return -EAGAIN;
 
 	port_id = pf->port_id;
-	rte_cpu_to_le_32(rte_write32(1 << port_id, (uint8_t *)bp->bar0 +
-	       ptp->rx_mapped_regs[BNXT_PTP_RX_FIFO_ADV]));
+	rte_write32(1 << port_id, (uint8_t *)bp->bar0 +
+	       ptp->rx_mapped_regs[BNXT_PTP_RX_FIFO_ADV]);
 
 	fifo = rte_le_to_cpu_32(rte_read32((uint8_t *)bp->bar0 +
 				   ptp->rx_mapped_regs[BNXT_PTP_RX_FIFO]));
@@ -2755,7 +2981,7 @@ static int
 bnxt_timesync_write_time(struct rte_eth_dev *dev, const struct timespec *ts)
 {
 	uint64_t ns;
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 
 	if (!ptp)
@@ -2772,7 +2998,7 @@ static int
 bnxt_timesync_read_time(struct rte_eth_dev *dev, struct timespec *ts)
 {
 	uint64_t ns, systime_cycles;
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 
 	if (!ptp)
@@ -2787,7 +3013,7 @@ bnxt_timesync_read_time(struct rte_eth_dev *dev, struct timespec *ts)
 static int
 bnxt_timesync_enable(struct rte_eth_dev *dev)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 	uint32_t shift = 0;
 
@@ -2823,7 +3049,7 @@ bnxt_timesync_enable(struct rte_eth_dev *dev)
 static int
 bnxt_timesync_disable(struct rte_eth_dev *dev)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 
 	if (!ptp)
@@ -2845,7 +3071,7 @@ bnxt_timesync_read_rx_timestamp(struct rte_eth_dev *dev,
 				 struct timespec *timestamp,
 				 uint32_t flags __rte_unused)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 	uint64_t rx_tstamp_cycles = 0;
 	uint64_t ns;
@@ -2863,7 +3089,7 @@ static int
 bnxt_timesync_read_tx_timestamp(struct rte_eth_dev *dev,
 				 struct timespec *timestamp)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 	uint64_t tx_tstamp_cycles = 0;
 	uint64_t ns;
@@ -2881,7 +3107,7 @@ bnxt_timesync_read_tx_timestamp(struct rte_eth_dev *dev,
 static int
 bnxt_timesync_adjust_time(struct rte_eth_dev *dev, int64_t delta)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 
 	if (!ptp)
@@ -2895,7 +3121,7 @@ bnxt_timesync_adjust_time(struct rte_eth_dev *dev, int64_t delta)
 static int
 bnxt_get_eeprom_length_op(struct rte_eth_dev *dev)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	int rc;
 	uint32_t dir_entries;
 	uint32_t entry_length;
@@ -2915,7 +3141,7 @@ static int
 bnxt_get_eeprom_op(struct rte_eth_dev *dev,
 		struct rte_dev_eeprom_info *in_eeprom)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	uint32_t index;
 	uint32_t offset;
 
@@ -2986,7 +3212,7 @@ static int
 bnxt_set_eeprom_op(struct rte_eth_dev *dev,
 		struct rte_dev_eeprom_info *in_eeprom)
 {
-	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
+	struct bnxt *bp = dev->data->dev_private;
 	uint8_t index, dir_op;
 	uint16_t type, ext, ordinal, attr;
 
@@ -3026,7 +3252,6 @@ bnxt_set_eeprom_op(struct rte_eth_dev *dev,
 
 	return bnxt_hwrm_flash_nvram(bp, type, ordinal, ext, attr,
 				     in_eeprom->data, in_eeprom->length);
-	return 0;
 }
 
 /*
@@ -3110,7 +3335,9 @@ static bool bnxt_vf_pciid(uint16_t id)
 	    id == BROADCOM_DEV_ID_57414_VF ||
 	    id == BROADCOM_DEV_ID_STRATUS_NIC_VF1 ||
 	    id == BROADCOM_DEV_ID_STRATUS_NIC_VF2 ||
-	    id == BROADCOM_DEV_ID_58802_VF)
+	    id == BROADCOM_DEV_ID_58802_VF ||
+	    id == BROADCOM_DEV_ID_57500_VF1 ||
+	    id == BROADCOM_DEV_ID_57500_VF2)
 		return true;
 	return false;
 }
@@ -3128,54 +3355,422 @@ bool bnxt_stratus_device(struct bnxt *bp)
 
 static int bnxt_init_board(struct rte_eth_dev *eth_dev)
 {
-	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
-	int rc;
+	struct bnxt *bp = eth_dev->data->dev_private;
 
 	/* enable device (incl. PCI PM wakeup), and bus-mastering */
-	if (!pci_dev->mem_resource[0].addr) {
-		PMD_DRV_LOG(ERR,
-			"Cannot find PCI device base address, aborting\n");
-		rc = -ENODEV;
-		goto init_err_disable;
+	bp->bar0 = (void *)pci_dev->mem_resource[0].addr;
+	bp->doorbell_base = (void *)pci_dev->mem_resource[2].addr;
+	if (!bp->bar0 || !bp->doorbell_base) {
+		PMD_DRV_LOG(ERR, "Unable to access Hardware\n");
+		return -ENODEV;
 	}
 
 	bp->eth_dev = eth_dev;
 	bp->pdev = pci_dev;
 
-	bp->bar0 = (void *)pci_dev->mem_resource[0].addr;
-	if (!bp->bar0) {
-		PMD_DRV_LOG(ERR, "Cannot map device registers, aborting\n");
-		rc = -ENOMEM;
-		goto init_err_release;
-	}
-
-	if (!pci_dev->mem_resource[2].addr) {
-		PMD_DRV_LOG(ERR,
-			    "Cannot find PCI device BAR 2 address, aborting\n");
-		rc = -ENODEV;
-		goto init_err_release;
-	} else {
-		bp->doorbell_base = (void *)pci_dev->mem_resource[2].addr;
-	}
-
 	return 0;
+}
 
-init_err_release:
-	if (bp->bar0)
-		bp->bar0 = NULL;
-	if (bp->doorbell_base)
-		bp->doorbell_base = NULL;
+static int bnxt_alloc_ctx_mem_blk(__rte_unused struct bnxt *bp,
+				  struct bnxt_ctx_pg_info *ctx_pg,
+				  uint32_t mem_size,
+				  const char *suffix,
+				  uint16_t idx)
+{
+	struct bnxt_ring_mem_info *rmem = &ctx_pg->ring_mem;
+	const struct rte_memzone *mz = NULL;
+	char mz_name[RTE_MEMZONE_NAMESIZE];
+	rte_iova_t mz_phys_addr;
+	uint64_t valid_bits = 0;
+	uint32_t sz;
+	int i;
 
-init_err_disable:
+	if (!mem_size)
+		return 0;
+
+	rmem->nr_pages = RTE_ALIGN_MUL_CEIL(mem_size, BNXT_PAGE_SIZE) /
+			 BNXT_PAGE_SIZE;
+	rmem->page_size = BNXT_PAGE_SIZE;
+	rmem->pg_arr = ctx_pg->ctx_pg_arr;
+	rmem->dma_arr = ctx_pg->ctx_dma_arr;
+	rmem->flags = BNXT_RMEM_VALID_PTE_FLAG;
+
+	valid_bits = PTU_PTE_VALID;
+
+	if (rmem->nr_pages > 1) {
+		snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
+			 "bnxt_ctx_pg_tbl%s_%x_%d",
+			 suffix, idx, bp->eth_dev->data->port_id);
+		mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
+		mz = rte_memzone_lookup(mz_name);
+		if (!mz) {
+			mz = rte_memzone_reserve_aligned(mz_name,
+						rmem->nr_pages * 8,
+						SOCKET_ID_ANY,
+						RTE_MEMZONE_2MB |
+						RTE_MEMZONE_SIZE_HINT_ONLY |
+						RTE_MEMZONE_IOVA_CONTIG,
+						BNXT_PAGE_SIZE);
+			if (mz == NULL)
+				return -ENOMEM;
+		}
+
+		memset(mz->addr, 0, mz->len);
+		mz_phys_addr = mz->iova;
+		if ((unsigned long)mz->addr == mz_phys_addr) {
+			PMD_DRV_LOG(WARNING,
+				"Memzone physical address same as virtual.\n");
+			PMD_DRV_LOG(WARNING,
+				    "Using rte_mem_virt2iova()\n");
+			mz_phys_addr = rte_mem_virt2iova(mz->addr);
+			if (mz_phys_addr == RTE_BAD_IOVA) {
+				PMD_DRV_LOG(ERR,
+					"unable to map addr to phys memory\n");
+				return -ENOMEM;
+			}
+		}
+		rte_mem_lock_page(((char *)mz->addr));
+
+		rmem->pg_tbl = mz->addr;
+		rmem->pg_tbl_map = mz_phys_addr;
+		rmem->pg_tbl_mz = mz;
+	}
+
+	snprintf(mz_name, RTE_MEMZONE_NAMESIZE, "bnxt_ctx_%s_%x_%d",
+		 suffix, idx, bp->eth_dev->data->port_id);
+	mz = rte_memzone_lookup(mz_name);
+	if (!mz) {
+		mz = rte_memzone_reserve_aligned(mz_name,
+						 mem_size,
+						 SOCKET_ID_ANY,
+						 RTE_MEMZONE_1GB |
+						 RTE_MEMZONE_SIZE_HINT_ONLY |
+						 RTE_MEMZONE_IOVA_CONTIG,
+						 BNXT_PAGE_SIZE);
+		if (mz == NULL)
+			return -ENOMEM;
+	}
+
+	memset(mz->addr, 0, mz->len);
+	mz_phys_addr = mz->iova;
+	if ((unsigned long)mz->addr == mz_phys_addr) {
+		PMD_DRV_LOG(WARNING,
+			    "Memzone physical address same as virtual.\n");
+		PMD_DRV_LOG(WARNING,
+			    "Using rte_mem_virt2iova()\n");
+		for (sz = 0; sz < mem_size; sz += BNXT_PAGE_SIZE)
+			rte_mem_lock_page(((char *)mz->addr) + sz);
+		mz_phys_addr = rte_mem_virt2iova(mz->addr);
+		if (mz_phys_addr == RTE_BAD_IOVA) {
+			PMD_DRV_LOG(ERR,
+				    "unable to map addr to phys memory\n");
+			return -ENOMEM;
+		}
+	}
+
+	for (sz = 0, i = 0; sz < mem_size; sz += BNXT_PAGE_SIZE, i++) {
+		rte_mem_lock_page(((char *)mz->addr) + sz);
+		rmem->pg_arr[i] = ((char *)mz->addr) + sz;
+		rmem->dma_arr[i] = mz_phys_addr + sz;
+
+		if (rmem->nr_pages > 1) {
+			if (i == rmem->nr_pages - 2 &&
+			    (rmem->flags & BNXT_RMEM_RING_PTE_FLAG))
+				valid_bits |= PTU_PTE_NEXT_TO_LAST;
+			else if (i == rmem->nr_pages - 1 &&
+				 (rmem->flags & BNXT_RMEM_RING_PTE_FLAG))
+				valid_bits |= PTU_PTE_LAST;
+
+			rmem->pg_tbl[i] = rte_cpu_to_le_64(rmem->dma_arr[i] |
+							   valid_bits);
+		}
+	}
+
+	rmem->mz = mz;
+	if (rmem->vmem_size)
+		rmem->vmem = (void **)mz->addr;
+	rmem->dma_arr[0] = mz_phys_addr;
+	return 0;
+}
+
+static void bnxt_free_ctx_mem(struct bnxt *bp)
+{
+	int i;
+
+	if (!bp->ctx || !(bp->ctx->flags & BNXT_CTX_FLAG_INITED))
+		return;
+
+	bp->ctx->flags &= ~BNXT_CTX_FLAG_INITED;
+	rte_memzone_free(bp->ctx->qp_mem.ring_mem.mz);
+	rte_memzone_free(bp->ctx->srq_mem.ring_mem.mz);
+	rte_memzone_free(bp->ctx->cq_mem.ring_mem.mz);
+	rte_memzone_free(bp->ctx->vnic_mem.ring_mem.mz);
+	rte_memzone_free(bp->ctx->stat_mem.ring_mem.mz);
+	rte_memzone_free(bp->ctx->qp_mem.ring_mem.pg_tbl_mz);
+	rte_memzone_free(bp->ctx->srq_mem.ring_mem.pg_tbl_mz);
+	rte_memzone_free(bp->ctx->cq_mem.ring_mem.pg_tbl_mz);
+	rte_memzone_free(bp->ctx->vnic_mem.ring_mem.pg_tbl_mz);
+	rte_memzone_free(bp->ctx->stat_mem.ring_mem.pg_tbl_mz);
+
+	for (i = 0; i < BNXT_MAX_Q; i++) {
+		if (bp->ctx->tqm_mem[i])
+			rte_memzone_free(bp->ctx->tqm_mem[i]->ring_mem.mz);
+	}
+
+	rte_free(bp->ctx);
+	bp->ctx = NULL;
+}
+
+#define bnxt_roundup(x, y)   ((((x) + ((y) - 1)) / (y)) * (y))
+
+#define min_t(type, x, y) ({                    \
+	type __min1 = (x);                      \
+	type __min2 = (y);                      \
+	__min1 < __min2 ? __min1 : __min2; })
+
+#define max_t(type, x, y) ({                    \
+	type __max1 = (x);                      \
+	type __max2 = (y);                      \
+	__max1 > __max2 ? __max1 : __max2; })
+
+#define clamp_t(type, _x, min, max)     min_t(type, max_t(type, _x, min), max)
+
+int bnxt_alloc_ctx_mem(struct bnxt *bp)
+{
+	struct bnxt_ctx_pg_info *ctx_pg;
+	struct bnxt_ctx_mem_info *ctx;
+	uint32_t mem_size, ena, entries;
+	int i, rc;
+
+	rc = bnxt_hwrm_func_backing_store_qcaps(bp);
+	if (rc) {
+		PMD_DRV_LOG(ERR, "Query context mem capability failed\n");
+		return rc;
+	}
+	ctx = bp->ctx;
+	if (!ctx || (ctx->flags & BNXT_CTX_FLAG_INITED))
+		return 0;
+
+	ctx_pg = &ctx->qp_mem;
+	ctx_pg->entries = ctx->qp_min_qp1_entries + ctx->qp_max_l2_entries;
+	mem_size = ctx->qp_entry_size * ctx_pg->entries;
+	rc = bnxt_alloc_ctx_mem_blk(bp, ctx_pg, mem_size, "qp_mem", 0);
+	if (rc)
+		return rc;
+
+	ctx_pg = &ctx->srq_mem;
+	ctx_pg->entries = ctx->srq_max_l2_entries;
+	mem_size = ctx->srq_entry_size * ctx_pg->entries;
+	rc = bnxt_alloc_ctx_mem_blk(bp, ctx_pg, mem_size, "srq_mem", 0);
+	if (rc)
+		return rc;
+
+	ctx_pg = &ctx->cq_mem;
+	ctx_pg->entries = ctx->cq_max_l2_entries;
+	mem_size = ctx->cq_entry_size * ctx_pg->entries;
+	rc = bnxt_alloc_ctx_mem_blk(bp, ctx_pg, mem_size, "cq_mem", 0);
+	if (rc)
+		return rc;
+
+	ctx_pg = &ctx->vnic_mem;
+	ctx_pg->entries = ctx->vnic_max_vnic_entries +
+		ctx->vnic_max_ring_table_entries;
+	mem_size = ctx->vnic_entry_size * ctx_pg->entries;
+	rc = bnxt_alloc_ctx_mem_blk(bp, ctx_pg, mem_size, "vnic_mem", 0);
+	if (rc)
+		return rc;
+
+	ctx_pg = &ctx->stat_mem;
+	ctx_pg->entries = ctx->stat_max_entries;
+	mem_size = ctx->stat_entry_size * ctx_pg->entries;
+	rc = bnxt_alloc_ctx_mem_blk(bp, ctx_pg, mem_size, "stat_mem", 0);
+	if (rc)
+		return rc;
+
+	entries = ctx->qp_max_l2_entries;
+	entries = bnxt_roundup(entries, ctx->tqm_entries_multiple);
+	entries = clamp_t(uint32_t, entries, ctx->tqm_min_entries_per_ring,
+			  ctx->tqm_max_entries_per_ring);
+	for (i = 0, ena = 0; i < BNXT_MAX_Q; i++) {
+		ctx_pg = ctx->tqm_mem[i];
+		/* use min tqm entries for now. */
+		ctx_pg->entries = entries;
+		mem_size = ctx->tqm_entry_size * ctx_pg->entries;
+		rc = bnxt_alloc_ctx_mem_blk(bp, ctx_pg, mem_size, "tqm_mem", i);
+		if (rc)
+			return rc;
+		ena |= HWRM_FUNC_BACKING_STORE_CFG_INPUT_ENABLES_TQM_SP << i;
+	}
+
+	ena |= FUNC_BACKING_STORE_CFG_INPUT_DFLT_ENABLES;
+	rc = bnxt_hwrm_func_backing_store_cfg(bp, ena);
+	if (rc)
+		PMD_DRV_LOG(ERR,
+			    "Failed to configure context mem: rc = %d\n", rc);
+	else
+		ctx->flags |= BNXT_CTX_FLAG_INITED;
 
 	return rc;
 }
 
+static int bnxt_alloc_stats_mem(struct bnxt *bp)
+{
+	struct rte_pci_device *pci_dev = bp->pdev;
+	char mz_name[RTE_MEMZONE_NAMESIZE];
+	const struct rte_memzone *mz = NULL;
+	uint32_t total_alloc_len;
+	rte_iova_t mz_phys_addr;
+
+	if (pci_dev->id.device_id == BROADCOM_DEV_ID_NS2)
+		return 0;
+
+	snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
+		 "bnxt_" PCI_PRI_FMT "-%s", pci_dev->addr.domain,
+		 pci_dev->addr.bus, pci_dev->addr.devid,
+		 pci_dev->addr.function, "rx_port_stats");
+	mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
+	mz = rte_memzone_lookup(mz_name);
+	total_alloc_len =
+		RTE_CACHE_LINE_ROUNDUP(sizeof(struct rx_port_stats) +
+				       sizeof(struct rx_port_stats_ext) + 512);
+	if (!mz) {
+		mz = rte_memzone_reserve(mz_name, total_alloc_len,
+					 SOCKET_ID_ANY,
+					 RTE_MEMZONE_2MB |
+					 RTE_MEMZONE_SIZE_HINT_ONLY |
+					 RTE_MEMZONE_IOVA_CONTIG);
+		if (mz == NULL)
+			return -ENOMEM;
+	}
+	memset(mz->addr, 0, mz->len);
+	mz_phys_addr = mz->iova;
+	if ((unsigned long)mz->addr == mz_phys_addr) {
+		PMD_DRV_LOG(WARNING,
+			    "Memzone physical address same as virtual.\n");
+		PMD_DRV_LOG(WARNING,
+			    "Using rte_mem_virt2iova()\n");
+		mz_phys_addr = rte_mem_virt2iova(mz->addr);
+		if (mz_phys_addr == RTE_BAD_IOVA) {
+			PMD_DRV_LOG(ERR,
+				    "Can't map address to physical memory\n");
+			return -ENOMEM;
+		}
+	}
+
+	bp->rx_mem_zone = (const void *)mz;
+	bp->hw_rx_port_stats = mz->addr;
+	bp->hw_rx_port_stats_map = mz_phys_addr;
+
+	snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
+		 "bnxt_" PCI_PRI_FMT "-%s", pci_dev->addr.domain,
+		 pci_dev->addr.bus, pci_dev->addr.devid,
+		 pci_dev->addr.function, "tx_port_stats");
+	mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
+	mz = rte_memzone_lookup(mz_name);
+	total_alloc_len =
+		RTE_CACHE_LINE_ROUNDUP(sizeof(struct tx_port_stats) +
+				       sizeof(struct tx_port_stats_ext) + 512);
+	if (!mz) {
+		mz = rte_memzone_reserve(mz_name,
+					 total_alloc_len,
+					 SOCKET_ID_ANY,
+					 RTE_MEMZONE_2MB |
+					 RTE_MEMZONE_SIZE_HINT_ONLY |
+					 RTE_MEMZONE_IOVA_CONTIG);
+		if (mz == NULL)
+			return -ENOMEM;
+	}
+	memset(mz->addr, 0, mz->len);
+	mz_phys_addr = mz->iova;
+	if ((unsigned long)mz->addr == mz_phys_addr) {
+		PMD_DRV_LOG(WARNING,
+			    "Memzone physical address same as virtual\n");
+		PMD_DRV_LOG(WARNING,
+			    "Using rte_mem_virt2iova()\n");
+		mz_phys_addr = rte_mem_virt2iova(mz->addr);
+		if (mz_phys_addr == RTE_BAD_IOVA) {
+			PMD_DRV_LOG(ERR,
+				    "Can't map address to physical memory\n");
+			return -ENOMEM;
+		}
+	}
+
+	bp->tx_mem_zone = (const void *)mz;
+	bp->hw_tx_port_stats = mz->addr;
+	bp->hw_tx_port_stats_map = mz_phys_addr;
+	bp->flags |= BNXT_FLAG_PORT_STATS;
+
+	/* Display extended statistics if FW supports it */
+	if (bp->hwrm_spec_code < HWRM_SPEC_CODE_1_8_4 ||
+	    bp->hwrm_spec_code == HWRM_SPEC_CODE_1_9_0 ||
+	    !(bp->flags & BNXT_FLAG_EXT_STATS_SUPPORTED))
+		return 0;
+
+	bp->hw_rx_port_stats_ext = (void *)
+		((uint8_t *)bp->hw_rx_port_stats +
+		 sizeof(struct rx_port_stats));
+	bp->hw_rx_port_stats_ext_map = bp->hw_rx_port_stats_map +
+		sizeof(struct rx_port_stats);
+	bp->flags |= BNXT_FLAG_EXT_RX_PORT_STATS;
+
+	if (bp->hwrm_spec_code < HWRM_SPEC_CODE_1_9_2 ||
+	    bp->flags & BNXT_FLAG_EXT_STATS_SUPPORTED) {
+		bp->hw_tx_port_stats_ext = (void *)
+			((uint8_t *)bp->hw_tx_port_stats +
+			 sizeof(struct tx_port_stats));
+		bp->hw_tx_port_stats_ext_map =
+			bp->hw_tx_port_stats_map +
+			sizeof(struct tx_port_stats);
+		bp->flags |= BNXT_FLAG_EXT_TX_PORT_STATS;
+	}
+
+	return 0;
+}
+
+static int bnxt_setup_mac_addr(struct rte_eth_dev *eth_dev)
+{
+	struct bnxt *bp = eth_dev->data->dev_private;
+	int rc = 0;
+
+	eth_dev->data->mac_addrs = rte_zmalloc("bnxt_mac_addr_tbl",
+					       RTE_ETHER_ADDR_LEN *
+					       bp->max_l2_ctx,
+					       0);
+	if (eth_dev->data->mac_addrs == NULL) {
+		PMD_DRV_LOG(ERR, "Failed to alloc MAC addr tbl\n");
+		return -ENOMEM;
+	}
+
+	if (bnxt_check_zero_bytes(bp->dflt_mac_addr, RTE_ETHER_ADDR_LEN)) {
+		if (BNXT_PF(bp))
+			return -EINVAL;
+
+		/* Generate a random MAC address, if none was assigned by PF */
+		PMD_DRV_LOG(INFO, "VF MAC address not assigned by Host PF\n");
+		bnxt_eth_hw_addr_random(bp->mac_addr);
+		PMD_DRV_LOG(INFO,
+			    "Assign random MAC:%02X:%02X:%02X:%02X:%02X:%02X\n",
+			    bp->mac_addr[0], bp->mac_addr[1], bp->mac_addr[2],
+			    bp->mac_addr[3], bp->mac_addr[4], bp->mac_addr[5]);
+
+		rc = bnxt_hwrm_set_mac(bp);
+		if (!rc)
+			memcpy(&bp->eth_dev->data->mac_addrs[0], bp->mac_addr,
+			       RTE_ETHER_ADDR_LEN);
+		return rc;
+	}
+
+	/* Copy the permanent MAC from the FUNC_QCAPS response */
+	memcpy(bp->mac_addr, bp->dflt_mac_addr, RTE_ETHER_ADDR_LEN);
+	memcpy(&eth_dev->data->mac_addrs[0], bp->mac_addr, RTE_ETHER_ADDR_LEN);
+
+	return rc;
+}
 
 #define ALLOW_FUNC(x)	\
 	{ \
-		typeof(x) arg = (x); \
+		uint32_t arg = (x); \
 		bp->pf.vf_req_fwd[((arg) >> 5)] &= \
 		~rte_cpu_to_le_32(1 << ((arg) & 0x1f)); \
 	}
@@ -3183,12 +3778,9 @@ static int
 bnxt_dev_init(struct rte_eth_dev *eth_dev)
 {
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
-	char mz_name[RTE_MEMZONE_NAMESIZE];
-	const struct rte_memzone *mz = NULL;
 	static int version_printed;
-	uint32_t total_alloc_len;
-	rte_iova_t mz_phys_addr;
 	struct bnxt *bp;
+	uint16_t mtu;
 	int rc;
 
 	if (version_printed++ == 0)
@@ -3200,11 +3792,32 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev)
 
 	bp->dev_stopped = 1;
 
+	eth_dev->dev_ops = &bnxt_dev_ops;
+	eth_dev->rx_pkt_burst = &bnxt_recv_pkts;
+	eth_dev->tx_pkt_burst = &bnxt_xmit_pkts;
+
+	/*
+	 * For secondary processes, we don't initialise any further
+	 * as primary has already done this work.
+	 */
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		goto skip_init;
+		return 0;
 
 	if (bnxt_vf_pciid(pci_dev->id.device_id))
 		bp->flags |= BNXT_FLAG_VF;
+
+	if (pci_dev->id.device_id == BROADCOM_DEV_ID_57508 ||
+	    pci_dev->id.device_id == BROADCOM_DEV_ID_57504 ||
+	    pci_dev->id.device_id == BROADCOM_DEV_ID_57502 ||
+	    pci_dev->id.device_id == BROADCOM_DEV_ID_57500_VF1 ||
+	    pci_dev->id.device_id == BROADCOM_DEV_ID_57500_VF2)
+		bp->flags |= BNXT_FLAG_THOR_CHIP;
+
+	if (pci_dev->id.device_id == BROADCOM_DEV_ID_58802 ||
+	    pci_dev->id.device_id == BROADCOM_DEV_ID_58804 ||
+	    pci_dev->id.device_id == BROADCOM_DEV_ID_58808 ||
+	    pci_dev->id.device_id == BROADCOM_DEV_ID_58802_VF)
+		bp->flags |= BNXT_FLAG_STINGRAY;
 
 	rc = bnxt_init_board(eth_dev);
 	if (rc) {
@@ -3212,116 +3825,7 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev)
 			"Board initialization failed rc: %x\n", rc);
 		goto error;
 	}
-skip_init:
-	eth_dev->dev_ops = &bnxt_dev_ops;
-	eth_dev->rx_pkt_burst = &bnxt_recv_pkts;
-	eth_dev->tx_pkt_burst = &bnxt_xmit_pkts;
-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		return 0;
 
-	if (pci_dev->id.device_id != BROADCOM_DEV_ID_NS2) {
-		snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
-			 "bnxt_%04x:%02x:%02x:%02x-%s", pci_dev->addr.domain,
-			 pci_dev->addr.bus, pci_dev->addr.devid,
-			 pci_dev->addr.function, "rx_port_stats");
-		mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
-		mz = rte_memzone_lookup(mz_name);
-		total_alloc_len = RTE_CACHE_LINE_ROUNDUP(
-					sizeof(struct rx_port_stats) +
-					sizeof(struct rx_port_stats_ext) +
-					512);
-		if (!mz) {
-			mz = rte_memzone_reserve(mz_name, total_alloc_len,
-					SOCKET_ID_ANY,
-					RTE_MEMZONE_2MB |
-					RTE_MEMZONE_SIZE_HINT_ONLY |
-					RTE_MEMZONE_IOVA_CONTIG);
-			if (mz == NULL)
-				return -ENOMEM;
-		}
-		memset(mz->addr, 0, mz->len);
-		mz_phys_addr = mz->iova;
-		if ((unsigned long)mz->addr == mz_phys_addr) {
-			PMD_DRV_LOG(WARNING,
-				"Memzone physical address same as virtual.\n");
-			PMD_DRV_LOG(WARNING,
-				"Using rte_mem_virt2iova()\n");
-			mz_phys_addr = rte_mem_virt2iova(mz->addr);
-			if (mz_phys_addr == 0) {
-				PMD_DRV_LOG(ERR,
-				"unable to map address to physical memory\n");
-				return -ENOMEM;
-			}
-		}
-
-		bp->rx_mem_zone = (const void *)mz;
-		bp->hw_rx_port_stats = mz->addr;
-		bp->hw_rx_port_stats_map = mz_phys_addr;
-
-		snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
-			 "bnxt_%04x:%02x:%02x:%02x-%s", pci_dev->addr.domain,
-			 pci_dev->addr.bus, pci_dev->addr.devid,
-			 pci_dev->addr.function, "tx_port_stats");
-		mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
-		mz = rte_memzone_lookup(mz_name);
-		total_alloc_len = RTE_CACHE_LINE_ROUNDUP(
-					sizeof(struct tx_port_stats) +
-					sizeof(struct tx_port_stats_ext) +
-					512);
-		if (!mz) {
-			mz = rte_memzone_reserve(mz_name,
-					total_alloc_len,
-					SOCKET_ID_ANY,
-					RTE_MEMZONE_2MB |
-					RTE_MEMZONE_SIZE_HINT_ONLY |
-					RTE_MEMZONE_IOVA_CONTIG);
-			if (mz == NULL)
-				return -ENOMEM;
-		}
-		memset(mz->addr, 0, mz->len);
-		mz_phys_addr = mz->iova;
-		if ((unsigned long)mz->addr == mz_phys_addr) {
-			PMD_DRV_LOG(WARNING,
-				"Memzone physical address same as virtual.\n");
-			PMD_DRV_LOG(WARNING,
-				"Using rte_mem_virt2iova()\n");
-			mz_phys_addr = rte_mem_virt2iova(mz->addr);
-			if (mz_phys_addr == 0) {
-				PMD_DRV_LOG(ERR,
-				"unable to map address to physical memory\n");
-				return -ENOMEM;
-			}
-		}
-
-		bp->tx_mem_zone = (const void *)mz;
-		bp->hw_tx_port_stats = mz->addr;
-		bp->hw_tx_port_stats_map = mz_phys_addr;
-
-		bp->flags |= BNXT_FLAG_PORT_STATS;
-
-		/* Display extended statistics if FW supports it */
-		if (bp->hwrm_spec_code < HWRM_SPEC_CODE_1_8_4 ||
-		    bp->hwrm_spec_code == HWRM_SPEC_CODE_1_9_0)
-			goto skip_ext_stats;
-
-		bp->hw_rx_port_stats_ext = (void *)
-			(bp->hw_rx_port_stats + sizeof(struct rx_port_stats));
-		bp->hw_rx_port_stats_ext_map = bp->hw_rx_port_stats_map +
-			sizeof(struct rx_port_stats);
-		bp->flags |= BNXT_FLAG_EXT_RX_PORT_STATS;
-
-
-		if (bp->hwrm_spec_code < HWRM_SPEC_CODE_1_9_2) {
-			bp->hw_tx_port_stats_ext = (void *)
-			(bp->hw_tx_port_stats + sizeof(struct tx_port_stats));
-			bp->hw_tx_port_stats_ext_map =
-				bp->hw_tx_port_stats_map +
-				sizeof(struct tx_port_stats);
-			bp->flags |= BNXT_FLAG_EXT_TX_PORT_STATS;
-		}
-	}
-
-skip_ext_stats:
 	rc = bnxt_alloc_hwrm_resources(bp);
 	if (rc) {
 		PMD_DRV_LOG(ERR,
@@ -3331,67 +3835,63 @@ skip_ext_stats:
 	rc = bnxt_hwrm_ver_get(bp);
 	if (rc)
 		goto error_free;
+
+	rc = bnxt_hwrm_func_reset(bp);
+	if (rc) {
+		PMD_DRV_LOG(ERR, "hwrm chip reset failure rc: %x\n", rc);
+		rc = -EIO;
+		goto error_free;
+	}
+
 	rc = bnxt_hwrm_queue_qportcfg(bp);
 	if (rc) {
 		PMD_DRV_LOG(ERR, "hwrm queue qportcfg failed\n");
 		goto error_free;
 	}
-
-	rc = bnxt_hwrm_func_qcfg(bp);
-	if (rc) {
-		PMD_DRV_LOG(ERR, "hwrm func qcfg failed\n");
-		goto error_free;
-	}
-
 	/* Get the MAX capabilities for this function */
 	rc = bnxt_hwrm_func_qcaps(bp);
 	if (rc) {
 		PMD_DRV_LOG(ERR, "hwrm query capability failure rc: %x\n", rc);
 		goto error_free;
 	}
+
+	rc = bnxt_alloc_stats_mem(bp);
+	if (rc)
+		goto error_free;
+
 	if (bp->max_tx_rings == 0) {
 		PMD_DRV_LOG(ERR, "No TX rings available!\n");
 		rc = -EBUSY;
 		goto error_free;
 	}
-	eth_dev->data->mac_addrs = rte_zmalloc("bnxt_mac_addr_tbl",
-					ETHER_ADDR_LEN * bp->max_l2_ctx, 0);
-	if (eth_dev->data->mac_addrs == NULL) {
-		PMD_DRV_LOG(ERR,
-			"Failed to alloc %u bytes needed to store MAC addr tbl",
-			ETHER_ADDR_LEN * bp->max_l2_ctx);
-		rc = -ENOMEM;
-		goto error_free;
-	}
 
-	if (bnxt_check_zero_bytes(bp->dflt_mac_addr, ETHER_ADDR_LEN)) {
-		PMD_DRV_LOG(ERR,
-			    "Invalid MAC addr %02X:%02X:%02X:%02X:%02X:%02X\n",
-			    bp->dflt_mac_addr[0], bp->dflt_mac_addr[1],
-			    bp->dflt_mac_addr[2], bp->dflt_mac_addr[3],
-			    bp->dflt_mac_addr[4], bp->dflt_mac_addr[5]);
-		rc = -EINVAL;
+	rc = bnxt_setup_mac_addr(eth_dev);
+	if (rc)
 		goto error_free;
-	}
-	/* Copy the permanent MAC from the qcap response address now. */
-	memcpy(bp->mac_addr, bp->dflt_mac_addr, sizeof(bp->mac_addr));
-	memcpy(&eth_dev->data->mac_addrs[0], bp->mac_addr, ETHER_ADDR_LEN);
 
-	if (bp->max_ring_grps < bp->rx_cp_nr_rings) {
+	/* THOR does not support ring groups.
+	 * But we will use the array to save RSS context IDs.
+	 */
+	if (BNXT_CHIP_THOR(bp)) {
+		bp->max_ring_grps = BNXT_MAX_RSS_CTXTS_THOR;
+	} else if (bp->max_ring_grps < bp->rx_cp_nr_rings) {
 		/* 1 ring is for default completion ring */
 		PMD_DRV_LOG(ERR, "Insufficient resource: Ring Group\n");
 		rc = -ENOSPC;
 		goto error_free;
 	}
 
-	bp->grp_info = rte_zmalloc("bnxt_grp_info",
-				sizeof(*bp->grp_info) * bp->max_ring_grps, 0);
-	if (!bp->grp_info) {
-		PMD_DRV_LOG(ERR,
-			"Failed to alloc %zu bytes to store group info table\n",
-			sizeof(*bp->grp_info) * bp->max_ring_grps);
-		rc = -ENOMEM;
-		goto error_free;
+	if (BNXT_HAS_RING_GRPS(bp)) {
+		bp->grp_info = rte_zmalloc("bnxt_grp_info",
+					sizeof(*bp->grp_info) *
+						bp->max_ring_grps, 0);
+		if (!bp->grp_info) {
+			PMD_DRV_LOG(ERR,
+				"Failed to alloc %zu bytes for grp info tbl.\n",
+				sizeof(*bp->grp_info) * bp->max_ring_grps);
+			rc = -ENOMEM;
+			goto error_free;
+		}
 	}
 
 	/* Forward all requests if firmware is new enough */
@@ -3431,12 +3931,15 @@ skip_ext_stats:
 		pci_dev->mem_resource[0].phys_addr,
 		pci_dev->mem_resource[0].addr);
 
-	rc = bnxt_hwrm_func_reset(bp);
+	rc = bnxt_hwrm_func_qcfg(bp, &mtu);
 	if (rc) {
-		PMD_DRV_LOG(ERR, "hwrm chip reset failure rc: %x\n", rc);
-		rc = -EIO;
+		PMD_DRV_LOG(ERR, "hwrm func qcfg failed\n");
 		goto error_free;
 	}
+
+	if (mtu >= RTE_ETHER_MIN_MTU && mtu <= BNXT_MAX_MTU &&
+	    mtu != eth_dev->data->mtu)
+		eth_dev->data->mtu = mtu;
 
 	if (BNXT_PF(bp)) {
 		//if (bp->pf.active_vfs) {
@@ -3466,22 +3969,16 @@ skip_ext_stats:
 
 	rc = bnxt_alloc_mem(bp);
 	if (rc)
-		goto error_free_int;
+		goto error_free;
+
+	bnxt_init_nic(bp);
 
 	rc = bnxt_request_int(bp);
 	if (rc)
-		goto error_free_int;
-
-	bnxt_enable_int(bp);
-	bnxt_init_nic(bp);
+		goto error_free;
 
 	return 0;
 
-error_free_int:
-	bnxt_disable_int(bp);
-	bnxt_hwrm_func_buf_unrgtr(bp);
-	bnxt_free_int(bp);
-	bnxt_free_mem(bp);
 error_free:
 	bnxt_dev_uninit(eth_dev);
 error:
@@ -3501,6 +3998,9 @@ bnxt_dev_uninit(struct rte_eth_dev *eth_dev)
 	bnxt_disable_int(bp);
 	bnxt_free_int(bp);
 	bnxt_free_mem(bp);
+
+	bnxt_hwrm_func_buf_unrgtr(bp);
+
 	if (bp->grp_info != NULL) {
 		rte_free(bp->grp_info);
 		bp->grp_info = NULL;
@@ -3522,6 +4022,7 @@ bnxt_dev_uninit(struct rte_eth_dev *eth_dev)
 		bnxt_dev_close_op(eth_dev);
 	if (bp->pf.vf_info)
 		rte_free(bp->pf.vf_info);
+	bnxt_free_ctx_mem(bp);
 	eth_dev->dev_ops = NULL;
 	eth_dev->rx_pkt_burst = NULL;
 	eth_dev->tx_pkt_burst = NULL;
@@ -3547,8 +4048,7 @@ static int bnxt_pci_remove(struct rte_pci_device *pci_dev)
 
 static struct rte_pci_driver bnxt_rte_pmd = {
 	.id_table = bnxt_pci_id_map,
-	.drv_flags = RTE_PCI_DRV_NEED_MAPPING |
-		RTE_PCI_DRV_INTR_LSC,
+	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
 	.probe = bnxt_pci_probe,
 	.remove = bnxt_pci_remove,
 };
@@ -3571,7 +4071,7 @@ RTE_INIT(bnxt_init_log)
 {
 	bnxt_logtype_driver = rte_log_register("pmd.net.bnxt.driver");
 	if (bnxt_logtype_driver >= 0)
-		rte_log_set_level(bnxt_logtype_driver, RTE_LOG_INFO);
+		rte_log_set_level(bnxt_logtype_driver, RTE_LOG_NOTICE);
 }
 
 RTE_PMD_REGISTER_PCI(net_bnxt, bnxt_rte_pmd);

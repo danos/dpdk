@@ -46,6 +46,12 @@ those below would be added to the file ``/boot/loader.conf``.
     hw.nic_uio.bdfs="2:0:0,2:0:1"
     nic_uio_load="YES"
 
+.. note::
+
+   Please ensure that the latest patches are applied to third party libraries
+   and software to avoid any known vulnerabilities.
+
+
 Compiling and Running the Example Applications
 ----------------------------------------------
 
@@ -57,7 +63,7 @@ environmental variables should be set as below:
 
 * ``RTE_SDK=/usr/local/share/dpdk``
 
-* ``RTE_TARGET=x86_64-native-bsdapp-clang``
+* ``RTE_TARGET=x86_64-native-freebsd-clang``
 
 .. note::
 
@@ -72,7 +78,7 @@ compiled and run as below:
 
     export RTE_SDK=/usr/local/share/dpdk
 
-    export RTE_TARGET=x86_64-native-bsdapp-clang
+    export RTE_TARGET=x86_64-native-freebsd-clang
 
     cp -r /usr/local/share/dpdk/examples/helloworld .
 

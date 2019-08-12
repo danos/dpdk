@@ -22,7 +22,7 @@
 #include <rte_mempool.h>
 #include <rte_ether.h>
 
-#include <exec-env/rte_kni_common.h>
+#include <rte_kni_common.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,12 +63,12 @@ struct rte_kni_conf {
 	uint32_t core_id;   /* Core ID to bind kernel thread on */
 	uint16_t group_id;  /* Group ID */
 	unsigned mbuf_size; /* mbuf size */
-	struct rte_pci_addr addr;
-	struct rte_pci_id id;
+	struct rte_pci_addr addr; /* depreciated */
+	struct rte_pci_id id; /* depreciated */
 
 	__extension__
 	uint8_t force_bind : 1; /* Flag to bind kernel thread */
-	char mac_addr[ETHER_ADDR_LEN]; /* MAC address assigned to KNI */
+	uint8_t mac_addr[RTE_ETHER_ADDR_LEN]; /* MAC address assigned to KNI */
 	uint16_t mtu;
 };
 
@@ -249,7 +249,8 @@ int rte_kni_unregister_handlers(struct rte_kni *kni);
  *  Previous link state == linkdown: 0
  *  Previous link state == linkup: 1
  */
-int __rte_experimental
+__rte_experimental
+int
 rte_kni_update_link(struct rte_kni *kni, unsigned int linkup);
 
 /**

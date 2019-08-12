@@ -142,7 +142,8 @@ octeontx_port_open(struct octeontx_nic *nic)
 	nic->mcast_mode = bgx_port_conf.mcast_mode;
 	nic->speed	= bgx_port_conf.mode;
 
-	memcpy(&nic->mac_addr[0], &bgx_port_conf.macaddr[0], ETHER_ADDR_LEN);
+	memcpy(&nic->mac_addr[0], &bgx_port_conf.macaddr[0],
+		RTE_ETHER_ADDR_LEN);
 
 	octeontx_log_dbg("port opened %d", nic->port_id);
 	return res;
@@ -555,7 +556,7 @@ octeontx_dev_stats_reset(struct rte_eth_dev *dev)
 
 static int
 octeontx_dev_default_mac_addr_set(struct rte_eth_dev *dev,
-					struct ether_addr *addr)
+					struct rte_ether_addr *addr)
 {
 	struct octeontx_nic *nic = octeontx_pmd_priv(dev);
 	int ret;
@@ -1064,7 +1065,7 @@ octeontx_create(struct rte_vdev_device *dev, int port, uint8_t evdev,
 	data->all_multicast = 0;
 	data->scattered_rx = 0;
 
-	data->mac_addrs = rte_zmalloc_socket(octtx_name, ETHER_ADDR_LEN, 0,
+	data->mac_addrs = rte_zmalloc_socket(octtx_name, RTE_ETHER_ADDR_LEN, 0,
 							socket_id);
 	if (data->mac_addrs == NULL) {
 		octeontx_log_err("failed to allocate memory for mac_addrs");
@@ -1085,7 +1086,7 @@ octeontx_create(struct rte_vdev_device *dev, int port, uint8_t evdev,
 	}
 
 	/* Update port_id mac to eth_dev */
-	memcpy(data->mac_addrs, nic->mac_addr, ETHER_ADDR_LEN);
+	memcpy(data->mac_addrs, nic->mac_addr, RTE_ETHER_ADDR_LEN);
 
 	PMD_INIT_LOG(DEBUG, "ethdev info: ");
 	PMD_INIT_LOG(DEBUG, "port %d, port_ena %d ochan %d num_ochan %d tx_q %d",
@@ -1174,7 +1175,7 @@ octeontx_probe(struct rte_vdev_device *dev)
 	    strlen(rte_vdev_device_args(dev)) == 0) {
 		eth_dev = rte_eth_dev_attach_secondary(dev_name);
 		if (!eth_dev) {
-			RTE_LOG(ERR, PMD, "Failed to probe %s\n", dev_name);
+			PMD_INIT_LOG(ERR, "Failed to probe %s", dev_name);
 			return -1;
 		}
 		/* TODO: request info from primary to set up Rx and Tx */

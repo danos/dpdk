@@ -32,7 +32,7 @@ struct txq_port {
 };
 
 struct app_port {
-	struct ether_addr mac_addr;
+	struct rte_ether_addr mac_addr;
 	struct txq_port txq;
 	rte_spinlock_t lock;
 	int port_active;
@@ -95,7 +95,6 @@ static void setup_ports(struct app_config *app_cfg, int cnt_ports)
 	char str_name[16];
 	uint16_t nb_rxd = PORT_RX_QUEUE_SIZE;
 	uint16_t nb_txd = PORT_TX_QUEUE_SIZE;
-	struct rte_eth_txconf txconf;
 
 	memset(&cfg_port, 0, sizeof(cfg_port));
 	cfg_port.txmode.mq_mode = ETH_MQ_TX_NONE;
@@ -140,10 +139,9 @@ static void setup_ports(struct app_config *app_cfg, int cnt_ports)
 			rte_exit(EXIT_FAILURE,
 				 "rte_eth_rx_queue_setup failed"
 				);
-		txconf = dev_info.default_txconf;
 		if (rte_eth_tx_queue_setup(
 			    idx_port, 0, nb_txd,
-			    rte_eth_dev_socket_id(idx_port), &txconf) < 0)
+			    rte_eth_dev_socket_id(idx_port), NULL) < 0)
 			rte_exit(EXIT_FAILURE,
 				 "rte_eth_tx_queue_setup failed"
 				);
@@ -160,11 +158,11 @@ static void setup_ports(struct app_config *app_cfg, int cnt_ports)
 static void process_frame(struct app_port *ptr_port,
 	struct rte_mbuf *ptr_frame)
 {
-	struct ether_hdr *ptr_mac_hdr;
+	struct rte_ether_hdr *ptr_mac_hdr;
 
-	ptr_mac_hdr = rte_pktmbuf_mtod(ptr_frame, struct ether_hdr *);
-	ether_addr_copy(&ptr_mac_hdr->s_addr, &ptr_mac_hdr->d_addr);
-	ether_addr_copy(&ptr_port->mac_addr, &ptr_mac_hdr->s_addr);
+	ptr_mac_hdr = rte_pktmbuf_mtod(ptr_frame, struct rte_ether_hdr *);
+	rte_ether_addr_copy(&ptr_mac_hdr->s_addr, &ptr_mac_hdr->d_addr);
+	rte_ether_addr_copy(&ptr_port->mac_addr, &ptr_mac_hdr->s_addr);
 }
 
 static int slave_main(__attribute__((unused)) void *ptr_data)

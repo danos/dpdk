@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <getopt.h>
 
+#include <rte_string_fns.h>
 #include <rte_common.h>
 #include <rte_eventdev.h>
 #include <rte_lcore.h>
@@ -85,6 +86,16 @@ evt_parse_queue_priority(struct evt_options *opt, const char *arg __rte_unused)
 }
 
 static int
+evt_parse_deq_tmo_nsec(struct evt_options *opt, const char *arg)
+{
+	int ret;
+
+	ret = parser_read_uint32(&(opt->deq_tmo_nsec), arg);
+
+	return ret;
+}
+
+static int
 evt_parse_eth_prod_type(struct evt_options *opt, const char *arg __rte_unused)
 {
 	opt->prod_type = EVT_PROD_TYPE_ETH_RX_ADPTR;
@@ -110,7 +121,7 @@ evt_parse_timer_prod_type_burst(struct evt_options *opt,
 static int
 evt_parse_test_name(struct evt_options *opt, const char *arg)
 {
-	snprintf(opt->test_name, EVT_TEST_NAME_MAX_LEN, "%s", arg);
+	strlcpy(opt->test_name, arg, EVT_TEST_NAME_MAX_LEN);
 	return 0;
 }
 
@@ -240,6 +251,7 @@ usage(char *program)
 		"\t--worker_deq_depth : dequeue depth of the worker\n"
 		"\t--fwd_latency      : perform fwd_latency measurement\n"
 		"\t--queue_priority   : enable queue priority\n"
+		"\t--deq_tmo_nsec     : global dequeue timeout\n"
 		"\t--prod_type_ethdev : use ethernet device as producer.\n"
 		"\t--prod_type_timerdev : use event timer device as producer.\n"
 		"\t                     expity_nsec would be the timeout\n"
@@ -311,6 +323,7 @@ static struct option lgopts[] = {
 	{ EVT_SCHED_TYPE_LIST,     1, 0, 0 },
 	{ EVT_FWD_LATENCY,         0, 0, 0 },
 	{ EVT_QUEUE_PRIORITY,      0, 0, 0 },
+	{ EVT_DEQ_TMO_NSEC,        1, 0, 0 },
 	{ EVT_PROD_ETHDEV,         0, 0, 0 },
 	{ EVT_PROD_TIMERDEV,       0, 0, 0 },
 	{ EVT_PROD_TIMERDEV_BURST, 0, 0, 0 },
@@ -342,6 +355,7 @@ evt_opts_parse_long(int opt_idx, struct evt_options *opt)
 		{ EVT_SCHED_TYPE_LIST, evt_parse_sched_type_list},
 		{ EVT_FWD_LATENCY, evt_parse_fwd_latency},
 		{ EVT_QUEUE_PRIORITY, evt_parse_queue_priority},
+		{ EVT_DEQ_TMO_NSEC, evt_parse_deq_tmo_nsec},
 		{ EVT_PROD_ETHDEV, evt_parse_eth_prod_type},
 		{ EVT_PROD_TIMERDEV, evt_parse_timer_prod_type},
 		{ EVT_PROD_TIMERDEV_BURST, evt_parse_timer_prod_type_burst},

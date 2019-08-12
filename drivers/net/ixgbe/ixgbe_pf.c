@@ -40,16 +40,16 @@ dev_num_vf(struct rte_eth_dev *eth_dev)
 static inline
 int ixgbe_vf_perm_addr_gen(struct rte_eth_dev *dev, uint16_t vf_num)
 {
-	unsigned char vf_mac_addr[ETHER_ADDR_LEN];
+	unsigned char vf_mac_addr[RTE_ETHER_ADDR_LEN];
 	struct ixgbe_vf_info *vfinfo =
 		*IXGBE_DEV_PRIVATE_TO_P_VFDATA(dev->data->dev_private);
 	uint16_t vfn;
 
 	for (vfn = 0; vfn < vf_num; vfn++) {
-		eth_random_addr(vf_mac_addr);
+		rte_eth_random_addr(vf_mac_addr);
 		/* keep the random address as default */
 		memcpy(vfinfo[vfn].vf_mac_addresses, vf_mac_addr,
-			   ETHER_ADDR_LEN);
+			   RTE_ETHER_ADDR_LEN);
 	}
 
 	return 0;
@@ -351,7 +351,7 @@ ixgbe_vf_reset_event(struct rte_eth_dev *dev, uint16_t vf)
 	int rar_entry = hw->mac.num_rar_entries - (vf + 1);
 	uint32_t vmolr = IXGBE_READ_REG(hw, IXGBE_VMOLR(vf));
 
-	vmolr |= (IXGBE_VMOLR_ROPE | IXGBE_VMOLR_ROMPE |
+	vmolr |= (IXGBE_VMOLR_ROPE |
 			IXGBE_VMOLR_BAM | IXGBE_VMOLR_AUPE);
 	IXGBE_WRITE_REG(hw, IXGBE_VMOLR(vf), vmolr);
 
@@ -408,23 +408,6 @@ ixgbe_vf_reset_msg(struct rte_eth_dev *dev, uint16_t vf)
 }
 
 static int
-ixgbe_enable_vf_mc_promisc(struct rte_eth_dev *dev, uint32_t vf)
-{
-	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
-	uint32_t vmolr;
-
-	vmolr = IXGBE_READ_REG(hw, IXGBE_VMOLR(vf));
-
-	RTE_LOG(INFO, PMD, "VF %u: enabling multicast promiscuous\n", vf);
-
-	vmolr |= IXGBE_VMOLR_MPE;
-
-	IXGBE_WRITE_REG(hw, IXGBE_VMOLR(vf), vmolr);
-
-	return 0;
-}
-
-static int
 ixgbe_disable_vf_mc_promisc(struct rte_eth_dev *dev, uint32_t vf)
 {
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
@@ -460,7 +443,7 @@ ixgbe_vf_reset(struct rte_eth_dev *dev, uint16_t vf, uint32_t *msgbuf)
 
 	/* reply to reset with ack and vf mac address */
 	msgbuf[0] = IXGBE_VF_RESET | IXGBE_VT_MSGTYPE_ACK;
-	rte_memcpy(new_mac, vf_mac, ETHER_ADDR_LEN);
+	rte_memcpy(new_mac, vf_mac, RTE_ETHER_ADDR_LEN);
 	/*
 	 * Piggyback the multicast filter type so VF can compute the
 	 * correct vectors
@@ -480,7 +463,8 @@ ixgbe_vf_set_mac_addr(struct rte_eth_dev *dev, uint32_t vf, uint32_t *msgbuf)
 	int rar_entry = hw->mac.num_rar_entries - (vf + 1);
 	uint8_t *new_mac = (uint8_t *)(&msgbuf[1]);
 
-	if (is_valid_assigned_ether_addr((struct ether_addr *)new_mac)) {
+	if (rte_is_valid_assigned_ether_addr(
+			(struct rte_ether_addr *)new_mac)) {
 		rte_memcpy(vfinfo[vf].vf_mac_addresses, new_mac, 6);
 		return hw->mac.ops.set_rar(hw, rar_entry, new_mac, vf, IXGBE_RAH_AV);
 	}
@@ -503,6 +487,7 @@ ixgbe_vf_set_multicast(struct rte_eth_dev *dev, uint32_t vf, uint32_t *msgbuf)
 	const uint32_t IXGBE_MTA_BIT_MASK = (0x1 << IXGBE_MTA_BIT_SHIFT) - 1;
 	uint32_t reg_val;
 	int i;
+	u32 vmolr = IXGBE_READ_REG(hw, IXGBE_VMOLR(vf));
 
 	/* Disable multicast promiscuous first */
 	ixgbe_disable_vf_mc_promisc(dev, vf);
@@ -516,6 +501,12 @@ ixgbe_vf_set_multicast(struct rte_eth_dev *dev, uint32_t vf, uint32_t *msgbuf)
 		vfinfo->vf_mc_hashes[i] = hash_list[i];
 	}
 
+	if (nb_entries == 0) {
+		vmolr &= ~IXGBE_VMOLR_ROMPE;
+		IXGBE_WRITE_REG(hw, IXGBE_VMOLR(vf), vmolr);
+		return 0;
+	}
+
 	for (i = 0; i < vfinfo->num_vf_mc_hashes; i++) {
 		mta_idx = (vfinfo->vf_mc_hashes[i] >> IXGBE_MTA_BIT_SHIFT)
 				& IXGBE_MTA_INDEX_MASK;
@@ -524,6 +515,9 @@ ixgbe_vf_set_multicast(struct rte_eth_dev *dev, uint32_t vf, uint32_t *msgbuf)
 		reg_val |= (1 << mta_shift);
 		IXGBE_WRITE_REG(hw, IXGBE_MTA(mta_idx), reg_val);
 	}
+
+	vmolr |= IXGBE_VMOLR_ROMPE;
+	IXGBE_WRITE_REG(hw, IXGBE_VMOLR(vf), vmolr);
 
 	return 0;
 }
@@ -553,7 +547,7 @@ ixgbe_set_vf_lpe(struct rte_eth_dev *dev, __rte_unused uint32_t vf, uint32_t *ms
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	uint32_t new_mtu = msgbuf[1];
 	uint32_t max_frs;
-	int max_frame = new_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
+	int max_frame = new_mtu + RTE_ETHER_HDR_LEN + RTE_ETHER_CRC_LEN;
 
 	/* X540 and X550 support jumbo frames in IOV mode */
 	if (hw->mac.type != ixgbe_mac_X540 &&
@@ -562,7 +556,8 @@ ixgbe_set_vf_lpe(struct rte_eth_dev *dev, __rte_unused uint32_t vf, uint32_t *ms
 		hw->mac.type != ixgbe_mac_X550EM_a)
 		return -1;
 
-	if ((max_frame < ETHER_MIN_LEN) || (max_frame > ETHER_MAX_JUMBO_FRAME_LEN))
+	if (max_frame < RTE_ETHER_MIN_LEN ||
+			max_frame > RTE_ETHER_MAX_JUMBO_FRAME_LEN)
 		return -1;
 
 	max_frs = (IXGBE_READ_REG(hw, IXGBE_MAXFRS) &
@@ -586,6 +581,7 @@ ixgbe_negotiate_vf_api(struct rte_eth_dev *dev, uint32_t vf, uint32_t *msgbuf)
 	case ixgbe_mbox_api_10:
 	case ixgbe_mbox_api_11:
 	case ixgbe_mbox_api_12:
+	case ixgbe_mbox_api_13:
 		vfinfo[vf].api_version = (uint8_t)api_version;
 		return 0;
 	default:
@@ -688,19 +684,70 @@ ixgbe_set_vf_mc_promisc(struct rte_eth_dev *dev, uint32_t vf, uint32_t *msgbuf)
 {
 	struct ixgbe_vf_info *vfinfo =
 		*(IXGBE_DEV_PRIVATE_TO_P_VFDATA(dev->data->dev_private));
-	bool enable = !!msgbuf[1];	/* msgbuf contains the flag to enable */
+	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+	int xcast_mode = msgbuf[1];	/* msgbuf contains the flag to enable */
+	u32 vmolr, fctrl, disable, enable;
 
 	switch (vfinfo[vf].api_version) {
 	case ixgbe_mbox_api_12:
+		/* promisc introduced in 1.3 version */
+		if (xcast_mode == IXGBEVF_XCAST_MODE_PROMISC)
+			return -EOPNOTSUPP;
+		break;
+		/* Fall threw */
+	case ixgbe_mbox_api_13:
 		break;
 	default:
 		return -1;
 	}
 
-	if (enable)
-		return ixgbe_enable_vf_mc_promisc(dev, vf);
-	else
-		return ixgbe_disable_vf_mc_promisc(dev, vf);
+	if (vfinfo[vf].xcast_mode == xcast_mode)
+		goto out;
+
+	switch (xcast_mode) {
+	case IXGBEVF_XCAST_MODE_NONE:
+		disable = IXGBE_VMOLR_BAM | IXGBE_VMOLR_ROMPE |
+			  IXGBE_VMOLR_MPE | IXGBE_VMOLR_UPE | IXGBE_VMOLR_VPE;
+		enable = 0;
+		break;
+	case IXGBEVF_XCAST_MODE_MULTI:
+		disable = IXGBE_VMOLR_MPE | IXGBE_VMOLR_UPE | IXGBE_VMOLR_VPE;
+		enable = IXGBE_VMOLR_BAM | IXGBE_VMOLR_ROMPE;
+		break;
+	case IXGBEVF_XCAST_MODE_ALLMULTI:
+		disable = IXGBE_VMOLR_UPE | IXGBE_VMOLR_VPE;
+		enable = IXGBE_VMOLR_BAM | IXGBE_VMOLR_ROMPE | IXGBE_VMOLR_MPE;
+		break;
+	case IXGBEVF_XCAST_MODE_PROMISC:
+		if (hw->mac.type <= ixgbe_mac_82599EB)
+			return -1;
+
+		fctrl = IXGBE_READ_REG(hw, IXGBE_FCTRL);
+		if (!(fctrl & IXGBE_FCTRL_UPE)) {
+			/* VF promisc requires PF in promisc */
+			RTE_LOG(ERR, PMD,
+			       "Enabling VF promisc requires PF in promisc\n");
+			return -1;
+		}
+
+		disable = 0;
+		enable = IXGBE_VMOLR_BAM | IXGBE_VMOLR_ROMPE |
+			 IXGBE_VMOLR_MPE | IXGBE_VMOLR_UPE | IXGBE_VMOLR_VPE;
+		break;
+	default:
+		return -1;
+	}
+
+	vmolr = IXGBE_READ_REG(hw, IXGBE_VMOLR(vf));
+	vmolr &= ~disable;
+	vmolr |= enable;
+	IXGBE_WRITE_REG(hw, IXGBE_VMOLR(vf), vmolr);
+	vfinfo[vf].xcast_mode = xcast_mode;
+
+out:
+	msgbuf[1] = xcast_mode;
+
+	return 0;
 }
 
 static int

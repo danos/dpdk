@@ -19,7 +19,7 @@
 
 static const struct rte_eth_conf port_conf_default = {
 	.rxmode = {
-		.max_rx_pkt_len = ETHER_MAX_LEN,
+		.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
 	},
 };
 
@@ -82,7 +82,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 		return retval;
 
 	/* Display the port MAC address. */
-	struct ether_addr addr;
+	struct rte_ether_addr addr;
 	rte_eth_macaddr_get(port, &addr);
 	printf("Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
 			   " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
