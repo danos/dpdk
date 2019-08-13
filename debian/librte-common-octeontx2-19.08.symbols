@@ -1,4 +1,4 @@
-librte_common_octeontx2.so.19.08 librte-common-octeontx219.08 #MINVER#
+librte_common_octeontx2.so.19.08 librte-common-octeontx2-19.08 #MINVER#
  DPDK_19.08@DPDK_19.08 19.08
  otx2_dev_active_vfs@DPDK_19.08 19.08
  otx2_dev_fini@DPDK_19.08 19.08
