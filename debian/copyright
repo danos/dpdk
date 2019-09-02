@@ -55,6 +55,7 @@ License: GPL-2
 
 Files: debian/*
 Copyright: 2015, 2016 Canonical Ltd.
+           2016-2019 Luca Boccassi <bluca@debian.org>
 License: GPL-3
 
 Files: debian/kernel-version
