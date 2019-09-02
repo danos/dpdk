@@ -1,4 +1,4 @@
-dpdk (18.11-6) UNRELEASED; urgency=medium
+dpdk (18.11-6) unstable; urgency=medium
 
   As a result from switching the build system to Meson, the following changes
   happened since 17.11:
