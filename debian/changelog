@@ -1,3 +1,12 @@
+dpdk (18.11.2-3) unstable; urgency=medium
+
+  * Note branch in Vcs-Git.
+  * Bump Standards-Version to 4.4.0.
+  * Fix distribution in dpdk-dev.NEWS.
+    Fixes LW: debian-news-entry-has-strange-distribution
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 02 Sep 2019 20:21:32 +0100
+
 dpdk (18.11.2-2) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
