@@ -1,3 +1,10 @@
+dpdk (18.11.2-4) unstable; urgency=medium
+
+  * d/p/avoid-as-needed-as-it-causes-overlinking.patch: fix overlinking in
+    software using the dpdk pkg-config (LP: #1841759)
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Wed, 04 Sep 2019 15:37:29 +0200
+
 dpdk (18.11.2-3) unstable; urgency=medium
 
   * Note branch in Vcs-Git.
