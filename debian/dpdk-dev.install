@@ -1,4 +1,3 @@
-obj-*/test/test/dpdk-test usr/bin/
 test/test/autotest.py usr/share/dpdk/test/
 test/test/autotest_data.py usr/share/dpdk/test/
 test/test/autotest_runner.py usr/share/dpdk/test/
@@ -9,3 +8,4 @@ usr/bin/dpdk-test-bbdev
 usr/bin/dpdk-test-crypto-perf
 usr/bin/dpdk-test-eventdev
 usr/bin/dpdk-testpmd
+usr/bin/dpdk-test
