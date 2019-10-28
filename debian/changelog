@@ -1,3 +1,15 @@
+dpdk (18.11.3-1) unstable; urgency=medium
+
+  * Merge stable update to 18.11.3; For a list of changes see
+    http://doc.dpdk.org/guides-18.11/rel_notes/release_18_11.html#id2
+    - refresh d/p/0004-build-bump-minimum-Meson-version-to-0.47.1.patch
+    - refresh d/p/avoid-as-needed-as-it-causes-overlinking.patch
+    - d/dpdk-dev.install: dpdk-test is now properly in usr/bin
+    - d/librte-security18.11.symbols: mark some symbols that now properly
+      are experimental as such (none is gone)
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 28 Oct 2019 10:59:53 +0100
+
 dpdk (18.11.2-4) unstable; urgency=medium
 
   * d/p/avoid-as-needed-as-it-causes-overlinking.patch: fix overlinking in
