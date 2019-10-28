@@ -20,7 +20,7 @@ Origin: https://patches.dpdk.org/patch/49995/
 --- a/kernel/linux/meson.build
 +++ b/kernel/linux/meson.build
 @@ -27,11 +27,7 @@ else
- 	make_returncode = run_command('make', '-sC', kernel_dir,
+ 	make_returncode = run_command('make', '-sC', kernel_dir + '/build',
  			'kernelversion').returncode()
  	if make_returncode != 0
 -		if meson.version().version_compare('>=0.44')
@@ -35,7 +35,7 @@ Origin: https://patches.dpdk.org/patch/49995/
 --- a/meson.build
 +++ b/meson.build
 @@ -5,7 +5,7 @@ project('DPDK', 'C',
- 	version: '18.11.2',
+ 	version: '18.11.3',
  	license: 'BSD',
  	default_options: ['buildtype=release', 'default_library=static'],
 -	meson_version: '>= 0.41'

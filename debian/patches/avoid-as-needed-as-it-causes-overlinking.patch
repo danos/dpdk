@@ -31,8 +31,8 @@ Last-Update: 2019-09-04
 
 --- a/config/meson.build
 +++ b/config/meson.build
-@@ -44,7 +44,6 @@ dpdk_conf.set_quoted('RTE_TOOLCHAIN', to
- dpdk_conf.set('RTE_TOOLCHAIN_' + toolchain.to_upper(), 1)
+@@ -53,7 +53,6 @@ dpdk_conf.set('RTE_TOOLCHAIN_' + toolcha
+ dpdk_conf.set('RTE_ARCH_64', cc.sizeof('void *') == 8)
  
  add_project_link_arguments('-Wl,--no-as-needed', language: 'c')
 -dpdk_extra_ldflags += '-Wl,--no-as-needed'
