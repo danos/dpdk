@@ -7,7 +7,7 @@ Description: bump minimum Meson version to 0.47.1
 Origin: https://patches.dpdk.org/patch/49995/
 --- a/drivers/meson.build
 +++ b/drivers/meson.build
-@@ -148,8 +148,5 @@ foreach class:driver_classes
+@@ -145,8 +145,5 @@
  		endif # build
  	endforeach
  
@@ -19,7 +19,7 @@ Origin: https://patches.dpdk.org/patch/49995/
  endforeach
 --- a/kernel/linux/meson.build
 +++ b/kernel/linux/meson.build
-@@ -27,11 +27,7 @@ else
+@@ -27,11 +27,7 @@
  	make_returncode = run_command('make', '-sC', kernel_dir + '/build',
  			'kernelversion').returncode()
  	if make_returncode != 0
@@ -34,8 +34,8 @@ Origin: https://patches.dpdk.org/patch/49995/
  # DO ACTUAL MODULE BUILDING
 --- a/meson.build
 +++ b/meson.build
-@@ -5,7 +5,7 @@ project('DPDK', 'C',
- 	version: '18.11.3',
+@@ -5,7 +5,7 @@
+ 	version: '18.11.4',
  	license: 'BSD',
  	default_options: ['buildtype=release', 'default_library=static'],
 -	meson_version: '>= 0.41'
@@ -43,7 +43,7 @@ Origin: https://patches.dpdk.org/patch/49995/
  )
  
  # set up some global vars for compiler, platform, configuration, etc.
-@@ -105,23 +105,18 @@ foreach lib:enabled_libs
+@@ -102,23 +102,18 @@
  endforeach
  message(output_message + '\n')
  
