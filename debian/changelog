@@ -1,3 +1,13 @@
+dpdk (18.11.4-1) unstable; urgency=high
+
+  * Merge stable update to 18.11.4; For a list of changes see
+    http://doc.dpdk.org/guides-18.11/rel_notes/release_18_11.html
+  * Fixes CVE-2019-14818
+  * Refresh 0004-build-bump-minimum-Meson-version-to-0.47.1.patch to
+    remove fuzz from 18.11.4
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 12 Nov 2019 14:14:06 +0000
+
 dpdk (18.11.3-1) unstable; urgency=medium
 
   * Merge stable update to 18.11.3; For a list of changes see
