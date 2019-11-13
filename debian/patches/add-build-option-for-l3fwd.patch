@@ -1,0 +1,7 @@
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -30,3 +30,4 @@
+ 	description: 'build unit tests')
+ option('max_ethports', type: 'string', value: '32',
+ 	description: 'maximum number of Ethernet devices in EAL')
++option('examples', type: 'string', value: 'l3fwd')

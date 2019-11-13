@@ -1,0 +1,16 @@
+--- a/drivers/net/mlx5/mlx5_ethdev.c
++++ b/drivers/net/mlx5/mlx5_ethdev.c
+@@ -772,9 +772,13 @@
+ 				ETH_LINK_HALF_DUPLEX : ETH_LINK_FULL_DUPLEX);
+ 	dev_link.link_autoneg = !(dev->data->dev_conf.link_speeds &
+ 				  ETH_LINK_SPEED_FIXED);
++	DRV_LOG(DEBUG, "port %d, speed_capa = 0x%x\n", dev->data->port_id,
++		priv->link_speed_capa);
+ 	if (((dev_link.link_speed && !dev_link.link_status) ||
+ 	     (!dev_link.link_speed && dev_link.link_status))) {
+ 		rte_errno = EAGAIN;
++		DRV_LOG(DEBUG, "port %d, link_speed = %d, link_status = %d\n",
++			dev->data->port_id, dev_link.link_speed, dev_link.link_status);
+ 		return -rte_errno;
+ 	}
+ 	*link = dev_link;

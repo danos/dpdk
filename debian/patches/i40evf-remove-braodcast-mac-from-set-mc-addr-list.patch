@@ -1,0 +1,31 @@
+Remove broadcast MAC address from i40evf set mac addr list
+
+If the list of addresses to add to a vf contains a broadcast MAC
+address the addition will fail.
+Added code to remove the broadcast address if it exists
+
+Signed-off-by: Anthony Dempsey <anthonyjdempsey@gmail.com>
+---
+ drivers/net/i40e/i40e_ethdev_vf.c |   11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+--- a/drivers/net/i40e/i40e_ethdev_vf.c
++++ b/drivers/net/i40e/i40e_ethdev_vf.c
+@@ -2714,6 +2714,17 @@
+ {
+ 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
+ 	int err;
++	uint32_t i;
++
++	for (i = 0; i < mc_addrs_num;) {
++		if (is_broadcast_ether_addr(&mc_addrs[i]))
++			mc_addrs[i] = mc_addrs[--mc_addrs_num];
++		else
++			i++;
++	}
++
++	if (mc_addrs_num == 0)
++		return 0;
+ 
+ 	/* flush previous addresses */
+ 	err = i40evf_add_del_mc_addr_list(dev, vf->mc_addrs, vf->mc_addrs_num,

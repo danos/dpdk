@@ -1,38 +1,28 @@
 Source: dpdk
 Priority: optional
-Maintainer: Debian DPDK Maintainers <pkg-dpdk-devel@lists.alioth.debian.org>
-Uploaders: Luca Boccassi <bluca@debian.org>,
-           Christian Ehrhardt <christian.ehrhardt@canonical.com>,
-           Santiago Ruano Rincón <santiagorr@riseup.net>,
-Build-Depends: debhelper (>= 10.3~),
+Maintainer: Vyatta Package Maintainers <DL-vyatta-help@att.com>
+Build-Depends: debhelper (>= 10~),
                dh-python,
+               dh-signobs,
                dkms,
-               doxygen <!nodoc>,
-               graphviz <!nodoc>,
-               inkscape <!nodoc>,
+               ibverbs-providers,
                libbsd-dev,
+               libcap-dev,
                libelf-dev,
-               libibverbs-dev (>= 16~),
-               libipsec-mb-dev [amd64],
+               libibverbs-dev,
                libjansson-dev,
                libmnl-dev,
                libnuma-dev,
                libpcap-dev,
                libssl-dev,
-               meson (>= 0.47.1~),
+               linux-vyatta-kbuild | linux-headers-amd64 [amd64] | linux-headers,
+               meson (>= 0.41~),
                pkg-config,
                python3,
-               python3-sphinx <!nodoc>,
-               python3-sphinx-rtd-theme <!nodoc>,
-               texlive-fonts-recommended <!nodoc>,
-               texlive-latex-extra <!nodoc>,
                zlib1g-dev,
-Standards-Version: 4.3.0
+Standards-Version: 4.2.1
 Rules-Requires-Root: no
 Section: libs
-Homepage: https://www.dpdk.org
-Vcs-Git: https://salsa.debian.org/debian/dpdk.git
-Vcs-Browser: https://salsa.debian.org/debian/dpdk
 
 Package: dpdk
 Section: admin
@@ -42,8 +32,8 @@ Depends: hwdata,
          pciutils,
          ${misc:Depends},
          ${python3:Depends},
+         ${shlibs:Depends},
 Recommends: librte-mempool18.11,
-            librte-mempool-ring18.11,
             librte-pmd-af-packet18.11,
             librte-pmd-bond18.11,
             librte-pmd-e1000-18.11,
@@ -67,7 +57,7 @@ Suggests: dpdk-doc,
           dpdk-rte-kni-dkms (= ${binary:Version}),
           linux-image-generic,
           ${librte:Suggests},
-Breaks: dpdk-dev (<< 18.11-4~),
+Breaks: dpdk-dev (<< 18.11-4),
 Replaces: dpdk-dev (<< 18.11),
 Description: Data Plane Development Kit (runtime)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -78,7 +68,7 @@ Description: Data Plane Development Kit (runtime)
 Package: dpdk-dev
 Section: oldlibs
 Architecture: amd64 arm64 armhf i386 ppc64el
-Breaks: dpdk (<< 18.11-4~),
+Breaks: dpdk (<< 18.11-4),
 Replaces: dpdk (<< 18.11-4),
 Depends: libdpdk-dev (>= ${source:Version}),
          ${misc:Depends},
@@ -141,9 +131,8 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
 Depends: libbsd-dev,
-         libibverbs-dev,
-         libipsec-mb-dev [amd64],
          libelf-dev,
+         libibverbs-dev,
          libjansson-dev,
          libmnl-dev,
          libnuma-dev,
@@ -669,6 +658,7 @@ Homepage: https://doc.dpdk.org/guides/nics/bnx2x.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+         linux-firmware | firmware-bnx2x,
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-pmd-bnx2x runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -739,6 +729,7 @@ Homepage: https://dpdk.org/doc/guides/nics/cxgbe.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+         linux-firmware | firmware-misc-nonfree,
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-pmd-cxgbe runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -1745,7 +1736,6 @@ Homepage: https://dpdk.org/doc/guides/nics/mlx4.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
-         rdma-core,
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-pmd-mlx4 runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -1760,7 +1750,6 @@ Homepage: https://dpdk.org/doc/guides/nics/mlx5.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
-         rdma-core,
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-pmd-mlx5 runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -1864,4 +1853,23 @@ Description: Data Plane Development Kit (librte-pmd-virtio-crypto runtime librar
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte-pmd-virtio-crypto.
+
+Package: libdpdk-dbg
+Section: debug
+Architecture: any
+Depends: ${librte:Depends}, ${misc:Depends}
+Description: Data Plane Development Kit debug symbols
+ Virtual package to provide a single dependency point for
+ debug symbols for all DPDK libraries
+
+Package: dpdk-testapps
+Architecture: amd64 arm64 armhf i386 ppc64el
+Depends: python3:any,
+         ${misc:Depends},
+         ${python3:Depends},
+         ${shlibs:Depends},
+Description: DPDK test applications
+ This package contains the test applications testpmd, l3fwd etc. They are
+ included in a debian package to make it easier to compare performance with
+ the dataplane and help with easier troubleshooting of drivers.
 

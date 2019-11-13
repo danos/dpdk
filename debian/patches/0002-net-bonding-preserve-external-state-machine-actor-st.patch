@@ -1,0 +1,90 @@
+From 798624b84c19f13444913f9df916c4071e68191b Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Wed, 7 Aug 2019 22:55:57 -0400
+Subject: [PATCH 2/2] net/bonding: preserve external state machine actor states
+
+The external state machine doesn't reset the state of the slaves.
+When a slave is deactivate and reactivated, the state of the actor
+may be lost. If the external state machine has set a particular state,
+it needs to be preserved.
+
+Fixes: dc40f17a36bc ("net/bonding: allow external state machine in mode 4")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chas Williams <chas3@att.com>
+---
+ drivers/net/bonding/rte_eth_bond_8023ad.c       | 17 ++++++++++++-----
+ .../net/bonding/rte_eth_bond_8023ad_private.h   |  3 +++
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_8023ad.c b/drivers/net/bonding/rte_eth_bond_8023ad.c
+index 1e2afdf09..256ef3027 100644
+--- a/drivers/net/bonding/rte_eth_bond_8023ad.c
++++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
+@@ -945,7 +945,8 @@ bond_mode_8023ad_activate_slave(struct rte_eth_dev *bond_dev,
+ 	memcpy(&port->partner, &initial, sizeof(struct port_params));
+ 
+ 	/* default states */
+-	port->actor_state = STATE_AGGREGATION | STATE_LACP_ACTIVE | STATE_DEFAULTED;
++	port->actor_state = STATE_AGGREGATION | STATE_LACP_ACTIVE |
++			    STATE_DEFAULTED | port->actor_state_ext;
+ 	port->partner_state = STATE_LACP_ACTIVE | STATE_AGGREGATION;
+ 	port->sm_flags = SM_FLAGS_BEGIN;
+ 
+@@ -1456,10 +1457,13 @@ rte_eth_bond_8023ad_ext_collect(uint16_t port_id, uint16_t slave_id,
+ 
+ 	port = &bond_mode_8023ad_ports[slave_id];
+ 
+-	if (enabled)
++	if (enabled) {
+ 		ACTOR_STATE_SET(port, COLLECTING);
+-	else
++		ACTOR_STATE_SET_EXT(port, COLLECTING);
++	} else {
+ 		ACTOR_STATE_CLR(port, COLLECTING);
++		ACTOR_STATE_CLR_EXT(port, COLLECTING);
++	}
+ 
+ 	return 0;
+ }
+@@ -1477,10 +1481,13 @@ rte_eth_bond_8023ad_ext_distrib(uint16_t port_id, uint16_t slave_id,
+ 
+ 	port = &bond_mode_8023ad_ports[slave_id];
+ 
+-	if (enabled)
++	if (enabled) {
+ 		ACTOR_STATE_SET(port, DISTRIBUTING);
+-	else
++		ACTOR_STATE_SET_EXT(port, DISTRIBUTING);
++	} else {
+ 		ACTOR_STATE_CLR(port, DISTRIBUTING);
++		ACTOR_STATE_CLR_EXT(port, DISTRIBUTING);
++	}
+ 
+ 	return 0;
+ }
+diff --git a/drivers/net/bonding/rte_eth_bond_8023ad_private.h b/drivers/net/bonding/rte_eth_bond_8023ad_private.h
+index d905de425..534d3ec1d 100644
+--- a/drivers/net/bonding/rte_eth_bond_8023ad_private.h
++++ b/drivers/net/bonding/rte_eth_bond_8023ad_private.h
+@@ -76,7 +76,9 @@
+ 
+ #define ACTOR_STATE(_p, _f) (!!CHECK_FLAGS((_p)->actor_state, STATE_ ## _f))
+ #define ACTOR_STATE_SET(_p, _f) SET_FLAGS((_p)->actor_state, STATE_ ## _f)
++#define ACTOR_STATE_SET_EXT(_p, _f) SET_FLAGS((_p)->actor_state_ext, STATE_ ## _f)
+ #define ACTOR_STATE_CLR(_p, _f) CLEAR_FLAGS((_p)->actor_state, STATE_ ## _f)
++#define ACTOR_STATE_CLR_EXT(_p, _f) CLEAR_FLAGS((_p)->actor_state_ext, STATE_ ## _f)
+ 
+ #define PARTNER_STATE(_p, _f) (!!CHECK_FLAGS((_p)->partner_state, STATE_ ## _f))
+ #define PARTNER_STATE_SET(_p, _f) SET_FLAGS((_p)->partner_state, STATE_ ## _f)
+@@ -89,6 +91,7 @@ struct port {
+ 	 * of port states.
+ 	 */
+ 	uint8_t actor_state;
++	uint8_t actor_state_ext;
+ 
+ 	/** The operational Actor's port parameters */
+ 	struct port_params actor;
+-- 
+2.17.2
+

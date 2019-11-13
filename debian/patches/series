@@ -1,4 +1,46 @@
-0004-build-bump-minimum-Meson-version-to-0.47.1.patch
-0005-build-use-dependency-instead-of-find_library.patch
-0006-build-reorder-libraries-and-build-eal-before-cmdline.patch
-0007-build-use-dependency-for-libbsd-instead-of-manual-ap.patch
+# Patches for DPDK
+meson-build-fixes.patch
+igb-reset-phy-check-in-dev-stop-close.patch
+
+# Backport from dpdk master
+
+# Backport from dpdk stable
+
+# Backport from dpdk-net-next
+
+# Submitted upstream, not yet merged
+build-add-option-to-override-max-ethports.patch
+0001-net-bonding-fix-external-state-machine-slave-updates.patch
+0002-net-bonding-preserve-external-state-machine-actor-st.patch
+
+# Qos extensions
+sched-configurable-red-scaling.patch
+sched-fix-WRR-overflow-errors.patch
+sched-parametrize-QoS-traffic-classes-and-queues.patch
+sched-increase-to-eight-queues-per-traffic-class.patch
+sched-support-queue-limit-per-subport.patch
+sched-support-wred-per-subport.patch
+frame-overhead.patch
+shaper-tc.patch
+sched-per-dscp-wred.patch
+sched-per-dscp-wred-stats.patch
+sched-add-64-bit-counter-retrieval-API.patch
+sched-meson.patch
+sched-fix-broken-strict-priority-of-tcs.patch
+
+# Bonding
+bonding-polled-slave-muxstate.patch
+
+# PF-VF fixes for Intel drivers
+ixgbe_filter_unknown_vlan_hdr.patch
+
+bypass-mlx5-extended-stats.patch
+mlx5-debug.patch
+mlx5-skip-legacy-ethtool.patch
+vlan-insert-clone-add_new-hdr-mbuf.patch
+i40evf-remove-braodcast-mac-from-set-mc-addr-list.patch
+add-build-option-for-l3fwd.patch
+mlx5-hardcode-devargs.patch
+mlx5-eeprom-read.patch
+af_packet_advertise_supported_capabilities
+bonding_secondary_mac_debug.patch

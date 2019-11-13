@@ -1,7 +1,7 @@
 Package: dpdk-modules-#KVERS#
 Section: kernel
 Architecture: amd64 arm64 i386
-Depends: linux-image-#KVERS# #KDREV#,
+Depends: linux-image-#KVERS#-signed #KDREV# | linux-image-#KVERS#-unsigned #KDREV# | linux-image-#KVERS# #KDREV#
 Provides: dpdk-modules,
 Conflicts: dpdk-igb-uio-dkms,
            dpdk-rte-kni-dkms,

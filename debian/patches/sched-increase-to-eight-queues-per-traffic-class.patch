@@ -1,0 +1,13 @@
+--- a/lib/librte_sched/rte_sched.h
++++ b/lib/librte_sched/rte_sched.h
+@@ -104,8 +104,9 @@ extern "C" {
+ #define RTE_SCHED_MAX_TC                      \
+ 	(RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE - 1)
+ 
++/** log2(number of queues per pipe traffic class) */
++#define RTE_SCHED_WRR_BITS                    3
+ /** Number of queues per pipe traffic class. Must be power of two. */
+-#define RTE_SCHED_WRR_BITS                    2
+ #define RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS    (1 << RTE_SCHED_WRR_BITS)
+ #define RTE_SCHED_WRR_MASK                    \
+ 	(RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS - 1)

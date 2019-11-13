@@ -1,0 +1,59 @@
+--- a/drivers/net/bonding/rte_eth_bond_8023ad.c
++++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
+@@ -1399,6 +1399,11 @@ rte_eth_bond_8023ad_slave_info(uint16_t
+ 	bond_dev = &rte_eth_devices[port_id];
+ 
+ 	internals = bond_dev->data->dev_private;
++
++	/* make sure polled link state is up-to-date */
++	if (internals->link_status_polling_enabled)
++		bond_ethdev_slave_link_status_change_monitor(bond_dev);
++
+ 	if (find_slave_by_id(internals->active_slaves,
+ 			internals->active_slave_count, slave_id) ==
+ 				internals->active_slave_count)
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1976,9 +1976,6 @@ slave_remove(struct bond_dev_private *in
+ 	_rte_eth_dev_reset(slave_eth_dev);
+ }
+ 
+-static void
+-bond_ethdev_slave_link_status_change_monitor(void *cb_arg);
+-
+ void
+ slave_add(struct bond_dev_private *internals,
+ 		struct rte_eth_dev *slave_eth_dev)
+@@ -2390,7 +2387,7 @@ bond_ethdev_tx_queue_release(void *queue
+ 	rte_free(queue);
+ }
+ 
+-static void
++void
+ bond_ethdev_slave_link_status_change_monitor(void *cb_arg)
+ {
+ 	struct rte_eth_dev *bonded_ethdev, *slave_ethdev;
+@@ -2427,10 +2424,11 @@ bond_ethdev_slave_link_status_change_mon
+ 			(*slave_ethdev->dev_ops->link_update)(slave_ethdev,
+ 					internals->slaves[i].link_status_wait_to_complete);
+ 
+-			/* if link status has changed since last checked then call lsc
+-			 * event callback */
++			/* if link status has changed since last checked and bond dev is
++			 * started then call lsc event callback */
+ 			if (slave_ethdev->data->dev_link.link_status !=
+-					internals->slaves[i].last_link_status) {
++					internals->slaves[i].last_link_status &&
++						bonded_ethdev->data->dev_started) {
+ 				internals->slaves[i].last_link_status =
+ 						slave_ethdev->data->dev_link.link_status;
+ 
+--- a/drivers/net/bonding/rte_eth_bond_private.h
++++ b/drivers/net/bonding/rte_eth_bond_private.h
+@@ -322,4 +322,6 @@ bond_ethdev_stop(struct rte_eth_dev *eth
+ void
+ bond_ethdev_close(struct rte_eth_dev *dev);
+ 
++void
++bond_ethdev_slave_link_status_change_monitor(void *cb_arg);
+ #endif

@@ -1,0 +1,164 @@
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -2,6 +2,7 @@
+  * Copyright(c) 2010-2014 Intel Corporation
+  */
+ 
++#include <assert.h>
+ #include <stdio.h>
+ #include <string.h>
+ 
+@@ -41,7 +42,7 @@
+ 
+ #define RTE_SCHED_TB_RATE_CONFIG_ERR          (1e-7)
+ #define RTE_SCHED_BYTERATE_TO_BITRATE_SHIFT   3
+-#define RTE_SCHED_GRINDER_PCACHE_SIZE         4
++#define RTE_SCHED_GRINDER_PCACHE_SIZE         (64 / RTE_SCHED_QUEUES_PER_PIPE)
+ #define RTE_SCHED_PIPE_INVALID                UINT32_MAX
+ #define RTE_SCHED_BMP_POS_INVALID             UINT32_MAX
+ 
+@@ -135,9 +136,17 @@ enum grinder_state {
+ 	e_GRINDER_READ_MBUF
+ };
+ 
++_Static_assert(RTE_SCHED_QUEUES_PER_PIPE <= 32, "Too many queues per pipe");
++
++#if RTE_SCHED_QUEUES_PER_PIPE != 32
++typedef uint16_t qbitmask_t;
++#else
++typedef uint32_t qbitmask_t;
++#endif
++
+ struct rte_sched_grinder {
+ 	/* Pipe cache */
+-	uint16_t pcache_qmask[RTE_SCHED_GRINDER_PCACHE_SIZE];
++	qbitmask_t pcache_qmask[RTE_SCHED_GRINDER_PCACHE_SIZE];
+ 	uint32_t pcache_qindex[RTE_SCHED_GRINDER_PCACHE_SIZE];
+ 	uint32_t pcache_w;
+ 	uint32_t pcache_r;
+@@ -151,8 +160,8 @@ struct rte_sched_grinder {
+ 	struct rte_sched_pipe_profile *pipe_params;
+ 
+ 	/* TC cache */
+-	uint8_t tccache_qmask[4];
+-	uint32_t tccache_qindex[4];
++	uint8_t tccache_qmask[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	uint32_t tccache_qindex[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+ 	uint32_t tccache_w;
+ 	uint32_t tccache_r;
+ 
+@@ -2310,57 +2319,82 @@ static inline void
+ grinder_pcache_populate(struct rte_sched_port *port, uint32_t pos, uint32_t bmp_pos, uint64_t bmp_slab)
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+-	uint16_t w[4];
++	qbitmask_t w[RTE_SCHED_GRINDER_PCACHE_SIZE] = { 0 };
+ 
+ 	grinder->pcache_w = 0;
+ 	grinder->pcache_r = 0;
+ 
+-	w[0] = (uint16_t) bmp_slab;
+-	w[1] = (uint16_t) (bmp_slab >> 16);
+-	w[2] = (uint16_t) (bmp_slab >> 32);
+-	w[3] = (uint16_t) (bmp_slab >> 48);
++	w[0] = (qbitmask_t) bmp_slab;
++	w[1] = (qbitmask_t) (bmp_slab >> RTE_SCHED_QUEUES_PER_PIPE);
++#if RTE_SCHED_GRINDER_PCACHE_SIZE == 4
++	w[2] = (qbitmask_t) (bmp_slab >> (RTE_SCHED_QUEUES_PER_PIPE * 2));
++	w[3] = (qbitmask_t) (bmp_slab >> (RTE_SCHED_QUEUES_PER_PIPE * 3));
++#endif
+ 
+ 	grinder->pcache_qmask[grinder->pcache_w] = w[0];
+ 	grinder->pcache_qindex[grinder->pcache_w] = bmp_pos;
+ 	grinder->pcache_w += (w[0] != 0);
+ 
+ 	grinder->pcache_qmask[grinder->pcache_w] = w[1];
+-	grinder->pcache_qindex[grinder->pcache_w] = bmp_pos + 16;
++	grinder->pcache_qindex[grinder->pcache_w] = bmp_pos +
++		RTE_SCHED_QUEUES_PER_PIPE;
+ 	grinder->pcache_w += (w[1] != 0);
+ 
++#if RTE_SCHED_GRINDER_PCACHE_SIZE == 4
+ 	grinder->pcache_qmask[grinder->pcache_w] = w[2];
+-	grinder->pcache_qindex[grinder->pcache_w] = bmp_pos + 32;
++	grinder->pcache_qindex[grinder->pcache_w] = bmp_pos +
++		(RTE_SCHED_QUEUES_PER_PIPE * 2);
+ 	grinder->pcache_w += (w[2] != 0);
+ 
+ 	grinder->pcache_qmask[grinder->pcache_w] = w[3];
+-	grinder->pcache_qindex[grinder->pcache_w] = bmp_pos + 48;
++	grinder->pcache_qindex[grinder->pcache_w] = bmp_pos +
++		(RTE_SCHED_QUEUES_PER_PIPE * 3);
+ 	grinder->pcache_w += (w[3] != 0);
++#endif
+ }
+ 
+ uint32_t qmask_mask[] = { 0x1, 0x3, 0xF, 0xFF };
+ 
+ static inline void
+-grinder_tccache_populate(struct rte_sched_port *port, uint32_t pos, uint32_t qindex, uint16_t qmask)
++grinder_tccache_populate(struct rte_sched_port *port, uint32_t pos, uint32_t qindex, qbitmask_t qmask)
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+-	uint8_t b[4] = { 0 };
+-	uint32_t i;
+-	uint32_t j;
++	uint8_t b[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE] = { 0 };
+ 
+ 	grinder->tccache_w = 0;
+ 	grinder->tccache_r = 0;
+ 
+-	for (i = 0; qmask != 0; i++) {
+-		b[i] = (uint8_t) (qmask & qmask_mask[RTE_SCHED_WRR_BITS]);
+-		qmask >>= RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS;
+-	}
+-
+-	for (j = 0; j <= i; j++) {
+-		grinder->tccache_qmask[grinder->tccache_w] = b[j];
+-		grinder->tccache_qindex[grinder->tccache_w] = qindex +
+-			(j * RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS);
+-		grinder->tccache_w += (b[j] != 0);
+-	}
++	b[0] = (uint8_t) (qmask & qmask_mask[RTE_SCHED_WRR_BITS]);
++	b[1] = (uint8_t) ((qmask >> RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS) &
++			  qmask_mask[RTE_SCHED_WRR_BITS]);
++
++#if RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE == 4
++	b[2] = (uint8_t) ((qmask >> (RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS * 2)) &
++			  qmask_mask[RTE_SCHED_WRR_BITS]);
++	b[3] = (uint8_t) ((qmask >> (RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS * 3)) &
++			  qmask_mask[RTE_SCHED_WRR_BITS]);
++#endif
++
++	grinder->tccache_qmask[grinder->tccache_w] = b[0];
++	grinder->tccache_qindex[grinder->tccache_w] = qindex;
++	grinder->tccache_w += (b[0] != 0);
++
++	grinder->tccache_qmask[grinder->tccache_w] = b[1];
++	grinder->tccache_qindex[grinder->tccache_w] = qindex +
++		RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS;
++	grinder->tccache_w += (b[1] != 0);
++
++#if RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE == 4
++	grinder->tccache_qmask[grinder->tccache_w] = b[2];
++	grinder->tccache_qindex[grinder->tccache_w] = qindex +
++		(RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS * 2);
++	grinder->tccache_w += (b[2] != 0);
++
++	grinder->tccache_qmask[grinder->tccache_w] = b[3];
++	grinder->tccache_qindex[grinder->tccache_w] = qindex +
++		(RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS * 3);
++	grinder->tccache_w += (b[3] != 0);
++#endif
+ }
+ 
+ static inline int
+@@ -2399,7 +2433,7 @@ grinder_next_pipe(struct rte_sched_port
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+ 	uint32_t pipe_qindex;
+-	uint16_t pipe_qmask;
++	qbitmask_t pipe_qmask;
+ 
+ 	if (grinder->pcache_r < grinder->pcache_w) {
+ 		pipe_qmask = grinder->pcache_qmask[grinder->pcache_r];

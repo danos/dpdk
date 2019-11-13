@@ -1,0 +1,11 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib/@DEB_HOST_MULTIARCH@
+includedir=${prefix}/include
+include_arch_dir=${prefix}/include/@DEB_HOST_MULTIARCH@
+
+Name: dpdk
+Description: Data Plane Development Kit library
+Version: @VERSION@
+Libs: -L${libdir} @DPDK_LIBS@ -ldl -lm -lpthread -lz
+Cflags: -include ${include_arch_dir}/dpdk/rte_config.h -I${include_arch_dir}/dpdk -I${includedir}/dpdk

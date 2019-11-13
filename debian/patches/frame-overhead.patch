@@ -1,0 +1,88 @@
+From b9cbf5c1f586841d2a1746b419ef9564d9e069a7 Mon Sep 17 00:00:00 2001
+From: Alan Robertson <alan.robertson@intl.att.com>
+Date: Mon, 11 Dec 2017 11:42:45 +0000
+Subject: [PATCH] Allow -ve frame_overhead values
+
+When forwarding traffic across a TDM network the ethernet header will
+be replaced with a ML-PPP one thereby reducing the size of the packet.
+
+Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
+---
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -226,7 +226,7 @@ struct rte_sched_port {
+ 	uint32_t n_pipes_per_subport;
+ 	uint32_t rate;
+ 	uint32_t mtu;
+-	uint32_t frame_overhead;
++	int32_t frame_overhead;
+ 	uint16_t qsize[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+ 	uint32_t n_pipe_profiles;
+ 	uint32_t pipe_low_prio_tc_rate_max;
+@@ -1881,13 +1881,16 @@ grinder_credits_check(struct rte_sched_p
+ 	struct rte_sched_pipe *pipe = grinder->pipe;
+ 	struct rte_mbuf *pkt = grinder->pkt;
+ 	uint32_t tc_index = grinder->tc_index;
+-	uint32_t pkt_len = pkt->pkt_len + port->frame_overhead;
++	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
+ 	uint32_t subport_tb_credits = subport->tb_credits;
+ 	uint32_t subport_tc_credits = subport->tc_credits[tc_index];
+ 	uint32_t pipe_tb_credits = pipe->tb_credits;
+ 	uint32_t pipe_tc_credits = pipe->tc_credits[tc_index];
+ 	int enough_credits;
+ 
++	if (pkt_len < 0)
++		pkt_len = 0;
++
+ 	/* Check queue credits */
+ 	enough_credits = (pkt_len <= subport_tb_credits) &&
+ 		(pkt_len <= subport_tc_credits) &&
+@@ -1916,7 +1919,7 @@ grinder_credits_check(struct rte_sched_p
+ 	struct rte_sched_pipe *pipe = grinder->pipe;
+ 	struct rte_mbuf *pkt = grinder->pkt;
+ 	uint32_t tc_index = grinder->tc_index;
+-	uint32_t pkt_len = pkt->pkt_len + port->frame_overhead;
++	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
+ 	uint32_t subport_tb_credits = subport->tb_credits;
+ 	uint32_t subport_tc_credits = subport->tc_credits[tc_index];
+ 	uint32_t pipe_tb_credits = pipe->tb_credits;
+@@ -1926,6 +1929,9 @@ grinder_credits_check(struct rte_sched_p
+ 	uint32_t pipe_tc_ov_credits = pipe_tc_ov_mask1[tc_index];
+ 	int enough_credits;
+ 
++	if (pkt_len < 0)
++		pkt_len = 0;
++
+ 	/* Check pipe and subport credits */
+ 	enough_credits = (pkt_len <= subport_tb_credits) &&
+ 		(pkt_len <= subport_tc_credits) &&
+@@ -1955,11 +1961,14 @@ grinder_schedule(struct rte_sched_port *
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+ 	struct rte_sched_queue *queue = grinder->queue[grinder->qpos];
+ 	struct rte_mbuf *pkt = grinder->pkt;
+-	uint32_t pkt_len = pkt->pkt_len + port->frame_overhead;
++	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
+ 
+ 	if (!grinder_credits_check(port, pos))
+ 		return 0;
+ 
++	if (pkt_len < 0)
++		pkt_len = 0;
++
+ 	/* Advance port time */
+ 	port->time += pkt_len;
+ 
+--- a/lib/librte_sched/rte_sched.h
++++ b/lib/librte_sched/rte_sched.h
+@@ -235,8 +235,9 @@ struct rte_sched_port_params {
+ 	uint32_t mtu;                    /**< Maximum Ethernet frame size
+ 					  * (measured in bytes).
+ 					  * Should not include the framing overhead. */
+-	uint32_t frame_overhead;         /**< Framing overhead per packet
+-					  * (measured in bytes) */
++	int32_t frame_overhead;
++	/**< Framing overhead per packet * (measured in bytes).
++	 * Can have negative value. */
+ 	uint32_t n_subports_per_port;    /**< Number of subports */
+ 	uint32_t n_pipes_per_subport;    /**< Number of pipes per subport */
+ 	uint16_t qsize[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];

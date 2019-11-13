@@ -1,0 +1,17 @@
+--- a/drivers/net/mlx5/mlx5.c
++++ b/drivers/net/mlx5/mlx5.c
+@@ -1456,12 +1456,12 @@
+ 		.tx_vec_en = 1,
+ 		.rx_vec_en = 1,
+ 		.txq_inline = MLX5_ARG_UNSET,
+-		.txqs_inline = MLX5_ARG_UNSET,
++		.txqs_inline = 1,
+ 		.txqs_vec = MLX5_ARG_UNSET,
+ 		.inline_max_packet_sz = MLX5_ARG_UNSET,
+ 		.vf_nl_en = 1,
+ 		.mprq = {
+-			.enabled = 0, /* Disabled by default. */
++			.enabled = 1, /* Enabled by default. */
+ 			.stride_num_n = MLX5_MPRQ_STRIDE_NUM_N,
+ 			.max_memcpy_len = MLX5_MPRQ_MEMCPY_DEFAULT_LEN,
+ 			.min_rxqs_num = MLX5_MPRQ_MIN_RXQS,

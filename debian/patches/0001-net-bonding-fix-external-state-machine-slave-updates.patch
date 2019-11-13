@@ -1,0 +1,72 @@
+From e09e91f0adb69fa82ce7d50384ceb79a506774b5 Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Wed, 7 Aug 2019 22:49:08 -0400
+Subject: [PATCH 1/2] net/bonding: fix external state machine slave updates
+
+The external state machine needs to be able to update a slave before it
+is started or active. Blocking this behavior introduces a race. The state
+of the slave can't be set before it is started and active, i.e. link up.
+By the time the slave reaches this state it is potentially receiving
+packets.
+
+Fixes: dc40f17a36bc ("net/bonding: allow external state machine in mode 4")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chas Williams <chas3@att.com>
+---
+ drivers/net/bonding/rte_eth_bond_8023ad.c | 7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
+
+--- a/drivers/net/bonding/rte_eth_bond_8023ad.c
++++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
+@@ -1422,21 +1422,20 @@ bond_8023ad_ext_validate(uint16_t port_i
+ 	struct rte_eth_dev *bond_dev;
+ 	struct bond_dev_private *internals;
+ 	struct mode8023ad_private *mode4;
++	int i;
+ 
+ 	if (rte_eth_bond_mode_get(port_id) != BONDING_MODE_8023AD)
+ 		return -EINVAL;
+ 
+ 	bond_dev = &rte_eth_devices[port_id];
+ 
+-	if (!bond_dev->data->dev_started)
+-		return -EINVAL;
+-
+ 	internals = bond_dev->data->dev_private;
+-	if (find_slave_by_id(internals->active_slaves,
+-			internals->active_slave_count, slave_id) ==
+-				internals->active_slave_count)
+-		return -EINVAL;
++	for (i = 0; i < internals->slave_count; i++)
++		if (internals->slaves[i].port_id == slave_id)
++			goto found_slave;
++	return -EINVAL;
+ 
++found_slave:
+ 	mode4 = &internals->mode4;
+ 	if (mode4->slowrx_cb == NULL)
+ 		return -EINVAL;
+@@ -1519,12 +1518,22 @@ rte_eth_bond_8023ad_ext_slowtx(uint16_t
+ 		struct rte_mbuf *lacp_pkt)
+ {
+ 	struct port *port;
++	struct rte_eth_dev *bond_dev;
++	struct bond_dev_private *internals;
+ 	int res;
+ 
+ 	res = bond_8023ad_ext_validate(port_id, slave_id);
+ 	if (res != 0)
+ 		return res;
+ 
++	bond_dev = &rte_eth_devices[port_id];
++	internals = bond_dev->data->dev_private;
++	if (find_slave_by_id(internals->active_slaves,
++			     internals->active_slave_count, slave_id) ==
++			     internals->active_slave_count)
++		return -EINVAL;
++
++
+ 	port = &bond_mode_8023ad_ports[slave_id];
+ 
+ 	if (rte_pktmbuf_pkt_len(lacp_pkt) < sizeof(struct lacpdu_header))
