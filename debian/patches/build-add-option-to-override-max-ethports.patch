@@ -1,0 +1,53 @@
+From b6f6c3456158c4983e26230c92e4b3d3a20027be Mon Sep 17 00:00:00 2001
+From: Chas Williams <3chas3@gmail.com>
+Date: Wed, 30 Jan 2019 20:53:27 -0500
+Subject: [PATCH] build: add option to override max ethports
+
+Allow users and packagers to override the default RTE_MAX_ETHPORTS.
+This adds a new meson option, max_ethports which defaults to the
+current value.
+
+Signed-off-by: Chas Williams <3chas3@gmail.com>
+---
+ config/meson.build  | 1 +
+ config/rte_config.h | 1 -
+ meson_options.txt   | 2 ++
+ 3 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/config/meson.build b/config/meson.build
+index db32499b3..e59507065 100644
+--- a/config/meson.build
++++ b/config/meson.build
+@@ -103,6 +103,7 @@ endforeach
+ # set other values pulled from the build options
+ dpdk_conf.set('RTE_MAX_LCORE', get_option('max_lcores'))
+ dpdk_conf.set('RTE_MAX_NUMA_NODES', get_option('max_numa_nodes'))
++dpdk_conf.set('RTE_MAX_ETHPORTS', get_option('max_ethports'))
+ dpdk_conf.set('RTE_LIBEAL_USE_HPET', get_option('use_hpet'))
+ dpdk_conf.set('RTE_EAL_ALLOW_INV_SOCKET_ID', get_option('allow_invalid_socket_id'))
+ # values which have defaults which may be overridden
+diff --git a/config/rte_config.h b/config/rte_config.h
+index d3732e953..7606f5d7b 100644
+--- a/config/rte_config.h
++++ b/config/rte_config.h
+@@ -51,7 +51,6 @@
+ #define RTE_PKTMBUF_HEADROOM 128
+ 
+ /* ether defines */
+-#define RTE_MAX_ETHPORTS 32
+ #define RTE_MAX_QUEUES_PER_PORT 1024
+ #define RTE_ETHDEV_QUEUE_STAT_CNTRS 16
+ #define RTE_ETHDEV_RXTX_CALLBACKS 1
+diff --git a/meson_options.txt b/meson_options.txt
+index 574054597..e54eedc66 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -28,3 +28,5 @@ option('use_hpet', type: 'boolean', value: false,
+ 	description: 'use HPET timer in EAL')
+ option('tests', type: 'boolean', value: true,
+ 	description: 'build unit tests')
++option('max_ethports', type: 'string', value: '32',
++	description: 'maximum number of Ethernet devices in EAL')
+-- 
+2.17.2
+

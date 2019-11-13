@@ -1,0 +1,44 @@
+From d387b7ae45a520970ff55ea6ce75b48d5e69c4d9 Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <sthemmin@microsoft.com>
+Date: Wed, 5 Dec 2018 14:11:58 -0800
+Subject: [PATCH] net/netvsc: disable multi-queue on older servers
+
+[ upstream commit afbc22bf51ab98b9b61b11eb6d38278a9d577111 ]
+
+NDIS multi-queue support is only in WS2012 or later. Check the NDIS
+version to limit to single queue on older versions. Similar code
+exists in Linux driver.
+
+Fixes: 4e9c73e96e83 ("net/netvsc: add Hyper-V network device")
+
+Signed-off-by: Stephen Hemminger <sthemmin@microsoft.com>
+---
+ drivers/net/netvsc/hn_ethdev.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/net/netvsc/hn_ethdev.c b/drivers/net/netvsc/hn_ethdev.c
+index b330bf3d7..1256fa399 100644
+--- a/drivers/net/netvsc/hn_ethdev.c
++++ b/drivers/net/netvsc/hn_ethdev.c
+@@ -732,6 +732,7 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
+ 	hv->chim_res  = &vmbus->resource[HV_SEND_BUF_MAP];
+ 	hv->port_id = eth_dev->data->port_id;
+ 	hv->latency = HN_CHAN_LATENCY_NS;
++	hv->max_queues = 1;
+ 
+ 	err = hn_parse_args(eth_dev);
+ 	if (err)
+@@ -770,6 +771,10 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
+ 	if (err)
+ 		goto failed;
+ 
++	/* Multi queue requires later versions of windows server */
++	if (hv->nvs_ver < NVS_VERSION_5)
++		return 0;
++
+ 	max_chan = rte_vmbus_max_channels(vmbus);
+ 	PMD_INIT_LOG(DEBUG, "VMBus max channels %d", max_chan);
+ 	if (max_chan <= 0)
+-- 
+2.11.0
+

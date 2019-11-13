@@ -12,6 +12,17 @@ ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
 	export DH_OPTIONS=-v
 endif
 
+# Support Vyatta vendor specific options
+ifeq ($(shell dpkg-vendor --is Vyatta && echo yes),yes)
+ ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
+	DEB_BUILD_OPTIONS += dpdk_config_options=-Duse_hpet=true,-Dmax_ethports=128,-Dmax_numa_nodes=8
+ endif
+ ifeq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
+	DEB_BUILD_OPTIONS += kernel_modules ksrc=/lib/modules/$(shell ls -1 /lib/modules | sort | head -1)/build
+ endif
+ DEB_BUILD_OPTIONS += nodoc
+endif
+
 # People rebuilding this package can overwrite RTE_MACHINE
 # via DEB_BUILD_OPTIONS if they like
 ifneq (,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
@@ -81,11 +92,11 @@ build:
 	fi
 	sh debian/prep-modules $(KSRC)
 	cat debian/control.modules >> debian/control
-	dh $@ --with python3,dkms,systemd --buildsystem=meson
+	dh $@ --with python3,dkms,systemd,signobs
 endif
 
 %:
-	dh $@ --with python3,dkms,systemd --buildsystem=meson
+	dh $@ --with python3,dkms,systemd,signobs
 
 override_dh_gencontrol:
 	dh_gencontrol
@@ -101,16 +112,23 @@ ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
 		-v`cat debian/VERSION` \
 		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
 endif
+	dh_gencontrol -p libdpdk-dbg -- -V"librte:Depends=`grep -E 'dbgsym' ./debian/files | sed -E 's/_/, /' | cut -d ' ' -f 1`"
 
 override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
-		debian/control.modules debian/VERSION
+		debian/control.modules debian/VERSION debian/files.json
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	rm -f debian/dpdk-igb-uio-dkms.dkms debian/dpdk-rte-kni-dkms.dkms
-	dh_auto_clean
+	rm -rf obj-$(DEB_HOST_MULTIARCH)
 
 override_dh_auto_configure:
-	dh_auto_configure -- $(DPDK_CONFIG_OPTIONS) \
+	meson obj-$(DEB_HOST_MULTIARCH) --prefix=/usr $(DPDK_CONFIG_OPTIONS) \
+		--wrap-mode=nodownload \
+		--buildtype=plain \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=lib/$(DEB_HOST_MULTIARCH) \
 		--includedir=include/dpdk \
 		--default-library=shared \
 		-Dper_library_versions=false \
@@ -121,17 +139,20 @@ override_dh_auto_configure:
 
 override_dh_auto_build-indep:
 ifeq (y,$(BUILD_DOCS))
-	dh_auto_build -- doc
+	ninja -C obj-$(DEB_HOST_MULTIARCH) doc
 	# NINJA DOC INSTALL DOES NOT WORK - .buildinfo present, css missing
 	rm -f obj-$(DEB_HOST_MULTIARCH)/doc/guides/guides/.buildinfo
 endif
+
+override_dh_auto_build-arch:
+	ninja -C obj-$(DEB_HOST_MULTIARCH)
 
 # ninja install doc does not work, will rebuild everything,
 # only dpdk-doc as arch: all so just skip it
 override_dh_auto_install-indep:
 
 override_dh_auto_install-arch:
-	dh_auto_install
+	DESTDIR=$(CURDIR)/debian/tmp/ ninja -C obj-$(DEB_HOST_MULTIARCH) install
 	# have the DKMS build include the correct per-arch directory
 	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
 	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-rte-kni-dkms.dkms.in > debian/dpdk-rte-kni-dkms.dkms
@@ -158,6 +179,7 @@ override_dh_auto_install-arch:
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
 	dh_install -p dpdk-modules-$(KVERS) lib/modules
+	echo "{\"dpdk-modules-$(KVERS)\": { \"files\": [ {\"sig_type\": \"linux-module\", \"file\": \"lib/modules/$(KVERS)/extra/dpdk/igb_uio.ko\"} ]}}" > debian/files.json
 endif
 
 override_dh_dkms:

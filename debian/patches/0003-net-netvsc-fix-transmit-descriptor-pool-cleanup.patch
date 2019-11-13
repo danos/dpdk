@@ -1,0 +1,76 @@
+From b61fb5e52a7f1a0ad9220cab654203d5e694ef92 Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <stephen@networkplumber.org>
+Date: Thu, 13 Dec 2018 17:26:20 -0800
+Subject: [PATCH] net/netvsc: fix transmit descriptor pool cleanup
+
+[ upstream commit c578d8507b4325747bbdb3993774e59fbad45d84 ]
+
+On device close or startup errors, the transmit descriptor pool
+was being left behind.
+
+Fixes: 4e9c73e96e83 ("net/netvsc: add Hyper-V network device")
+
+Signed-off-by: Stephen Hemminger <sthemmin@microsoft.com>
+---
+ drivers/net/netvsc/hn_ethdev.c |  2 ++
+ drivers/net/netvsc/hn_rxtx.c   | 11 +++++++++++
+ drivers/net/netvsc/hn_var.h    |  1 +
+ 3 files changed, 14 insertions(+)
+
+diff --git a/drivers/net/netvsc/hn_ethdev.c b/drivers/net/netvsc/hn_ethdev.c
+index 1256fa399..8c7fc6719 100644
+--- a/drivers/net/netvsc/hn_ethdev.c
++++ b/drivers/net/netvsc/hn_ethdev.c
+@@ -799,6 +799,7 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
+ failed:
+ 	PMD_INIT_LOG(NOTICE, "device init failed");
+ 
++	hn_tx_pool_uninit(eth_dev);
+ 	hn_detach(hv);
+ 	return err;
+ }
+@@ -821,6 +822,7 @@ eth_hn_dev_uninit(struct rte_eth_dev *eth_dev)
+ 	eth_dev->rx_pkt_burst = NULL;
+ 
+ 	hn_detach(hv);
++	hn_tx_pool_uninit(eth_dev);
+ 	rte_vmbus_chan_close(hv->primary->chan);
+ 	rte_free(hv->primary);
+ 	rte_eth_dev_owner_delete(hv->owner.id);
+diff --git a/drivers/net/netvsc/hn_rxtx.c b/drivers/net/netvsc/hn_rxtx.c
+index f4a36641b..487f76466 100644
+--- a/drivers/net/netvsc/hn_rxtx.c
++++ b/drivers/net/netvsc/hn_rxtx.c
+@@ -199,6 +199,17 @@ hn_tx_pool_init(struct rte_eth_dev *dev)
+ 	return 0;
+ }
+ 
++void
++hn_tx_pool_uninit(struct rte_eth_dev *dev)
++{
++	struct hn_data *hv = dev->data->dev_private;
++
++	if (hv->tx_pool) {
++		rte_mempool_free(hv->tx_pool);
++		hv->tx_pool = NULL;
++	}
++}
++
+ static void hn_reset_txagg(struct hn_tx_queue *txq)
+ {
+ 	txq->agg_szleft = txq->agg_szmax;
+diff --git a/drivers/net/netvsc/hn_var.h b/drivers/net/netvsc/hn_var.h
+index e1072c7cf..a6516c1e6 100644
+--- a/drivers/net/netvsc/hn_var.h
++++ b/drivers/net/netvsc/hn_var.h
+@@ -149,6 +149,7 @@ uint16_t hn_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
+ 		      uint16_t nb_pkts);
+ 
+ int	hn_tx_pool_init(struct rte_eth_dev *dev);
++void	hn_tx_pool_uninit(struct rte_eth_dev *dev);
+ int	hn_dev_link_update(struct rte_eth_dev *dev, int wait);
+ int	hn_dev_tx_queue_setup(struct rte_eth_dev *dev, uint16_t queue_idx,
+ 			      uint16_t nb_desc, unsigned int socket_id,
+-- 
+2.11.0
+

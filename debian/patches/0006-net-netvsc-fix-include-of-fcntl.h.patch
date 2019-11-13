@@ -1,0 +1,37 @@
+From fa1668ce4be40d1aef18d200f7aad9df898632a8 Mon Sep 17 00:00:00 2001
+From: Natanael Copa <ncopa@alpinelinux.org>
+Date: Wed, 13 Mar 2019 18:06:56 +0100
+Subject: [PATCH] net/netvsc: fix include of fcntl.h
+
+[ upstream commit f6d163a6dc39cdcc618f3e865658da508afeb527 ]
+
+Fix the following warning when building with musl libc:
+
+In file included from ../drivers/net/netvsc/hn_vf.c:14:
+/usr/include/sys/fcntl.h:1:2: warning: #warning redirecting
+incorrect #include <sys/fcntl.h> to <fcntl.h> [-Wcpp]
+
+Fixes: dc7680e8597c ("net/netvsc: support integrated VF")
+
+Signed-off-by: Natanael Copa <ncopa@alpinelinux.org>
+---
+ drivers/net/netvsc/hn_vf.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/netvsc/hn_vf.c b/drivers/net/netvsc/hn_vf.c
+index de278eb7b..4127e411f 100644
+--- a/drivers/net/netvsc/hn_vf.c
++++ b/drivers/net/netvsc/hn_vf.c
+@@ -10,8 +10,8 @@
+ #include <errno.h>
+ #include <unistd.h>
+ #include <dirent.h>
++#include <fcntl.h>
+ #include <sys/types.h>
+-#include <sys/fcntl.h>
+ #include <sys/uio.h>
+ 
+ #include <rte_ether.h>
+-- 
+2.11.0
+

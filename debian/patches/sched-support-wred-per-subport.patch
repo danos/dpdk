@@ -1,0 +1,124 @@
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -106,6 +106,10 @@ struct rte_sched_subport {
+ 	uint32_t qsize_add[RTE_SCHED_QUEUES_PER_PIPE];
+ 	uint32_t qsize_sum;
+ 	uint32_t qoffset;
++
++#ifdef RTE_SCHED_RED
++	struct rte_red_config red_config[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE][e_RTE_METER_COLORS];
++#endif
+ };
+ 
+ struct rte_sched_pipe_profile {
+@@ -982,7 +986,8 @@ static int
+ rte_sched_subport_config_common(struct rte_sched_port *port,
+ 				uint32_t subport_id,
+ 				struct rte_sched_subport_params *params,
+-				uint16_t *qsize)
++				uint16_t *qsize,
++				struct rte_red_params red_params[][e_RTE_METER_COLORS])
+ {
+ 
+ 	struct rte_sched_subport *s;
+@@ -1035,6 +1040,38 @@ rte_sched_subport_config_common(struct r
+ 						     params->tc_rate[i]);
+ 		s->tc_credits[i] = s->tc_credits_per_period[i];
+ 	}
++
++#ifdef RTE_SCHED_RED
++	for (i = 0; i < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; i++) {
++		uint32_t j;
++
++		if (!red_params) {
++			/* Copy the red configuration from port */
++			for (j = 0; j < e_RTE_METER_COLORS; j++)
++				s->red_config[i][j] = port->red_config[i][j];
++		} else {
++			/* Subport has an individual red configuration */
++			for (j = 0; j < e_RTE_METER_COLORS; j++) {
++				/* if min/max are both zero, then RED is
++				 * disabled
++				 */
++				if ((red_params[i][j].min_th |
++				     red_params[i][j].max_th) == 0) {
++					continue;
++				}
++
++				if (rte_red_config_init(&s->red_config[i][j],
++					red_params[i][j].wq_log2,
++					red_params[i][j].min_th,
++					red_params[i][j].max_th,
++					red_params[i][j].maxp_inv) != 0) {
++					return -6;
++				}
++			}
++		}
++	}
++#endif
++
+ #ifdef RTE_SCHED_SUBPORT_TC_OV
+ 	/* TC oversubscription */
+ 	s->tc_ov_wm_min = port->mtu;
+@@ -1058,17 +1095,19 @@ rte_sched_subport_config(struct rte_sche
+ 			 uint32_t subport_id,
+ 			 struct rte_sched_subport_params *params)
+ {
+-	return rte_sched_subport_config_common(port, subport_id, params, NULL);
++	return rte_sched_subport_config_common(port, subport_id, params, NULL,
++					       NULL);
+ }
+ 
+ int
+ rte_sched_subport_config_v2(struct rte_sched_port *port,
+ 			    uint32_t subport_id,
+ 			    struct rte_sched_subport_params *params,
+-			    uint16_t *qsize)
++			    uint16_t *qsize,
++			    struct rte_red_params red_params[][e_RTE_METER_COLORS])
+ {
+ 	return rte_sched_subport_config_common(port, subport_id, params,
+-					       qsize);
++					       qsize, red_params);
+ }
+ 
+ int
+@@ -1375,6 +1414,8 @@ rte_sched_port_update_queue_stats_on_dro
+ static inline int
+ rte_sched_port_red_drop(struct rte_sched_port *port, struct rte_mbuf *pkt, uint32_t qindex, uint16_t qlen)
+ {
++	struct rte_sched_subport *subport = port->subport +
++		(qindex / rte_sched_port_queues_per_subport(port));
+ 	struct rte_sched_queue_extra *qe;
+ 	struct rte_red_config *red_cfg;
+ 	struct rte_red *red;
+@@ -1383,7 +1424,7 @@ rte_sched_port_red_drop(struct rte_sched
+ 
+ 	tc_index = (qindex >> RTE_SCHED_WRR_BITS) & RTE_SCHED_TC_MASK;
+ 	color = rte_sched_port_pkt_read_color(pkt);
+-	red_cfg = &port->red_config[tc_index][color];
++	red_cfg = &subport->red_config[tc_index][color];
+ 
+ 	if ((red_cfg->min_th | red_cfg->max_th) == 0)
+ 		return 0;
+--- a/lib/librte_sched/rte_sched.h
++++ b/lib/librte_sched/rte_sched.h
+@@ -320,6 +320,8 @@ rte_sched_subport_config(struct rte_sche
+  *   Subport configuration parameters
+  * @param qsize
+  *   Array of traffic-class maximum queue-lengths
++ * @param red_params
++ *   Subport WRED queue configuration parameters
+  * @return
+  *   0 upon success, error code otherwise
+  */
+@@ -327,7 +329,8 @@ int
+ rte_sched_subport_config_v2(struct rte_sched_port *port,
+ 			    uint32_t subport_id,
+ 			    struct rte_sched_subport_params *params,
+-			    uint16_t *qsize);
++			    uint16_t *qsize,
++			    struct rte_red_params red_params[][e_RTE_METER_COLORS]);
+ 
+ /**
+  * Hierarchical scheduler pipe configuration

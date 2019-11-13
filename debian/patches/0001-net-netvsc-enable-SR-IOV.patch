@@ -1,0 +1,36 @@
+From 21dc946c2b5524c7e6ec1fe4079864f3322dd483 Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <sthemmin@microsoft.com>
+Date: Wed, 5 Dec 2018 14:11:57 -0800
+Subject: [PATCH] net/netvsc: enable SR-IOV
+
+[ upstream commit 825ab257b5ce8235ab0cdc260e5b7b757e102875 ]
+
+Make DPDK enable SRIOV flag in same way as Linux and FreeBSD.
+
+Fixes: dc7680e8597c ("net/netvsc: support integrated VF")
+
+Signed-off-by: Stephen Hemminger <sthemmin@microsoft.com>
+---
+ drivers/net/netvsc/hn_nvs.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/netvsc/hn_nvs.c b/drivers/net/netvsc/hn_nvs.c
+index 9690c5f8a..d58770e04 100644
+--- a/drivers/net/netvsc/hn_nvs.c
++++ b/drivers/net/netvsc/hn_nvs.c
+@@ -326,9 +326,9 @@ hn_nvs_conf_ndis(struct hn_data *hv, unsigned int mtu)
+ 	conf.mtu = mtu + ETHER_HDR_LEN;
+ 	conf.caps = NVS_NDIS_CONF_VLAN;
+ 
+-	/* TODO enable SRIOV */
+-	//if (hv->nvs_ver >= NVS_VERSION_5)
+-	//	conf.caps |= NVS_NDIS_CONF_SRIOV;
++	/* enable SRIOV */
++	if (hv->nvs_ver >= NVS_VERSION_5)
++		conf.caps |= NVS_NDIS_CONF_SRIOV;
+ 
+ 	/* NOTE: No response. */
+ 	error = hn_nvs_req_send(hv, &conf, sizeof(conf));
+-- 
+2.11.0
+

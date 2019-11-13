@@ -1,6 +1,4 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: dpdk
-Source: https://dpdk.org
 
 Files: *
 Copyright: 2008-2014 Cisco Systems, Inc.
@@ -55,6 +53,7 @@ License: GPL-2
 
 Files: debian/*
 Copyright: 2015, 2016 Canonical Ltd.
+           2019, AT&T Intellectual Property.  All rights reserved.
 License: GPL-3
 
 Files: debian/kernel-version

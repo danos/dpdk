@@ -1,0 +1,90 @@
+From af91947cd236ece51b026ad9648b12cb59deeee5 Mon Sep 17 00:00:00 2001
+From: Chas Williams <chas3@att.com>
+Date: Thu, 14 Feb 2019 14:09:58 -0500
+Subject: [PATCH] net/bonding: fix slave Tx burst for mode 4
+
+The Tx burst routine always needs to check for pending LACPDUs
+and send them if available. Do this first to prioritize the
+control traffic.  We can still early exit, before calculating
+the distribution slaves, if there isn't any data packets.
+
+Fixes: 09150784a776 ("net/bonding: burst mode hash calculation")
+Cc: stable@dpdk.org
+
+Reported-by: Hui Zhao <zhaohui8@huawei.com>
+Signed-off-by: Chas Williams <chas3@att.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 48 +++++++++++++++++-----------------
+ 1 file changed, 24 insertions(+), 24 deletions(-)
+
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1298,9 +1298,6 @@ bond_ethdev_tx_burst_8023ad(void *queue,
+ 
+ 	uint16_t i;
+ 
+-	if (unlikely(nb_bufs == 0))
+-		return 0;
+-
+ 	/* Copy slave list to protect against slave up/down changes during tx
+ 	 * bursting */
+ 	slave_count = internals->active_slave_count;
+@@ -1310,6 +1307,30 @@ bond_ethdev_tx_burst_8023ad(void *queue,
+ 	memcpy(slave_port_ids, internals->active_slaves,
+ 			sizeof(slave_port_ids[0]) * slave_count);
+ 
++	/* Check for LACP control packets and send if available */
++	for (i = 0; i < slave_count; i++) {
++		struct port *port = &bond_mode_8023ad_ports[slave_port_ids[i]];
++		struct rte_mbuf *ctrl_pkt = NULL;
++
++		if (likely(rte_ring_empty(port->tx_ring)))
++			continue;
++
++		if (rte_ring_dequeue(port->tx_ring,
++				     (void **)&ctrl_pkt) != -ENOENT) {
++			slave_tx_count = rte_eth_tx_burst(slave_port_ids[i],
++					bd_tx_q->queue_id, &ctrl_pkt, 1);
++			/*
++			 * re-enqueue LAG control plane packets to buffering
++			 * ring if transmission fails so the packet isn't lost.
++			 */
++			if (slave_tx_count != 1)
++				rte_ring_enqueue(port->tx_ring,	ctrl_pkt);
++		}
++	}
++
++	if (unlikely(nb_bufs == 0))
++		return 0;
++
+ 	dist_slave_count = 0;
+ 	for (i = 0; i < slave_count; i++) {
+ 		struct port *port = &bond_mode_8023ad_ports[slave_port_ids[i]];
+@@ -1365,27 +1386,6 @@ bond_ethdev_tx_burst_8023ad(void *queue,
+ 		}
+ 	}
+ 
+-	/* Check for LACP control packets and send if available */
+-	for (i = 0; i < slave_count; i++) {
+-		struct port *port = &bond_mode_8023ad_ports[slave_port_ids[i]];
+-		struct rte_mbuf *ctrl_pkt = NULL;
+-
+-		if (likely(rte_ring_empty(port->tx_ring)))
+-			continue;
+-
+-		if (rte_ring_dequeue(port->tx_ring,
+-				     (void **)&ctrl_pkt) != -ENOENT) {
+-			slave_tx_count = rte_eth_tx_burst(slave_port_ids[i],
+-					bd_tx_q->queue_id, &ctrl_pkt, 1);
+-			/*
+-			 * re-enqueue LAG control plane packets to buffering
+-			 * ring if transmission fails so the packet isn't lost.
+-			 */
+-			if (slave_tx_count != 1)
+-				rte_ring_enqueue(port->tx_ring,	ctrl_pkt);
+-		}
+-	}
+-
+ 	return total_tx_count;
+ }
+ 

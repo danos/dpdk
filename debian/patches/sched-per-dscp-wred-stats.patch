@@ -1,0 +1,419 @@
+This patch will add support for per Q dscp WRED statistics so we can
+track the number of drops per WRED map.
+
+Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
+---
+--- a/lib/librte_sched/rte_red.c
++++ b/lib/librte_sched/rte_red.c
+@@ -187,6 +187,39 @@ rte_red_alloc_q_params(struct rte_sched_
+ }
+ 
+ struct rte_red_pipe_params *
++rte_red_copy_params(struct rte_sched_pipe_params *p_profs,
++		    const struct rte_red_pipe_params *orig, uint32_t qindex)
++{
++	struct rte_red_pipe_params *copy_params;
++	int num_params;
++	const struct rte_red_q_params *from;
++	struct rte_red_q_params *to;
++	int i, ret;
++
++	copy_params = rte_red_alloc_q_params(p_profs, qindex);
++	if (!copy_params)
++		return NULL;
++
++	memcpy(&copy_params->red_q_params, &orig->red_q_params,
++	       sizeof(struct rte_red_q_params));
++	copy_params->alloced = true;
++	num_params = copy_params->red_q_params.num_maps;
++	from = &orig->red_q_params;
++	to = &copy_params->red_q_params;
++	for (i = 0; i < num_params; i++) {
++		ret = asprintf(&to->grp_names[i], "%s", from->grp_names[i]);
++		if (ret < 0) {
++			SLIST_REMOVE_HEAD(&p_profs->qred_head, list);
++			for (i--; i >= 0; i--)
++				free(to->grp_names[i]);
++			free(copy_params);
++			return NULL;
++		}
++	}
++	return copy_params;
++}
++
++struct rte_red_pipe_params *
+ rte_red_find_q_params(struct rte_sched_pipe_params *pipe, unsigned int qindex)
+ {
+ 	struct rte_red_pipe_params *wred_params = NULL;
+@@ -201,20 +234,33 @@ rte_red_find_q_params(struct rte_sched_p
+ int
+ rte_red_init_q_params(struct rte_red_q_params *wred_params,
+                       unsigned qmax, unsigned qmin, unsigned prob,
+-                      uint64_t dscp_set)
++                      uint64_t dscp_set, char *grp_name)
+ {
+-	int wred_index;
++	int wred_index, ret;
+ 
+ 	if (!wred_params || wred_params->num_maps > RTE_MAX_DSCP_MAPS) {
+ 		RTE_LOG(ERR, SCHED, "Invalid DSCP map init params\n");
+ 		return -1;
+ 	}
+ 
++	/*
++	 * Make sure we're not downloading the same map again
++	 */
++	for (wred_index = 0; wred_index < wred_params->num_maps; wred_index++) {
++		if (!wred_params->grp_names[wred_index])
++			continue;
++		if (!strcmp(wred_params->grp_names[wred_index], grp_name))
++			return 0;
++	}
++
+ 	wred_index = wred_params->num_maps++;
+ 	wred_params->qparams[wred_index].max_th = qmax;
+ 	wred_params->qparams[wred_index].min_th = qmin;
+ 	wred_params->qparams[wred_index].maxp_inv = prob;
+ 	wred_params->dscp_set[wred_index] = dscp_set;
++	ret = asprintf(&wred_params->grp_names[wred_index], "%s", grp_name);
++	if (ret < 0)
++		wred_params->grp_names[wred_index] = NULL;
+ 	return 0;
+ }
+ 
+@@ -222,13 +268,38 @@ void
+ rte_red_free_q_params(struct rte_sched_pipe_params *pipe, int i)
+ {
+ 	struct rte_red_pipe_params *wred_params;
++	struct rte_red_q_params *qparams;
+ 
+ 	while ((wred_params = SLIST_FIRST(&pipe->qred_head)) != NULL) {
++		int j;
++
+ 		SLIST_REMOVE_HEAD(&pipe->qred_head, list);
+ 		RTE_LOG(DEBUG, SCHED,
+ 			"Freeing Q RED params qindex %u profile "
+ 			"%u pipe %p wred_params %p\n",
+ 			wred_params->qindex, i, pipe, wred_params);
++		qparams = &(wred_params->red_q_params);
++		for (j = 0; j < RTE_NUM_DSCP_MAPS; j++) {
++			if (qparams->grp_names[j])
++				free(qparams->grp_names[j]);
++		}
+ 		free(wred_params);
+ 	}
+ }
++
++int
++rte_red_queue_num_maps(struct rte_sched_port *port, uint32_t queue_id)
++{
++	struct rte_sched_queue_extra *qe;
++
++	/* Check user parameters */
++	if ((port == NULL) ||
++ 	    (queue_id >= rte_sched_port_queues_per_port(port)))
++		return -1;
++
++	qe = rte_sched_port_get_queue_extra(port, queue_id);
++	if (!qe)
++		return -1;
++
++	return qe->qred.num_maps;
++}
+--- a/lib/librte_sched/rte_red.h
++++ b/lib/librte_sched/rte_red.h
+@@ -17,6 +17,7 @@ extern "C" {
+  ***/
+ 
+ #include <stdint.h>
++#include <stdbool.h>
+ #include <limits.h>
+ #include <rte_common.h>
+ #include <rte_debug.h>
+@@ -78,13 +79,15 @@ struct rte_red_config {
+ struct rte_red_q_params {
+ 	uint64_t	dscp_set[RTE_NUM_DSCP_MAPS];
+ 	struct rte_red_params qparams[RTE_NUM_DSCP_MAPS];
++	char		*grp_names[RTE_NUM_DSCP_MAPS];
+ 	uint8_t		num_maps;
+ };
+ 
+ struct rte_red_pipe_params {
+ 	SLIST_ENTRY(rte_red_pipe_params) list;
+ 	struct rte_red_q_params red_q_params;
+-	uint8_t		qindex;
++	uint32_t	qindex;
++	bool		alloced;
+ };
+ 
+ struct rte_red_q_config {
+@@ -102,6 +105,8 @@ struct rte_red {
+ 	uint64_t q_time;   /**< Start of the queue idle time (q_time) */
+ };
+ 
++struct rte_sched_port;
++
+ /**
+  * @brief Initialises run-time data
+  *
+@@ -452,6 +457,30 @@ rte_red_mark_queue_empty(struct rte_red
+ 	red->q_time = time;
+ }
+ 
++/**
++ * @brief Return the number of dscp maps configured
++ *
++ * @return The number of maps configured
++ * @retval -1 invalid map lookup
++ * @param port [in] pointer to the port
++ * @param queue_id [in] queue index in the port
++ */
++int rte_red_queue_num_maps(struct rte_sched_port *port, uint32_t queue_id);
++
++struct rte_sched_pipe_params;
++
++/**
++ * @brief Copy a wred_map structure to be used for another queue
++ *
++ * @return Pointer to new map
++ * @param p_profs pointer to the profile
++ * @param orig pointer to structure to be copied
++ * @param qindex queue index in subport
++ */
++struct rte_red_pipe_params *
++rte_red_copy_params(struct rte_sched_pipe_params *p_profs,
++		    const struct rte_red_pipe_params *orig, uint32_t qindex);
++
+ #ifdef __cplusplus
+ }
+ #endif
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -128,14 +128,6 @@ struct rte_sched_queue {
+ 	uint16_t qr;
+ };
+ 
+-struct rte_sched_queue_extra {
+-	struct rte_sched_queue_stats stats;
+-#ifdef RTE_SCHED_RED
+-	struct rte_red red;
+-	struct rte_red_q_config qred;
+-#endif
+-};
+-
+ enum grinder_state {
+ 	e_GRINDER_PREFETCH_PIPE = 0,
+ 	e_GRINDER_PREFETCH_TC_QUEUE_ARRAYS,
+@@ -246,7 +238,7 @@ rte_sched_port_queues_per_subport(struct
+ 
+ #endif
+ 
+-static inline uint32_t
++uint32_t
+ rte_sched_port_queues_per_port(struct rte_sched_port *port)
+ {
+ 	return RTE_SCHED_QUEUES_PER_PIPE * port->n_pipes_per_subport * port->n_subports_per_port;
+@@ -1279,6 +1271,7 @@ rte_sched_pipe_config_v2(struct rte_sche
+ 	int ret;
+ 	struct rte_sched_pipe_params *p_profs;
+ 	struct rte_red_pipe_params *wred_params;
++	uint32_t qindex;
+ 
+ 	ret = rte_sched_pipe_config(port, subport_id, pipe_id, pipe_profile);
+ 	if (ret != 0)
+@@ -1288,11 +1281,10 @@ rte_sched_pipe_config_v2(struct rte_sche
+ 
+ 	SLIST_FOREACH(wred_params, &p_profs->qred_head, list) {
+ 		int i;
+-		uint32_t qindex = (wred_params->qindex >> RTE_SCHED_TC_BITS) &
+-				RTE_SCHED_WRR_MASK;
+-		uint32_t tc = wred_params->qindex & RTE_SCHED_TC_MASK;
++		uint32_t tc = 0;
+ 		struct rte_sched_queue_extra *qxtra;
+ 
++		qindex = wred_params->qindex;
+ 		qindex = rte_sched_port_qindex(port, subport_id, pipe_id,
+ 					       tc, qindex);
+ 		qxtra = port->queue_extra + qindex;
+@@ -1310,6 +1302,24 @@ rte_sched_pipe_config_v2(struct rte_sche
+ 		}
+ 		qxtra->qred.num_maps = wred_params->red_q_params.num_maps;
+ 
++		/*
++		 * Initially the qindex is set relative to a pipe since it's
++		 * configured in a profile.  We're now attaching the profile to
++		 * the subport so need to allow for the subport + pipe offset
++		 * in addition to the internal pipe offset.
++		 *
++		 * There may be several classes using the same wred profile,
++		 * if there is copy it and assign to new qindex.
++		 */
++		if (!wred_params->alloced) {
++			wred_params->qindex = qindex;
++			wred_params->alloced = true;
++		} else {
++			if (rte_red_copy_params(p_profs, wred_params,
++					        qindex) == NULL)
++				return -1;
++		}
++
+ 		RTE_LOG(DEBUG, SCHED,
+ 			"Setup per Q wred sub %u pip %u qind %u maps %u\n",
+ 			subport_id, pipe_id, qindex, qxtra->qred.num_maps);
+@@ -1537,7 +1547,7 @@ rte_sched_port_red_drop(struct rte_sched
+ 	red = &qe->red;
+ 
+ 	if (qe->qred.num_maps) {
+-		int i;
++		int i, ret;
+ 		struct rte_sched_port_hierarchy *sched =
+ 			(struct rte_sched_port_hierarchy *) &pkt->hash.sched;
+ 		uint64_t dscp_mask;
+@@ -1552,6 +1562,12 @@ rte_sched_port_red_drop(struct rte_sched
+ 		/* If we haven't found a dscp match then force a drop */
+ 		if (i >= qe->qred.num_maps)
+ 			return 1;
++
++		ret = rte_red_enqueue(red_cfg, red, qlen, port->time);
++		if (ret)
++			qe->stats.n_pkts_red_dscp_dropped[i]++;
++
++		return ret;
+ 	}
+ 
+ 	return rte_red_enqueue(red_cfg, red, qlen, port->time);
+@@ -1603,6 +1619,25 @@ debug_check_queue_slab(struct rte_sched_
+ 
+ #endif /* RTE_SCHED_DEBUG */
+ 
++int rte_sched_get_profile_for_pipe(struct rte_sched_port *port,
++				   uint32_t qid)
++{
++	uint32_t n_pipes, pipeid;
++	struct rte_sched_pipe *pipe;
++
++	if (!port)
++		return -1;
++
++	n_pipes = port->n_subports_per_port * port->n_pipes_per_subport;
++	pipeid = qid / RTE_SCHED_QUEUES_PER_PIPE;
++	if (pipeid >= n_pipes)
++		return -1;
++
++	pipe = port->pipe + pipeid;
++
++	return pipe->profile;
++}
++
+ static inline uint32_t
+ rte_sched_port_enqueue_qptrs_prefetch0(struct rte_sched_port *port,
+ 				       struct rte_mbuf *pkt)
+@@ -2598,3 +2633,9 @@ rte_sched_port_dequeue(struct rte_sched_
+ 
+ 	return count;
+ }
++
++struct rte_sched_queue_extra *
++rte_sched_port_get_queue_extra(struct rte_sched_port *port, uint32_t qindex)
++{
++	return (port->queue_extra + qindex);
++}
+--- a/lib/librte_sched/rte_sched.h
++++ b/lib/librte_sched/rte_sched.h
+@@ -197,6 +197,8 @@ struct rte_sched_queue_stats {
+ 	uint32_t n_pkts_dropped;         /**< Packets dropped */
+ #ifdef RTE_SCHED_RED
+ 	uint32_t n_pkts_red_dropped;	 /**< Packets dropped by RED */
++	uint32_t n_pkts_red_dscp_dropped[RTE_NUM_DSCP_MAPS];
++					/**< Packets dropped by RED per map */
+ #endif
+ 
+ 	/* Bytes */
+@@ -249,6 +251,14 @@ struct rte_sched_port_hierarchy {
+ 	uint32_t pipe;				  /**< Pipe ID */
+ };
+ 
++struct rte_sched_queue_extra {
++	struct rte_sched_queue_stats stats;
++#ifdef RTE_SCHED_RED
++	struct rte_red red;
++	struct rte_red_q_config qred;
++#endif
++};
++
+ /*
+  * Configuration
+  *
+@@ -635,6 +645,8 @@ rte_red_find_q_params(struct rte_sched_p
+  * @param dscp_set
+  *   A 64 bit mask with the DSCP values we're using wred with
+  *   set in the mask.
++ * @grp_name
++ *   The name of the resource group used
+  * @return
+  *   0 if successful, -1 if the number of supported maps
+  *   is exceeded.
+@@ -642,7 +654,7 @@ rte_red_find_q_params(struct rte_sched_p
+ int
+ rte_red_init_q_params(struct rte_red_q_params *wred_params,
+ 		      unsigned qmax, unsigned qmin, unsigned prob,
+-		      uint64_t dscp_set);
++		      uint64_t dscp_set, char *grp_name);
+ 
+ /**
+  * Free any wred structures associated with this pipe profile.
+@@ -655,6 +667,43 @@ rte_red_init_q_params(struct rte_red_q_p
+ void
+ rte_red_free_q_params(struct rte_sched_pipe_params *pipe, int i);
+ 
++/**
++ * The number of queues in a pipe
++ *
++ * @param port
++ *   A pointer to the port structure
++ * @return
++ *   The number of queues in a pipe
++ */
++uint32_t
++rte_sched_port_queues_per_port(struct rte_sched_port *port);
++
++/**
++ * Return the queue extra structure given a port and qid
++ *
++ * @param port
++ *   A pointer to the interface
++ * @param qid
++ *   The index of the required qid
++ * @return
++ *   void
++ */
++struct rte_sched_queue_extra *
++rte_sched_port_get_queue_extra(struct rte_sched_port *port, uint32_t qindex);
++
++/**
++ * Get the profile used to configure a pipe
++ *
++ * @param port
++ *   A pointer to the interface structure
++ * @param qid
++ *   The index of a queue associated with the pipe
++ * @return
++ *   Profile id
++ */
++int rte_sched_get_profile_for_pipe(struct rte_sched_port *port,
++                                   uint32_t qid);
++
+ #ifdef __cplusplus
+ }
+ #endif
+--- a/lib/librte_sched/rte_sched_version.map
++++ b/lib/librte_sched/rte_sched_version.map
+@@ -50,6 +50,8 @@ DPDK_17.11 {
+ 	rte_red_free_q_params;
+ 	rte_sched_pipe_config_v2;
+ 	rte_sched_port_pkt_write_v2;
++	rte_red_queue_num_maps;
++	rte_sched_get_profile_for_pipe;
+ } DPDK_17.08;
+ 
+ EXPERIMENTAL {

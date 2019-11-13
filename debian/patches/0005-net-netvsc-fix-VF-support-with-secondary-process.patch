@@ -1,0 +1,383 @@
+From 7d8bb5bf17ab230c58aad1e8a046e0514190442c Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <sthemmin@microsoft.com>
+Date: Thu, 7 Feb 2019 19:44:02 -0800
+Subject: [PATCH] net/netvsc: fix VF support with secondary process
+
+[ upstream commit 4a9efcddaddd2477d370f3720bf93079717c6ddb ]
+
+The VF device management in netvsc was using a pointer to the
+rte_eth_devices. But the actual rte_eth_devices array is likely to
+be place in the secondary process; which causes a crash.
+
+The solution is to record the port of the VF (instead of a pointer)
+and find the device in the per process array as needed.
+
+Fixes: dc7680e8597c ("net/netvsc: support integrated VF")
+
+Signed-off-by: Stephen Hemminger <sthemmin@microsoft.com>
+---
+ drivers/net/netvsc/hn_ethdev.c |  3 +-
+ drivers/net/netvsc/hn_rxtx.c   |  8 ++---
+ drivers/net/netvsc/hn_var.h    | 32 +++++++++++++++--
+ drivers/net/netvsc/hn_vf.c     | 82 +++++++++++++++++++++---------------------
+ 4 files changed, 76 insertions(+), 49 deletions(-)
+
+diff --git a/drivers/net/netvsc/hn_ethdev.c b/drivers/net/netvsc/hn_ethdev.c
+index da76b0db6..fad209f21 100644
+--- a/drivers/net/netvsc/hn_ethdev.c
++++ b/drivers/net/netvsc/hn_ethdev.c
+@@ -733,6 +733,7 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
+ 	hv->port_id = eth_dev->data->port_id;
+ 	hv->latency = HN_CHAN_LATENCY_NS;
+ 	hv->max_queues = 1;
++	hv->vf_port = HN_INVALID_PORT;
+ 
+ 	err = hn_parse_args(eth_dev);
+ 	if (err)
+@@ -786,7 +787,7 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
+ 	hv->max_queues = RTE_MIN(rxr_cnt, (unsigned int)max_chan);
+ 
+ 	/* If VF was reported but not added, do it now */
+-	if (hv->vf_present && !hv->vf_dev) {
++	if (hv->vf_present && !hn_vf_attached(hv)) {
+ 		PMD_INIT_LOG(DEBUG, "Adding VF device");
+ 
+ 		err = hn_vf_add(eth_dev, hv);
+diff --git a/drivers/net/netvsc/hn_rxtx.c b/drivers/net/netvsc/hn_rxtx.c
+index 487f76466..96b7f1855 100644
+--- a/drivers/net/netvsc/hn_rxtx.c
++++ b/drivers/net/netvsc/hn_rxtx.c
+@@ -1305,8 +1305,8 @@ hn_xmit_pkts(void *ptxq, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
+ 		return 0;
+ 
+ 	/* Transmit over VF if present and up */
+-	vf_dev = hv->vf_dev;
+-	rte_compiler_barrier();
++	vf_dev = hn_get_vf_dev(hv);
++
+ 	if (vf_dev && vf_dev->data->dev_started) {
+ 		void *sub_q = vf_dev->data->tx_queues[queue_id];
+ 
+@@ -1396,8 +1396,8 @@ hn_recv_pkts(void *prxq, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
+ 	if (unlikely(hv->closed))
+ 		return 0;
+ 
+-	vf_dev = hv->vf_dev;
+-	rte_compiler_barrier();
++	/* Transmit over VF if present and up */
++	vf_dev = hn_get_vf_dev(hv);
+ 
+ 	if (vf_dev && vf_dev->data->dev_started) {
+ 		/* Normally, with SR-IOV the ring buffer will be empty */
+diff --git a/drivers/net/netvsc/hn_var.h b/drivers/net/netvsc/hn_var.h
+index a6516c1e6..b31563435 100644
+--- a/drivers/net/netvsc/hn_var.h
++++ b/drivers/net/netvsc/hn_var.h
+@@ -91,14 +91,18 @@ struct hn_rx_bufinfo {
+ 	struct rte_mbuf_ext_shared_info shinfo;
+ } __rte_cache_aligned;
+ 
++#define HN_INVALID_PORT	UINT16_MAX
++
+ struct hn_data {
+ 	struct rte_vmbus_device *vmbus;
+ 	struct hn_rx_queue *primary;
+-	struct rte_eth_dev *vf_dev;		/* Subordinate device */
+ 	rte_spinlock_t  vf_lock;
+ 	uint16_t	port_id;
+-	bool		closed;
+-	bool		vf_present;
++	uint16_t	vf_port;
++
++	uint8_t		vf_present;
++	uint8_t		closed;
++
+ 	uint32_t	link_status;
+ 	uint32_t	link_speed;
+ 
+@@ -169,6 +173,28 @@ int	hn_dev_rx_queue_setup(struct rte_eth_dev *dev,
+ 			      struct rte_mempool *mp);
+ void	hn_dev_rx_queue_release(void *arg);
+ 
++/* Check if VF is attached */
++static inline bool
++hn_vf_attached(const struct hn_data *hv)
++{
++	return hv->vf_port != HN_INVALID_PORT;
++}
++
++/* Get VF device for existing netvsc device */
++static inline struct rte_eth_dev *
++hn_get_vf_dev(const struct hn_data *hv)
++{
++	uint16_t vf_port = hv->vf_port;
++
++	/* make sure vf_port is loaded */
++	rte_smp_rmb();
++
++	if (vf_port == HN_INVALID_PORT)
++		return NULL;
++	else
++		return &rte_eth_devices[vf_port];
++}
++
+ void	hn_vf_info_get(struct hn_data *hv,
+ 		       struct rte_eth_dev_info *info);
+ int	hn_vf_add(struct rte_eth_dev *dev, struct hn_data *hv);
+diff --git a/drivers/net/netvsc/hn_vf.c b/drivers/net/netvsc/hn_vf.c
+index 3f714ec99..de278eb7b 100644
+--- a/drivers/net/netvsc/hn_vf.c
++++ b/drivers/net/netvsc/hn_vf.c
+@@ -51,15 +51,20 @@ static int hn_vf_match(const struct rte_eth_dev *dev)
+ 	return -ENOENT;
+ }
+ 
++
+ /*
+  * Attach new PCI VF device and return the port_id
+  */
+-static int hn_vf_attach(struct hn_data *hv, uint16_t port_id,
+-			struct rte_eth_dev **vf_dev)
++static int hn_vf_attach(struct hn_data *hv, uint16_t port_id)
+ {
+ 	struct rte_eth_dev_owner owner = { .id = RTE_ETH_DEV_NO_OWNER };
+ 	int ret;
+ 
++	if (hn_vf_attached(hv)) {
++		PMD_DRV_LOG(ERR, "VF already attached");
++		return -EEXIST;
++	}
++
+ 	ret = rte_eth_dev_owner_get(port_id, &owner);
+ 	if (ret < 0) {
+ 		PMD_DRV_LOG(ERR, "Can not find owner for port %d", port_id);
+@@ -79,8 +84,9 @@ static int hn_vf_attach(struct hn_data *hv, uint16_t port_id,
+ 	}
+ 
+ 	PMD_DRV_LOG(DEBUG, "Attach VF device %u", port_id);
++	hv->vf_port = port_id;
+ 	rte_smp_wmb();
+-	*vf_dev = &rte_eth_devices[port_id];
++
+ 	return 0;
+ }
+ 
+@@ -96,12 +102,7 @@ int hn_vf_add(struct rte_eth_dev *dev, struct hn_data *hv)
+ 	}
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	if (hv->vf_dev) {
+-		PMD_DRV_LOG(ERR, "VF already attached");
+-		err = -EBUSY;
+-	} else {
+-		err = hn_vf_attach(hv, port, &hv->vf_dev);
+-	}
++	err = hn_vf_attach(hv, port);
+ 
+ 	if (err == 0) {
+ 		dev->data->dev_flags |= RTE_ETH_DEV_INTR_LSC;
+@@ -120,22 +121,22 @@ int hn_vf_add(struct rte_eth_dev *dev, struct hn_data *hv)
+ /* Remove new VF device */
+ static void hn_vf_remove(struct hn_data *hv)
+ {
+-	struct rte_eth_dev *vf_dev;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
+-	if (!vf_dev) {
++
++	if (!hn_vf_attached(hv)) {
+ 		PMD_DRV_LOG(ERR, "VF path not active");
+-		rte_spinlock_unlock(&hv->vf_lock);
+-		return;
+-	}
++	} else {
++		/* Stop incoming packets from arriving on VF */
++		hn_nvs_set_datapath(hv, NVS_DATAPATH_SYNTHETIC);
+ 
+-	/* Stop incoming packets from arriving on VF */
+-	hn_nvs_set_datapath(hv, NVS_DATAPATH_SYNTHETIC);
+-	hv->vf_dev = NULL;
++		/* Stop transmission over VF */
++		hv->vf_port = HN_INVALID_PORT;
++		rte_smp_wmb();
+ 
+-	/* Give back ownership */
+-	rte_eth_dev_owner_unset(vf_dev->data->port_id, hv->owner.id);
++		/* Give back ownership */
++		rte_eth_dev_owner_unset(hv->vf_port, hv->owner.id);
++	}
+ 	rte_spinlock_unlock(&hv->vf_lock);
+ }
+ 
+@@ -207,7 +208,7 @@ void hn_vf_info_get(struct hn_data *hv, struct rte_eth_dev_info *info)
+ 	struct rte_eth_dev *vf_dev;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev)
+ 		hn_vf_info_merge(vf_dev, info);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+@@ -221,7 +222,7 @@ int hn_vf_link_update(struct rte_eth_dev *dev,
+ 	int ret = 0;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev && vf_dev->dev_ops->link_update)
+ 		ret = (*vf_dev->dev_ops->link_update)(vf_dev, wait_to_complete);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+@@ -249,13 +250,14 @@ static int hn_vf_lsc_event(uint16_t port_id __rte_unused,
+ }
+ 
+ static int _hn_vf_configure(struct rte_eth_dev *dev,
+-			    struct rte_eth_dev *vf_dev,
++			    uint16_t vf_port,
+ 			    const struct rte_eth_conf *dev_conf)
+ {
+ 	struct rte_eth_conf vf_conf = *dev_conf;
+-	uint16_t vf_port = vf_dev->data->port_id;
++	struct rte_eth_dev *vf_dev;
+ 	int ret;
+ 
++	vf_dev = &rte_eth_devices[vf_port];
+ 	if (dev_conf->intr_conf.lsc &&
+ 	    (vf_dev->data->dev_flags & RTE_ETH_DEV_INTR_LSC)) {
+ 		PMD_DRV_LOG(DEBUG, "enabling LSC for VF %u",
+@@ -294,13 +296,11 @@ int hn_vf_configure(struct rte_eth_dev *dev,
+ 		    const struct rte_eth_conf *dev_conf)
+ {
+ 	struct hn_data *hv = dev->data->dev_private;
+-	struct rte_eth_dev *vf_dev;
+ 	int ret = 0;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
+-	if (vf_dev)
+-		ret = _hn_vf_configure(dev, vf_dev, dev_conf);
++	if (hv->vf_port != HN_INVALID_PORT)
++		ret = _hn_vf_configure(dev, hv->vf_port, dev_conf);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+ 	return ret;
+ }
+@@ -312,7 +312,7 @@ const uint32_t *hn_vf_supported_ptypes(struct rte_eth_dev *dev)
+ 	const uint32_t *ptypes = NULL;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev && vf_dev->dev_ops->dev_supported_ptypes_get)
+ 		ptypes = (*vf_dev->dev_ops->dev_supported_ptypes_get)(vf_dev);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+@@ -327,7 +327,7 @@ int hn_vf_start(struct rte_eth_dev *dev)
+ 	int ret = 0;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev)
+ 		ret = rte_eth_dev_start(vf_dev->data->port_id);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+@@ -340,7 +340,7 @@ void hn_vf_stop(struct rte_eth_dev *dev)
+ 	struct rte_eth_dev *vf_dev;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev)
+ 		rte_eth_dev_stop(vf_dev->data->port_id);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+@@ -352,7 +352,7 @@ void hn_vf_stop(struct rte_eth_dev *dev)
+ 		struct hn_data *hv = (dev)->data->dev_private;	\
+ 		struct rte_eth_dev *vf_dev;			\
+ 		rte_spinlock_lock(&hv->vf_lock);		\
+-		vf_dev = hv->vf_dev;				\
++		vf_dev = hn_get_vf_dev(hv);			\
+ 		if (vf_dev)					\
+ 			func(vf_dev->data->port_id);		\
+ 		rte_spinlock_unlock(&hv->vf_lock);		\
+@@ -402,7 +402,7 @@ int hn_vf_mc_addr_list(struct rte_eth_dev *dev,
+ 	int ret = 0;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev)
+ 		ret = rte_eth_dev_set_mc_addr_list(vf_dev->data->port_id,
+ 						   mc_addr_set, nb_mc_addr);
+@@ -420,7 +420,7 @@ int hn_vf_tx_queue_setup(struct rte_eth_dev *dev,
+ 	int ret = 0;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev)
+ 		ret = rte_eth_tx_queue_setup(vf_dev->data->port_id,
+ 					     queue_idx, nb_desc,
+@@ -434,7 +434,7 @@ void hn_vf_tx_queue_release(struct hn_data *hv, uint16_t queue_id)
+ 	struct rte_eth_dev *vf_dev;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev && vf_dev->dev_ops->tx_queue_release) {
+ 		void *subq = vf_dev->data->tx_queues[queue_id];
+ 
+@@ -455,7 +455,7 @@ int hn_vf_rx_queue_setup(struct rte_eth_dev *dev,
+ 	int ret = 0;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev)
+ 		ret = rte_eth_rx_queue_setup(vf_dev->data->port_id,
+ 					     queue_idx, nb_desc,
+@@ -469,7 +469,7 @@ void hn_vf_rx_queue_release(struct hn_data *hv, uint16_t queue_id)
+ 	struct rte_eth_dev *vf_dev;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev && vf_dev->dev_ops->rx_queue_release) {
+ 		void *subq = vf_dev->data->rx_queues[queue_id];
+ 
+@@ -486,7 +486,7 @@ int hn_vf_stats_get(struct rte_eth_dev *dev,
+ 	int ret = 0;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev)
+ 		ret = rte_eth_stats_get(vf_dev->data->port_id, stats);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+@@ -503,7 +503,7 @@ int hn_vf_xstats_get_names(struct rte_eth_dev *dev,
+ 	char tmp[RTE_ETH_XSTATS_NAME_SIZE];
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev && vf_dev->dev_ops->xstats_get_names)
+ 		count = vf_dev->dev_ops->xstats_get_names(vf_dev, names, n);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+@@ -528,7 +528,7 @@ int hn_vf_xstats_get(struct rte_eth_dev *dev,
+ 	int count = 0;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev && vf_dev->dev_ops->xstats_get)
+ 		count = vf_dev->dev_ops->xstats_get(vf_dev, xstats, n);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+@@ -542,7 +542,7 @@ void hn_vf_xstats_reset(struct rte_eth_dev *dev)
+ 	struct rte_eth_dev *vf_dev;
+ 
+ 	rte_spinlock_lock(&hv->vf_lock);
+-	vf_dev = hv->vf_dev;
++	vf_dev = hn_get_vf_dev(hv);
+ 	if (vf_dev && vf_dev->dev_ops->xstats_reset)
+ 		vf_dev->dev_ops->xstats_reset(vf_dev);
+ 	rte_spinlock_unlock(&hv->vf_lock);
+-- 
+2.11.0
+

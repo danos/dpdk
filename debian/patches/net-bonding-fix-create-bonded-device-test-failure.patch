@@ -1,0 +1,62 @@
+From 53605efd1c132119a6f2809c31c97c5a451cb296 Mon Sep 17 00:00:00 2001
+From: Hari Kumar Vemula <hari.kumarx.vemula@intel.com>
+Date: Mon, 28 Jan 2019 07:28:53 +0000
+Subject: [PATCH] net/bonding: fix create bonded device test failure
+
+Create bonded device test is failing due to improper initialisation in
+bonded device configuration. which leads to crash while setting up queues.
+
+The value of nb_rx_desc is checked if it is not in range of rx_desc_lim of
+bonded device which fails.
+This is due to "rx_desc_lim" is set to 0 as default value of bonded device
+during bond_alloc().
+Hence nb_rx_desc (1024) is > 0 and test fails.
+
+Fix is to set the default values of rx_desc_lim of bonded device to
+appropriate value.
+
+Fixes: 2efb58cbab6e ("bond: new link bonding library")
+Cc: stable@dpdk.org
+
+Signed-off-by: Hari Kumar Vemula <hari.kumarx.vemula@intel.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -2228,6 +2228,8 @@ bond_ethdev_info(struct rte_eth_dev *dev
+ 
+ 	uint16_t max_nb_rx_queues = UINT16_MAX;
+ 	uint16_t max_nb_tx_queues = UINT16_MAX;
++	uint16_t max_rx_desc_lim = UINT16_MAX;
++	uint16_t max_tx_desc_lim = UINT16_MAX;
+ 
+ 	dev_info->max_mac_addrs = BOND_MAX_MAC_ADDRS;
+ 
+@@ -2252,6 +2254,12 @@ bond_ethdev_info(struct rte_eth_dev *dev
+ 
+ 			if (slave_info.max_tx_queues < max_nb_tx_queues)
+ 				max_nb_tx_queues = slave_info.max_tx_queues;
++
++			if (slave_info.rx_desc_lim.nb_max < max_rx_desc_lim)
++				max_rx_desc_lim = slave_info.rx_desc_lim.nb_max;
++
++			if (slave_info.tx_desc_lim.nb_max < max_tx_desc_lim)
++				max_tx_desc_lim = slave_info.tx_desc_lim.nb_max;
+ 		}
+ 	}
+ 
+@@ -2263,10 +2271,8 @@ bond_ethdev_info(struct rte_eth_dev *dev
+ 	memcpy(&dev_info->default_txconf, &internals->default_txconf,
+ 	       sizeof(dev_info->default_txconf));
+ 
+-	memcpy(&dev_info->rx_desc_lim, &internals->rx_desc_lim,
+-	       sizeof(dev_info->rx_desc_lim));
+-	memcpy(&dev_info->tx_desc_lim, &internals->tx_desc_lim,
+-	       sizeof(dev_info->tx_desc_lim));
++	dev_info->rx_desc_lim.nb_max = max_rx_desc_lim;
++	dev_info->tx_desc_lim.nb_max = max_tx_desc_lim;
+ 
+ 	/**
+ 	 * If dedicated hw queues enabled for link bonding device in LACP mode

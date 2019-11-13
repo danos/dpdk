@@ -1,0 +1,126 @@
+From fe3ea6322c168233da914b2b4ea21b15e13b725f Mon Sep 17 00:00:00 2001
+From: Alan Robertson <alan.robertson@intl.att.com>
+Date: Fri, 9 Feb 2018 10:04:25 +0000
+Subject: [PATCH] Improve the shaper accuracy for large packets
+
+There were 2 issues, the first was time could be lost whilst updating
+the traffic-class period, the second was a frame could be delayed if
+not enough tokens were available for the full frame.  By allowing the
+shaper to borrow credit from the next period the throughput is improved.
+
+Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
+---
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -86,7 +86,7 @@ struct rte_sched_subport {
+ 	/* Traffic classes (TCs) */
+ 	uint64_t tc_time; /* time of next update */
+ 	uint32_t tc_credits_per_period[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+-	uint32_t tc_credits[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	int32_t tc_credits[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+ 	uint16_t qsize[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+ 	uint32_t tc_period;
+ 
+@@ -137,7 +137,7 @@ struct rte_sched_pipe {
+ 
+ 	/* Traffic classes (TCs) */
+ 	uint64_t tc_time; /* time of next update */
+-	uint32_t tc_credits[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	int32_t tc_credits[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+ 
+ 	/* Weighted Round Robin (WRR) */
+ 	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
+@@ -1744,6 +1744,7 @@ grinder_credits_update(struct rte_sched_
+ 	struct rte_sched_pipe_profile *params = grinder->pipe_params;
+ 	uint64_t n_periods;
+ 	uint32_t tc;
++	uint64_t lapsed;
+ 
+ 	/* Subport TB */
+ 	n_periods = (port->time - subport->tb_time) / subport->tb_period;
+@@ -1760,19 +1761,43 @@ grinder_credits_update(struct rte_sched_
+ 	/* Subport TCs */
+ 	if (unlikely(port->time >= subport->tc_time)) {
+ 		for (tc = 0; tc < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; tc++) {
+-			subport->tc_credits[tc] =
+-				subport->tc_credits_per_period[tc];
++			if (subport->tc_credits[tc] < 0)
++				subport->tc_credits[tc] +=
++					subport->tc_credits_per_period[tc];
++			else
++				subport->tc_credits[tc] =
++					subport->tc_credits_per_period[tc];
+ 		}
+-		subport->tc_time = port->time + subport->tc_period;
++		/* If we've run into the next period only update the clock to
++		 * the time + tc_period so we'll replenish the tc tokens early
++		 * in the next tc_period to compensate.
++		 */
++		lapsed = port->time - subport->tc_time;
++		if (lapsed < subport->tc_period)
++			subport->tc_time += subport->tc_period;
++		else
++			subport->tc_time = port->time + subport->tc_period;
+ 	}
+ 
+ 	/* Pipe TCs */
+ 	if (unlikely(port->time >= pipe->tc_time)) {
+ 		for (tc = 0; tc < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; tc++) {
+-			pipe->tc_credits[tc] =
+-				params->tc_credits_per_period[tc];
++			if (pipe->tc_credits[tc] < 0)
++				pipe->tc_credits[tc] +=
++					params->tc_credits_per_period[tc];
++			else
++				pipe->tc_credits[tc] =
++					params->tc_credits_per_period[tc];
+ 		}
+-		pipe->tc_time = port->time + params->tc_period;
++		/* If we've run into the next period only update the clock to
++		 * the time + tc_period so we'll replenish the tc tokens early
++		 * in the next tc_period to compensate.
++		 */
++		lapsed = port->time - pipe->tc_time;
++		if (lapsed < params->tc_period)
++			pipe->tc_time += params->tc_period;
++		else
++			pipe->tc_time = port->time + params->tc_period;
+ 	}
+ }
+ 
+@@ -1883,19 +1908,19 @@ grinder_credits_check(struct rte_sched_p
+ 	uint32_t tc_index = grinder->tc_index;
+ 	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
+ 	uint32_t subport_tb_credits = subport->tb_credits;
+-	uint32_t subport_tc_credits = subport->tc_credits[tc_index];
++	int32_t subport_tc_credits = subport->tc_credits[tc_index];
+ 	uint32_t pipe_tb_credits = pipe->tb_credits;
+-	uint32_t pipe_tc_credits = pipe->tc_credits[tc_index];
++	int32_t pipe_tc_credits = pipe->tc_credits[tc_index];
+ 	int enough_credits;
+ 
+ 	if (pkt_len < 0)
+ 		pkt_len = 0;
+ 
+ 	/* Check queue credits */
+-	enough_credits = (pkt_len <= subport_tb_credits) &&
+-		(pkt_len <= subport_tc_credits) &&
+-		(pkt_len <= pipe_tb_credits) &&
+-		(pkt_len <= pipe_tc_credits);
++	enough_credits = (pkt_len <= (int32_t)subport_tb_credits) &&
++		(subport_tc_credits > 0) &&
++		(pkt_len <= (int32_t)pipe_tb_credits) &&
++		(pipe_tc_credits > 0);
+ 
+ 	if (!enough_credits)
+ 		return 0;
+@@ -1903,8 +1928,8 @@ grinder_credits_check(struct rte_sched_p
+ 	/* Update port credits */
+ 	subport->tb_credits -= pkt_len;
+ 	subport->tc_credits[tc_index] -= pkt_len;
+-	pipe->tb_credits -= pkt_len;
+ 	pipe->tc_credits[tc_index] -= pkt_len;
++	pipe->tb_credits -= pkt_len;
+ 
+ 	return 1;
+ }

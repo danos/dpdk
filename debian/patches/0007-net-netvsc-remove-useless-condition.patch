@@ -1,0 +1,35 @@
+From ce3001a82d0e596c2401f4780462e694e6aeacb4 Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <sthemmin@microsoft.com>
+Date: Wed, 27 Mar 2019 14:08:42 -0700
+Subject: [PATCH] net/netvsc: remove useless condition
+
+[ upstream commit 204109c5d4a8bdd6787a43a113f7f987aae6623c ]
+
+Since previous test is for mtu < 1519 the next else if
+is always true. This causes the lgtm static tool to complain.
+Not a real issue, just cosmetic.
+
+Fixes: 4e9c73e96e83 ("net/netvsc: add Hyper-V network device")
+
+Signed-off-by: Stephen Hemminger <sthemmin@microsoft.com>
+Acked-by: Rami Rosen <ramirose@gmail.com>
+---
+ drivers/net/netvsc/hn_rxtx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/netvsc/hn_rxtx.c b/drivers/net/netvsc/hn_rxtx.c
+index 96b7f1855..6b3768a54 100644
+--- a/drivers/net/netvsc/hn_rxtx.c
++++ b/drivers/net/netvsc/hn_rxtx.c
+@@ -123,7 +123,7 @@ hn_update_packet_stats(struct hn_stats *stats, const struct rte_mbuf *m)
+ 			stats->size_bins[0]++;
+ 		else if (s < 1519)
+ 			stats->size_bins[6]++;
+-		else if (s >= 1519)
++		else
+ 			stats->size_bins[7]++;
+ 	}
+ 
+-- 
+2.11.0
+

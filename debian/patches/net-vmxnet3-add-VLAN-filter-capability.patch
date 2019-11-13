@@ -1,0 +1,30 @@
+From 1ca5019fef09c466aaaa442a0801c9a00bd5665f Mon Sep 17 00:00:00 2001
+From: Mark Gillott <mgillott@vyatta.att-mail.com>
+Date: Wed, 1 May 2019 13:57:53 +0100
+Subject: [PATCH] net/vmxnet3: add VLAN filter capability
+
+The driver supports VLAN filtering, but the option is not included in
+the advertised list of capabilities. Thus any attempt to enable VLAN
+filtering always fails. Update the list of offload capabilities to
+include DEV_RX_OFFLOAD_VLAN_FILTER.
+
+Signed-off-by: Mark Gillott <mgillott@vyatta.att-mail.com>
+---
+ drivers/net/vmxnet3/vmxnet3_ethdev.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/net/vmxnet3/vmxnet3_ethdev.c b/drivers/net/vmxnet3/vmxnet3_ethdev.c
+index 846d7fd7a..f54536b49 100644
+--- a/drivers/net/vmxnet3/vmxnet3_ethdev.c
++++ b/drivers/net/vmxnet3/vmxnet3_ethdev.c
+@@ -52,6 +52,7 @@
+ 
+ #define VMXNET3_RX_OFFLOAD_CAP		\
+ 	(DEV_RX_OFFLOAD_VLAN_STRIP |	\
++	 DEV_RX_OFFLOAD_VLAN_FILTER |   \
+ 	 DEV_RX_OFFLOAD_SCATTER |	\
+ 	 DEV_RX_OFFLOAD_IPV4_CKSUM |	\
+ 	 DEV_RX_OFFLOAD_UDP_CKSUM |	\
+-- 
+2.17.1
+

@@ -1,0 +1,38 @@
+net/e1000: set/clear GO_LINKD bit only if PHY reset is not blocked
+
+When PHY reset is blocked as is the case when BMC is connected via NC-SI
+do not set GO_LINKD bit in PHY power management register in dev_stop as
+this will disconnect the PHY. Also, in dev_close clear the GO_LINKD
+bit only if PHY reset is not blocked
+
+Signed-off-by: Shweta Choudaha <shweta.choudaha@intl.att.com>
+---
+ drivers/net/e1000/igb_ethdev.c |   10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+--- a/drivers/net/e1000/igb_ethdev.c
++++ b/drivers/net/e1000/igb_ethdev.c
+@@ -1494,8 +1494,9 @@ eth_igb_stop(struct rte_eth_dev *dev)
+ 	igb_pf_reset_hw(hw);
+ 	E1000_WRITE_REG(hw, E1000_WUC, 0);
+ 
+-	/* Set bit for Go Link disconnect */
+-	if (hw->mac.type >= e1000_82580) {
++	/* Set bit for Go Link disconnect if PHY reset is not blocked*/
++	if ((hw->mac.type >= e1000_82580) &&
++	    (e1000_check_reset_block(hw) != E1000_BLK_PHY_RESET)) {
+ 		uint32_t phpm_reg;
+ 
+ 		phpm_reg = E1000_READ_REG(hw, E1000_82580_PHY_POWER_MGMT);
+@@ -1569,8 +1570,9 @@ eth_igb_close(struct rte_eth_dev *dev)
+ 	igb_release_manageability(hw);
+ 	igb_hw_control_release(hw);
+ 
+-	/* Clear bit for Go Link disconnect */
+-	if (hw->mac.type >= e1000_82580) {
++	/* Clear bit for Go Link disconnect if PHY reset is not blocked */
++	if ((hw->mac.type >= e1000_82580) &&
++	    (e1000_check_reset_block(hw) != E1000_BLK_PHY_RESET)) {
+ 		uint32_t phpm_reg;
+ 
+ 		phpm_reg = E1000_READ_REG(hw, E1000_82580_PHY_POWER_MGMT);

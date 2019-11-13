@@ -1,0 +1,190 @@
+From ac660dec49d7802d2efd318efb768b36b0659936 Mon Sep 17 00:00:00 2001
+From: Alan Dewar <alan.dewar@intl.att.com>
+Date: Tue, 14 Nov 2017 15:21:17 +0000
+Subject: [PATCH] sched: fix overflow errors in WRR weighting code
+
+The WRR code calculates the lowest common denominator between the four
+WRR weights as a uint32_t value and divides the LCD by each of the WRR
+weights and casts the results as a uint8_t.  This casting can cause
+the ratios of the computed wrr costs to be wrong.  For example with
+WRR weights of 3, 5, 7 and 11, the LCD is computed to be
+1155.  The WRR costs get computed as:
+
+  1155/3 = 385, 1155/5 = 231, 1155/7 = 165, 1155/11 = 105.
+
+When the value 385 is cast into an uint8_t it ends up as 129.
+Rather than casting straight into a uint8_t, this patch shifts the
+computed WRR costs right so that the largest value is only eight bits
+wide.
+
+In grinder_schedule, the packet length is multiplied by the WRR cost
+and added to the grinder's wrr_tokens value.  The grinder's wrr_tokens
+field is a uint16_t, so combination of a packet length of 1500 bytes
+and a wrr cost of 44 will overflow this field on the first packet.
+
+This patch increases the width of the grinder's wrr_tokens and
+wrr_mask fields from uint16_t to uint32_t.
+
+In grinder_wrr_store, the remaining tokens in the grinder's wrr_tokens
+array are copied to the appropriate pipe's wrr_tokens array.  However
+the pipe's wrr_tokens array is only a uint8_t array so unused tokens
+were quite frequently lost which upsets the balance of traffic across
+the four WRR queues.
+
+This patch increases the width of the pipe's wrr_tokens array from
+a uint8_t to uint32_t.
+
+Signed-off-by: Alan Dewar <alan.dewar@intl.att.com>
+---
+ lib/librte_sched/rte_sched.c        | 57 ++++++++++++++++++++++++++-----------
+ lib/librte_sched/rte_sched_common.h | 15 ++++++++++
+ 2 files changed, 55 insertions(+), 17 deletions(-)
+
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -101,7 +101,7 @@ struct rte_sched_pipe {
+ 	uint32_t tc_credits[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+ 
+ 	/* Weighted Round Robin (WRR) */
+-	uint8_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
++	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
+ 
+ 	/* TC oversubscription */
+ 	uint32_t tc_ov_credits;
+@@ -176,8 +176,8 @@ struct rte_sched_grinder {
+ 	struct rte_mbuf *pkt;
+ 
+ 	/* WRR */
+-	uint16_t wrr_tokens[RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS];
+-	uint16_t wrr_mask[RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS];
++	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS];
++	uint32_t wrr_mask[RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS];
+ 	uint8_t wrr_cost[RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS];
+ };
+ 
+@@ -533,6 +533,17 @@ rte_sched_time_ms_to_bytes(uint32_t time
+ 	return time;
+ }
+ 
++static uint32_t rte_sched_reduce_to_byte(uint32_t value)
++{
++	uint32_t shift = 0;
++
++	while (value & 0xFFFFFF00) {
++		value >>= 1;
++		shift++;
++	}
++	return shift;
++}
++
+ static void
+ rte_sched_pipe_profile_convert(struct rte_sched_pipe_params *src,
+ 	struct rte_sched_pipe_profile *dst,
+@@ -573,6 +584,8 @@ rte_sched_pipe_profile_convert(struct rt
+ 		uint32_t wrr_cost[RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS];
+ 		uint32_t lcd, lcd1, lcd2;
+ 		uint32_t qindex;
++		uint32_t low_pos;
++		uint32_t shift;
+ 
+ 		qindex = i * RTE_SCHED_QUEUES_PER_TRAFFIC_CLASS;
+ 
+@@ -584,12 +597,28 @@ rte_sched_pipe_profile_convert(struct rt
+ 		lcd1 = rte_get_lcd(wrr_cost[0], wrr_cost[1]);
+ 		lcd2 = rte_get_lcd(wrr_cost[2], wrr_cost[3]);
+ 		lcd = rte_get_lcd(lcd1, lcd2);
++		low_pos = rte_min_pos_4_u32(wrr_cost);
+ 
+ 		wrr_cost[0] = lcd / wrr_cost[0];
+ 		wrr_cost[1] = lcd / wrr_cost[1];
+ 		wrr_cost[2] = lcd / wrr_cost[2];
+ 		wrr_cost[3] = lcd / wrr_cost[3];
+ 
++		shift = rte_sched_reduce_to_byte(wrr_cost[low_pos]);
++		wrr_cost[0] >>= shift;
++		wrr_cost[1] >>= shift;
++		wrr_cost[2] >>= shift;
++		wrr_cost[3] >>= shift;
++
++		if (wrr_cost[0] == 0)
++			wrr_cost[0]++;
++		if (wrr_cost[1] == 0)
++			wrr_cost[1]++;
++		if (wrr_cost[2] == 0)
++			wrr_cost[2]++;
++		if (wrr_cost[3] == 0)
++			wrr_cost[3]++;
++
+ 		dst->wrr_cost[qindex] = (uint8_t) wrr_cost[0];
+ 		dst->wrr_cost[qindex + 1] = (uint8_t) wrr_cost[1];
+ 		dst->wrr_cost[qindex + 2] = (uint8_t) wrr_cost[2];
+@@ -1985,15 +2014,19 @@ grinder_wrr_load(struct rte_sched_port *
+ 
+ 	qindex = tc_index * 4;
+ 
+-	grinder->wrr_tokens[0] = ((uint16_t) pipe->wrr_tokens[qindex]) << RTE_SCHED_WRR_SHIFT;
+-	grinder->wrr_tokens[1] = ((uint16_t) pipe->wrr_tokens[qindex + 1]) << RTE_SCHED_WRR_SHIFT;
+-	grinder->wrr_tokens[2] = ((uint16_t) pipe->wrr_tokens[qindex + 2]) << RTE_SCHED_WRR_SHIFT;
+-	grinder->wrr_tokens[3] = ((uint16_t) pipe->wrr_tokens[qindex + 3]) << RTE_SCHED_WRR_SHIFT;
+-
+-	grinder->wrr_mask[0] = (qmask & 0x1) * 0xFFFF;
+-	grinder->wrr_mask[1] = ((qmask >> 1) & 0x1) * 0xFFFF;
+-	grinder->wrr_mask[2] = ((qmask >> 2) & 0x1) * 0xFFFF;
+-	grinder->wrr_mask[3] = ((qmask >> 3) & 0x1) * 0xFFFF;
++	grinder->wrr_tokens[0] = pipe->wrr_tokens[qindex] <<
++		RTE_SCHED_WRR_SHIFT;
++	grinder->wrr_tokens[1] = pipe->wrr_tokens[qindex + 1] <<
++		RTE_SCHED_WRR_SHIFT;
++	grinder->wrr_tokens[2] = pipe->wrr_tokens[qindex + 2] <<
++		RTE_SCHED_WRR_SHIFT;
++	grinder->wrr_tokens[3] = pipe->wrr_tokens[qindex + 3] <<
++		RTE_SCHED_WRR_SHIFT;
++
++	grinder->wrr_mask[0] = (qmask & 0x1) * 0xFFFFFFFF;
++	grinder->wrr_mask[1] = ((qmask >> 1) & 0x1) * 0xFFFFFFFF;
++	grinder->wrr_mask[2] = ((qmask >> 2) & 0x1) * 0xFFFFFFFF;
++	grinder->wrr_mask[3] = ((qmask >> 3) & 0x1) * 0xFFFFFFFF;
+ 
+ 	grinder->wrr_cost[0] = pipe_params->wrr_cost[qindex];
+ 	grinder->wrr_cost[1] = pipe_params->wrr_cost[qindex + 1];
+@@ -2025,14 +2058,14 @@ static inline void
+ grinder_wrr(struct rte_sched_port *port, uint32_t pos)
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+-	uint16_t wrr_tokens_min;
++	uint32_t wrr_tokens_min;
+ 
+ 	grinder->wrr_tokens[0] |= ~grinder->wrr_mask[0];
+ 	grinder->wrr_tokens[1] |= ~grinder->wrr_mask[1];
+ 	grinder->wrr_tokens[2] |= ~grinder->wrr_mask[2];
+ 	grinder->wrr_tokens[3] |= ~grinder->wrr_mask[3];
+ 
+-	grinder->qpos = rte_min_pos_4_u16(grinder->wrr_tokens);
++	grinder->qpos = rte_min_pos_4_u32(grinder->wrr_tokens);
+ 	wrr_tokens_min = grinder->wrr_tokens[grinder->qpos];
+ 
+ 	grinder->wrr_tokens[0] -= wrr_tokens_min;
+--- a/lib/librte_sched/rte_sched_common.h
++++ b/lib/librte_sched/rte_sched_common.h
+@@ -48,6 +48,21 @@ rte_min_pos_4_u16(uint16_t *x)
+ 	return pos0;
+ }
+ 
++static inline uint32_t
++rte_min_pos_4_u32(uint32_t *x)
++{
++	uint32_t pos0 = 0;
++	uint32_t pos1 = 2;
++
++	if (x[1] <= x[0])
++		pos0 = 1;
++	if (x[3] <= x[2])
++		pos1 = 3;
++	if (x[pos1] <= x[pos0])
++		pos0 = pos1;
++
++	return pos0;
++}
+ #endif
+ 
+ /*

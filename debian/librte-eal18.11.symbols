@@ -85,6 +85,7 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
 #MISSING: 18.11# rte_eal_hotplug_add@EXPERIMENTAL 17.08
  rte_eal_hotplug_remove@DPDK_18.11 18.11
 #MISSING: 18.11# rte_eal_hotplug_remove@EXPERIMENTAL 17.08
+ rte_eal_hpet_init@DPDK_2.0 16.04
  rte_eal_iova_mode@DPDK_17.11 17.11
  rte_eal_init@DPDK_2.0 16.04
  rte_eal_iopl_init@DPDK_2.0 16.04
@@ -130,6 +131,8 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  rte_fbarray_set_free@EXPERIMENTAL 18.05
  rte_fbarray_set_used@EXPERIMENTAL 18.05
  rte_free@DPDK_2.0 16.04
+ rte_get_hpet_cycles@DPDK_2.0 16.04
+ rte_get_hpet_hz@DPDK_2.0 16.04
  rte_get_tsc_hz@DPDK_2.0 16.04
  rte_hexdump@DPDK_2.0 16.04
  rte_hypervisor_get@DPDK_18.02 18.02

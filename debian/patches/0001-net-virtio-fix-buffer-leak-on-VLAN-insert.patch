@@ -1,0 +1,41 @@
+driver/net/virtio
+
+From 8f37e38241f291f2ae8fa7e8d0d4ec3eae50b2de Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <stephen@networkplumber.org>
+Date: Fri, 5 Apr 2019 09:31:15 -0700
+Subject: [PATCH] net/virtio: fix buffer leak on VLAN insert
+
+The function rte_vlan_insert may allocate a new buffer for the
+vlan header and return a different mbuf than originally passed.
+In this case, the stored mbuf in txm[] array could point to wrong
+buffer.
+
+Fixes: dd856dfcb9e7 ("virtio: use any layout on Tx")
+Cc: stable@dpdk.org
+
+Signed-off-by: Stephen Hemminger <stephen@networkplumber.org>
+Reviewed-by: Jens Freimann <jfreimann@redhat.com>
+Reviewed-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+
+
+
+--- a/drivers/net/virtio/virtio_rxtx.c
++++ b/drivers/net/virtio/virtio_rxtx.c
+@@ -1380,6 +1380,8 @@ virtio_xmit_pkts(void *tx_queue, struct
+ 				rte_pktmbuf_free(txm);
+ 				continue;
+ 			}
++			/* vlan_insert may add a header mbuf */
++			tx_pkts[nb_tx] = txm;
+ 		}
+ 
+ 		/* optimize ring usage */
+@@ -1484,6 +1486,8 @@ virtio_xmit_pkts_inorder(void *tx_queue,
+ 				rte_pktmbuf_free(txm);
+ 				continue;
+ 			}
++			/* vlan_insert may add a header mbuf */
++			tx_pkts[nb_tx] = txm;
+ 		}
+ 
+ 		/* optimize ring usage */

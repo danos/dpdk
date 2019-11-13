@@ -1,0 +1,38 @@
+From 10c848470f1c2fcbed7fc2f7f8448f8c9252f714 Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <stephen@networkplumber.org>
+Date: Thu, 13 Dec 2018 17:26:21 -0800
+Subject: [PATCH] net/netvsc: fix probe when VF not found
+
+[ upstream commit f2b76d22f85694864bbcd0f88267de9ef02d75c0 ]
+
+It is possible that the VF device exists but DPDK doesn't know
+about it. This could happen if device was blacklisted or more
+likely the necessary device (Mellanox) was not part of the DPDK
+configuration.
+
+In either case, the right thing to do is just keep working
+but only with the slower para-virtual device.
+
+Fixes: dc7680e8597c ("net/netvsc: support integrated VF")
+
+Signed-off-by: Stephen Hemminger <sthemmin@microsoft.com>
+---
+ drivers/net/netvsc/hn_ethdev.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/netvsc/hn_ethdev.c b/drivers/net/netvsc/hn_ethdev.c
+index 8c7fc6719..da76b0db6 100644
+--- a/drivers/net/netvsc/hn_ethdev.c
++++ b/drivers/net/netvsc/hn_ethdev.c
+@@ -791,7 +791,7 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
+ 
+ 		err = hn_vf_add(eth_dev, hv);
+ 		if (err)
+-			goto failed;
++			hv->vf_present = 0;
+ 	}
+ 
+ 	return 0;
+-- 
+2.11.0
+

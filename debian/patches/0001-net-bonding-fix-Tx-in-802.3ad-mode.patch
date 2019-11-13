@@ -1,0 +1,26 @@
+From bddcc1228cdb447b99ec7d245732c81c65830ca9 Mon Sep 17 00:00:00 2001
+From: Chas Williams <chas3@att.com>
+Date: Mon, 11 Feb 2019 11:34:36 -0500
+Subject: [PATCH] net/bonding: fix Tx in 802.3ad mode
+
+We can transmit if there is at least one distributing slave.
+
+Fixes: 09150784a776 ("net/bonding: burst mode hash calculation")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chas Williams <chas3@att.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1319,7 +1319,7 @@ bond_ethdev_tx_burst_8023ad(void *queue,
+ 					slave_port_ids[i];
+ 	}
+ 
+-	if (likely(dist_slave_count > 1)) {
++	if (likely(dist_slave_count > 0)) {
+ 
+ 		/*
+ 		 * Populate slaves mbuf with the packets which are to be sent
