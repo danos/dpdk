@@ -18,7 +18,7 @@ ifeq ($(shell dpkg-vendor --is Vyatta && echo yes),yes)
 	DEB_BUILD_OPTIONS += dpdk_config_options=-Duse_hpet=true,-Dmax_ethports=128,-Dmax_numa_nodes=8
  endif
  ifeq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
-	DEB_BUILD_OPTIONS += kernel_modules ksrc=/lib/modules/$(shell ls -1 /lib/modules | sort | head -1)/build
+	DEB_BUILD_OPTIONS += kernel_modules ksrc=/lib/modules/$(shell ls -1 /lib/modules | sort | head -1)
  endif
  DEB_BUILD_OPTIONS += nodoc
 endif
@@ -70,10 +70,10 @@ else
 ifneq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
     KSRC := $(patsubst ksrc=%,%,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
 else
-    KSRC := /lib/modules/$(shell LIST=$$(ls /lib/modules/); for dir in $$LIST; do test -d /lib/modules/$$dir/build && echo $$dir; done | sort -V | tail -n1)/build
+    KSRC := /lib/modules/$(shell LIST=$$(ls /lib/modules/); for dir in $$LIST; do test -d /lib/modules/$$dir/build && echo $$dir; done | sort -V | tail -n1)
 endif
 
-KVERS := $(shell perl debian/kernel-version $(KSRC))
+KVERS := $(shell perl debian/kernel-version $(KSRC)/build)
 export KVERS
 export MODULE_CFLAGS=-fno-PIE
 
@@ -87,10 +87,10 @@ get_built_using	?= $(filter-out (=),$(shell dpkg-query -f='$${source:Package} (=
 
 build:
 	@if [ x"$(KVERS)" = x ] ; then \
-	    echo 'No version in $(KSRC)/include/linux/version.h' >&2; \
+	    echo 'No version in $(KSRC)/build/include/linux/version.h' >&2; \
 	    exit 1; \
 	fi
-	sh debian/prep-modules $(KSRC)
+	sh debian/prep-modules $(KSRC)/build
 	cat debian/control.modules >> debian/control
 	dh $@ --with python3,dkms,systemd,signobs
 endif
