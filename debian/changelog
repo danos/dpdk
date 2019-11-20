@@ -1,3 +1,12 @@
+dpdk (18.11.5-1) unstable; urgency=medium
+
+  * New upstream version 18.11.5; For a list of changes see
+    http://doc.dpdk.org/guides-18.11/rel_notes/release_18_11.html
+  * Refresh 0004-build-bump-minimum-Meson-version-to-0.47.1.patch to
+    remove fuzz from 18.11.5
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 20 Nov 2019 16:09:39 +0000
+
 dpdk (18.11.4-1) unstable; urgency=high
 
   * Merge stable update to 18.11.4; For a list of changes see
