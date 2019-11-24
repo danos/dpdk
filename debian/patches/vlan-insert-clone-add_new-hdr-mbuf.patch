@@ -10,13 +10,15 @@ Signed-off-by: Simon Barber <sbarber@vyatta.att-mail.com>
 
 --- a/lib/librte_net/rte_ether.h
 +++ b/lib/librte_net/rte_ether.h
-@@ -386,23 +386,56 @@ static inline int rte_vlan_insert(struct
+@@ -386,23 +386,58 @@ static inline int rte_vlan_insert(struct
  	struct vlan_hdr *vh;
  
  	/* Can't insert header if mbuf is shared */
 -	if (rte_mbuf_refcnt_read(*m) > 1) {
 -		struct rte_mbuf *copy;
-+	if (RTE_MBUF_INDIRECT(*m) || rte_mbuf_refcnt_read(*m) > 1) {
++	if ((RTE_MBUF_INDIRECT(*m) &&
++	     rte_mbuf_refcnt_read(rte_mbuf_from_indirect(*m)) > 1) ||
++	    rte_mbuf_refcnt_read(*m) > 1) {
 +		struct rte_mbuf *copy, *m0;
 +		int err;
  
