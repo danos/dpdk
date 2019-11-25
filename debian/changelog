@@ -4,7 +4,7 @@ dpdk (18.11.5-1vyatta1) unstable; urgency=medium
   * Merge tag 'v18.11.5' from dpdk-stable into 18.11.x
   * Update local patches for latest stable release (Bugfix: VRVDR-49058)
 
- -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 18 Nov 2019 10:01:08 -0500
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 25 Nov 2019 11:45:14 -0500
 
 dpdk (18.11.2-1vyatta1) unstable; urgency=medium
 
