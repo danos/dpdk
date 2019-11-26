@@ -7,6 +7,7 @@ igb-reset-phy-check-in-dev-stop-close.patch
 # Backport from dpdk stable
 
 # Backport from dpdk-net-next
+0001-net-virtio-fix-tagging-when-not-using-Tx-preparation.patch
 
 # Submitted upstream, not yet merged
 build-add-option-to-override-max-ethports.patch
