@@ -1,3 +1,10 @@
+dpdk (18.11.5-1vyatta3) unstable; urgency=medium
+
+  * net/virtio: fix tagging when not using Tx preparation (Bugfix:
+    VRVDR-49256)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 27 Nov 2019 08:15:02 -0500
+
 dpdk (18.11.5-1vyatta1) unstable; urgency=medium
 
   * Remove debian "history" (Bugfix: VRVDR-49058)
