@@ -1,2 +1,3 @@
 # meson installs this whether or not docs are built
 usr/share/doc/dpdk/guides/_static/css/custom.css
+usr/bin/dpdk-test
