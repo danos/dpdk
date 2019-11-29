@@ -1,2 +1,0 @@
-fix-ppc64-mlx4-build.patch
-avoid-as-needed-as-it-causes-overlinking.patch
