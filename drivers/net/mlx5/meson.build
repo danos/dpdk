@@ -38,11 +38,13 @@ endforeach
 
 if build
 	allow_experimental_apis = true
+	deps += ['hash']
 	ext_deps += libs
 	sources = files(
 		'mlx5.c',
 		'mlx5_ethdev.c',
 		'mlx5_flow.c',
+		'mlx5_flow_meter.c',
 		'mlx5_flow_dv.c',
 		'mlx5_flow_verbs.c',
 		'mlx5_mac.c',
@@ -58,15 +60,17 @@ if build
 		'mlx5_txq.c',
 		'mlx5_vlan.c',
 		'mlx5_devx_cmds.c',
+		'mlx5_utils.c',
 	)
-	if dpdk_conf.has('RTE_ARCH_X86_64') or dpdk_conf.has('RTE_ARCH_ARM64')
+	if (dpdk_conf.has('RTE_ARCH_X86_64')
+		or dpdk_conf.has('RTE_ARCH_ARM64')
+		or dpdk_conf.has('RTE_ARCH_PPC_64'))
 		sources += files('mlx5_rxtx_vec.c')
 	endif
 	if not pmd_dlopen
 		sources += files('mlx5_glue.c')
 	endif
 	cflags_options = [
-		'-Wextra',
 		'-std=c11',
 		'-Wno-strict-prototypes',
 		'-D_BSD_SOURCE',
@@ -118,6 +122,8 @@ if build
 		'IBV_WQ_FLAGS_PCI_WRITE_END_PADDING' ],
 		[ 'HAVE_IBV_WQ_FLAG_RX_END_PADDING', 'infiniband/verbs.h',
 		'IBV_WQ_FLAG_RX_END_PADDING' ],
+		[ 'HAVE_MLX5DV_DR_DEVX_PORT', 'infiniband/mlx5dv.h',
+		'mlx5dv_query_devx_port' ],
 		[ 'HAVE_IBV_DEVX_OBJ', 'infiniband/mlx5dv.h',
 		'mlx5dv_devx_obj_create' ],
 		[ 'HAVE_IBV_FLOW_DEVX_COUNTERS', 'infiniband/mlx5dv.h',
@@ -126,10 +132,16 @@ if build
 		'mlx5dv_devx_obj_query_async' ],
 		[ 'HAVE_MLX5DV_DR_ACTION_DEST_DEVX_TIR', 'infiniband/mlx5dv.h',
 		'mlx5dv_dr_action_create_dest_devx_tir' ],
+		[ 'HAVE_MLX5_DR_CREATE_ACTION_FLOW_METER', 'infiniband/mlx5dv.h',
+		'mlx5dv_dr_action_create_flow_meter' ],
+		[ 'HAVE_MLX5DV_MMAP_GET_NC_PAGES_CMD', 'infiniband/mlx5dv.h',
+		'MLX5_MMAP_GET_NC_PAGES_CMD' ],
 		[ 'HAVE_MLX5DV_DR', 'infiniband/mlx5dv.h',
 		'MLX5DV_DR_DOMAIN_TYPE_NIC_RX' ],
 		[ 'HAVE_MLX5DV_DR_ESWITCH', 'infiniband/mlx5dv.h',
 		'MLX5DV_DR_DOMAIN_TYPE_FDB' ],
+		[ 'HAVE_MLX5DV_DR_VLAN', 'infiniband/mlx5dv.h',
+		'mlx5dv_dr_action_create_push_vlan' ],
 		[ 'HAVE_SUPPORTED_40000baseKR4_Full', 'linux/ethtool.h',
 		'SUPPORTED_40000baseKR4_Full' ],
 		[ 'HAVE_SUPPORTED_40000baseCR4_Full', 'linux/ethtool.h',
@@ -177,12 +189,13 @@ if build
 	]
 	config = configuration_data()
 	foreach arg:has_sym_args
-		config.set(arg[0], cc.has_header_symbol(arg[1], arg[2]))
+		config.set(arg[0], cc.has_header_symbol(arg[1], arg[2],
+			dependencies: libs))
 	endforeach
 	foreach arg:has_member_args
-		file_prefix = '#include<' + arg[1] + '>'
+		file_prefix = '#include <' + arg[1] + '>'
 		config.set(arg[0], cc.has_member(arg[2], arg[3],
-			prefix : file_prefix))
+			prefix : file_prefix, dependencies: libs))
 	endforeach
 	configure_file(output : 'mlx5_autoconf.h', configuration : config)
 endif
@@ -193,10 +206,14 @@ if pmd_dlopen and build
 	dlopen_so_version = LIB_GLUE_VERSION
 	dlopen_sources = files('mlx5_glue.c')
 	dlopen_install_dir = [ eal_pmd_path + '-glue' ]
+	dlopen_includes = [global_inc]
+	dlopen_includes += include_directories(
+		'../../../lib/librte_eal/common/include/generic',
+	)
 	shared_lib = shared_library(
 		dlopen_lib_name,
 		dlopen_sources,
-		include_directories: global_inc,
+		include_directories: dlopen_includes,
 		c_args: cflags,
 		dependencies: libs,
 		link_args: [

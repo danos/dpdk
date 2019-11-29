@@ -8,6 +8,7 @@
 
 #include "eal_internal_cfg.h"
 #include "eal_memcfg.h"
+#include "eal_private.h"
 
 void
 eal_mcfg_complete(void)
@@ -160,4 +161,11 @@ rte_mcfg_timer_unlock(void)
 {
 	struct rte_mem_config *mcfg = rte_eal_get_configuration()->mem_config;
 	rte_spinlock_unlock(&mcfg->tlock);
+}
+
+bool
+rte_mcfg_get_single_file_segments(void)
+{
+	struct rte_mem_config *mcfg = rte_eal_get_configuration()->mem_config;
+	return (bool)mcfg->single_file_segments;
 }

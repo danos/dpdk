@@ -41,16 +41,16 @@ struct ipv6_l3fwd_lpm_route {
 	uint8_t  if_out;
 };
 
-/* 192.18.0.0/16 are set aside for RFC2544 benchmarking. */
+/* 198.18.0.0/16 are set aside for RFC2544 benchmarking (RFC5735). */
 static struct ipv4_l3fwd_lpm_route ipv4_l3fwd_lpm_route_array[] = {
-	{RTE_IPV4(192, 18, 0, 0), 24, 0},
-	{RTE_IPV4(192, 18, 1, 0), 24, 1},
-	{RTE_IPV4(192, 18, 2, 0), 24, 2},
-	{RTE_IPV4(192, 18, 3, 0), 24, 3},
-	{RTE_IPV4(192, 18, 4, 0), 24, 4},
-	{RTE_IPV4(192, 18, 5, 0), 24, 5},
-	{RTE_IPV4(192, 18, 6, 0), 24, 6},
-	{RTE_IPV4(192, 18, 7, 0), 24, 7},
+	{RTE_IPV4(198, 18, 0, 0), 24, 0},
+	{RTE_IPV4(198, 18, 1, 0), 24, 1},
+	{RTE_IPV4(198, 18, 2, 0), 24, 2},
+	{RTE_IPV4(198, 18, 3, 0), 24, 3},
+	{RTE_IPV4(198, 18, 4, 0), 24, 4},
+	{RTE_IPV4(198, 18, 5, 0), 24, 5},
+	{RTE_IPV4(198, 18, 6, 0), 24, 6},
+	{RTE_IPV4(198, 18, 7, 0), 24, 7},
 };
 
 /* 2001:0200::/48 is IANA reserved range for IPv6 benchmarking (RFC5180) */
@@ -400,10 +400,17 @@ lpm_cb_parse_ptype(uint16_t port __rte_unused, uint16_t queue __rte_unused,
 		   uint16_t max_pkts __rte_unused,
 		   void *user_param __rte_unused)
 {
-	unsigned i;
+	unsigned int i;
 
-	for (i = 0; i < nb_pkts; ++i)
+	if (unlikely(nb_pkts == 0))
+		return nb_pkts;
+	rte_prefetch0(rte_pktmbuf_mtod(pkts[0], struct ether_hdr *));
+	for (i = 0; i < (unsigned int) (nb_pkts - 1); ++i) {
+		rte_prefetch0(rte_pktmbuf_mtod(pkts[i+1],
+			struct ether_hdr *));
 		lpm_parse_ptype(pkts[i]);
+	}
+	lpm_parse_ptype(pkts[i]);
 
 	return nb_pkts;
 }

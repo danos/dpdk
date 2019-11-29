@@ -7,9 +7,9 @@ MLX5 poll mode driver
 
 The MLX5 poll mode driver library (**librte_pmd_mlx5**) provides support
 for **Mellanox ConnectX-4**, **Mellanox ConnectX-4 Lx** , **Mellanox
-ConnectX-5**, **Mellanox ConnectX-6** and **Mellanox BlueField** families
-of 10/25/40/50/100/200 Gb/s adapters as well as their virtual functions (VF)
-in SR-IOV context.
+ConnectX-5**, **Mellanox ConnectX-6**, **Mellanox ConnectX-6DX** and
+**Mellanox BlueField** families of 10/25/40/50/100/200 Gb/s adapters
+as well as their virtual functions (VF) in SR-IOV context.
 
 Information and documentation about these adapters can be found on the
 `Mellanox website <http://www.mellanox.com>`__. Help is also provided by the
@@ -87,7 +87,7 @@ Features
 - RX interrupts.
 - Statistics query including Basic, Extended and per queue.
 - Rx HW timestamp.
-- Tunnel types: VXLAN, L3 VXLAN, VXLAN-GPE, GRE, MPLSoGRE, MPLSoUDP, IP-in-IP.
+- Tunnel types: VXLAN, L3 VXLAN, VXLAN-GPE, GRE, MPLSoGRE, MPLSoUDP, IP-in-IP, Geneve.
 - Tunnel HW offloads: packet type, inner/outer RSS, IP and UDP checksum verification.
 - NIC HW offloads: encapsulation (vxlan, gre, mplsoudp, mplsogre), NAT, routing, TTL
   increment/decrement, count, drop, mark. For details please see :ref:`mlx5_offloads_support`.
@@ -124,6 +124,16 @@ Limitations
 
   Will match any ipv4 packet (VLAN included).
 
+- VLAN pop offload command:
+
+  - Flow rules having a VLAN pop offload command as one of their actions and
+    are lacking a match on VLAN as one of their items are not supported.
+  - The command is not supported on egress traffic.
+
+- VLAN push offload is not supported on ingress traffic.
+
+- VLAN set PCP offload is not supported on existing headers.
+
 - A multi segment packet must have not more segments than reported by dev_infos_get()
   in tx_desc_lim.nb_seg_max field. This value depends on maximal supported Tx descriptor
   size and ``txq_inline_min`` settings and may be from 2 (worst case forced by maximal
@@ -135,6 +145,14 @@ Limitations
 - VXLAN TSO and checksum offloads are not supported on VM.
 
 - L3 VXLAN and VXLAN-GPE tunnels cannot be supported together with MPLSoGRE and MPLSoUDP.
+
+- Match on Geneve header supports the following fields only:
+
+     - VNI
+     - OAM
+     - protocol type
+     - options length
+       Currently, the only supported options length value is 0.
 
 - VF: flow rules created on VF devices can only match traffic targeted at the
   configured MAC addresses (see ``rte_eth_dev_mac_addr_add()``).
@@ -185,10 +203,12 @@ Limitations
 
 - LRO:
 
-  - Requires DevX to be enabled.
+  - Requires DevX and DV flow to be enabled.
   - KEEP_CRC offload cannot be supported with LRO.
   - The first mbuf length, without head-room,  must be big enough to include the
     TCP header (122B).
+  - Rx queue with LRO offload enabled, receiving a non-LRO packet, can forward
+    it with size limited to max LRO size, not to max RX packet length.
 
 Statistics
 ----------
@@ -295,8 +315,10 @@ Run-time configuration
 
   Supported on:
 
-  - x86_64 with ConnectX-4, ConnectX-4 LX, ConnectX-5, ConnectX-6 and BlueField.
-  - POWER9 and ARMv8 with ConnectX-4 LX, ConnectX-5, ConnectX-6 and BlueField.
+  - x86_64 with ConnectX-4, ConnectX-4 LX, ConnectX-5, ConnectX-6, ConnectX-6 DX
+    and BlueField.
+  - POWER9 and ARMv8 with ConnectX-4 LX, ConnectX-5, ConnectX-6, ConnectX-6 DX
+    and BlueField.
 
 - ``rxq_cqe_pad_en`` parameter [int]
 
@@ -326,8 +348,10 @@ Run-time configuration
 
   Supported on:
 
-  - x86_64 with ConnectX-4, ConnectX-4 LX, ConnectX-5, ConnectX-6 and BlueField.
-  - POWER8 and ARMv8 with ConnectX-4 LX, ConnectX-5, ConnectX-6 and BlueField.
+  - x86_64 with ConnectX-4, ConnectX-4 LX, ConnectX-5, ConnectX-6, ConnectX-6 DX
+    and BlueField.
+  - POWER8 and ARMv8 with ConnectX-4 LX, ConnectX-5, ConnectX-6, ConnectX-6 DX
+    and BlueField.
 
 - ``mprq_en`` parameter [int]
 
@@ -463,6 +487,11 @@ Run-time configuration
   The default ``txq_inline_max`` value is 290. The specified value may be adjusted
   by the driver in order not to exceed the limit (930 bytes) and to provide better
   WQE space filling without gaps, the adjustment is reflected in the debug log.
+  Also, the default value (290) may be decreased in run-time if the large transmit
+  queue size is requested and hardware does not support enough descriptor
+  amount, in this case warning is emitted. If ``txq_inline_max`` key is
+  specified and requested inline settings can not be satisfied then error
+  will be raised.
 
 - ``txq_inline_mpw`` parameter [int]
 
@@ -484,7 +513,11 @@ Run-time configuration
   WQE space filling without gaps, the adjustment is reflected in the debug log.
   Due to multiple packets may be included to the same WQE with Enhanced Multi
   Packet Write Method and overall WQE size is limited it is not recommended to
-  specify large values for the ``txq_inline_mpw``.
+  specify large values for the ``txq_inline_mpw``. Also, the default value (268)
+  may be decreased in run-time if the large transmit queue size is requested
+  and hardware does not support enough descriptor amount, in this case warning
+  is emitted. If ``txq_inline_mpw`` key is  specified and requested inline
+  settings can not be satisfied then error will be raised.
 
 - ``txqs_max_vec`` parameter [int]
 
@@ -510,21 +543,54 @@ Run-time configuration
 - ``txq_mpw_en`` parameter [int]
 
   A nonzero value enables Enhanced Multi-Packet Write (eMPW) for ConnectX-5,
-  ConnectX-6 and BlueField. eMPW allows the TX burst function to pack up multiple
-  packets in a single descriptor session in order to save PCI bandwidth and improve
-  performance at the cost of a slightly higher CPU usage. When ``txq_inline_mpw``
-  is set along with ``txq_mpw_en``, TX burst function copies entire packet
-  data on to TX descriptor instead of including pointer of packet.
+  ConnectX-6, ConnectX-6 DX and BlueField. eMPW allows the TX burst function to pack
+  up multiple packets in a single descriptor session in order to save PCI bandwidth
+  and improve performance at the cost of a slightly higher CPU usage. When
+  ``txq_inline_mpw`` is set along with ``txq_mpw_en``, TX burst function copies
+  entire packet data on to TX descriptor instead of including pointer of packet.
 
   The Enhanced Multi-Packet Write feature is enabled by default if NIC supports
   it, can be disabled by explicit specifying 0 value for ``txq_mpw_en`` option.
   Also, if minimal data inlining is requested by non-zero ``txq_inline_min``
   option or reported by the NIC, the eMPW feature is disengaged.
 
+- ``tx_db_nc`` parameter [int]
+
+  The rdma core library can map doorbell register in two ways, depending on the
+  environment variable "MLX5_SHUT_UP_BF":
+
+  - As regular cached memory, if the variable is either missing or set to zero.
+  - As non-cached memory, if the variable is present and set to not "0" value.
+
+  The type of mapping may slightly affect the Tx performance, the optimal choice
+  is strongly relied on the host architecture and should be deduced practically.
+
+  If ``tx_db_nc`` is set to zero, the doorbell is forced to be mapped to regular
+  memory, the PMD will perform the extra write memory barrier after writing to
+  doorbell, it might increase the needed CPU clocks per packet to send, but
+  latency might be improved.
+
+  If ``tx_db_nc`` is set to one, the doorbell is forced to be mapped to non
+  cached memory, the PMD will not perform the extra write memory barrier
+  after writing to doorbell, on some architectures it might improve the
+  performance.
+
+  If ``tx_db_nc`` is set to two, the doorbell is forced to be mapped to regular
+  memory, the PMD will use heuristics to decide whether write memory barrier
+  should be performed. For bursts with size multiple of recommended one (64 pkts)
+  it is supposed the next burst is coming and no need to issue the extra memory
+  barrier (it is supposed to be issued in the next coming burst, at least after
+  descriptor writing). It might increase latency (on some hosts till next
+  packets transmit) and should be used with care.
+
+  If ``tx_db_nc`` is omitted or set to zero, the preset (if any) environment
+  variable "MLX5_SHUT_UP_BF" value is used. If there is no "MLX5_SHUT_UP_BF",
+  the default ``tx_db_nc`` value is zero for ARM64 hosts and one for others.
+
 - ``tx_vec_en`` parameter [int]
 
-  A nonzero value enables Tx vector on ConnectX-5, ConnectX-6 and BlueField
-  NICs if the number of global Tx queues on the port is less than
+  A nonzero value enables Tx vector on ConnectX-5, ConnectX-6, ConnectX-6 DX
+  and BlueField NICs if the number of global Tx queues on the port is less than
   ``txqs_max_vec``. The parameter is deprecated and ignored.
 
 - ``rx_vec_en`` parameter [int]
@@ -551,12 +617,65 @@ Run-time configuration
 
   Disabled by default.
 
+- ``dv_xmeta_en`` parameter [int]
+
+  A nonzero value enables extensive flow metadata support if device is
+  capable and driver supports it. This can enable extensive support of
+  ``MARK`` and ``META`` item of ``rte_flow``. The newly introduced
+  ``SET_TAG`` and ``SET_META`` actions do not depend on ``dv_xmeta_en``.
+
+  There are some possible configurations, depending on parameter value:
+
+  - 0, this is default value, defines the legacy mode, the ``MARK`` and
+    ``META`` related actions and items operate only within NIC Tx and
+    NIC Rx steering domains, no ``MARK`` and ``META`` information crosses
+    the domain boundaries. The ``MARK`` item is 24 bits wide, the ``META``
+    item is 32 bits wide and match supported on egress only.
+
+  - 1, this engages extensive metadata mode, the ``MARK`` and ``META``
+    related actions and items operate within all supported steering domains,
+    including FDB, ``MARK`` and ``META`` information may cross the domain
+    boundaries. The ``MARK`` item is 24 bits wide, the ``META`` item width
+    depends on kernel and firmware configurations and might be 0, 16 or
+    32 bits. Within NIC Tx domain ``META`` data width is 32 bits for
+    compatibility, the actual width of data transferred to the FDB domain
+    depends on kernel configuration and may be vary. The actual supported
+    width can be retrieved in runtime by series of rte_flow_validate()
+    trials.
+
+  - 2, this engages extensive metadata mode, the ``MARK`` and ``META``
+    related actions and items operate within all supported steering domains,
+    including FDB, ``MARK`` and ``META`` information may cross the domain
+    boundaries. The ``META`` item is 32 bits wide, the ``MARK`` item width
+    depends on kernel and firmware configurations and might be 0, 16 or
+    24 bits. The actual supported width can be retrieved in runtime by
+    series of rte_flow_validate() trials.
+
+  +------+-----------+-----------+-------------+-------------+
+  | Mode | ``MARK``  | ``META``  | ``META`` Tx | FDB/Through |
+  +======+===========+===========+=============+=============+
+  | 0    | 24 bits   | 32 bits   | 32 bits     | no          |
+  +------+-----------+-----------+-------------+-------------+
+  | 1    | 24 bits   | vary 0-32 | 32 bits     | yes         |
+  +------+-----------+-----------+-------------+-------------+
+  | 2    | vary 0-32 | 32 bits   | 32 bits     | yes         |
+  +------+-----------+-----------+-------------+-------------+
+
+  If there is no E-Switch configuration the ``dv_xmeta_en`` parameter is
+  ignored and the device is configured to operate in legacy mode (0).
+
+  Disabled by default (set to 0).
+
+  The Direct Verbs/Rules (engaged with ``dv_flow_en`` = 1) supports all
+  of the extensive metadata features. The legacy Verbs supports FLAG and
+  MARK metadata actions over NIC Rx steering domain only.
+
 - ``dv_flow_en`` parameter [int]
 
   A nonzero value enables the DV flow steering assuming it is supported
-  by the driver.
+  by the driver (RDMA Core library version is rdma-core-24.0 or higher).
 
-  Disabled by default.
+  Enabled by default if supported.
 
 - ``dv_esw_en`` parameter [int]
 
@@ -663,6 +782,10 @@ Below are some firmware configurations listed.
 
     FLEX_PARSER_PROFILE_ENABLE=2
 
+- enable Geneve flow matching::
+
+   FLEX_PARSER_PROFILE_ENABLE=0
+
 Prerequisites
 -------------
 
@@ -763,6 +886,7 @@ Mellanox OFED/EN
   - ConnectX-5: **16.21.1000** and above.
   - ConnectX-5 Ex: **16.21.1000** and above.
   - ConnectX-6: **20.99.5374** and above.
+  - ConnectX-6 DX: **22.27.0090** and above.
   - BlueField: **18.25.1010** and above.
 
 While these libraries and kernel modules are available on OpenFabrics
@@ -806,6 +930,9 @@ Supported NICs
 * Mellanox(R) ConnectX(R)-4 Lx 25G MCX4121A-ACAT (2x25G)
 * Mellanox(R) ConnectX(R)-5 100G MCX556A-ECAT (2x100G)
 * Mellanox(R) ConnectX(R)-5 Ex EN 100G MCX516A-CDAT (2x100G)
+* Mellanox(R) ConnectX(R)-6 200G MCX654106A-HCAT (4x200G)
+* Mellanox(R) ConnectX(R)-6DX EN 100G MCX623106AN-CDAT (2*100g)
+* Mellanox(R) ConnectX(R)-6DX EN 200G MCX623105AN-VDAT (1*200g)
 
 Quick Start Guide on OFED/EN
 ----------------------------
@@ -988,37 +1115,51 @@ Supported hardware offloads
 .. table:: Minimal SW/HW versions for rte_flow offloads
 
    +-----------------------+-----------------+-----------------+
-   | Offload               | with E-Switch   | with vNIC       |
+   | Offload               | with E-Switch   | with NIC        |
    +=======================+=================+=================+
    | Count                 | | DPDK 19.05    | | DPDK 19.02    |
    |                       | | OFED 4.6      | | OFED 4.6      |
    |                       | | rdma-core 24  | | rdma-core 23  |
    |                       | | ConnectX-5    | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
-   | Drop / Queue / RSS    | | DPDK 19.05    | | DPDK 18.11    |
+   | Drop                  | | DPDK 19.05    | | DPDK 18.11    |
    |                       | | OFED 4.6      | | OFED 4.5      |
    |                       | | rdma-core 24  | | rdma-core 23  |
    |                       | | ConnectX-5    | | ConnectX-4    |
    +-----------------------+-----------------+-----------------+
+   | Queue / RSS           | |               | | DPDK 18.11    |
+   |                       | |     N/A       | | OFED 4.5      |
+   |                       | |               | | rdma-core 23  |
+   |                       | |               | | ConnectX-4    |
+   +-----------------------+-----------------+-----------------+
    | Encapsulation         | | DPDK 19.05    | | DPDK 19.02    |
-   | (VXLAN / NVGRE / RAW) | | OFED 4.6-2    | | OFED 4.6      |
+   | (VXLAN / NVGRE / RAW) | | OFED 4.7-1    | | OFED 4.6      |
    |                       | | rdma-core 24  | | rdma-core 23  |
    |                       | | ConnectX-5    | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
+   | Encapsulation         | | DPDK 19.11    | | DPDK 19.11    |
+   | GENEVE                | | OFED 4.7-3    | | OFED 4.7-3    |
+   |                       | | rdma-core 27  | | rdma-core 27  |
+   |                       | | ConnectX-5    | | ConnectX-5    |
+   +-----------------------+-----------------+-----------------+
    | | Header rewrite      | | DPDK 19.05    | | DPDK 19.02    |
-   | | (set_ipv4_src /     | | OFED 4.6-2    | | OFED 4.6-2    |
-   | | set_ipv4_dst /      | | rdma-core 24  | | rdma-core 23  |
+   | | (set_ipv4_src /     | | OFED 4.7-1    | | OFED 4.7-1    |
+   | | set_ipv4_dst /      | | rdma-core 24  | | rdma-core 24  |
    | | set_ipv6_src /      | | ConnectX-5    | | ConnectX-5    |
-   | | set_ipv6_dst /      |                 |                 |
-   | | set_tp_src /        |                 |                 |
-   | | set_tp_dst /        |                 |                 |
-   | | dec_ttl /           |                 |                 |
-   | | set_ttl /           |                 |                 |
-   | | set_mac_src /       |                 |                 |
-   | | set_mac_dst)        |                 |                 |
+   | | set_ipv6_dst /      | |               | |               |
+   | | set_tp_src /        | |               | |               |
+   | | set_tp_dst /        | |               | |               |
+   | | dec_ttl /           | |               | |               |
+   | | set_ttl /           | |               | |               |
+   | | set_mac_src /       | |               | |               |
+   | | set_mac_dst)        | |               | |               |
+   | |                     | |               | |               |
+   | | (of_set_vlan_vid)   | | DPDK 19.11    | | DPDK 19.11    |
+   |                       | | OFED 4.7-1    | | OFED 4.7-1    |
+   |                       | | ConnectX-5    | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
    | Jump                  | | DPDK 19.05    | | DPDK 19.02    |
-   |                       | | OFED 4.6-4    | | OFED 4.6-4    |
+   |                       | | OFED 4.7-1    | | OFED 4.7-1    |
    |                       | | rdma-core 24  | | N/A           |
    |                       | | ConnectX-5    | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
@@ -1028,9 +1169,30 @@ Supported hardware offloads
    |                       | | ConnectX-5    | | ConnectX-4    |
    +-----------------------+-----------------+-----------------+
    | Port ID               | | DPDK 19.05    |     | N/A       |
-   |                       | | OFED 4.6      |     | N/A       |
+   |                       | | OFED 4.7-1    |     | N/A       |
    |                       | | rdma-core 24  |     | N/A       |
    |                       | | ConnectX-5    |     | N/A       |
+   +-----------------------+-----------------+-----------------+
+   | | VLAN                | | DPDK 19.11    | | DPDK 19.11    |
+   | | (of_pop_vlan /      | | OFED 4.7-1    | | OFED 4.7-1    |
+   | | of_push_vlan /      | | ConnectX-5    | | ConnectX-5    |
+   | | of_set_vlan_pcp /   |                 |                 |
+   | | of_set_vlan_vid)    |                 |                 |
+   +-----------------------+-----------------+-----------------+
+   | Hairpin               | |               | | DPDK 19.11    |
+   |                       | |     N/A       | | OFED 4.7-3    |
+   |                       | |               | | rdma-core 26  |
+   |                       | |               | | ConnectX-5    |
+   +-----------------------+-----------------+-----------------+
+   | Meta data             | |  DPDK 19.11   | | DPDK 19.11    |
+   |                       | |  OFED 4.7-3   | | OFED 4.7-3    |
+   |                       | |  rdma-core 26 | | rdma-core 26  |
+   |                       | |  ConnectX-5   | | ConnectX-5    |
+   +-----------------------+-----------------+-----------------+
+   | Metering              | |  DPDK 19.11   | | DPDK 19.11    |
+   |                       | |  OFED 4.7-3   | | OFED 4.7-3    |
+   |                       | |  rdma-core 26 | | rdma-core 26  |
+   |                       | |  ConnectX-5   | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
 
 Notes for testpmd

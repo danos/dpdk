@@ -31,6 +31,23 @@
 #define BIT(nr)     (1UL << (nr))
 #endif
 
+#ifndef BITS_PER_LONG
+#define BITS_PER_LONG	(__SIZEOF_LONG__ * 8)
+#endif
+#ifndef BITS_PER_LONG_LONG
+#define BITS_PER_LONG_LONG (__SIZEOF_LONG_LONG__ * 8)
+#endif
+
+#ifndef GENMASK
+#define GENMASK(h, l) \
+		(((~0UL) << (l)) & (~0UL >> (BITS_PER_LONG - 1 - (h))))
+#endif
+#ifndef GENMASK_ULL
+#define GENMASK_ULL(h, l) \
+	(((~0ULL) - (1ULL << (l)) + 1) & \
+	 (~0ULL >> (BITS_PER_LONG_LONG - 1 - (h))))
+#endif
+
 /* Compiler attributes */
 #ifndef __hot
 #define __hot   __attribute__((hot))
@@ -104,6 +121,8 @@ extern int otx2_logtype_dpi;
 #define PCI_DEVID_OCTEONTX2_RVU_CPT_VF		0xA0FE
 #define PCI_DEVID_OCTEONTX2_RVU_AF_VF		0xA0f8
 #define PCI_DEVID_OCTEONTX2_DPI_VF		0xA081
+#define PCI_DEVID_OCTEONTX2_RVU_SDP_PF		0xA0f6
+#define PCI_DEVID_OCTEONTX2_RVU_SDP_VF		0xA0f7
 
 /* Subsystem Device ID */
 #define PCI_SUBSYS_DEVID_96XX_95XX		0xB200

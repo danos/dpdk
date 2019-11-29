@@ -24,6 +24,7 @@ Features of the OCTEON TX2 Ethdev PMD are:
 - Multiple queues for TX and RX
 - Receiver Side Scaling (RSS)
 - MAC/VLAN filtering
+- Multicast MAC filtering
 - Generic flow API
 - Inner and Outer Checksum offload
 - VLAN/QinQ stripping and insertion
@@ -112,11 +113,6 @@ use arm64-octeontx2-linux-gcc as target.
 Runtime Config Options
 ----------------------
 
-- ``HW offload ptype parsing disable`` (default ``0``)
-
-   Packet type parsing is HW offloaded by default and this feature may be toggled
-   using ``ptype_disable`` ``devargs`` parameter.
-
 - ``Rx&Tx scalar mode enable`` (default ``0``)
 
    Ethdev supports both scalar and vector mode, it may be selected at runtime
@@ -169,6 +165,18 @@ Runtime Config Options
    With the above configuration, each send queue's decscriptor buffer count is
    limited to a maximum of 64 buffers.
 
+- ``switch header enable`` (default ``none``)
+
+   A port can be configured to a specific switch header type by using
+   ``switch_header`` ``devargs`` parameter.
+
+   For example::
+
+      -w 0002:02:00.0,switch_header="higig2"
+
+   With the above configuration, higig2 will be enabled on that port and the
+   traffic on this port should be higig2 traffic only. Supported switch header
+   types are "higig2" and "dsa".
 
 .. note::
 
@@ -187,12 +195,21 @@ The OCTEON TX2 SoC family NIC has inbuilt HW assisted external mempool manager.
 as it is performance wise most effective way for packet allocation and Tx buffer
 recycling on OCTEON TX2 SoC platform.
 
-CRC striping
-~~~~~~~~~~~~
+CRC stripping
+~~~~~~~~~~~~~
 
 The OCTEON TX2 SoC family NICs strip the CRC for every packet being received by
 the host interface irrespective of the offload configuration.
 
+Multicast MAC filtering
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``net_octeontx2`` pmd supports multicast mac filtering feature only on physical
+function devices.
+
+SDP interface support
+~~~~~~~~~~~~~~~~~~~~~
+OCTEON TX2 SDP interface support is limited to PF device, No VF support.
 
 Debugging Options
 -----------------
@@ -269,6 +286,8 @@ Patterns:
    | 22 | RTE_FLOW_ITEM_TYPE_ANY         |
    +----+--------------------------------+
    | 23 | RTE_FLOW_ITEM_TYPE_GRE_KEY     |
+   +----+--------------------------------+
+   | 24 | RTE_FLOW_ITEM_TYPE_HIGIG2      |
    +----+--------------------------------+
 
 .. note::

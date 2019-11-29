@@ -21,7 +21,7 @@ if pmd_dlopen
 	]
 endif
 
-libnames = [ 'mnl', 'mlx4', 'ibverbs' ]
+libnames = [ 'mlx4', 'ibverbs' ]
 libs = []
 foreach libname:libnames
 	lib = dependency('lib' + libname, required:false)
@@ -55,7 +55,6 @@ if build
 		sources += files('mlx4_glue.c')
 	endif
 	cflags_options = [
-		'-Wextra',
 		'-std=c11',
 		'-Wno-strict-prototypes',
 		'-D_BSD_SOURCE',
@@ -76,7 +75,7 @@ if build
 	# mlx4_autoconf.h file is still generated.
 	# input array for meson member search:
 	# [ "MACRO to define if found", "header for the search",
-	#   "symbol to search","struct member to search" ]
+	#   "symbol to search", "struct member to search" ]
 	#
 	has_member_args = [
 		[ 'HAVE_IBV_MLX4_WQE_LSO_SEG', 'infiniband/mlx4dv.h',
@@ -93,12 +92,13 @@ if build
 	]
 	config = configuration_data()
 	foreach arg:has_sym_args
-		config.set(arg[0], cc.has_header_symbol(arg[1], arg[2]))
+		config.set(arg[0], cc.has_header_symbol(arg[1], arg[2],
+			dependencies: libs))
 	endforeach
 	foreach arg:has_member_args
-		file_prefix = '#include<' + arg[1] + '>'
+		file_prefix = '#include <' + arg[1] + '>'
 		config.set(arg[0], cc.has_member(arg[2], arg[3],
-			prefix : file_prefix))
+			prefix: file_prefix, dependencies: libs))
 	endforeach
 	configure_file(output : 'mlx4_autoconf.h', configuration : config)
 endif

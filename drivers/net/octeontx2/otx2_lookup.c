@@ -53,12 +53,31 @@ otx2_nix_supported_ptypes_get(struct rte_eth_dev *eth_dev)
 		RTE_PTYPE_INNER_L4_UDP,  /* LH */
 		RTE_PTYPE_INNER_L4_SCTP, /* LH */
 		RTE_PTYPE_INNER_L4_ICMP, /* LH */
+		RTE_PTYPE_UNKNOWN,
 	};
 
 	if (dev->rx_offload_flags & NIX_RX_OFFLOAD_PTYPE_F)
 		return ptypes;
 	else
 		return NULL;
+}
+
+int
+otx2_nix_ptypes_set(struct rte_eth_dev *eth_dev, uint32_t ptype_mask)
+{
+	struct otx2_eth_dev *dev = otx2_eth_pmd_priv(eth_dev);
+
+	if (ptype_mask) {
+		dev->rx_offload_flags |= NIX_RX_OFFLOAD_PTYPE_F;
+		dev->ptype_disable = 0;
+	} else {
+		dev->rx_offload_flags &= ~NIX_RX_OFFLOAD_PTYPE_F;
+		dev->ptype_disable = 1;
+	}
+
+	otx2_eth_set_rx_function(eth_dev);
+
+	return 0;
 }
 
 /*
@@ -78,7 +97,8 @@ static void
 nix_create_non_tunnel_ptype_array(uint16_t *ptype)
 {
 	uint8_t lb, lc, ld, le;
-	uint16_t idx, val;
+	uint16_t val;
+	uint32_t idx;
 
 	for (idx = 0; idx < PTYPE_NON_TUNNEL_ARRAY_SZ; idx++) {
 		lb = idx & 0xF;
@@ -88,7 +108,7 @@ nix_create_non_tunnel_ptype_array(uint16_t *ptype)
 		val = RTE_PTYPE_UNKNOWN;
 
 		switch (lb) {
-		case NPC_LT_LB_QINQ:
+		case NPC_LT_LB_STAG_QINQ:
 			val |= RTE_PTYPE_L2_ETHER_QINQ;
 			break;
 		case NPC_LT_LB_CTAG:
@@ -137,6 +157,7 @@ nix_create_non_tunnel_ptype_array(uint16_t *ptype)
 			val |= RTE_PTYPE_L4_SCTP;
 			break;
 		case NPC_LT_LD_ICMP:
+		case NPC_LT_LD_ICMP6:
 			val |= RTE_PTYPE_L4_ICMP;
 			break;
 		case NPC_LT_LD_IGMP:
@@ -180,28 +201,29 @@ nix_create_non_tunnel_ptype_array(uint16_t *ptype)
 	}
 }
 
-#define TU_SHIFT(x) ((x) >> PTYPE_WIDTH)
+#define TU_SHIFT(x) ((x) >> PTYPE_NON_TUNNEL_WIDTH)
 static void
 nix_create_tunnel_ptype_array(uint16_t *ptype)
 {
-	uint8_t le, lf, lg;
-	uint16_t idx, val;
+	uint8_t lf, lg, lh;
+	uint16_t val;
+	uint32_t idx;
 
 	/* Skip non tunnel ptype array memory */
 	ptype = ptype + PTYPE_NON_TUNNEL_ARRAY_SZ;
 
 	for (idx = 0; idx < PTYPE_TUNNEL_ARRAY_SZ; idx++) {
-		le = idx & 0xF;
-		lf = (idx & 0xF0) >> 4;
-		lg = (idx & 0xF00) >> 8;
+		lf = idx & 0xF;
+		lg = (idx & 0xF0) >> 4;
+		lh = (idx & 0xF00) >> 8;
 		val = RTE_PTYPE_UNKNOWN;
 
-		switch (le) {
+		switch (lf) {
 		case NPC_LT_LF_TU_ETHER:
 			val |= TU_SHIFT(RTE_PTYPE_INNER_L2_ETHER);
 			break;
 		}
-		switch (lf) {
+		switch (lg) {
 		case NPC_LT_LG_TU_IP:
 			val |= TU_SHIFT(RTE_PTYPE_INNER_L3_IPV4);
 			break;
@@ -209,7 +231,7 @@ nix_create_tunnel_ptype_array(uint16_t *ptype)
 			val |= TU_SHIFT(RTE_PTYPE_INNER_L3_IPV6);
 			break;
 		}
-		switch (lg) {
+		switch (lh) {
 		case NPC_LT_LH_TU_TCP:
 			val |= TU_SHIFT(RTE_PTYPE_INNER_L4_TCP);
 			break;
@@ -220,6 +242,7 @@ nix_create_tunnel_ptype_array(uint16_t *ptype)
 			val |= TU_SHIFT(RTE_PTYPE_INNER_L4_SCTP);
 			break;
 		case NPC_LT_LH_TU_ICMP:
+		case NPC_LT_LH_TU_ICMP6:
 			val |= TU_SHIFT(RTE_PTYPE_INNER_L4_ICMP);
 			break;
 		}
@@ -272,13 +295,13 @@ nix_create_rx_ol_flags_array(void *mem)
 				val |= PKT_RX_IP_CKSUM_GOOD;
 			break;
 		case NPC_ERRLEV_NIX:
+			val |= PKT_RX_IP_CKSUM_GOOD;
 			if (errcode == NIX_RX_PERRCODE_OL4_CHK) {
 				val |= PKT_RX_OUTER_L4_CKSUM_BAD;
 				val |= PKT_RX_L4_CKSUM_BAD;
 			} else if (errcode == NIX_RX_PERRCODE_IL4_CHK) {
 				val |= PKT_RX_L4_CKSUM_BAD;
 			} else {
-				val |= PKT_RX_IP_CKSUM_GOOD;
 				val |= PKT_RX_L4_CKSUM_GOOD;
 			}
 			break;

@@ -426,6 +426,22 @@ struct i40e_pf_vf {
 	/* version of the virtchnl from VF */
 	struct virtchnl_version_info version;
 	uint32_t request_caps; /* offload caps requested from VF */
+
+	/*
+	 * Variables for store the arrival timestamp of VF messages.
+	 * If the timestamp of latest message stored at
+	 * `msg_timestamps[index % max]` then the timestamp of
+	 * earliest message stored at `msg_time[(index + 1) % max]`.
+	 * When a new message come, the timestamp of this message
+	 * will be stored at `msg_timestamps[(index + 1) % max]` and the
+	 * earliest message timestamp is at
+	 * `msg_timestamps[(index + 2) % max]` now...
+	 */
+	uint32_t msg_index;
+	uint64_t *msg_timestamps;
+
+	/* cycle of stop ignoring VF message */
+	uint64_t ignore_end_cycle;
 };
 
 /*
@@ -900,6 +916,20 @@ struct i40e_rte_flow_rss_conf {
 	uint16_t queue[I40E_MAX_Q_PER_TC]; /**< Queues indices to use. */
 };
 
+struct i40e_vf_msg_cfg {
+	/* maximal VF message during a statistic period */
+	uint32_t max_msg;
+
+	/* statistic period, in second */
+	uint32_t period;
+	/*
+	 * If message statistics from a VF exceed the maximal limitation,
+	 * the PF will ignore any new message from that VF for
+	 * 'ignor_second' time.
+	 */
+	uint32_t ignore_second;
+};
+
 /*
  * Structure to store private data specific for PF instance.
  */
@@ -975,6 +1005,8 @@ struct i40e_pf {
 	struct i40e_customized_pctype customized_pctype[I40E_CUSTOMIZED_MAX];
 	/* Switch Domain Id */
 	uint16_t switch_domain_id;
+
+	struct i40e_vf_msg_cfg vf_msg_cfg;
 };
 
 enum pending_msg {
@@ -1153,6 +1185,7 @@ const struct rte_memzone *i40e_memzone_reserve(const char *name,
 					uint32_t len,
 					int socket_id);
 int i40e_fdir_configure(struct rte_eth_dev *dev);
+void i40e_fdir_rx_proc_enable(struct rte_eth_dev *dev, bool on);
 void i40e_fdir_teardown(struct i40e_pf *pf);
 enum i40e_filter_pctype
 	i40e_flowtype_to_pctype(const struct i40e_adapter *adapter,
@@ -1177,6 +1210,10 @@ void i40e_rxq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
 	struct rte_eth_rxq_info *qinfo);
 void i40e_txq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
 	struct rte_eth_txq_info *qinfo);
+int i40e_rx_burst_mode_get(struct rte_eth_dev *dev, uint16_t queue_id,
+			   struct rte_eth_burst_mode *mode);
+int i40e_tx_burst_mode_get(struct rte_eth_dev *dev, uint16_t queue_id,
+			   struct rte_eth_burst_mode *mode);
 struct i40e_ethertype_filter *
 i40e_sw_ethertype_filter_lookup(struct i40e_ethertype_rule *ethertype_rule,
 			const struct i40e_ethertype_filter_input *input);

@@ -85,17 +85,20 @@ int enic_get_vnic_config(struct enic *enic)
 	vnic_dev_capable_udp_rss_weak(enic->vdev, &enic->nic_cfg_chk,
 				      &enic->udp_rss_weak);
 
-	dev_info(enic, "Flow api filter mode: %s Actions: %s%s%s\n",
+	dev_info(enic, "Flow api filter mode: %s Actions: %s%s%s%s\n",
+		((enic->flow_filter_mode == FILTER_FLOWMAN) ? "FLOWMAN" :
 		((enic->flow_filter_mode == FILTER_DPDK_1) ? "DPDK" :
 		((enic->flow_filter_mode == FILTER_USNIC_IP) ? "USNIC" :
 		((enic->flow_filter_mode == FILTER_IPV4_5TUPLE) ? "5TUPLE" :
-		"NONE"))),
+		"NONE")))),
 		((enic->filter_actions & FILTER_ACTION_RQ_STEERING_FLAG) ?
 		 "steer " : ""),
 		((enic->filter_actions & FILTER_ACTION_FILTER_ID_FLAG) ?
 		 "tag " : ""),
 		((enic->filter_actions & FILTER_ACTION_DROP_FLAG) ?
-		 "drop " : ""));
+		 "drop " : ""),
+		((enic->filter_actions & FILTER_ACTION_COUNTER_FLAG) ?
+		 "count " : ""));
 
 	c->wq_desc_count =
 		min_t(u32, ENIC_MAX_WQ_DESCS,
@@ -179,6 +182,10 @@ int enic_get_vnic_config(struct enic *enic)
 
 	enic->vxlan = ENIC_SETTING(enic, VXLAN) &&
 		vnic_dev_capable_vxlan(enic->vdev);
+	if (vnic_dev_capable_geneve(enic->vdev)) {
+		dev_info(NULL, "Geneve with options offload available\n");
+		enic->geneve_opt_avail = 1;
+	}
 	/*
 	 * Default hardware capabilities. enic_dev_init() may add additional
 	 * flags if it enables overlay offloads.
@@ -198,7 +205,8 @@ int enic_get_vnic_config(struct enic *enic)
 		DEV_RX_OFFLOAD_VLAN_STRIP |
 		DEV_RX_OFFLOAD_IPV4_CKSUM |
 		DEV_RX_OFFLOAD_UDP_CKSUM |
-		DEV_RX_OFFLOAD_TCP_CKSUM;
+		DEV_RX_OFFLOAD_TCP_CKSUM |
+		DEV_RX_OFFLOAD_RSS_HASH;
 	enic->tx_offload_mask =
 		PKT_TX_IPV6 |
 		PKT_TX_IPV4 |

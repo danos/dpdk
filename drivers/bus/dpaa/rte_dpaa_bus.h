@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- *   Copyright 2017 NXP
+ *   Copyright 2017-2019 NXP
  *
  */
 #ifndef __RTE_DPAA_BUS_H__
@@ -10,10 +10,10 @@
 #include <rte_mempool.h>
 #include <dpaax_iova_table.h>
 
+#include <dpaa_of.h>
 #include <fsl_usd.h>
 #include <fsl_qman.h>
 #include <fsl_bman.h>
-#include <of.h>
 #include <netcfg.h>
 
 #define DPAA_MEMPOOL_OPS_NAME	"dpaa"
@@ -75,6 +75,7 @@ struct rte_dpaa_device {
 	};
 	struct rte_dpaa_driver *driver;
 	struct dpaa_device_id id;
+	struct rte_intr_handle intr_handle;
 	enum rte_dpaa_type device_type; /**< Ethernet or crypto type device */
 	char name[RTE_ETH_NAME_MAX_LEN];
 };

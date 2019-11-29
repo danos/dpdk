@@ -7,7 +7,7 @@ Intel(R) QuickAssist (QAT) Crypto Poll Mode Driver
 QAT documentation consists of three parts:
 
 * Details of the symmetric and asymmetric crypto services below.
-* Details of the `compression service <http://doc.dpdk.org/guides/compressdevs/qat_comp.html>`_
+* Details of the :doc:`compression service <../compressdevs/qat_comp>`
   in the compressdev drivers section.
 * Details of building the common QAT infrastructure and the PMDs to support the
   above services. See :ref:`building_qat` below.
@@ -82,6 +82,17 @@ Limitations
 * ZUC EEA3/EIA3 is not supported by dh895xcc devices
 * Maximum additional authenticated data (AAD) for GCM is 240 bytes long and must be passed to the device in a buffer rounded up to the nearest block-size multiple (x16) and padded with zeros.
 * Queue pairs are not thread-safe (that is, within a single queue pair, RX and TX from different lcores is not supported).
+* A GCM limitation exists, but only in the case where there are multiple
+  generations of QAT devices on a single platform.
+  To optimise performance, the GCM crypto session should be initialised for the
+  device generation to which the ops will be enqueued. Specifically if a GCM
+  session is initialised on a GEN2 device, but then attached to an op enqueued
+  to a GEN3 device, it will work but cannot take advantage of hardware
+  optimisations in the GEN3 device. And if a GCM session is initialised on a
+  GEN3 device, then attached to an op sent to a GEN1/GEN2 device, it will not be
+  enqueued to the device and will be marked as failed. The simplest way to
+  mitigate this is to use the bdf whitelist to avoid mixing devices of different
+  generations in the same process if planning to use for GCM.
 
 Extra notes on KASUMI F9
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -123,6 +134,7 @@ Limitations
 
 * Big integers longer than 4096 bits are not supported.
 * Queue pairs are not thread-safe (that is, within a single queue pair, RX and TX from different lcores is not supported).
+* RSA-2560, RSA-3584 are not supported
 
 .. _building_qat:
 
@@ -146,7 +158,7 @@ Configuring and Building the DPDK QAT PMDs
 
 
 Further information on configuring, building and installing DPDK is described
-`here <http://doc.dpdk.org/guides/linux_gsg/build_dpdk.html>`_.
+:doc:`here <../linux_gsg/build_dpdk>`.
 
 
 Quick instructions for QAT cryptodev PMD are as follows:

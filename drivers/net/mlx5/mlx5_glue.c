@@ -391,15 +391,19 @@ mlx5_glue_dr_create_flow_action_dest_flow_tbl(void *tbl)
 }
 
 static void *
-mlx5_glue_dr_create_flow_action_dest_vport(void *domain, uint32_t vport)
+mlx5_glue_dr_create_flow_action_dest_port(void *domain, uint32_t port)
 {
+#ifdef HAVE_MLX5DV_DR_DEVX_PORT
+	return mlx5dv_dr_action_create_dest_ib_port(domain, port);
+#else
 #ifdef HAVE_MLX5DV_DR_ESWITCH
-	return mlx5dv_dr_action_create_dest_vport(domain, vport);
+	return mlx5dv_dr_action_create_dest_vport(domain, port);
 #else
 	(void)domain;
-	(void)vport;
+	(void)port;
 	errno = ENOTSUP;
 	return NULL;
+#endif
 #endif
 }
 
@@ -408,6 +412,31 @@ mlx5_glue_dr_create_flow_action_drop(void)
 {
 #ifdef HAVE_MLX5DV_DR_ESWITCH
 	return mlx5dv_dr_action_create_drop();
+#else
+	errno = ENOTSUP;
+	return NULL;
+#endif
+}
+
+static void *
+mlx5_glue_dr_create_flow_action_push_vlan(struct mlx5dv_dr_domain *domain,
+					  rte_be32_t vlan_tag)
+{
+#ifdef HAVE_MLX5DV_DR_VLAN
+	return mlx5dv_dr_action_create_push_vlan(domain, vlan_tag);
+#else
+	(void)domain;
+	(void)vlan_tag;
+	errno = ENOTSUP;
+	return NULL;
+#endif
+}
+
+static void *
+mlx5_glue_dr_create_flow_action_pop_vlan(void)
+{
+#ifdef HAVE_MLX5DV_DR_VLAN
+	return mlx5dv_dr_action_create_pop_vlan();
 #else
 	errno = ENOTSUP;
 	return NULL;
@@ -740,6 +769,34 @@ mlx5_glue_dv_create_flow_action_tag(uint32_t tag)
 	return NULL;
 }
 
+static void *
+mlx5_glue_dv_create_flow_action_meter(struct mlx5dv_dr_flow_meter_attr *attr)
+{
+#if defined(HAVE_MLX5DV_DR) && defined(HAVE_MLX5_DR_CREATE_ACTION_FLOW_METER)
+	return mlx5dv_dr_action_create_flow_meter(attr);
+#else
+	(void)attr;
+	errno = ENOTSUP;
+	return NULL;
+#endif
+}
+
+static int
+mlx5_glue_dv_modify_flow_action_meter(void *action,
+				      struct mlx5dv_dr_flow_meter_attr *attr,
+				      uint64_t modify_bits)
+{
+#if defined(HAVE_MLX5DV_DR) && defined(HAVE_MLX5_DR_CREATE_ACTION_FLOW_METER)
+	return mlx5dv_dr_action_modify_flow_meter(action, attr, modify_bits);
+#else
+	(void)action;
+	(void)attr;
+	(void)modify_bits;
+	errno = ENOTSUP;
+	return errno;
+#endif
+}
+
 static int
 mlx5_glue_dv_destroy_flow(void *flow_id)
 {
@@ -951,7 +1008,7 @@ mlx5_glue_devx_qp_query(struct ibv_qp *qp,
 			const void *in, size_t inlen,
 			void *out, size_t outlen)
 {
-#ifdef HAVE_IBV_DEVX_ASYNC
+#ifdef HAVE_IBV_DEVX_OBJ
 	return mlx5dv_devx_qp_query(qp, in, inlen, out, outlen);
 #else
 	(void)qp;
@@ -959,6 +1016,22 @@ mlx5_glue_devx_qp_query(struct ibv_qp *qp,
 	(void)inlen;
 	(void)out;
 	(void)outlen;
+	errno = ENOTSUP;
+	return errno;
+#endif
+}
+
+static int
+mlx5_glue_devx_port_query(struct ibv_context *ctx,
+			  uint32_t port_num,
+			  struct mlx5dv_devx_port *mlx5_devx_port)
+{
+#ifdef HAVE_MLX5DV_DR_DEVX_PORT
+	return mlx5dv_query_devx_port(ctx, port_num, mlx5_devx_port);
+#else
+	(void)ctx;
+	(void)port_num;
+	(void)mlx5_devx_port;
 	errno = ENOTSUP;
 	return errno;
 #endif
@@ -1012,10 +1085,14 @@ const struct mlx5_glue *mlx5_glue = &(const struct mlx5_glue){
 	.cq_ex_to_cq = mlx5_glue_cq_ex_to_cq,
 	.dr_create_flow_action_dest_flow_tbl =
 		mlx5_glue_dr_create_flow_action_dest_flow_tbl,
-	.dr_create_flow_action_dest_vport =
-		mlx5_glue_dr_create_flow_action_dest_vport,
+	.dr_create_flow_action_dest_port =
+		mlx5_glue_dr_create_flow_action_dest_port,
 	.dr_create_flow_action_drop =
 		mlx5_glue_dr_create_flow_action_drop,
+	.dr_create_flow_action_push_vlan =
+		mlx5_glue_dr_create_flow_action_push_vlan,
+	.dr_create_flow_action_pop_vlan =
+		mlx5_glue_dr_create_flow_action_pop_vlan,
 	.dr_create_flow_tbl = mlx5_glue_dr_create_flow_tbl,
 	.dr_destroy_flow_tbl = mlx5_glue_dr_destroy_flow_tbl,
 	.dr_create_domain = mlx5_glue_dr_create_domain,
@@ -1039,6 +1116,8 @@ const struct mlx5_glue *mlx5_glue = &(const struct mlx5_glue){
 	.dv_create_flow_action_packet_reformat =
 		mlx5_glue_dv_create_flow_action_packet_reformat,
 	.dv_create_flow_action_tag =  mlx5_glue_dv_create_flow_action_tag,
+	.dv_create_flow_action_meter = mlx5_glue_dv_create_flow_action_meter,
+	.dv_modify_flow_action_meter = mlx5_glue_dv_modify_flow_action_meter,
 	.dv_destroy_flow = mlx5_glue_dv_destroy_flow,
 	.dv_destroy_flow_matcher = mlx5_glue_dv_destroy_flow_matcher,
 	.dv_open_device = mlx5_glue_dv_open_device,
@@ -1054,4 +1133,5 @@ const struct mlx5_glue *mlx5_glue = &(const struct mlx5_glue){
 	.devx_umem_reg = mlx5_glue_devx_umem_reg,
 	.devx_umem_dereg = mlx5_glue_devx_umem_dereg,
 	.devx_qp_query = mlx5_glue_devx_qp_query,
+	.devx_port_query = mlx5_glue_devx_port_query,
 };

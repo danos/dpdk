@@ -154,6 +154,13 @@ Where:
     Incoming packets with length bigger then MTU will be discarded.
     Default value: 1500.
 
+*   ``--frag-ttl FRAG_TTL_NS``: fragment lifetime (in nanoseconds).
+    If packet is not reassembled within this time, received fragments
+    will be discarded. Fragment lifetime should be decreased when
+    there is a high fragmented traffic loss in high bandwidth networks.
+    Should be lower for low number of reassembly buckets.
+    Valid values: from 1 ns to 10 s. Default value: 10000000 (10 s).
+
 *   ``--reassemble NUM``: max number of entries in reassemble fragment table.
     Zero value disables reassembly functionality.
     Default value: 0.
@@ -401,7 +408,7 @@ The SA rule syntax is shown as follows:
 .. code-block:: console
 
     sa <dir> <spi> <cipher_algo> <cipher_key> <auth_algo> <auth_key>
-    <mode> <src_ip> <dst_ip> <action_type> <port_id>
+    <mode> <src_ip> <dst_ip> <action_type> <port_id> <fallback>
 
 where each options means:
 
@@ -573,6 +580,26 @@ where each options means:
 
    * *port_id X* X is a valid device number in decimal
 
+ ``<fallback>``
+
+ * Action type for ingress IPsec packets that inline processor failed to
+   process. Only a combination of *inline-crypto-offload* as a primary
+   session and *lookaside-none* as a fall-back session is supported at the
+   moment.
+
+   If used in conjunction with IPsec window, its width needs be increased
+   due to different processing times of inline and lookaside modes which
+   results in packet reordering.
+
+ * Optional: Yes.
+
+ * Available options:
+
+   * *lookaside-none*: use automatically chosen cryptodev to process packets
+
+ * Syntax:
+
+   * *fallback lookaside-none*
 
 Example SA rules:
 
@@ -725,6 +752,11 @@ Also the user can optionally setup:
 
 *   ``CRYPTO_DEV``: crypto device to be used ('-w <pci-id>'). If none specified
     appropriate vdevs will be created by the script
+
+*   ``MULTI_SEG_TEST``: ipsec-secgw option to enable reassembly support and
+    specify size of reassembly table (e.g.
+    ``MULTI_SEG_TEST='--reassemble 128'``). This option must be set for
+    fallback session tests.
 
 Note that most of the tests require the appropriate crypto PMD/device to be
 available.

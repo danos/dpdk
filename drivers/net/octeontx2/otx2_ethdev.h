@@ -122,11 +122,15 @@
 	DEV_TX_OFFLOAD_MT_LOCKFREE	| \
 	DEV_TX_OFFLOAD_VLAN_INSERT	| \
 	DEV_TX_OFFLOAD_QINQ_INSERT	| \
-	DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM | \
-	DEV_TX_OFFLOAD_OUTER_UDP_CKSUM  | \
+	DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM	| \
+	DEV_TX_OFFLOAD_OUTER_UDP_CKSUM	| \
 	DEV_TX_OFFLOAD_TCP_CKSUM	| \
 	DEV_TX_OFFLOAD_UDP_CKSUM	| \
 	DEV_TX_OFFLOAD_SCTP_CKSUM	| \
+	DEV_TX_OFFLOAD_TCP_TSO		| \
+	DEV_TX_OFFLOAD_VXLAN_TNL_TSO    | \
+	DEV_TX_OFFLOAD_GENEVE_TNL_TSO   | \
+	DEV_TX_OFFLOAD_GRE_TNL_TSO	| \
 	DEV_TX_OFFLOAD_MULTI_SEGS	| \
 	DEV_TX_OFFLOAD_IPV4_CKSUM)
 
@@ -136,11 +140,12 @@
 	DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM | \
 	DEV_RX_OFFLOAD_SCATTER		| \
 	DEV_RX_OFFLOAD_JUMBO_FRAME	| \
-	DEV_RX_OFFLOAD_OUTER_UDP_CKSUM | \
-	DEV_RX_OFFLOAD_VLAN_STRIP | \
-	DEV_RX_OFFLOAD_VLAN_FILTER | \
-	DEV_RX_OFFLOAD_QINQ_STRIP | \
-	DEV_RX_OFFLOAD_TIMESTAMP)
+	DEV_RX_OFFLOAD_OUTER_UDP_CKSUM	| \
+	DEV_RX_OFFLOAD_VLAN_STRIP	| \
+	DEV_RX_OFFLOAD_VLAN_FILTER	| \
+	DEV_RX_OFFLOAD_QINQ_STRIP	| \
+	DEV_RX_OFFLOAD_TIMESTAMP	| \
+	DEV_RX_OFFLOAD_RSS_HASH)
 
 #define NIX_DEFAULT_RSS_CTX_GROUP  0
 #define NIX_DEFAULT_RSS_MCAM_IDX  -1
@@ -203,6 +208,14 @@ struct vlan_mkex_info {
 	uint64_t lb_lt_offset;
 };
 
+struct mcast_entry {
+	struct rte_ether_addr mcast_mac;
+	uint16_t mcam_index;
+	TAILQ_ENTRY(mcast_entry) next;
+};
+
+TAILQ_HEAD(otx2_nix_mc_filter_tbl, mcast_entry);
+
 struct vlan_entry {
 	uint32_t mcam_idx;
 	uint16_t vlan_id;
@@ -249,6 +262,7 @@ struct otx2_eth_dev {
 	uint8_t tx_chan_cnt;
 	uint8_t lso_tsov4_idx;
 	uint8_t lso_tsov6_idx;
+	uint8_t lso_base_idx;
 	uint8_t mac_addr[RTE_ETHER_ADDR_LEN];
 	uint8_t mkex_pfl_name[MKEX_NAME_LEN];
 	uint8_t max_mac_entries;
@@ -262,6 +276,7 @@ struct otx2_eth_dev {
 	uint8_t configured_cints;
 	uint8_t configured_nb_rx_qs;
 	uint8_t configured_nb_tx_qs;
+	uint8_t ptype_disable;
 	uint16_t nix_msixoff;
 	uintptr_t base;
 	uintptr_t lmt_addr;
@@ -306,6 +321,9 @@ struct otx2_eth_dev {
 	struct rte_timecounter  tx_tstamp_tc;
 	double clk_freq_mult;
 	uint64_t clk_delta;
+	bool mc_tbl_set;
+	struct otx2_nix_mc_filter_tbl mc_fltr_tbl;
+	bool sdp_link; /* SDP flag */
 } __rte_cache_aligned;
 
 struct otx2_eth_txq {
@@ -357,8 +375,8 @@ otx2_eth_pmd_priv(struct rte_eth_dev *eth_dev)
 }
 
 /* Ops */
-void otx2_nix_info_get(struct rte_eth_dev *eth_dev,
-		       struct rte_eth_dev_info *dev_info);
+int otx2_nix_info_get(struct rte_eth_dev *eth_dev,
+		      struct rte_eth_dev_info *dev_info);
 int otx2_nix_dev_filter_ctrl(struct rte_eth_dev *eth_dev,
 			     enum rte_filter_type filter_type,
 			     enum rte_filter_op filter_op, void *arg);
@@ -373,19 +391,33 @@ void otx2_nix_rxq_info_get(struct rte_eth_dev *eth_dev, uint16_t queue_id,
 			   struct rte_eth_rxq_info *qinfo);
 void otx2_nix_txq_info_get(struct rte_eth_dev *eth_dev, uint16_t queue_id,
 			   struct rte_eth_txq_info *qinfo);
+int otx2_rx_burst_mode_get(struct rte_eth_dev *dev, uint16_t queue_id,
+			   struct rte_eth_burst_mode *mode);
+int otx2_tx_burst_mode_get(struct rte_eth_dev *dev, uint16_t queue_id,
+			   struct rte_eth_burst_mode *mode);
 uint32_t otx2_nix_rx_queue_count(struct rte_eth_dev *eth_dev, uint16_t qidx);
 int otx2_nix_tx_done_cleanup(void *txq, uint32_t free_cnt);
 int otx2_nix_rx_descriptor_done(void *rxq, uint16_t offset);
 int otx2_nix_rx_descriptor_status(void *rx_queue, uint16_t offset);
+int otx2_nix_tx_descriptor_status(void *tx_queue, uint16_t offset);
 
 void otx2_nix_promisc_config(struct rte_eth_dev *eth_dev, int en);
-void otx2_nix_promisc_enable(struct rte_eth_dev *eth_dev);
-void otx2_nix_promisc_disable(struct rte_eth_dev *eth_dev);
-void otx2_nix_allmulticast_enable(struct rte_eth_dev *eth_dev);
-void otx2_nix_allmulticast_disable(struct rte_eth_dev *eth_dev);
+int otx2_nix_promisc_enable(struct rte_eth_dev *eth_dev);
+int otx2_nix_promisc_disable(struct rte_eth_dev *eth_dev);
+int otx2_nix_allmulticast_enable(struct rte_eth_dev *eth_dev);
+int otx2_nix_allmulticast_disable(struct rte_eth_dev *eth_dev);
 int otx2_nix_tx_queue_start(struct rte_eth_dev *eth_dev, uint16_t qidx);
 int otx2_nix_tx_queue_stop(struct rte_eth_dev *eth_dev, uint16_t qidx);
 uint64_t otx2_nix_rxq_mbuf_setup(struct otx2_eth_dev *dev, uint16_t port_id);
+
+/* Multicast filter APIs */
+void otx2_nix_mc_filter_init(struct otx2_eth_dev *dev);
+void otx2_nix_mc_filter_fini(struct otx2_eth_dev *dev);
+int otx2_nix_mc_addr_list_install(struct rte_eth_dev *eth_dev);
+int otx2_nix_mc_addr_list_uninstall(struct rte_eth_dev *eth_dev);
+int otx2_nix_set_mc_addr_list(struct rte_eth_dev *eth_dev,
+			      struct rte_ether_addr *mc_addr_set,
+			      uint32_t nb_mc_addr);
 
 /* MTU */
 int otx2_nix_mtu_set(struct rte_eth_dev *eth_dev, uint16_t mtu);
@@ -422,7 +454,7 @@ void otx2_nix_cqe_dump(const struct nix_cqe_hdr_s *cq);
 /* Stats */
 int otx2_nix_dev_stats_get(struct rte_eth_dev *eth_dev,
 			   struct rte_eth_stats *stats);
-void otx2_nix_dev_stats_reset(struct rte_eth_dev *eth_dev);
+int otx2_nix_dev_stats_reset(struct rte_eth_dev *eth_dev);
 
 int otx2_nix_queue_stats_mapping(struct rte_eth_dev *dev,
 				 uint16_t queue_id, uint8_t stat_idx,
@@ -432,7 +464,7 @@ int otx2_nix_xstats_get(struct rte_eth_dev *eth_dev,
 int otx2_nix_xstats_get_names(struct rte_eth_dev *eth_dev,
 			      struct rte_eth_xstat_name *xstats_names,
 			      unsigned int limit);
-void otx2_nix_xstats_reset(struct rte_eth_dev *eth_dev);
+int otx2_nix_xstats_reset(struct rte_eth_dev *eth_dev);
 
 int otx2_nix_xstats_get_by_id(struct rte_eth_dev *eth_dev,
 			      const uint64_t *ids,
@@ -500,6 +532,7 @@ void *otx2_nix_fastpath_lookup_mem_get(void);
 
 /* PTYPES */
 const uint32_t *otx2_nix_supported_ptypes_get(struct rte_eth_dev *dev);
+int otx2_nix_ptypes_set(struct rte_eth_dev *eth_dev, uint32_t ptype_mask);
 
 /* Mac address handling */
 int otx2_nix_mac_addr_set(struct rte_eth_dev *eth_dev,
@@ -536,5 +569,6 @@ int otx2_nix_timesync_read_time(struct rte_eth_dev *eth_dev,
 int otx2_eth_dev_ptp_info_update(struct otx2_dev *dev, bool ptp_en);
 int otx2_nix_read_clock(struct rte_eth_dev *eth_dev, uint64_t *time);
 int otx2_nix_raw_clock_tsc_conv(struct otx2_eth_dev *dev);
+void otx2_nix_ptp_enable_vf(struct rte_eth_dev *eth_dev);
 
 #endif /* __OTX2_ETHDEV_H__ */

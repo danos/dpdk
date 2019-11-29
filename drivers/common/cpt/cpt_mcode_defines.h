@@ -6,6 +6,7 @@
 #define _CPT_MCODE_DEFINES_H_
 
 #include <rte_byteorder.h>
+#include <rte_crypto_asym.h>
 #include <rte_memory.h>
 
 /*
@@ -19,6 +20,18 @@
 #define CPT_MAJOR_OP_ZUC_SNOW3G	0x37
 #define CPT_MAJOR_OP_KASUMI	0x38
 #define CPT_MAJOR_OP_MISC	0x01
+
+/* AE opcodes */
+#define CPT_MAJOR_OP_MODEX	0x03
+#define CPT_MINOR_OP_MODEX	0x01
+#define CPT_MINOR_OP_PKCS_ENC	0x02
+#define CPT_MINOR_OP_PKCS_ENC_CRT	0x03
+#define CPT_MINOR_OP_PKCS_DEC	0x04
+#define CPT_MINOR_OP_PKCS_DEC_CRT	0x05
+#define CPT_MINOR_OP_MODEX_CRT	0x06
+
+#define CPT_BLOCK_TYPE1 0
+#define CPT_BLOCK_TYPE2 1
 
 #define CPT_BYTE_16		16
 #define CPT_BYTE_24		24
@@ -213,6 +226,8 @@ struct cpt_sess_misc {
 	uint16_t is_null:1;
 	/** Flag for GMAC */
 	uint16_t is_gmac:1;
+	/** Engine group */
+	uint16_t egrp:3;
 	/** AAD length */
 	uint16_t aad_length;
 	/** MAC len in bytes */
@@ -303,8 +318,8 @@ struct cpt_ctx {
 	uint64_t hmac		:1;
 	uint64_t zsk_flags	:3;
 	uint64_t k_ecb		:1;
-	uint64_t snow3g		:1;
-	uint64_t rsvd		:22;
+	uint64_t snow3g		:2;
+	uint64_t rsvd		:21;
 	/* Below fields are accessed by hardware */
 	union {
 		mc_fc_context_t fctx;
@@ -312,6 +327,14 @@ struct cpt_ctx {
 		mc_kasumi_ctx_t k_ctx;
 	};
 	uint8_t  auth_key[64];
+};
+
+struct cpt_asym_sess_misc {
+	enum rte_crypto_asym_xform_type xfrm_type;
+	union {
+		struct rte_crypto_rsa_xform rsa_ctx;
+		struct rte_crypto_modex_xform mod_ctx;
+	};
 };
 
 /* Buffer pointer */
@@ -356,6 +379,14 @@ typedef struct fc_params {
 	buf_ptr_t mac_buf;
 
 } fc_params_t;
+
+/*
+ * Parameters for asymmetric operations
+ */
+struct asym_op_params {
+	struct cpt_request_info *req;
+	phys_addr_t meta_buf;
+};
 
 /*
  * Parameters for digest

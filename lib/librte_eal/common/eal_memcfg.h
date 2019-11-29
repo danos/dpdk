@@ -6,14 +6,14 @@
 #define EAL_MEMCFG_H
 
 #include <rte_config.h>
-#include <rte_eal_memconfig.h>
-#include <rte_malloc_heap.h>
 #include <rte_memory.h>
 #include <rte_memzone.h>
 #include <rte_pause.h>
 #include <rte_spinlock.h>
 #include <rte_rwlock.h>
 #include <rte_tailq.h>
+
+#include "malloc_heap.h"
 
 /**
  * Memory configuration shared across multiple processes.
@@ -69,6 +69,9 @@ struct rte_mem_config {
 	uint32_t legacy_mem; /**< stored legacy mem parameter. */
 	uint32_t single_file_segments;
 	/**< stored single file segments parameter. */
+
+	uint64_t tsc_hz;
+	/**< TSC rate */
 
 	uint8_t dma_maskbits; /**< Keeps the more restricted dma mask. */
 };

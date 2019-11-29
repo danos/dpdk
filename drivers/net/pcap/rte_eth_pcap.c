@@ -265,6 +265,9 @@ eth_pcap_rx(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 		}
 
 		mbuf->pkt_len = (uint16_t)header.caplen;
+		mbuf->timestamp = (uint64_t)header.ts.tv_sec * 1000000
+							+ header.ts.tv_usec;
+		mbuf->ol_flags |= PKT_RX_TIMESTAMP;
 		mbuf->port = pcap_q->port_id;
 		bufs[num_rx] = mbuf;
 		num_rx++;
@@ -649,7 +652,7 @@ eth_dev_configure(struct rte_eth_dev *dev __rte_unused)
 	return 0;
 }
 
-static void
+static int
 eth_dev_info(struct rte_eth_dev *dev,
 		struct rte_eth_dev_info *dev_info)
 {
@@ -661,6 +664,8 @@ eth_dev_info(struct rte_eth_dev *dev,
 	dev_info->max_rx_queues = dev->data->nb_rx_queues;
 	dev_info->max_tx_queues = dev->data->nb_tx_queues;
 	dev_info->min_rx_bufsize = 0;
+
+	return 0;
 }
 
 static int
@@ -698,7 +703,7 @@ eth_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	return 0;
 }
 
-static void
+static int
 eth_stats_reset(struct rte_eth_dev *dev)
 {
 	unsigned int i;
@@ -714,6 +719,8 @@ eth_stats_reset(struct rte_eth_dev *dev)
 		internal->tx_queue[i].tx_stat.bytes = 0;
 		internal->tx_queue[i].tx_stat.err_pkts = 0;
 	}
+
+	return 0;
 }
 
 static void
@@ -1122,6 +1129,8 @@ pmd_init_internals(struct rte_vdev_device *vdev,
 	data->nb_tx_queues = (uint16_t)nb_tx_queues;
 	data->dev_link = pmd_link;
 	data->mac_addrs = &(*internals)->eth_addr;
+	data->promiscuous = 1;
+	data->all_multicast = 1;
 
 	/*
 	 * NOTE: we'll replace the data element, of originally allocated
@@ -1230,12 +1239,6 @@ eth_from_pcaps_common(struct rte_vdev_device *vdev,
 	const unsigned int nb_rx_queues = rx_queues->num_of_queue;
 	const unsigned int nb_tx_queues = tx_queues->num_of_queue;
 	unsigned int i;
-
-	/* do some parameter checking */
-	if (rx_queues == NULL && nb_rx_queues > 0)
-		return -1;
-	if (tx_queues == NULL && nb_tx_queues > 0)
-		return -1;
 
 	if (pmd_init_internals(vdev, nb_rx_queues, nb_tx_queues, internals,
 			eth_dev) < 0)

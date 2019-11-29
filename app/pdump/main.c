@@ -606,7 +606,10 @@ configure_vdev(uint16_t port_id)
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "dev start failed\n");
 
-	rte_eth_macaddr_get(port_id, &addr);
+	ret = rte_eth_macaddr_get(port_id, &addr);
+	if (ret != 0)
+		rte_exit(EXIT_FAILURE, "macaddr get failed\n");
+
 	printf("Port %u MAC: %02"PRIx8" %02"PRIx8" %02"PRIx8
 			" %02"PRIx8" %02"PRIx8" %02"PRIx8"\n",
 			port_id,
@@ -614,7 +617,13 @@ configure_vdev(uint16_t port_id)
 			addr.addr_bytes[2], addr.addr_bytes[3],
 			addr.addr_bytes[4], addr.addr_bytes[5]);
 
-	rte_eth_promiscuous_enable(port_id);
+	ret = rte_eth_promiscuous_enable(port_id);
+	if (ret != 0) {
+		rte_exit(EXIT_FAILURE,
+			 "promiscuous mode enable failed: %s\n",
+			 rte_strerror(-ret));
+		return ret;
+	}
 
 	return 0;
 }

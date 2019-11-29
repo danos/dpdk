@@ -19,12 +19,21 @@ if [ "$AARCH64" = "1" ]; then
     OPTS="$OPTS --cross-file config/arm/arm64_armv8_linux_gcc"
 fi
 
+if [ "$BUILD_DOCS" = "1" ]; then
+    OPTS="$OPTS -Denable_docs=true"
+fi
+
+if [ "$BUILD_32BIT" = "1" ]; then
+    OPTS="$OPTS -Dc_args=-m32 -Dc_link_args=-m32"
+    export PKG_CONFIG_LIBDIR="/usr/lib32/pkgconfig"
+fi
+
 OPTS="$OPTS --default-library=$DEF_LIB"
 meson build --werror -Dexamples=all $OPTS
 ninja -C build
 
-if [ "$BUILD_DOCS" = "1" ]; then
-    ninja -C build doc
+if [ "$AARCH64" != "1" ]; then
+    devtools/test-null.sh
 fi
 
 if [ "$RUN_TESTS" = "1" ]; then
