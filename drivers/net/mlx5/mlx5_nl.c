@@ -42,7 +42,15 @@
 #define MLX5_NDA_RTA(r) \
 	((struct rtattr *)(((char *)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
 #endif
-
+/*
+ * Define NLMSG_TAIL as defined in iproute2 sources.
+ *
+ * see in iproute2 sources file include/libnetlink.h
+ */
+#ifndef NLMSG_TAIL
+#define NLMSG_TAIL(nmsg) \
+	((struct rtattr *)(((char *)(nmsg)) + NLMSG_ALIGN((nmsg)->nlmsg_len)))
+#endif
 /*
  * The following definitions are normally found in rdma/rdma_netlink.h,
  * however they are so recent that most systems do not expose them yet.
@@ -90,12 +98,18 @@ struct mlx5_nl_mac_addr {
 	int mac_n; /**< Number of addresses in the array. */
 };
 
+#define MLX5_NL_CMD_GET_IB_NAME (1 << 0)
+#define MLX5_NL_CMD_GET_IB_INDEX (1 << 1)
+#define MLX5_NL_CMD_GET_NET_INDEX (1 << 2)
+#define MLX5_NL_CMD_GET_PORT_INDEX (1 << 3)
+
 /** Data structure used by mlx5_nl_cmdget_cb(). */
 struct mlx5_nl_ifindex_data {
 	const char *name; /**< IB device name (in). */
+	uint32_t flags; /**< found attribute flags (out). */
 	uint32_t ibindex; /**< IB device index (out). */
 	uint32_t ifindex; /**< Network interface index (out). */
-	uint32_t portnum; /**< IB device max port number. */
+	uint32_t portnum; /**< IB device max port number (out). */
 };
 
 /**
@@ -488,6 +502,94 @@ error:
 }
 
 /**
+ * Modify the VF MAC address neighbour table with Netlink.
+ *
+ * @param dev
+ *    Pointer to Ethernet device.
+ * @param mac
+ *    MAC address to consider.
+ * @param vf_index
+ *    VF index.
+ *
+ * @return
+ *    0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_nl_vf_mac_addr_modify(struct rte_eth_dev *dev,
+			   struct rte_ether_addr *mac, int vf_index)
+{
+	int fd, ret;
+	struct mlx5_priv *priv = dev->data->dev_private;
+	unsigned int iface_idx = mlx5_ifindex(dev);
+	struct {
+		struct nlmsghdr hdr;
+		struct ifinfomsg ifm;
+		struct rtattr vf_list_rta;
+		struct rtattr vf_info_rta;
+		struct rtattr vf_mac_rta;
+		struct ifla_vf_mac ivm;
+	} req = {
+		.hdr = {
+			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg)),
+			.nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK,
+			.nlmsg_type = RTM_BASE,
+		},
+		.ifm = {
+			.ifi_index = iface_idx,
+		},
+		.vf_list_rta = {
+			.rta_type = IFLA_VFINFO_LIST,
+			.rta_len = RTA_ALIGN(RTA_LENGTH(0)),
+		},
+		.vf_info_rta = {
+			.rta_type = IFLA_VF_INFO,
+			.rta_len = RTA_ALIGN(RTA_LENGTH(0)),
+		},
+		.vf_mac_rta = {
+			.rta_type = IFLA_VF_MAC,
+		},
+	};
+	uint32_t sn = priv->nl_sn++;
+	struct ifla_vf_mac ivm = {
+		.vf = vf_index,
+	};
+
+	memcpy(&ivm.mac, mac, RTE_ETHER_ADDR_LEN);
+	memcpy(RTA_DATA(&req.vf_mac_rta), &ivm, sizeof(ivm));
+
+	req.vf_mac_rta.rta_len = RTA_LENGTH(sizeof(ivm));
+	req.hdr.nlmsg_len = NLMSG_ALIGN(req.hdr.nlmsg_len) +
+		RTA_ALIGN(req.vf_list_rta.rta_len) +
+		RTA_ALIGN(req.vf_info_rta.rta_len) +
+		RTA_ALIGN(req.vf_mac_rta.rta_len);
+	req.vf_list_rta.rta_len = RTE_PTR_DIFF(NLMSG_TAIL(&req.hdr),
+					       &req.vf_list_rta);
+	req.vf_info_rta.rta_len = RTE_PTR_DIFF(NLMSG_TAIL(&req.hdr),
+					       &req.vf_info_rta);
+
+	fd = priv->nl_socket_route;
+	if (fd < 0)
+		return -1;
+	ret = mlx5_nl_send(fd, &req.hdr, sn);
+	if (ret < 0)
+		goto error;
+	ret = mlx5_nl_recv(fd, sn, NULL, NULL);
+	if (ret < 0)
+		goto error;
+	return 0;
+error:
+	DRV_LOG(ERR,
+		"representor %u cannot set VF MAC address "
+		"%02X:%02X:%02X:%02X:%02X:%02X : %s",
+		vf_index,
+		mac->addr_bytes[0], mac->addr_bytes[1],
+		mac->addr_bytes[2], mac->addr_bytes[3],
+		mac->addr_bytes[4], mac->addr_bytes[5],
+		strerror(rte_errno));
+	return -rte_errno;
+}
+
+/**
  * Add a MAC address.
  *
  * @param dev
@@ -704,11 +806,10 @@ static int
 mlx5_nl_cmdget_cb(struct nlmsghdr *nh, void *arg)
 {
 	struct mlx5_nl_ifindex_data *data = arg;
+	struct mlx5_nl_ifindex_data local = {
+		.flags = 0,
+	};
 	size_t off = NLMSG_HDRLEN;
-	uint32_t ibindex = 0;
-	uint32_t ifindex = 0;
-	uint32_t portnum = 0;
-	int found = 0;
 
 	if (nh->nlmsg_type !=
 	    RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET) &&
@@ -723,27 +824,37 @@ mlx5_nl_cmdget_cb(struct nlmsghdr *nh, void *arg)
 			goto error;
 		switch (na->nla_type) {
 		case RDMA_NLDEV_ATTR_DEV_INDEX:
-			ibindex = *(uint32_t *)payload;
+			local.ibindex = *(uint32_t *)payload;
+			local.flags |= MLX5_NL_CMD_GET_IB_INDEX;
 			break;
 		case RDMA_NLDEV_ATTR_DEV_NAME:
 			if (!strcmp(payload, data->name))
-				found = 1;
+				local.flags |= MLX5_NL_CMD_GET_IB_NAME;
 			break;
 		case RDMA_NLDEV_ATTR_NDEV_INDEX:
-			ifindex = *(uint32_t *)payload;
+			local.ifindex = *(uint32_t *)payload;
+			local.flags |= MLX5_NL_CMD_GET_NET_INDEX;
 			break;
 		case RDMA_NLDEV_ATTR_PORT_INDEX:
-			portnum = *(uint32_t *)payload;
+			local.portnum = *(uint32_t *)payload;
+			local.flags |= MLX5_NL_CMD_GET_PORT_INDEX;
 			break;
 		default:
 			break;
 		}
 		off += NLA_ALIGN(na->nla_len);
 	}
-	if (found) {
-		data->ibindex = ibindex;
-		data->ifindex = ifindex;
-		data->portnum = portnum;
+	/*
+	 * It is possible to have multiple messages for all
+	 * Infiniband devices in the system with appropriate name.
+	 * So we should gather parameters locally and copy to
+	 * query context only in case of coinciding device name.
+	 */
+	if (local.flags & MLX5_NL_CMD_GET_IB_NAME) {
+		data->flags = local.flags;
+		data->ibindex = local.ibindex;
+		data->ifindex = local.ifindex;
+		data->portnum = local.portnum;
 	}
 	return 0;
 error:
@@ -774,6 +885,7 @@ mlx5_nl_ifindex(int nl, const char *name, uint32_t pindex)
 	uint32_t seq = random();
 	struct mlx5_nl_ifindex_data data = {
 		.name = name,
+		.flags = 0,
 		.ibindex = 0, /* Determined during first pass. */
 		.ifindex = 0, /* Determined during second pass. */
 	};
@@ -799,8 +911,10 @@ mlx5_nl_ifindex(int nl, const char *name, uint32_t pindex)
 	ret = mlx5_nl_recv(nl, seq, mlx5_nl_cmdget_cb, &data);
 	if (ret < 0)
 		return 0;
-	if (!data.ibindex)
+	if (!(data.flags & MLX5_NL_CMD_GET_IB_NAME) ||
+	    !(data.flags & MLX5_NL_CMD_GET_IB_INDEX))
 		goto error;
+	data.flags = 0;
 	++seq;
 	req.nh.nlmsg_type = RDMA_NL_GET_TYPE(RDMA_NL_NLDEV,
 					     RDMA_NLDEV_CMD_PORT_GET);
@@ -822,7 +936,10 @@ mlx5_nl_ifindex(int nl, const char *name, uint32_t pindex)
 	ret = mlx5_nl_recv(nl, seq, mlx5_nl_cmdget_cb, &data);
 	if (ret < 0)
 		return 0;
-	if (!data.ifindex)
+	if (!(data.flags & MLX5_NL_CMD_GET_IB_NAME) ||
+	    !(data.flags & MLX5_NL_CMD_GET_IB_INDEX) ||
+	    !(data.flags & MLX5_NL_CMD_GET_NET_INDEX) ||
+	    !data.ifindex)
 		goto error;
 	return data.ifindex;
 error:
@@ -847,8 +964,8 @@ mlx5_nl_portnum(int nl, const char *name)
 {
 	uint32_t seq = random();
 	struct mlx5_nl_ifindex_data data = {
+		.flags = 0,
 		.name = name,
-		.ibindex = 0,
 		.ifindex = 0,
 		.portnum = 0,
 	};
@@ -866,7 +983,9 @@ mlx5_nl_portnum(int nl, const char *name)
 	ret = mlx5_nl_recv(nl, seq, mlx5_nl_cmdget_cb, &data);
 	if (ret < 0)
 		return 0;
-	if (!data.ibindex) {
+	if (!(data.flags & MLX5_NL_CMD_GET_IB_NAME) ||
+	    !(data.flags & MLX5_NL_CMD_GET_IB_INDEX) ||
+	    !(data.flags & MLX5_NL_CMD_GET_PORT_INDEX)) {
 		rte_errno = ENODEV;
 		return 0;
 	}

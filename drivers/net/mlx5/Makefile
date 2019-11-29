@@ -19,6 +19,7 @@ SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rxq.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_txq.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rxtx.c
 ifneq ($(filter y,$(CONFIG_RTE_ARCH_X86_64) \
+			$(CONFIG_RTE_ARCH_PPC_64) \
 		  $(CONFIG_RTE_ARCH_ARM64)),)
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rxtx_vec.c
 endif
@@ -31,11 +32,13 @@ SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_stats.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_rss.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_mr.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow.c
+SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow_meter.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow_dv.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_flow_verbs.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_mp.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_nl.c
 SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_devx_cmds.c
+SRCS-$(CONFIG_RTE_LIBRTE_MLX5_PMD) += mlx5_utils.c
 
 ifeq ($(CONFIG_RTE_IBVERBS_LINK_DLOPEN),y)
 INSTALL-$(CONFIG_RTE_LIBRTE_MLX5_PMD)-lib += $(LIB_GLUE)
@@ -61,6 +64,7 @@ LDLIBS += $(shell $(RTE_SDK)/buildtools/options-ibverbs-static.sh)
 else
 LDLIBS += -libverbs -lmlx5
 endif
+LDLIBS += -lm
 LDLIBS += -lrte_eal -lrte_mbuf -lrte_mempool -lrte_ring
 LDLIBS += -lrte_ethdev -lrte_net -lrte_kvargs
 LDLIBS += -lrte_bus_pci
@@ -69,8 +73,6 @@ LDLIBS += -lrte_bus_pci
 CFLAGS += -Wno-error=cast-qual
 
 EXPORT_MAP := rte_pmd_mlx5_version.map
-LIBABIVER := 1
-
 # memseg walk is not part of stable API
 CFLAGS += -DALLOW_EXPERIMENTAL_API
 
@@ -82,7 +84,11 @@ endif
 
 # User-defined CFLAGS.
 ifeq ($(CONFIG_RTE_LIBRTE_MLX5_DEBUG),y)
-CFLAGS += -pedantic -UNDEBUG -DPEDANTIC
+CFLAGS += -pedantic -UNDEBUG
+ifneq ($(CONFIG_RTE_TOOLCHAIN_ICC),y)
+CFLAGS += -DPEDANTIC
+endif
+AUTO_CONFIG_CFLAGS += -Wno-pedantic
 else
 CFLAGS += -DNDEBUG -UPEDANTIC
 endif
@@ -92,7 +98,7 @@ include $(RTE_SDK)/mk/rte.lib.mk
 # Generate and clean-up mlx5_autoconf.h.
 
 export CC CFLAGS CPPFLAGS EXTRA_CFLAGS EXTRA_CPPFLAGS
-export AUTO_CONFIG_CFLAGS = -Wno-error
+export AUTO_CONFIG_CFLAGS += -Wno-error
 
 ifndef V
 AUTOCONF_OUTPUT := >/dev/null
@@ -163,6 +169,16 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		enum MLX5DV_DR_DOMAIN_TYPE_FDB \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
+		HAVE_MLX5DV_DR_VLAN \
+		infiniband/mlx5dv.h \
+		func mlx5dv_dr_action_create_push_vlan \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_MLX5DV_DR_DEVX_PORT \
+		infiniband/mlx5dv.h \
+		func mlx5dv_query_devx_port \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
 		HAVE_IBV_DEVX_OBJ \
 		infiniband/mlx5dv.h \
 		func mlx5dv_devx_obj_create \
@@ -181,6 +197,16 @@ mlx5_autoconf.h.new: $(RTE_SDK)/buildtools/auto-config-h.sh
 		HAVE_MLX5DV_DR_ACTION_DEST_DEVX_TIR \
 		infiniband/mlx5dv.h \
 		func mlx5dv_dr_action_create_dest_devx_tir \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_MLX5_DR_CREATE_ACTION_FLOW_METER \
+		infiniband/mlx5dv.h \
+		func mlx5dv_dr_action_create_flow_meter \
+		$(AUTOCONF_OUTPUT)
+	$Q sh -- '$<' '$@' \
+		HAVE_MLX5DV_MMAP_GET_NC_PAGES_CMD \
+		infiniband/mlx5dv.h \
+		enum MLX5_MMAP_GET_NC_PAGES_CMD \
 		$(AUTOCONF_OUTPUT)
 	$Q sh -- '$<' '$@' \
 		HAVE_ETHTOOL_LINK_MODE_25G \

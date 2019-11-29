@@ -38,7 +38,6 @@
 #include <rte_memory.h>
 #include <rte_launch.h>
 #include <rte_eal.h>
-#include <rte_eal_memconfig.h>
 #include <rte_per_lcore.h>
 #include <rte_lcore.h>
 #include <rte_common.h>
@@ -69,6 +68,26 @@
 static int phys_addrs_available = -1;
 
 #define RANDOMIZE_VA_SPACE_FILE "/proc/sys/kernel/randomize_va_space"
+
+uint64_t eal_get_baseaddr(void)
+{
+	/*
+	 * Linux kernel uses a really high address as starting address for
+	 * serving mmaps calls. If there exists addressing limitations and IOVA
+	 * mode is VA, this starting address is likely too high for those
+	 * devices. However, it is possible to use a lower address in the
+	 * process virtual address space as with 64 bits there is a lot of
+	 * available space.
+	 *
+	 * Current known limitations are 39 or 40 bits. Setting the starting
+	 * address at 4GB implies there are 508GB or 1020GB for mapping the
+	 * available hugepages. This is likely enough for most systems, although
+	 * a device with addressing limitations should call
+	 * rte_mem_check_dma_mask for ensuring all memory is within supported
+	 * range.
+	 */
+	return 0x100000000ULL;
+}
 
 /*
  * Get physical address of any mapped virtual address in the current process.
@@ -688,7 +707,7 @@ remap_segment(struct hugepage_file *hugepages, int seg_start, int seg_end)
 		return -1;
 	}
 
-#ifdef RTE_ARCH_PPC64
+#ifdef RTE_ARCH_PPC_64
 	/* for PPC64 we go through the list backwards */
 	for (cur_page = seg_end - 1; cur_page >= seg_start;
 			cur_page--, ms_idx++) {
@@ -812,6 +831,7 @@ alloc_memseg_list(struct rte_memseg_list *msl, uint64_t page_sz,
 	msl->page_sz = page_sz;
 	msl->socket_id = socket_id;
 	msl->base_va = NULL;
+	msl->heap = 1; /* mark it as a heap segment */
 
 	RTE_LOG(DEBUG, EAL, "Memseg list allocated: 0x%zxkB at socket %i\n",
 			(size_t)page_sz >> 10, socket_id);
@@ -833,7 +853,8 @@ alloc_va_space(struct rte_memseg_list *msl)
 	addr = eal_get_virtual_area(msl->base_va, &mem_sz, page_sz, 0, flags);
 	if (addr == NULL) {
 		if (rte_errno == EADDRNOTAVAIL)
-			RTE_LOG(ERR, EAL, "Could not mmap %llu bytes at [%p] - please use '--base-virtaddr' option\n",
+			RTE_LOG(ERR, EAL, "Could not mmap %llu bytes at [%p] - "
+				"please use '--" OPT_BASE_VIRTADDR "' option\n",
 				(unsigned long long)mem_sz, msl->base_va);
 		else
 			RTE_LOG(ERR, EAL, "Cannot reserve memory\n");
@@ -1385,6 +1406,7 @@ eal_legacy_hugepage_init(void)
 		msl->page_sz = page_sz;
 		msl->socket_id = 0;
 		msl->len = internal_config.memory;
+		msl->heap = 1;
 
 		/* we're in single-file segments mode, so only the segment list
 		 * fd needs to be set up.
@@ -1657,6 +1679,7 @@ eal_legacy_hugepage_init(void)
 		mem_sz = msl->len;
 		munmap(msl->base_va, mem_sz);
 		msl->base_va = NULL;
+		msl->heap = 0;
 
 		/* destroy backing fbarray */
 		rte_fbarray_destroy(&msl->memseg_arr);

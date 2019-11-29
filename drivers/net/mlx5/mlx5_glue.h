@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "rte_byteorder.h"
+
 /* Verbs headers do not support -pedantic. */
 #ifdef PEDANTIC
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -50,6 +52,7 @@ struct mlx5dv_flow_matcher;
 struct mlx5dv_flow_matcher_attr;
 struct mlx5dv_flow_action_attr;
 struct mlx5dv_flow_match_parameters;
+struct mlx5dv_dr_flow_meter_attr;
 struct ibv_flow_action;
 enum mlx5dv_flow_action_packet_reformat_type { packet_reformat_type = 0, };
 enum mlx5dv_flow_table_type { flow_table_type = 0, };
@@ -72,6 +75,14 @@ struct mlx5dv_devx_async_cmd_hdr;
 #ifndef HAVE_MLX5DV_DR
 enum  mlx5dv_dr_domain_type { unused, };
 struct mlx5dv_dr_domain;
+#endif
+
+#ifndef HAVE_MLX5DV_DR_DEVX_PORT
+struct mlx5dv_devx_port;
+#endif
+
+#ifndef HAVE_MLX5_DR_CREATE_ACTION_FLOW_METER
+struct mlx5dv_dr_flow_meter_attr;
 #endif
 
 /* LIB_GLUE_VERSION must be updated every time this structure is modified. */
@@ -154,8 +165,13 @@ struct mlx5_glue {
 	const char *(*port_state_str)(enum ibv_port_state port_state);
 	struct ibv_cq *(*cq_ex_to_cq)(struct ibv_cq_ex *cq);
 	void *(*dr_create_flow_action_dest_flow_tbl)(void *tbl);
-	void *(*dr_create_flow_action_dest_vport)(void *domain, uint32_t vport);
+	void *(*dr_create_flow_action_dest_port)(void *domain,
+						 uint32_t port);
 	void *(*dr_create_flow_action_drop)();
+	void *(*dr_create_flow_action_push_vlan)
+					(struct mlx5dv_dr_domain *domain,
+					 rte_be32_t vlan_tag);
+	void *(*dr_create_flow_action_pop_vlan)();
 	void *(*dr_create_flow_tbl)(void *domain, uint32_t level);
 	int (*dr_destroy_flow_tbl)(void *tbl);
 	void *(*dr_create_domain)(struct ibv_context *ctx,
@@ -199,6 +215,10 @@ struct mlx5_glue {
 		 struct mlx5dv_dr_domain *domain,
 		 uint32_t flags, size_t data_sz, void *data);
 	void *(*dv_create_flow_action_tag)(uint32_t tag);
+	void *(*dv_create_flow_action_meter)
+		(struct mlx5dv_dr_flow_meter_attr *attr);
+	int (*dv_modify_flow_action_meter)(void *action,
+		struct mlx5dv_dr_flow_meter_attr *attr, uint64_t modify_bits);
 	int (*dv_destroy_flow)(void *flow);
 	int (*dv_destroy_flow_matcher)(void *matcher);
 	struct ibv_context *(*dv_open_device)(struct ibv_device *device);
@@ -233,6 +253,9 @@ struct mlx5_glue {
 	int (*devx_qp_query)(struct ibv_qp *qp,
 			     const void *in, size_t inlen,
 			     void *out, size_t outlen);
+	int (*devx_port_query)(struct ibv_context *ctx,
+			       uint32_t port_num,
+			       struct mlx5dv_devx_port *mlx5_devx_port);
 };
 
 const struct mlx5_glue *mlx5_glue;

@@ -2349,6 +2349,37 @@ i40e_flow_set_fdir_inset(struct i40e_pf *pf,
 	if (num < 0)
 		return -EINVAL;
 
+	if (pf->support_multi_driver) {
+		for (i = 0; i < num; i++)
+			if (i40e_read_rx_ctl(hw,
+					I40E_GLQF_FD_MSK(i, pctype)) !=
+					mask_reg[i]) {
+				PMD_DRV_LOG(ERR, "Input set setting is not"
+						" supported with"
+						" `support-multi-driver`"
+						" enabled!");
+				return -EPERM;
+			}
+		for (i = num; i < I40E_INSET_MASK_NUM_REG; i++)
+			if (i40e_read_rx_ctl(hw,
+					I40E_GLQF_FD_MSK(i, pctype)) != 0) {
+				PMD_DRV_LOG(ERR, "Input set setting is not"
+						" supported with"
+						" `support-multi-driver`"
+						" enabled!");
+				return -EPERM;
+			}
+
+	} else {
+		for (i = 0; i < num; i++)
+			i40e_check_write_reg(hw, I40E_GLQF_FD_MSK(i, pctype),
+				mask_reg[i]);
+		/*clear unused mask registers of the pctype */
+		for (i = num; i < I40E_INSET_MASK_NUM_REG; i++)
+			i40e_check_write_reg(hw,
+					I40E_GLQF_FD_MSK(i, pctype), 0);
+	}
+
 	inset_reg |= i40e_translate_input_set_reg(hw->mac.type, input_set);
 
 	i40e_check_write_reg(hw, I40E_PRTQF_FD_INSET(pctype, 0),
@@ -2357,13 +2388,6 @@ i40e_flow_set_fdir_inset(struct i40e_pf *pf,
 			     (uint32_t)((inset_reg >>
 					 I40E_32_BIT_WIDTH) & UINT32_MAX));
 
-	for (i = 0; i < num; i++)
-		i40e_check_write_reg(hw, I40E_GLQF_FD_MSK(i, pctype),
-				     mask_reg[i]);
-
-	/*clear unused mask registers of the pctype */
-	for (i = num; i < I40E_INSET_MASK_NUM_REG; i++)
-		i40e_check_write_reg(hw, I40E_GLQF_FD_MSK(i, pctype), 0);
 	I40E_WRITE_FLUSH(hw);
 
 	pf->fdir.input_set[pctype] = input_set;
@@ -4775,6 +4799,7 @@ i40e_flow_destroy(struct rte_eth_dev *dev,
 			i40e_fdir_teardown(pf);
 			dev->data->dev_conf.fdir_conf.mode =
 				   RTE_FDIR_MODE_NONE;
+			i40e_fdir_rx_proc_enable(dev, 0);
 		}
 		break;
 	case RTE_ETH_FILTER_HASH:
@@ -4930,6 +4955,9 @@ i40e_flow_flush(struct rte_eth_dev *dev, struct rte_flow_error *error)
 				   "Failed to flush rss flows.");
 		return -rte_errno;
 	}
+
+	/* Disable FDIR processing as all FDIR rules are now flushed */
+	i40e_fdir_rx_proc_enable(dev, 0);
 
 	return ret;
 }

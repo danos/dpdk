@@ -498,7 +498,7 @@ to specify the details of the Crypto operation. For chaining of symmetric
 operations such as cipher encrypt and authentication generate, the next pointer
 allows transform to be chained together. Crypto devices which support chaining
 must publish the chaining of symmetric Crypto operations feature flag. Allocation of the
-xform structure is in the the application domain. To allow future API extensions in a
+xform structure is in the application domain. To allow future API extensions in a
 backwardly compatible manner, e.g. addition of a new parameter, the application should
 zero the full xform struct before populating it.
 
@@ -876,7 +876,15 @@ private asymmetric session data. Once this is done, session should be freed usin
 
 Asymmetric Sessionless Support
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Currently asymmetric crypto framework does not support sessionless.
+
+Asymmetric crypto framework supports session-less operations as well.
+
+Fields that should be set by user are:
+
+Member xform of struct rte_crypto_asym_op should point to the user created rte_crypto_asym_xform.
+Note that rte_crypto_asym_xform should be immutable for the lifetime of associated crypto_op.
+
+Member sess_type of rte_crypto_op should also be set to RTE_CRYPTO_OP_SESSIONLESS.
 
 Transforms and Transform Chaining
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -885,7 +893,7 @@ Asymmetric Crypto transforms (``rte_crypto_asym_xform``) are the mechanism used
 to specify the details of the asymmetric Crypto operation. Next pointer within
 xform allows transform to be chained together. Also it is important to note that
 the order in which the transforms are passed indicates the order of the chaining. Allocation
-of the xform structure is in the the application domain. To allow future API extensions in a
+of the xform structure is in the application domain. To allow future API extensions in a
 backwardly compatible manner, e.g. addition of a new parameter, the application should
 zero the full xform struct before populating it.
 

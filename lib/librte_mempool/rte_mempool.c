@@ -329,7 +329,7 @@ rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
 	if (mp->flags & MEMPOOL_F_NO_CACHE_ALIGN)
 		off = RTE_PTR_ALIGN_CEIL(vaddr, 8) - vaddr;
 	else
-		off = RTE_PTR_ALIGN_CEIL(vaddr, RTE_CACHE_LINE_SIZE) - vaddr;
+		off = RTE_PTR_ALIGN_CEIL(vaddr, RTE_MEMPOOL_ALIGN) - vaddr;
 
 	if (off > len) {
 		ret = -EINVAL;
@@ -356,6 +356,19 @@ fail:
 	return ret;
 }
 
+static rte_iova_t
+get_iova(void *addr)
+{
+	struct rte_memseg *ms;
+
+	/* try registered memory first */
+	ms = rte_mem_virt2memseg(addr, NULL);
+	if (ms == NULL || ms->iova == RTE_BAD_IOVA)
+		/* fall back to actual physical address */
+		return rte_mem_virt2iova(addr);
+	return ms->iova + RTE_PTR_DIFF(addr, ms->addr);
+}
+
 /* Populate the mempool with a virtual area. Return the number of
  * objects added, or a negative value on error.
  */
@@ -368,33 +381,28 @@ rte_mempool_populate_virt(struct rte_mempool *mp, char *addr,
 	size_t off, phys_len;
 	int ret, cnt = 0;
 
-	/* address and len must be page-aligned */
-	if (RTE_PTR_ALIGN_CEIL(addr, pg_sz) != addr)
-		return -EINVAL;
-	if (RTE_ALIGN_CEIL(len, pg_sz) != len)
-		return -EINVAL;
-
 	if (mp->flags & MEMPOOL_F_NO_IOVA_CONTIG)
 		return rte_mempool_populate_iova(mp, addr, RTE_BAD_IOVA,
 			len, free_cb, opaque);
 
-	for (off = 0; off + pg_sz <= len &&
+	for (off = 0; off < len &&
 		     mp->populated_size < mp->size; off += phys_len) {
 
-		iova = rte_mem_virt2iova(addr + off);
-
-		if (iova == RTE_BAD_IOVA && rte_eal_has_hugepages()) {
-			ret = -EINVAL;
-			goto fail;
-		}
+		iova = get_iova(addr + off);
 
 		/* populate with the largest group of contiguous pages */
-		for (phys_len = pg_sz; off + phys_len < len; phys_len += pg_sz) {
+		for (phys_len = RTE_MIN(
+			(size_t)(RTE_PTR_ALIGN_CEIL(addr + off + 1, pg_sz) -
+				(addr + off)),
+			len - off);
+		     off + phys_len < len;
+		     phys_len = RTE_MIN(phys_len + pg_sz, len - off)) {
 			rte_iova_t iova_tmp;
 
-			iova_tmp = rte_mem_virt2iova(addr + off + phys_len);
+			iova_tmp = get_iova(addr + off + phys_len);
 
-			if (iova_tmp != iova + phys_len)
+			if (iova_tmp == RTE_BAD_IOVA ||
+					iova_tmp != iova + phys_len)
 				break;
 		}
 
@@ -414,6 +422,31 @@ rte_mempool_populate_virt(struct rte_mempool *mp, char *addr,
 	return ret;
 }
 
+/* Get the minimal page size used in a mempool before populating it. */
+int
+rte_mempool_get_page_size(struct rte_mempool *mp, size_t *pg_sz)
+{
+	bool need_iova_contig_obj;
+	bool alloc_in_ext_mem;
+	int ret;
+
+	/* check if we can retrieve a valid socket ID */
+	ret = rte_malloc_heap_socket_is_external(mp->socket_id);
+	if (ret < 0)
+		return -EINVAL;
+	alloc_in_ext_mem = (ret == 1);
+	need_iova_contig_obj = !(mp->flags & MEMPOOL_F_NO_IOVA_CONTIG);
+
+	if (!need_iova_contig_obj)
+		*pg_sz = 0;
+	else if (rte_eal_has_hugepages() || alloc_in_ext_mem)
+		*pg_sz = get_min_page_size(mp->socket_id);
+	else
+		*pg_sz = getpagesize();
+
+	return 0;
+}
+
 /* Default function to populate the mempool: allocate memory in memzones,
  * and populate them. Return the number of objects added, or a negative
  * value on error.
@@ -425,27 +458,19 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 	char mz_name[RTE_MEMZONE_NAMESIZE];
 	const struct rte_memzone *mz;
 	ssize_t mem_size;
-	size_t align, pg_sz, pg_shift;
+	size_t align, pg_sz, pg_shift = 0;
 	rte_iova_t iova;
 	unsigned mz_id, n;
 	int ret;
-	bool no_contig, try_contig, no_pageshift, external;
+	bool need_iova_contig_obj;
 
 	ret = mempool_ops_alloc_once(mp);
 	if (ret != 0)
 		return ret;
 
-	/* check if we can retrieve a valid socket ID */
-	ret = rte_malloc_heap_socket_is_external(mp->socket_id);
-	if (ret < 0)
-		return -EINVAL;
-	external = ret;
-
 	/* mempool must not be populated */
 	if (mp->nb_mem_chunks != 0)
 		return -EEXIST;
-
-	no_contig = mp->flags & MEMPOOL_F_NO_IOVA_CONTIG;
 
 	/*
 	 * the following section calculates page shift and page size values.
@@ -462,17 +487,15 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 	 * then just set page shift and page size to 0, because the user has
 	 * indicated that there's no need to care about anything.
 	 *
-	 * if we do need contiguous objects, there is also an option to reserve
-	 * the entire mempool memory as one contiguous block of memory, in
-	 * which case the page shift and alignment wouldn't matter as well.
+	 * if we do need contiguous objects (if a mempool driver has its
+	 * own calc_size() method returning min_chunk_size = mem_size),
+	 * there is also an option to reserve the entire mempool memory
+	 * as one contiguous block of memory.
 	 *
 	 * if we require contiguous objects, but not necessarily the entire
-	 * mempool reserved space to be contiguous, then there are two options.
-	 *
-	 * if our IO addresses are virtual, not actual physical (IOVA as VA
-	 * case), then no page shift needed - our memory allocation will give us
-	 * contiguous IO memory as far as the hardware is concerned, so
-	 * act as if we're getting contiguous memory.
+	 * mempool reserved space to be contiguous, pg_sz will be != 0,
+	 * and the default ops->populate() will take care of not placing
+	 * objects across pages.
 	 *
 	 * if our IO addresses are physical, we may get memory from bigger
 	 * pages, or we might get memory from smaller pages, and how much of it
@@ -483,46 +506,23 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 	 * wasting some space this way, but it's much nicer than looping around
 	 * trying to reserve each and every page size.
 	 *
-	 * However, since size calculation will produce page-aligned sizes, it
-	 * makes sense to first try and see if we can reserve the entire memzone
-	 * in one contiguous chunk as well (otherwise we might end up wasting a
-	 * 1G page on a 10MB memzone). If we fail to get enough contiguous
-	 * memory, then we'll go and reserve space page-by-page.
-	 *
-	 * We also have to take into account the fact that memory that we're
-	 * going to allocate from can belong to an externally allocated memory
-	 * area, in which case the assumption of IOVA as VA mode being
-	 * synonymous with IOVA contiguousness will not hold. We should also try
-	 * to go for contiguous memory even if we're in no-huge mode, because
-	 * external memory may in fact be IOVA-contiguous.
+	 * If we fail to get enough contiguous memory, then we'll go and
+	 * reserve space in smaller chunks.
 	 */
-	external = rte_malloc_heap_socket_is_external(mp->socket_id) == 1;
-	no_pageshift = no_contig ||
-			(!external && rte_eal_iova_mode() == RTE_IOVA_VA);
-	try_contig = !no_contig && !no_pageshift &&
-			(rte_eal_has_hugepages() || external);
 
-	if (no_pageshift) {
-		pg_sz = 0;
-		pg_shift = 0;
-	} else if (try_contig) {
-		pg_sz = get_min_page_size(mp->socket_id);
+	need_iova_contig_obj = !(mp->flags & MEMPOOL_F_NO_IOVA_CONTIG);
+	ret = rte_mempool_get_page_size(mp, &pg_sz);
+	if (ret < 0)
+		return ret;
+
+	if (pg_sz != 0)
 		pg_shift = rte_bsf32(pg_sz);
-	} else {
-		pg_sz = getpagesize();
-		pg_shift = rte_bsf32(pg_sz);
-	}
 
 	for (mz_id = 0, n = mp->size; n > 0; mz_id++, n -= ret) {
 		size_t min_chunk_size;
-		unsigned int flags;
 
-		if (try_contig || no_pageshift)
-			mem_size = rte_mempool_ops_calc_mem_size(mp, n,
-					0, &min_chunk_size, &align);
-		else
-			mem_size = rte_mempool_ops_calc_mem_size(mp, n,
-					pg_shift, &min_chunk_size, &align);
+		mem_size = rte_mempool_ops_calc_mem_size(
+			mp, n, pg_shift, &min_chunk_size, &align);
 
 		if (mem_size < 0) {
 			ret = mem_size;
@@ -536,35 +536,15 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 			goto fail;
 		}
 
-		flags = mz_flags;
-
 		/* if we're trying to reserve contiguous memory, add appropriate
 		 * memzone flag.
 		 */
-		if (try_contig)
-			flags |= RTE_MEMZONE_IOVA_CONTIG;
+		if (min_chunk_size == (size_t)mem_size)
+			mz_flags |= RTE_MEMZONE_IOVA_CONTIG;
 
 		mz = rte_memzone_reserve_aligned(mz_name, mem_size,
-				mp->socket_id, flags, align);
+				mp->socket_id, mz_flags, align);
 
-		/* if we were trying to allocate contiguous memory, failed and
-		 * minimum required contiguous chunk fits minimum page, adjust
-		 * memzone size to the page size, and try again.
-		 */
-		if (mz == NULL && try_contig && min_chunk_size <= pg_sz) {
-			try_contig = false;
-			flags &= ~RTE_MEMZONE_IOVA_CONTIG;
-
-			mem_size = rte_mempool_ops_calc_mem_size(mp, n,
-					pg_shift, &min_chunk_size, &align);
-			if (mem_size < 0) {
-				ret = mem_size;
-				goto fail;
-			}
-
-			mz = rte_memzone_reserve_aligned(mz_name, mem_size,
-				mp->socket_id, flags, align);
-		}
 		/* don't try reserving with 0 size if we were asked to reserve
 		 * IOVA-contiguous memory.
 		 */
@@ -573,8 +553,7 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 			 * have
 			 */
 			mz = rte_memzone_reserve_aligned(mz_name, 0,
-					mp->socket_id, flags,
-					RTE_MAX(pg_sz, align));
+					mp->socket_id, mz_flags, align);
 		}
 		if (mz == NULL) {
 			ret = -rte_errno;
@@ -587,19 +566,19 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 			goto fail;
 		}
 
-		if (no_contig)
-			iova = RTE_BAD_IOVA;
-		else
+		if (need_iova_contig_obj)
 			iova = mz->iova;
+		else
+			iova = RTE_BAD_IOVA;
 
-		if (no_pageshift || try_contig)
+		if (pg_sz == 0 || (mz_flags & RTE_MEMZONE_IOVA_CONTIG))
 			ret = rte_mempool_populate_iova(mp, mz->addr,
 				iova, mz->len,
 				rte_mempool_memchunk_mz_free,
 				(void *)(uintptr_t)mz);
 		else
 			ret = rte_mempool_populate_virt(mp, mz->addr,
-				RTE_ALIGN_FLOOR(mz->len, pg_sz), pg_sz,
+				mz->len, pg_sz,
 				rte_mempool_memchunk_mz_free,
 				(void *)(uintptr_t)mz);
 		if (ret < 0) {

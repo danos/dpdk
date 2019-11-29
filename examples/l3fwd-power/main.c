@@ -880,7 +880,9 @@ sleep_until_rx_interrupt(int num)
 		port_id = ((uintptr_t)data) >> CHAR_BIT;
 		queue_id = ((uintptr_t)data) &
 			RTE_LEN2MASK(CHAR_BIT, uint8_t);
+		rte_spinlock_lock(&(locks[port_id]));
 		rte_eth_dev_rx_intr_disable(port_id, queue_id);
+		rte_spinlock_unlock(&(locks[port_id]));
 		RTE_LOG(INFO, L3FWD_POWER,
 			"lcore %u is waked up from rx interrupt on"
 			" port %d queue %d\n",
@@ -1970,6 +1972,7 @@ check_all_ports_link_status(uint32_t port_mask)
 	uint8_t count, all_ports_up, print_flag = 0;
 	uint16_t portid;
 	struct rte_eth_link link;
+	int ret;
 
 	printf("\nChecking link status");
 	fflush(stdout);
@@ -1979,7 +1982,14 @@ check_all_ports_link_status(uint32_t port_mask)
 			if ((port_mask & (1 << portid)) == 0)
 				continue;
 			memset(&link, 0, sizeof(link));
-			rte_eth_link_get_nowait(portid, &link);
+			ret = rte_eth_link_get_nowait(portid, &link);
+			if (ret < 0) {
+				all_ports_up = 0;
+				if (print_flag == 1)
+					printf("Port %u link get failed: %s\n",
+						portid, rte_strerror(-ret));
+				continue;
+			}
 			/* print link status if flag set */
 			if (print_flag == 1) {
 				if (link.link_status)
@@ -2257,7 +2267,12 @@ main(int argc, char **argv)
 		printf("Initializing port %d ... ", portid );
 		fflush(stdout);
 
-		rte_eth_dev_info_get(portid, &dev_info);
+		ret = rte_eth_dev_info_get(portid, &dev_info);
+		if (ret != 0)
+			rte_exit(EXIT_FAILURE,
+				"Error during getting device (port %u) info: %s\n",
+				portid, strerror(-ret));
+
 		dev_rxq_num = dev_info.max_rx_queues;
 		dev_txq_num = dev_info.max_tx_queues;
 
@@ -2275,7 +2290,13 @@ main(int argc, char **argv)
 		/* If number of Rx queue is 0, no need to enable Rx interrupt */
 		if (nb_rx_queue == 0)
 			local_port_conf.intr_conf.rxq = 0;
-		rte_eth_dev_info_get(portid, &dev_info);
+
+		ret = rte_eth_dev_info_get(portid, &dev_info);
+		if (ret != 0)
+			rte_exit(EXIT_FAILURE,
+				"Error during getting device (port %u) info: %s\n",
+				portid, strerror(-ret));
+
 		if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
 			local_port_conf.txmode.offloads |=
 				DEV_TX_OFFLOAD_MBUF_FAST_FREE;
@@ -2304,7 +2325,12 @@ main(int argc, char **argv)
 				 "Cannot adjust number of descriptors: err=%d, port=%d\n",
 				 ret, portid);
 
-		rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);
+		ret = rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);
+		if (ret < 0)
+			rte_exit(EXIT_FAILURE,
+				 "Cannot get MAC address: err=%d, port=%d\n",
+				 ret, portid);
+
 		print_ethaddr(" Address:", &ports_eth_addr[portid]);
 		printf(", ");
 
@@ -2398,7 +2424,12 @@ main(int argc, char **argv)
 			printf("rxq=%d,%d,%d ", portid, queueid, socketid);
 			fflush(stdout);
 
-			rte_eth_dev_info_get(portid, &dev_info);
+			ret = rte_eth_dev_info_get(portid, &dev_info);
+			if (ret != 0)
+				rte_exit(EXIT_FAILURE,
+					"Error during getting device (port %u) info: %s\n",
+					portid, strerror(-ret));
+
 			rxq_conf = dev_info.default_rxconf;
 			rxq_conf.offloads = port_conf.rxmode.offloads;
 			ret = rte_eth_rx_queue_setup(portid, queueid, nb_rxd,
@@ -2437,8 +2468,13 @@ main(int argc, char **argv)
 		 * to itself through 2 cross-connected  ports of the
 		 * target machine.
 		 */
-		if (promiscuous_on)
-			rte_eth_promiscuous_enable(portid);
+		if (promiscuous_on) {
+			ret = rte_eth_promiscuous_enable(portid);
+			if (ret != 0)
+				rte_exit(EXIT_FAILURE,
+					"rte_eth_promiscuous_enable: err=%s, port=%u\n",
+					rte_strerror(-ret), portid);
+		}
 		/* initialize spinlock for each port */
 		rte_spinlock_init(&(locks[portid]));
 	}

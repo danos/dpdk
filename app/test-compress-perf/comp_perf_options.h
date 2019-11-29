@@ -11,7 +11,7 @@
 #define MAX_MBUF_DATA_SIZE (UINT16_MAX - RTE_PKTMBUF_HEADROOM)
 #define MAX_SEG_SIZE ((int)(MAX_MBUF_DATA_SIZE / EXPANSE_RATIO))
 
-extern const char *cperf_test_type_strs[];
+extern const char *comp_perf_test_type_strs[];
 
 /* Cleanup state machine */
 enum cleanup_st {
@@ -56,12 +56,14 @@ struct comp_test_data {
 	uint32_t pool_sz;
 	uint32_t num_iter;
 	uint16_t max_sgl_segs;
+	uint32_t total_segs;
 
 	enum rte_comp_huffman huffman_enc;
 	enum comp_operation test_op;
 	int window_sz;
 	struct range_list level_lst;
 	uint8_t level;
+	int use_external_mbufs;
 
 	double ratio;
 	enum cleanup_st cleanup;

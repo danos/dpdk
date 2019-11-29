@@ -37,16 +37,16 @@ static int iavf_dev_configure(struct rte_eth_dev *dev);
 static int iavf_dev_start(struct rte_eth_dev *dev);
 static void iavf_dev_stop(struct rte_eth_dev *dev);
 static void iavf_dev_close(struct rte_eth_dev *dev);
-static void iavf_dev_info_get(struct rte_eth_dev *dev,
+static int iavf_dev_info_get(struct rte_eth_dev *dev,
 			     struct rte_eth_dev_info *dev_info);
 static const uint32_t *iavf_dev_supported_ptypes_get(struct rte_eth_dev *dev);
 static int iavf_dev_stats_get(struct rte_eth_dev *dev,
 			     struct rte_eth_stats *stats);
-static void iavf_dev_stats_reset(struct rte_eth_dev *dev);
-static void iavf_dev_promiscuous_enable(struct rte_eth_dev *dev);
-static void iavf_dev_promiscuous_disable(struct rte_eth_dev *dev);
-static void iavf_dev_allmulticast_enable(struct rte_eth_dev *dev);
-static void iavf_dev_allmulticast_disable(struct rte_eth_dev *dev);
+static int iavf_dev_stats_reset(struct rte_eth_dev *dev);
+static int iavf_dev_promiscuous_enable(struct rte_eth_dev *dev);
+static int iavf_dev_promiscuous_disable(struct rte_eth_dev *dev);
+static int iavf_dev_allmulticast_enable(struct rte_eth_dev *dev);
+static int iavf_dev_allmulticast_disable(struct rte_eth_dev *dev);
 static int iavf_dev_add_mac_addr(struct rte_eth_dev *dev,
 				struct rte_ether_addr *addr,
 				uint32_t index,
@@ -75,6 +75,16 @@ static int iavf_dev_rx_queue_intr_disable(struct rte_eth_dev *dev,
 
 int iavf_logtype_init;
 int iavf_logtype_driver;
+
+#ifdef RTE_LIBRTE_IAVF_DEBUG_RX
+int iavf_logtype_rx;
+#endif
+#ifdef RTE_LIBRTE_IAVF_DEBUG_TX
+int iavf_logtype_tx;
+#endif
+#ifdef RTE_LIBRTE_IAVF_DEBUG_TX_FREE
+int iavf_logtype_tx_free;
+#endif
 
 static const struct rte_pci_id pci_id_iavf_map[] = {
 	{ RTE_PCI_DEVICE(IAVF_INTEL_VENDOR_ID, IAVF_DEV_ID_ADAPTIVE_VF) },
@@ -131,16 +141,14 @@ iavf_dev_configure(struct rte_eth_dev *dev)
 	struct rte_eth_conf *dev_conf = &dev->data->dev_conf;
 
 	ad->rx_bulk_alloc_allowed = true;
-#ifdef RTE_LIBRTE_IAVF_INC_VECTOR
 	/* Initialize to TRUE. If any of Rx queues doesn't meet the
 	 * vector Rx/Tx preconditions, it will be reset.
 	 */
 	ad->rx_vec_allowed = true;
 	ad->tx_vec_allowed = true;
-#else
-	ad->rx_vec_allowed = false;
-	ad->tx_vec_allowed = false;
-#endif
+
+	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
+		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
 
 	/* Vlan stripping setting */
 	if (vf->vf_res->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_VLAN) {
@@ -495,7 +503,7 @@ iavf_dev_stop(struct rte_eth_dev *dev)
 	hw->adapter_stopped = 1;
 }
 
-static void
+static int
 iavf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 {
 	struct iavf_info *vf = IAVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
@@ -517,7 +525,8 @@ iavf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 		DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM |
 		DEV_RX_OFFLOAD_SCATTER |
 		DEV_RX_OFFLOAD_JUMBO_FRAME |
-		DEV_RX_OFFLOAD_VLAN_FILTER;
+		DEV_RX_OFFLOAD_VLAN_FILTER |
+		DEV_RX_OFFLOAD_RSS_HASH;
 	dev_info->tx_offload_capa =
 		DEV_TX_OFFLOAD_VLAN_INSERT |
 		DEV_TX_OFFLOAD_QINQ_INSERT |
@@ -556,6 +565,8 @@ iavf_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 		.nb_min = IAVF_MIN_RING_DESC,
 		.nb_align = IAVF_ALIGN_RING_DESC,
 	};
+
+	return 0;
 }
 
 static const uint32_t *
@@ -632,7 +643,7 @@ iavf_dev_link_update(struct rte_eth_dev *dev,
 	return 0;
 }
 
-static void
+static int
 iavf_dev_promiscuous_enable(struct rte_eth_dev *dev)
 {
 	struct iavf_adapter *adapter =
@@ -641,14 +652,18 @@ iavf_dev_promiscuous_enable(struct rte_eth_dev *dev)
 	int ret;
 
 	if (vf->promisc_unicast_enabled)
-		return;
+		return 0;
 
 	ret = iavf_config_promisc(adapter, TRUE, vf->promisc_multicast_enabled);
 	if (!ret)
 		vf->promisc_unicast_enabled = TRUE;
+	else
+		ret = -EAGAIN;
+
+	return ret;
 }
 
-static void
+static int
 iavf_dev_promiscuous_disable(struct rte_eth_dev *dev)
 {
 	struct iavf_adapter *adapter =
@@ -657,14 +672,18 @@ iavf_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	int ret;
 
 	if (!vf->promisc_unicast_enabled)
-		return;
+		return 0;
 
 	ret = iavf_config_promisc(adapter, FALSE, vf->promisc_multicast_enabled);
 	if (!ret)
 		vf->promisc_unicast_enabled = FALSE;
+	else
+		ret = -EAGAIN;
+
+	return ret;
 }
 
-static void
+static int
 iavf_dev_allmulticast_enable(struct rte_eth_dev *dev)
 {
 	struct iavf_adapter *adapter =
@@ -673,14 +692,18 @@ iavf_dev_allmulticast_enable(struct rte_eth_dev *dev)
 	int ret;
 
 	if (vf->promisc_multicast_enabled)
-		return;
+		return 0;
 
 	ret = iavf_config_promisc(adapter, vf->promisc_unicast_enabled, TRUE);
 	if (!ret)
 		vf->promisc_multicast_enabled = TRUE;
+	else
+		ret = -EAGAIN;
+
+	return ret;
 }
 
-static void
+static int
 iavf_dev_allmulticast_disable(struct rte_eth_dev *dev)
 {
 	struct iavf_adapter *adapter =
@@ -689,11 +712,15 @@ iavf_dev_allmulticast_disable(struct rte_eth_dev *dev)
 	int ret;
 
 	if (!vf->promisc_multicast_enabled)
-		return;
+		return 0;
 
 	ret = iavf_config_promisc(adapter, vf->promisc_unicast_enabled, FALSE);
 	if (!ret)
 		vf->promisc_multicast_enabled = FALSE;
+	else
+		ret = -EAGAIN;
+
+	return ret;
 }
 
 static int
@@ -1055,7 +1082,7 @@ iavf_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	return -EIO;
 }
 
-static void
+static int
 iavf_dev_stats_reset(struct rte_eth_dev *dev)
 {
 	int ret;
@@ -1067,10 +1094,13 @@ iavf_dev_stats_reset(struct rte_eth_dev *dev)
 
 	/* read stat values to clear hardware registers */
 	ret = iavf_query_stats(adapter, &pstats);
+	if (ret != 0)
+		return ret;
 
 	/* set stats offset base on current values */
-	if (ret == 0)
-		vsi->eth_stats_offset = *pstats;
+	vsi->eth_stats_offset = *pstats;
+
+	return 0;
 }
 
 static int
@@ -1419,6 +1449,24 @@ RTE_INIT(iavf_init_log)
 	iavf_logtype_driver = rte_log_register("pmd.net.iavf.driver");
 	if (iavf_logtype_driver >= 0)
 		rte_log_set_level(iavf_logtype_driver, RTE_LOG_NOTICE);
+
+#ifdef RTE_LIBRTE_IAVF_DEBUG_RX
+	iavf_logtype_rx = rte_log_register("pmd.net.iavf.rx");
+	if (iavf_logtype_rx >= 0)
+		rte_log_set_level(iavf_logtype_rx, RTE_LOG_DEBUG);
+#endif
+
+#ifdef RTE_LIBRTE_IAVF_DEBUG_TX
+	iavf_logtype_tx = rte_log_register("pmd.net.iavf.tx");
+	if (iavf_logtype_tx >= 0)
+		rte_log_set_level(iavf_logtype_tx, RTE_LOG_DEBUG);
+#endif
+
+#ifdef RTE_LIBRTE_IAVF_DEBUG_TX_FREE
+	iavf_logtype_tx_free = rte_log_register("pmd.net.iavf.tx_free");
+	if (iavf_logtype_tx_free >= 0)
+		rte_log_set_level(iavf_logtype_tx_free, RTE_LOG_DEBUG);
+#endif
 }
 
 /* memory func for base code */

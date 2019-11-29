@@ -238,10 +238,11 @@ hn_dev_link_update(struct rte_eth_dev *dev,
 	return rte_eth_linkstatus_set(dev, &link);
 }
 
-static void hn_dev_info_get(struct rte_eth_dev *dev,
-			    struct rte_eth_dev_info *dev_info)
+static int hn_dev_info_get(struct rte_eth_dev *dev,
+			   struct rte_eth_dev_info *dev_info)
 {
 	struct hn_data *hv = dev->data->dev_private;
+	int rc;
 
 	dev_info->speed_capa = ETH_LINK_SPEED_10G;
 	dev_info->min_rx_bufsize = HN_MIN_RX_BUF_SIZE;
@@ -255,8 +256,15 @@ static void hn_dev_info_get(struct rte_eth_dev *dev,
 	dev_info->max_rx_queues = hv->max_queues;
 	dev_info->max_tx_queues = hv->max_queues;
 
-	hn_rndis_get_offload(hv, dev_info);
-	hn_vf_info_get(hv, dev_info);
+	rc = hn_rndis_get_offload(hv, dev_info);
+	if (rc != 0)
+		return rc;
+
+	rc = hn_vf_info_get(hv, dev_info);
+	if (rc != 0)
+		return rc;
+
+	return 0;
 }
 
 static int hn_rss_reta_update(struct rte_eth_dev *dev,
@@ -408,16 +416,16 @@ static int hn_rss_hash_conf_get(struct rte_eth_dev *dev,
 	return 0;
 }
 
-static void
+static int
 hn_dev_promiscuous_enable(struct rte_eth_dev *dev)
 {
 	struct hn_data *hv = dev->data->dev_private;
 
 	hn_rndis_set_rxfilter(hv, NDIS_PACKET_TYPE_PROMISCUOUS);
-	hn_vf_promiscuous_enable(dev);
+	return hn_vf_promiscuous_enable(dev);
 }
 
-static void
+static int
 hn_dev_promiscuous_disable(struct rte_eth_dev *dev)
 {
 	struct hn_data *hv = dev->data->dev_private;
@@ -427,10 +435,10 @@ hn_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	if (dev->data->all_multicast)
 		filter |= NDIS_PACKET_TYPE_ALL_MULTICAST;
 	hn_rndis_set_rxfilter(hv, filter);
-	hn_vf_promiscuous_disable(dev);
+	return hn_vf_promiscuous_disable(dev);
 }
 
-static void
+static int
 hn_dev_allmulticast_enable(struct rte_eth_dev *dev)
 {
 	struct hn_data *hv = dev->data->dev_private;
@@ -438,17 +446,17 @@ hn_dev_allmulticast_enable(struct rte_eth_dev *dev)
 	hn_rndis_set_rxfilter(hv, NDIS_PACKET_TYPE_DIRECTED |
 			      NDIS_PACKET_TYPE_ALL_MULTICAST |
 			NDIS_PACKET_TYPE_BROADCAST);
-	hn_vf_allmulticast_enable(dev);
+	return hn_vf_allmulticast_enable(dev);
 }
 
-static void
+static int
 hn_dev_allmulticast_disable(struct rte_eth_dev *dev)
 {
 	struct hn_data *hv = dev->data->dev_private;
 
 	hn_rndis_set_rxfilter(hv, NDIS_PACKET_TYPE_DIRECTED |
 			     NDIS_PACKET_TYPE_BROADCAST);
-	hn_vf_allmulticast_disable(dev);
+	return hn_vf_allmulticast_disable(dev);
 }
 
 static int
@@ -523,6 +531,9 @@ static int hn_dev_configure(struct rte_eth_dev *dev)
 	int i, err, subchan;
 
 	PMD_INIT_FUNC_TRACE();
+
+	if (dev_conf->rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
+		dev_conf->rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
 
 	unsupported = txmode->offloads & ~HN_TX_OFFLOAD_CAPS;
 	if (unsupported) {
@@ -622,7 +633,7 @@ static int hn_dev_stats_get(struct rte_eth_dev *dev,
 	return 0;
 }
 
-static void
+static int
 hn_dev_stats_reset(struct rte_eth_dev *dev)
 {
 	unsigned int i;
@@ -645,13 +656,20 @@ hn_dev_stats_reset(struct rte_eth_dev *dev)
 
 		memset(&rxq->stats, 0, sizeof(struct hn_stats));
 	}
+
+	return 0;
 }
 
-static void
+static int
 hn_dev_xstats_reset(struct rte_eth_dev *dev)
 {
-	hn_dev_stats_reset(dev);
-	hn_vf_xstats_reset(dev);
+	int ret;
+
+	ret = hn_dev_stats_reset(dev);
+	if (ret != 0)
+		return 0;
+
+	return hn_vf_xstats_reset(dev);
 }
 
 static int
@@ -989,6 +1007,7 @@ static int
 eth_hn_dev_uninit(struct rte_eth_dev *eth_dev)
 {
 	struct hn_data *hv = eth_dev->data->dev_private;
+	int ret;
 
 	PMD_INIT_FUNC_TRACE();
 
@@ -1006,7 +1025,9 @@ eth_hn_dev_uninit(struct rte_eth_dev *eth_dev)
 	hn_tx_pool_uninit(eth_dev);
 	rte_vmbus_chan_close(hv->primary->chan);
 	rte_free(hv->primary);
-	rte_eth_dev_owner_delete(hv->owner.id);
+	ret = rte_eth_dev_owner_delete(hv->owner.id);
+	if (ret != 0)
+		return ret;
 
 	return 0;
 }

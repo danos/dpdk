@@ -15,16 +15,16 @@ static int  axgbe_dev_start(struct rte_eth_dev *dev);
 static void axgbe_dev_stop(struct rte_eth_dev *dev);
 static void axgbe_dev_interrupt_handler(void *param);
 static void axgbe_dev_close(struct rte_eth_dev *dev);
-static void axgbe_dev_promiscuous_enable(struct rte_eth_dev *dev);
-static void axgbe_dev_promiscuous_disable(struct rte_eth_dev *dev);
-static void axgbe_dev_allmulticast_enable(struct rte_eth_dev *dev);
-static void axgbe_dev_allmulticast_disable(struct rte_eth_dev *dev);
+static int axgbe_dev_promiscuous_enable(struct rte_eth_dev *dev);
+static int axgbe_dev_promiscuous_disable(struct rte_eth_dev *dev);
+static int axgbe_dev_allmulticast_enable(struct rte_eth_dev *dev);
+static int axgbe_dev_allmulticast_disable(struct rte_eth_dev *dev);
 static int axgbe_dev_link_update(struct rte_eth_dev *dev,
 				 int wait_to_complete);
 static int axgbe_dev_stats_get(struct rte_eth_dev *dev,
 				struct rte_eth_stats *stats);
-static void axgbe_dev_stats_reset(struct rte_eth_dev *dev);
-static void axgbe_dev_info_get(struct rte_eth_dev *dev,
+static int axgbe_dev_stats_reset(struct rte_eth_dev *dev);
+static int  axgbe_dev_info_get(struct rte_eth_dev *dev,
 			       struct rte_eth_dev_info *dev_info);
 
 /* The set of PCI devices this driver supports */
@@ -236,7 +236,7 @@ axgbe_dev_close(struct rte_eth_dev *dev)
 	axgbe_dev_clear_queues(dev);
 }
 
-static void
+static int
 axgbe_dev_promiscuous_enable(struct rte_eth_dev *dev)
 {
 	struct axgbe_port *pdata = dev->data->dev_private;
@@ -244,9 +244,11 @@ axgbe_dev_promiscuous_enable(struct rte_eth_dev *dev)
 	PMD_INIT_FUNC_TRACE();
 
 	AXGMAC_IOWRITE_BITS(pdata, MAC_PFR, PR, 1);
+
+	return 0;
 }
 
-static void
+static int
 axgbe_dev_promiscuous_disable(struct rte_eth_dev *dev)
 {
 	struct axgbe_port *pdata = dev->data->dev_private;
@@ -254,9 +256,11 @@ axgbe_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	PMD_INIT_FUNC_TRACE();
 
 	AXGMAC_IOWRITE_BITS(pdata, MAC_PFR, PR, 0);
+
+	return 0;
 }
 
-static void
+static int
 axgbe_dev_allmulticast_enable(struct rte_eth_dev *dev)
 {
 	struct axgbe_port *pdata = dev->data->dev_private;
@@ -264,11 +268,13 @@ axgbe_dev_allmulticast_enable(struct rte_eth_dev *dev)
 	PMD_INIT_FUNC_TRACE();
 
 	if (AXGMAC_IOREAD_BITS(pdata, MAC_PFR, PM))
-		return;
+		return 0;
 	AXGMAC_IOWRITE_BITS(pdata, MAC_PFR, PM, 1);
+
+	return 0;
 }
 
-static void
+static int
 axgbe_dev_allmulticast_disable(struct rte_eth_dev *dev)
 {
 	struct axgbe_port *pdata = dev->data->dev_private;
@@ -276,8 +282,10 @@ axgbe_dev_allmulticast_disable(struct rte_eth_dev *dev)
 	PMD_INIT_FUNC_TRACE();
 
 	if (!AXGMAC_IOREAD_BITS(pdata, MAC_PFR, PM))
-		return;
+		return 0;
 	AXGMAC_IOWRITE_BITS(pdata, MAC_PFR, PM, 0);
+
+	return 0;
 }
 
 /* return 0 means link status changed, -1 means not changed */
@@ -333,7 +341,7 @@ axgbe_dev_stats_get(struct rte_eth_dev *dev,
 	return 0;
 }
 
-static void
+static int
 axgbe_dev_stats_reset(struct rte_eth_dev *dev)
 {
 	struct axgbe_rx_queue *rxq;
@@ -352,9 +360,11 @@ axgbe_dev_stats_reset(struct rte_eth_dev *dev)
 		txq->bytes = 0;
 		txq->errors = 0;
 	}
+
+	return 0;
 }
 
-static void
+static int
 axgbe_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 {
 	struct axgbe_port *pdata = dev->data->dev_private;
@@ -393,6 +403,8 @@ axgbe_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 	dev_info->default_txconf = (struct rte_eth_txconf) {
 		.tx_free_thresh = AXGBE_TX_FREE_THRESH,
 	};
+
+	return 0;
 }
 
 static void axgbe_get_all_hw_features(struct axgbe_port *pdata)

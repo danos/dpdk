@@ -574,7 +574,7 @@ setup_test_string_tunneled(struct rte_mempool *mpool, const char *string,
 	struct rte_mbuf *m = rte_pktmbuf_alloc(mpool);
 	uint32_t hdrlen = sizeof(struct rte_ipv4_hdr) +
 		sizeof(struct rte_esp_hdr);
-	uint32_t taillen = sizeof(struct esp_tail);
+	uint32_t taillen = sizeof(struct rte_esp_tail);
 	uint32_t t_len = len + hdrlen + taillen;
 	uint32_t padlen;
 
@@ -586,7 +586,7 @@ setup_test_string_tunneled(struct rte_mempool *mpool, const char *string,
 	padlen = RTE_ALIGN(t_len, 4) - t_len;
 	t_len += padlen;
 
-	struct esp_tail espt  = {
+	struct rte_esp_tail espt = {
 		.pad_len = padlen,
 		.next_proto = IPPROTO_IPIP,
 	};
@@ -689,11 +689,11 @@ fill_ipsec_param(uint32_t replay_win_sz, uint64_t flags)
 
 	prm->userdata = 1;
 	prm->flags = flags;
-	prm->replay_win_sz = replay_win_sz;
 
 	/* setup ipsec xform */
 	prm->ipsec_xform = ut_params->ipsec_xform;
 	prm->ipsec_xform.salt = (uint32_t)rte_rand();
+	prm->ipsec_xform.replay_win_sz = replay_win_sz;
 
 	/* setup tunnel related fields */
 	prm->tun.hdr_len = sizeof(ipv4_outer);

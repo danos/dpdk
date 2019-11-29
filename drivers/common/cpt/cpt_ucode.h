@@ -310,7 +310,8 @@ cpt_fc_ciph_set_key(void *ctx, cipher_type_t type, const uint8_t *key,
 	memcpy(fctx->enc.encr_key, key, key_len);
 
 fc_success:
-	*ctrl_flags = rte_cpu_to_be_64(*ctrl_flags);
+	if (ctrl_flags != NULL)
+		*ctrl_flags = rte_cpu_to_be_64(*ctrl_flags);
 
 success:
 	cpt_ctx->enc_cipher = type;
@@ -1467,7 +1468,8 @@ cpt_zuc_snow3g_enc_prep(uint32_t req_flags,
 	opcode.s.major = CPT_MAJOR_OP_ZUC_SNOW3G;
 
 	/* indicates CPTR ctx, operation type, KEY & IV mode from DPTR */
-	opcode.s.minor = ((1 << 6) | (snow3g << 5) | (0 << 4) |
+
+	opcode.s.minor = ((1 << 7) | (snow3g << 5) | (0 << 4) |
 			  (0 << 3) | (flags & 0x7));
 
 	if (flags == 0x1) {
@@ -1791,7 +1793,8 @@ cpt_zuc_snow3g_dec_prep(uint32_t req_flags,
 	opcode.s.major = CPT_MAJOR_OP_ZUC_SNOW3G;
 
 	/* indicates CPTR ctx, operation type, KEY & IV mode from DPTR */
-	opcode.s.minor = ((1 << 6) | (snow3g << 5) | (0 << 4) |
+
+	opcode.s.minor = ((1 << 7) | (snow3g << 5) | (0 << 4) |
 			  (0 << 3) | (flags & 0x7));
 
 	/* consider iv len */

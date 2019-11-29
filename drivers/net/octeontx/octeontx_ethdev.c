@@ -174,7 +174,7 @@ octeontx_port_stop(struct octeontx_nic *nic)
 	return octeontx_bgx_port_stop(nic->port_id);
 }
 
-static void
+static int
 octeontx_port_promisc_set(struct octeontx_nic *nic, int en)
 {
 	struct rte_eth_dev *dev;
@@ -185,15 +185,19 @@ octeontx_port_promisc_set(struct octeontx_nic *nic, int en)
 	dev = nic->dev;
 
 	res = octeontx_bgx_port_promisc_set(nic->port_id, en);
-	if (res < 0)
+	if (res < 0) {
 		octeontx_log_err("failed to set promiscuous mode %d",
 				nic->port_id);
+		return res;
+	}
 
 	/* Set proper flag for the mode */
 	dev->data->promiscuous = (en != 0) ? 1 : 0;
 
 	octeontx_log_dbg("port %d : promiscuous mode %s",
 			nic->port_id, en ? "set" : "unset");
+
+	return 0;
 }
 
 static int
@@ -224,12 +228,12 @@ octeontx_port_stats(struct octeontx_nic *nic, struct rte_eth_stats *stats)
 	return 0;
 }
 
-static void
+static int
 octeontx_port_stats_clr(struct octeontx_nic *nic)
 {
 	PMD_INIT_FUNC_TRACE();
 
-	octeontx_bgx_port_stats_clr(nic->port_id);
+	return octeontx_bgx_port_stats_clr(nic->port_id);
 }
 
 static inline void
@@ -304,7 +308,7 @@ octeontx_dev_configure(struct rte_eth_dev *dev)
 
 	nic->num_tx_queues = dev->data->nb_tx_queues;
 
-	ret = octeontx_pko_channel_open(nic->port_id * PKO_VF_NUM_DQ,
+	ret = octeontx_pko_channel_open(nic->pko_vfid * PKO_VF_NUM_DQ,
 					nic->num_tx_queues,
 					nic->base_ochan);
 	if (ret) {
@@ -444,22 +448,22 @@ octeontx_dev_stop(struct rte_eth_dev *dev)
 	}
 }
 
-static void
+static int
 octeontx_dev_promisc_enable(struct rte_eth_dev *dev)
 {
 	struct octeontx_nic *nic = octeontx_pmd_priv(dev);
 
 	PMD_INIT_FUNC_TRACE();
-	octeontx_port_promisc_set(nic, 1);
+	return octeontx_port_promisc_set(nic, 1);
 }
 
-static void
+static int
 octeontx_dev_promisc_disable(struct rte_eth_dev *dev)
 {
 	struct octeontx_nic *nic = octeontx_pmd_priv(dev);
 
 	PMD_INIT_FUNC_TRACE();
-	octeontx_port_promisc_set(nic, 0);
+	return octeontx_port_promisc_set(nic, 0);
 }
 
 static int
@@ -545,13 +549,13 @@ octeontx_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	return octeontx_port_stats(nic, stats);
 }
 
-static void
+static int
 octeontx_dev_stats_reset(struct rte_eth_dev *dev)
 {
 	struct octeontx_nic *nic = octeontx_pmd_priv(dev);
 
 	PMD_INIT_FUNC_TRACE();
-	octeontx_port_stats_clr(nic);
+	return octeontx_port_stats_clr(nic);
 }
 
 static int
@@ -569,7 +573,7 @@ octeontx_dev_default_mac_addr_set(struct rte_eth_dev *dev,
 	return ret;
 }
 
-static void
+static int
 octeontx_dev_info(struct rte_eth_dev *dev,
 		struct rte_eth_dev_info *dev_info)
 {
@@ -600,6 +604,10 @@ octeontx_dev_info(struct rte_eth_dev *dev,
 
 	dev_info->rx_offload_capa = OCTEONTX_RX_OFFLOADS;
 	dev_info->tx_offload_capa = OCTEONTX_TX_OFFLOADS;
+	dev_info->rx_queue_offload_capa = OCTEONTX_RX_OFFLOADS;
+	dev_info->tx_queue_offload_capa = OCTEONTX_TX_OFFLOADS;
+
+	return 0;
 }
 
 static void
@@ -713,7 +721,7 @@ octeontx_dev_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qidx,
 	RTE_SET_USED(nb_desc);
 	RTE_SET_USED(socket_id);
 
-	dq_num = (nic->port_id * PKO_VF_NUM_DQ) + qidx;
+	dq_num = (nic->pko_vfid * PKO_VF_NUM_DQ) + qidx;
 
 	/* Socket id check */
 	if (socket_id != (unsigned int)SOCKET_ID_ANY &&
@@ -995,6 +1003,7 @@ octeontx_create(struct rte_vdev_device *dev, int port, uint8_t evdev,
 			int socket_id)
 {
 	int res;
+	size_t pko_vfid;
 	char octtx_name[OCTEONTX_MAX_NAME_LEN];
 	struct octeontx_nic *nic = NULL;
 	struct rte_eth_dev *eth_dev = NULL;
@@ -1033,7 +1042,15 @@ octeontx_create(struct rte_vdev_device *dev, int port, uint8_t evdev,
 		goto err;
 	}
 	data->dev_private = nic;
+	pko_vfid = octeontx_pko_get_vfid();
 
+	if (pko_vfid == SIZE_MAX) {
+		octeontx_log_err("failed to get pko vfid");
+		res = -ENODEV;
+		goto err;
+	}
+
+	nic->pko_vfid = pko_vfid;
 	nic->port_id = port;
 	nic->evdev = evdev;
 

@@ -7,6 +7,7 @@
 #define RTE_PMD_MLX5_DEFS_H_
 
 #include <rte_ethdev_driver.h>
+#include <rte_vxlan.h>
 
 #include "mlx5_autoconf.h"
 
@@ -58,6 +59,10 @@
 #define MLX5_PMD_SOFT_COUNTERS 1
 #endif
 
+/* Switch port ID parameters for bonding configurations. */
+#define MLX5_PORT_ID_BONDING_PF_MASK 0xf
+#define MLX5_PORT_ID_BONDING_PF_SHIFT 0xf
+
 /* Alarm timeout. */
 #define MLX5_ALARM_TIMEOUT_US 100000
 
@@ -92,6 +97,10 @@
 /* Maximum size of burst for vectorized Rx. */
 #define MLX5_VPMD_RX_MAX_BURST 64U
 
+/* Recommended optimal burst size. */
+#define MLX5_RX_DEFAULT_BURST 64U
+#define MLX5_TX_DEFAULT_BURST 64U
+
 /* Number of packets vectorized Rx can simultaneously process in a loop. */
 #define MLX5_VPMD_DESCS_PER_LOOP      4
 
@@ -100,6 +109,9 @@
 
 /* Timeout in seconds to get a valid link status. */
 #define MLX5_LINK_STATUS_TIMEOUT 10
+
+/* Number of times to retry retrieving the physical link information. */
+#define MLX5_GET_LINK_STATUS_RETRY_COUNT 3
 
 /* Maximum number of UAR pages used by a port,
  * These are the size and mask for an array of mutexes used to synchronize
@@ -114,6 +126,22 @@
  */
 #define MLX5_UAR_PAGE_NUM_MAX 64
 #define MLX5_UAR_PAGE_NUM_MASK ((MLX5_UAR_PAGE_NUM_MAX) - 1)
+
+/* Fields of memory mapping type in offset parameter of mmap() */
+#define MLX5_UAR_MMAP_CMD_SHIFT 8
+#define MLX5_UAR_MMAP_CMD_MASK 0xff
+
+/* Environment variable to control the doorbell register mapping. */
+#define MLX5_SHUT_UP_BF "MLX5_SHUT_UP_BF"
+#if defined(RTE_ARCH_ARM64)
+#define MLX5_SHUT_UP_BF_DEFAULT "0"
+#else
+#define MLX5_SHUT_UP_BF_DEFAULT "1"
+#endif
+
+#ifndef HAVE_MLX5DV_MMAP_GET_NC_PAGES_CMD
+#define MLX5_MMAP_GET_NC_PAGES_CMD 3
+#endif
 
 /* Log 2 of the default number of strides per WQE for Multi-Packet RQ. */
 #define MLX5_MPRQ_STRIDE_NUM_N 6U
@@ -132,6 +160,21 @@
 
 /* Cache size of mempool for Multi-Packet RQ. */
 #define MLX5_MPRQ_MP_CACHE_SZ 32U
+
+/* MLX5_DV_XMETA_EN supported values. */
+#define MLX5_XMETA_MODE_LEGACY 0
+#define MLX5_XMETA_MODE_META16 1
+#define MLX5_XMETA_MODE_META32 2
+
+/* MLX5_TX_DB_NC supported values. */
+#define MLX5_TXDB_CACHED 0
+#define MLX5_TXDB_NCACHED 1
+#define MLX5_TXDB_HEURISTIC 2
+
+/* Size of the simple hash table for metadata register table. */
+#define MLX5_FLOW_MREG_HTABLE_SZ 4096
+#define MLX5_FLOW_MREG_HNAME "MARK_COPY_TABLE"
+#define MLX5_DEFAULT_COPY_ID UINT32_MAX
 
 /* Definition of static_assert found in /usr/include/assert.h */
 #ifndef HAVE_STATIC_ASSERT
