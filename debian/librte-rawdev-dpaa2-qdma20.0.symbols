@@ -1,0 +1,16 @@
+librte_rawdev_dpaa2_qdma.so.20.0 librte-rawdev-dpaa2-qdma20.0 #MINVER#
+ DPDK_19.05@DPDK_19.05 19.08
+ rte_qdma_attr_get@DPDK_19.05 19.08
+ rte_qdma_configure@DPDK_19.05 19.08
+ rte_qdma_destroy@DPDK_19.05 19.08
+ rte_qdma_init@DPDK_19.05 19.08
+ rte_qdma_reset@DPDK_19.05 19.08
+ rte_qdma_start@DPDK_19.05 19.08
+ rte_qdma_stop@DPDK_19.05 19.08
+ rte_qdma_vq_create@DPDK_19.05 19.08
+ rte_qdma_vq_dequeue@DPDK_19.05 19.08
+ rte_qdma_vq_dequeue_multi@DPDK_19.05 19.08
+ rte_qdma_vq_destroy@DPDK_19.05 19.08
+ rte_qdma_vq_enqueue@DPDK_19.05 19.08
+ rte_qdma_vq_enqueue_multi@DPDK_19.05 19.08
+ rte_qdma_vq_stats@DPDK_19.05 19.08

@@ -1,0 +1,2 @@
+librte_pmd_bnx2x.so.20.0 librte-pmd-bnx2x20.0 #MINVER#
+ DPDK_2.1@DPDK_2.1 18.08

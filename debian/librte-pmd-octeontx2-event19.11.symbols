@@ -1,4 +1,0 @@
-librte_pmd_octeontx2_event.so.19.11 librte-pmd-octeontx2-event19.11 #MINVER#
- DPDK_19.08@DPDK_19.08 19.08
-# INFO: this library exports no symbols, essentially it is a driver that
-# registers itself on load and is then only driven by callbacks.
