@@ -1,0 +1,2 @@
+librte_pmd_octeontx2_crypto.so.19.11 librte-pmd-octeontx2-crypto19.11 #MINVER#
+ DPDK_18.11@DPDK_19.11 19.11

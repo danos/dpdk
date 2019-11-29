@@ -1956,11 +1956,25 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (TODO runtime library)
+Description: Data Plane Development Kit (events for octeontx2 pmd)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This package contains the runtime libraries for TODO.
+ This package contains the runtime libraries for events of octeontx2.
+
+Package: librte-pmd-octeontx2-crypto19.11
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/octeontx2.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (crypto for octeontx2 pmd)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for crypto of octeontx2.
 
 Package: librte-common-octeontx2-19.11
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1989,6 +2003,72 @@ Description: Data Plane Development Kit (librte-mempool-octeontx2 runtime librar
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte-mempool-octeontx2.
+
+Package: librte-pmd-qede19.11
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/nics/qede.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-pmd-qede runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_qede which is
+ The base driver is the backend module for the QLogic FastLinQ QL4xxxx
+ 25G/40G CNA family of adapters as well as their virtual functions (VF)
+ in SR-IOV context.
+
+Package: librte-pmd-nitrox19.11
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/cryptodevs/nitrox.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-pmd-nitrox runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_nitrox which is
+ The Nitrox crypto poll mode driver provides support for offloading
+ cryptographic operations to the NITROX V security processor
+
+Package: librte-pmd-pfe19.11
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: http://doc.dpdk.org/guides/nics/pfe.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-pmd-pfe runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_pfe which is
+ The PFE NIC PMD (librte_pmd_pfe) provides poll mode driver support for the
+ inbuilt NIC found in the NXP LS1012 SoC.
+
+Package: librte-pmd-hns3-19.11
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: http://doc.dpdk.org/guides/nics/hns3.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-pmd-hns3 runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_hns3 which is
+ The hns3 PMD (librte_pmd_hns3) provides poll mode driver support for the
+ inbuilt Hisilicon Network Subsystem(HNS) network engine found in the
+ Hisilicon Kunpeng 920 SoC
 
 Package: librte-rawdev-skeleton19.11
 Architecture: amd64 arm64 armhf i386 ppc64el
