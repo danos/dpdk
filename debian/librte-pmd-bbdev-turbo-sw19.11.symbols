@@ -1,0 +1,4 @@
+librte_pmd_bbdev_turbo_sw.so.19.11 librte-pmd-bbdev-turbo-sw19.11 #MINVER#
+ DPDK_18.02@DPDK_18.02 19.08
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

@@ -1,0 +1,10 @@
+librte_meter.so.19.11 librte-meter19.11 #MINVER#
+ DPDK_18.08@DPDK_18.08 18.08
+ DPDK_2.0@DPDK_2.0 16.04
+ EXPERIMENTAL@EXPERIMENTAL 19.08
+ rte_meter_srtcm_config@DPDK_2.0 16.04
+ rte_meter_srtcm_profile_config@DPDK_18.08 18.08
+ rte_meter_trtcm_config@DPDK_2.0 16.04
+ rte_meter_trtcm_profile_config@DPDK_18.08 18.08
+ rte_meter_trtcm_rfc4115_config@EXPERIMENTAL 19.08
+ rte_meter_trtcm_rfc4115_profile_config@EXPERIMENTAL 19.08

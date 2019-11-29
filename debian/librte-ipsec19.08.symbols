@@ -1,7 +1,0 @@
-librte_ipsec.so.19.08 librte-ipsec19.08 #MINVER#
- EXPERIMENTAL@EXPERIMENTAL 19.08
- rte_ipsec_sa_fini@EXPERIMENTAL 19.08
- rte_ipsec_sa_init@EXPERIMENTAL 19.08
- rte_ipsec_sa_size@EXPERIMENTAL 19.08
- rte_ipsec_sa_type@EXPERIMENTAL 19.08
- rte_ipsec_session_prepare@EXPERIMENTAL 19.08

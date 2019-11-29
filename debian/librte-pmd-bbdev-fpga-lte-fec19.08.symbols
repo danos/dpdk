@@ -1,4 +1,0 @@
-librte_pmd_bbdev_fpga_lte_fec.so.19.08 librte-pmd-bbdev-fpga-lte-fec19.08 #MINVER#
- DPDK_19.08@DPDK_19.08 19.08
-# INFO: this library exports no symbols, essentially it is a driver that
-# registers itself on load and is then only driven by callbacks.

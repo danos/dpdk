@@ -1,0 +1,4 @@
+librte_pmd_ipn3ke.so.19.11 librte-pmd-ipn3ke19.11 #MINVER#
+ DPDK_19.05@DPDK_19.05 19.08
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.
