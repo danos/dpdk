@@ -64,7 +64,6 @@ Recommends: librte-mempool19.11,
             python3-pyelftools,
 Suggests: dpdk-doc,
           dpdk-igb-uio-dkms (= ${binary:Version}),
-          dpdk-rte-kni-dkms (= ${binary:Version}),
           linux-image-generic,
           ${librte:Suggests},
 Breaks: dpdk-dev (<< 18.11-4~),
@@ -120,20 +119,6 @@ Description: Data Plane Development Kit (igb uio dkms)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the source code for the igb_uio kernel module.
-
-Package: dpdk-rte-kni-dkms
-Section: kernel
-Architecture: amd64 arm64 i386 ppc64el
-Depends: dkms,
-         libdpdk-dev (= ${binary:Version}),
-         libelf-dev,
-         make,
-         ${misc:Depends},
-Description: Data Plane Development Kit (rte kni dkms)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the source code for the rte_kni kernel module.
 
 Package: libdpdk-dev
 Section: libdevel
