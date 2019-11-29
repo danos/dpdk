@@ -1,3 +1,27 @@
+dpdk (19.11-1~git1) UNRELEASED; urgency=medium
+
+  * New upstream release 19.11; for a full list of changes see:
+    http://doc.dpdk.org/guides-19.08/rel_notes/release_19_08.html
+    - Includes d/p/avoid-as-needed-as-it-causes-overlinking.patch: fix
+      overlinking in software using the dpdk pkg-config (LP: #1841759)
+    - d/control: bump versions to 19.11
+    - d/*.symbols: bump for 19.11
+    - rte-kni module support dropped upstream, remove former package
+      dpdk-rte-kni-dkms
+    - d/p/fix-ppc64-mlx4-build.patch: drop patch now being upstream
+    - new Major ABI is set to 20.0 by upstream
+    - d/dpdk.lintian-overrides: it is ok that example shell scripts are
+      not executable
+    - d/control, d/*.symbols: new PMDs for qede pfe nitrox hns3 and
+      octeontx2-crypto
+    - d/control, d/*.symbols: new rte libraries rib and fib
+    - d/dpdk-dev.install: add new dpdk-test-sad
+    - d/rules: global ABI_VERSION now tracked in a file by upstream
+  * fixup package reference in debian/librte-common-octeontx2-19.11.symbols
+  * drop duplicate debian/update-control.py helper
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 29 Nov 2019 11:36:25 +0100
+
 dpdk (19.08-1~git1) UNRELEASED; urgency=medium
 
   [ Christian Ehrhardt ]
