@@ -17,6 +17,8 @@ dpdk (19.11-1~git1) UNRELEASED; urgency=medium
     - d/control, d/*.symbols: new rte libraries rib and fib
     - d/dpdk-dev.install: add new dpdk-test-sad
     - d/rules: global ABI_VERSION now tracked in a file by upstream
+    - d/control: add new build-dependencies libisal-dev, libfdt-dev
+      and libbpf-dev
   * fixup package reference in debian/librte-common-octeontx2-19.11.symbols
   * drop duplicate debian/update-control.py helper
 
