@@ -241,7 +241,7 @@ librte_eal.so.20.0 librte-eal20.0 #MINVER#
  rte_realloc_socket@EXPERIMENTAL 19.08
  rte_reciprocal_value@DPDK_20.0 19.11
  rte_reciprocal_value_u64@DPDK_20.0 19.11
- rte_rtm_supported@DPDK_20.0 19.11
+ (arch=amd64)rte_rtm_supported@DPDK_20.0 19.11
  rte_service_attr_get@DPDK_20.0 19.11
  rte_service_attr_reset_all@DPDK_20.0 19.11
  rte_service_component_register@DPDK_20.0 19.11
