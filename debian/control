@@ -1909,20 +1909,6 @@ Description: Data Plane Development Kit (librte-pmd-ice runtime library)
  .
  This package contains the runtime libraries for librte-pmd-ice.
 
-Package: librte-pmd-ipn3ke20.0
-Architecture: amd64 arm64 armhf i386 ppc64el
-Multi-Arch: same
-Homepage: https://doc.dpdk.org/guides/nics/ipn3ke.html
-Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
-         ${shlibs:Depends},
-Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-ipn3ke runtime library)
- DPDK is a set of libraries for fast packet processing. Applications run
- in user-space and communicate directly with dedicated network interfaces.
- .
- This package contains the runtime libraries for librte-pmd-ipn3ke.
-
 Package: librte-pmd-memif20.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
