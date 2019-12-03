@@ -10,9 +10,9 @@ librte_port.so.20.0 librte-port20.0 #MINVER#
  rte_port_fd_reader_ops@DPDK_20.0 19.11
  rte_port_fd_writer_nodrop_ops@DPDK_20.0 19.11
  rte_port_fd_writer_ops@DPDK_20.0 19.11
- rte_port_kni_reader_ops@DPDK_20.0 19.11
- rte_port_kni_writer_nodrop_ops@DPDK_20.0 19.11
- rte_port_kni_writer_ops@DPDK_20.0 19.11
+ (arch=!i386 !armhf)rte_port_kni_reader_ops@DPDK_20.0 19.11
+ (arch=!i386 !armhf)rte_port_kni_writer_nodrop_ops@DPDK_20.0 19.11
+ (arch=!i386 !armhf)rte_port_kni_writer_ops@DPDK_20.0 19.11
  rte_port_ring_multi_reader_ops@DPDK_20.0 19.11
  rte_port_ring_multi_writer_nodrop_ops@DPDK_20.0 19.11
  rte_port_ring_multi_writer_ops@DPDK_20.0 19.11
