@@ -1,4 +1,3 @@
 librte_pmd_octeontx.so.20.0 librte-pmd-octeontx20.0 #MINVER#
- DPDK_17.11@DPDK_17.11 17.11
- DPDK_18.02@DPDK_18.02 18.02
- rte_octeontx_pchan_map@DPDK_18.02 18.02
+ DPDK_20.0@DPDK_20.0 19.11
+ rte_octeontx_pchan_map@DPDK_20.0 19.11

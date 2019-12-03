@@ -1,2 +1,2 @@
 librte_pmd_ccp.so.20.0 librte-pmd-ccp20.0 #MINVER#
- DPDK_18.05@DPDK_18.05 18.05
+ DPDK_20.0@DPDK_20.0 19.11

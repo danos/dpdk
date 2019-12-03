@@ -1,4 +1,4 @@
 librte_rawdev_skeleton.so.20.0 librte-rawdev-skeleton20.0 #MINVER#
- DPDK_18.02@DPDK_18.02 18.02
+ DPDK_20.0@DPDK_20.0 19.11
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.

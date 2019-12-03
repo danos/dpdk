@@ -1,4 +1,4 @@
 librte_pmd_openssl.so.20.0 librte-pmd-openssl20.0 #MINVER#
- DPDK_16.11@DPDK_16.11 18.02
+ DPDK_20.0@DPDK_20.0 19.11
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.

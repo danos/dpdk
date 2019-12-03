@@ -1,5 +1,5 @@
 librte_pmd_atlantic.so.20.0 librte-pmd-atlantic20.0 #MINVER#
- DPDK_18.11@DPDK_18.11 18.11
+ DPDK_20.0@DPDK_20.0 19.11
  EXPERIMENTAL@EXPERIMENTAL 19.08
  rte_pmd_atl_macsec_config_rxsc@EXPERIMENTAL 19.08
  rte_pmd_atl_macsec_config_txsc@EXPERIMENTAL 19.08

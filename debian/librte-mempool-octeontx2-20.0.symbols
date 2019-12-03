@@ -1,4 +1,4 @@
 librte_mempool_octeontx2.so.20.0 librte-mempool-octeontx2-20.0 #MINVER#
- DPDK_19.08@DPDK_19.08 19.08
- otx2_npa_lf_fini@DPDK_19.08 19.08
- otx2_npa_lf_init@DPDK_19.08 19.08
+ DPDK_20.0@DPDK_20.0 19.11
+ otx2_npa_lf_fini@DPDK_20.0 19.11
+ otx2_npa_lf_init@DPDK_20.0 19.11
