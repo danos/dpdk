@@ -19,7 +19,6 @@ dpdk (19.11-1~git1) UNRELEASED; urgency=medium
     - d/rules: global ABI_VERSION now tracked in a file by upstream
     - d/control: add new build-dependencies libisal-dev, libfdt-dev
       and libbpf-dev
-    - d/control: bump minimium meson version
     - d/control: drop no more built librte-pmd-ipn3ke20.0
     - d/control: add new PMDs of 19.11 af-xdp and isal
   * fixup package reference in debian/librte-common-octeontx2-19.11.symbols
