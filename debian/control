@@ -152,7 +152,7 @@ Description: Data Plane Development Kit (basic development files)
  baseline.
  This is required for a number of static inline functions in the public headers.
 
-Package: librte-bbdev20.0
+Package: librte-bbdev0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__bbdev_8h.html
@@ -165,6 +165,7 @@ Description: Data Plane Development Kit (librte-bbdev runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_bbdev.
+ FYI: This library still is highly experimental.
 
 Package: librte-ethdev20.0
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -350,7 +351,7 @@ Description: Data Plane Development Kit (librte-eal runtime library)
  .
  This package contains the runtime libraries for librte_eal.
 
-Package: librte-flow-classify20.0
+Package: librte-flow-classify0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__flow__classify_8h.html
@@ -362,6 +363,7 @@ Description: Data Plane Development Kit (librte-flow-classify runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_flow_classify.
+ FYI: This library still is highly experimental.
 
 Package: librte-gro20.0
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -602,7 +604,7 @@ Description: Data Plane Development Kit (librte-net runtime library)
  contains protocol numbers (for use in IP headers), IP-related macros,
  IPv4/IPv6 header structures and TCP, UDP and SCTP header structures.
 
-Package: librte-bpf20.0
+Package: librte-bpf0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/prog_guide/bpf_lib.html
@@ -619,8 +621,9 @@ Description: Data Plane Development Kit (librte-bpf runtime library)
  The DPDK provides an BPF library that gives the ability to load and
  execute Enhanced Berkeley Packet Filter (eBPF) bytecode within user-space
  dpdk application.
+ FYI: This library still is highly experimental.
 
-Package: librte-compressdev20.0
+Package: librte-compressdev0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/compressdevs/isal.html
@@ -635,8 +638,9 @@ Description: Data Plane Development Kit (librte-compressdev runtime library)
  This package contains the runtime libraries for librte_compressdev.
  .
  Provides poll mode compression & decompression driver support.
+ FYI: This library still is highly experimental.
 
-Package: librte-ipsec20.0
+Package: librte-ipsec0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/prog_guide/ipsec_lib.html
@@ -649,8 +653,9 @@ Description: Data Plane Development Kit (librte-ipsec runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte-ipsec.
+ FYI: This library still is highly experimental.
 
-Package: librte-rcu20.0
+Package: librte-rcu0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/prog_guide/rcu_lib.html
@@ -663,8 +668,9 @@ Description: Data Plane Development Kit (librte-rcu runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte-rcu.
+ FYI: This library still is highly experimental.
 
-Package: librte-stack20.0
+Package: librte-stack0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/prog_guide/stack_lib.html
@@ -677,8 +683,9 @@ Description: Data Plane Development Kit (librte-stack runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte-stack.
+ FYI: This library still is highly experimental.
 
-Package: librte-fib20.0
+Package: librte-fib0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/api/rte__fib_8h.html
@@ -692,8 +699,9 @@ Description: Data Plane Development Kit (libfib runtime library)
  .
  This package contains the runtime libraries for libfib.
  FIB (Forwarding information base) implementation for IPv4 Longest Prefix Match
+ FYI: This library still is highly experimental.
 
-Package: librte-rib20.0
+Package: librte-rib0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/api/rte__rib_8h.html
@@ -707,6 +715,7 @@ Description: Data Plane Development Kit (librib runtime library)
  .
  This package contains the runtime libraries for librib.
  RIB is a Level compressed tree implementation for IPv4 Longest Prefix Match
+ FYI: This library still is highly experimental.
 
 Package: librte-pmd-af-packet20.0
 Architecture: amd64 arm64 armhf i386 ppc64el
@@ -1281,7 +1290,7 @@ Description: Data Plane Development Kit (librte_table runtime library)
  .
  This package contains the runtime libraries for librte_table.
 
-Package: librte-telemetry20.0
+Package: librte-telemetry0.200
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__telemetry_8h.html
@@ -1294,6 +1303,7 @@ Description: Data Plane Development Kit (librte_telemetry runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte_telemetry.
+ FYI: This library still is highly experimental.
 
 Package: librte-timer20.0
 Architecture: amd64 arm64 armhf i386 ppc64el
