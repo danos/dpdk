@@ -7,7 +7,7 @@ dpdk (19.11-1~git1) UNRELEASED; urgency=medium
     - d/control: bump versions to 19.11
     - d/*.symbols: bump for 19.11
     - rte-kni module support dropped upstream, remove former package
-      dpdk-rte-kni-dkms
+      dpdk-rte-kni-dkms (LP: #1853195)
     - d/p/fix-ppc64-mlx4-build.patch: drop patch now being upstream
     - new Major ABI is set to 20.0 by upstream
     - d/dpdk.lintian-overrides: it is ok that example shell scripts are
