@@ -2059,6 +2059,41 @@ Description: Data Plane Development Kit (librte-pmd-hns3 runtime library)
  inbuilt Hisilicon Network Subsystem(HNS) network engine found in the
  Hisilicon Kunpeng 920 SoC
 
+Package: librte-pmd-af-xdp20.0
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/af_xdp.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-pmd-af-xdp runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_af-xdp.
+ AF_XDP is an address family that is optimized for high performance packet
+ processing. AF_XDP sockets enable the possibility for XDP program to redirect
+ packets to a memory buffer in userspace.
+
+Package: librte-pmd-isal20.0
+Architecture: amd64 i386
+Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/compressdevs/isal.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-pmd-isal runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_isal.
+ The ISA-L PMD (librte_pmd_isal_comp) provides poll mode compression &
+ decompression driver support for utilizing Intel ISA-L library, which
+ implements the deflate algorithm for both Deflate(compression) and
+ Inflate(decompression).
+
 Package: librte-rawdev-skeleton20.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
