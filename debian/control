@@ -16,7 +16,7 @@ Build-Depends: debhelper (>= 10.3~),
                libfdt-dev,
                libibverbs-dev (>= 16~),
                libipsec-mb-dev [amd64],
-               libisal-dev,
+               libisal-dev [amd64],
                libjansson-dev,
                libmnl-dev,
                libnuma-dev,
@@ -2077,7 +2077,7 @@ Description: Data Plane Development Kit (librte-pmd-af-xdp runtime library)
  packets to a memory buffer in userspace.
 
 Package: librte-pmd-isal20.0
-Architecture: amd64 i386
+Architecture: amd64
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/compressdevs/isal.html
 Pre-Depends: ${misc:Pre-Depends},
