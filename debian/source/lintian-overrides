@@ -1,0 +1,3 @@
+# dpdk is a massive package by the way as defined by upstream
+# accept the long lists
+dpdk source: field-too-long
