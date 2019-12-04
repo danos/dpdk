@@ -134,6 +134,7 @@ Depends: libbpf-dev
          libipsec-mb-dev [amd64],
          libisal-dev [amd64],
          libelf-dev,
+         libfdt-dev,
          libjansson-dev,
          libmnl-dev,
          libnuma-dev,
