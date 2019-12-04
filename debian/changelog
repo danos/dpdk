@@ -24,6 +24,7 @@ dpdk (19.11-1~git1) UNRELEASED; urgency=medium
     - d/rules: add ability to handle fully experimental libs to be soname zero
     - d/control: experimental only libs now are on an soname 0.200 (bbdev, bpf,
       compressdev, fib, flow-classify, ipsec, rcu, rib, stack, telemetry)
+    - d/control: let libdpdk-dev depend on the new build dependencies
   * fixup package reference in debian/librte-common-octeontx2-19.11.symbols
   * drop duplicate debian/update-control.py helper
 
