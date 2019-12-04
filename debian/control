@@ -128,7 +128,7 @@ Section: libdevel
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
-Depends: libbpf-dev
+Depends: libbpf-dev,
          libbsd-dev,
          libibverbs-dev,
          libipsec-mb-dev [amd64],
