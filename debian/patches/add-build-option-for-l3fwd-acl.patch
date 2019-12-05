@@ -1,0 +1,10 @@
+Index: dpdk/meson_options.txt
+===================================================================
+--- dpdk.orig/meson_options.txt	2019-12-05 16:58:48.000000000 +0000
++++ dpdk/meson_options.txt	2019-12-05 17:10:22.448812696 +0000
+@@ -30,4 +30,4 @@
+ 	description: 'build unit tests')
+ option('max_ethports', type: 'string', value: '32',
+ 	description: 'maximum number of Ethernet devices in EAL')
+-option('examples', type: 'string', value: 'l3fwd')
++option('examples', type: 'string', value: 'l3fwd,l3fwd-acl')

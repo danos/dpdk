@@ -182,6 +182,7 @@ ifneq (,$(KVERS))
 	echo "{\"dpdk-modules-$(KVERS)\": { \"files\": [ {\"sig_type\": \"linux-module\", \"file\": \"lib/modules/$(KVERS)/extra/dpdk/igb_uio.ko\"} ]}}" > debian/files.json
 endif
 	cp obj-$(DEB_HOST_MULTIARCH)/examples/dpdk-l3fwd $(CURDIR)/debian/tmp/usr/bin
+	cp obj-$(DEB_HOST_MULTIARCH)/examples/dpdk-l3fwd-acl $(CURDIR)/debian/tmp/usr/bin
 	cp usertools/dpdk-setup.sh $(CURDIR)/debian/tmp/usr/bin
 	cp usertools/cpu_layout.py $(CURDIR)/debian/tmp/usr/bin
 

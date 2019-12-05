@@ -1,4 +1,5 @@
 usr/bin/dpdk-testpmd
 usr/bin/dpdk-l3fwd
+usr/bin/dpdk-l3fwd-acl
 usr/bin/dpdk-setup.sh
 usr/bin/cpu_layout.py
