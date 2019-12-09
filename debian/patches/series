@@ -35,6 +35,7 @@ bonding-polled-slave-muxstate.patch
 # PF-VF fixes for Intel drivers
 ixgbe_filter_unknown_vlan_hdr.patch
 
+mlx5-cache-associated-network-device-index.patch
 mlx5-fix-eagain-on-admin-down.patch
 bypass-mlx5-extended-stats.patch
 mlx5-debug.patch
