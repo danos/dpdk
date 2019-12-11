@@ -1,0 +1,69 @@
+From 51af08e0ef5919bcd4eb8e325c500f589e4e8e6c Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Wed, 11 Dec 2019 15:42:44 -0500
+Subject: [PATCH] net/bonding: advertise rx vlan filter capability
+
+The bonding driver has the ability to do RX vlan filtering and pass
+that configuration to the slaves.
+
+Fixes: c771e4ef3898 ("net/bonding: enable slave VLAN filter")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chas Williams <chas3@att.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1778,6 +1778,7 @@ slave_configure(struct rte_eth_dev *bond
+ 	int errval;
+ 	uint16_t q_id;
+ 	struct rte_flow_error flow_error;
++	struct rte_eth_dev_info slave_info;
+ 
+ 	struct bond_dev_private *internals = bonded_eth_dev->data->dev_private;
+ 
+@@ -1805,13 +1806,19 @@ slave_configure(struct rte_eth_dev *bond
+ 				bonded_eth_dev->data->dev_conf.rxmode.mq_mode;
+ 	}
+ 
+-	if (bonded_eth_dev->data->dev_conf.rxmode.offloads &
+-			DEV_RX_OFFLOAD_VLAN_FILTER)
++	rte_eth_dev_info_get(slave_eth_dev->data->port_id, &slave_info);
++
++	if ((bonded_eth_dev->data->dev_conf.rxmode.offloads &
++	     DEV_RX_OFFLOAD_VLAN_FILTER) &&
++            (slave_info.rx_offload_capa & DEV_RX_OFFLOAD_VLAN_FILTER)) {
+ 		slave_eth_dev->data->dev_conf.rxmode.offloads |=
+ 				DEV_RX_OFFLOAD_VLAN_FILTER;
+-	else
++	} else {
++		bonded_eth_dev->data->dev_conf.rxmode.offloads &=
++				~DEV_RX_OFFLOAD_VLAN_FILTER;
+ 		slave_eth_dev->data->dev_conf.rxmode.offloads &=
+ 				~DEV_RX_OFFLOAD_VLAN_FILTER;
++	}
+ 
+ 	nb_rx_queues = bonded_eth_dev->data->nb_rx_queues;
+ 	nb_tx_queues = bonded_eth_dev->data->nb_tx_queues;
+@@ -3091,7 +3098,7 @@ bond_alloc(struct rte_vdev_device *dev,
+ 
+ 	internals->slave_count = 0;
+ 	internals->active_slave_count = 0;
+-	internals->rx_offload_capa = 0;
++	internals->rx_offload_capa = DEV_RX_OFFLOAD_VLAN_FILTER;
+ 	internals->tx_offload_capa = 0;
+ 	internals->rx_queue_offload_capa = 0;
+ 	internals->tx_queue_offload_capa = 0;
+--- a/drivers/net/bonding/rte_eth_bond_api.c
++++ b/drivers/net/bonding/rte_eth_bond_api.c
+@@ -690,7 +690,7 @@ __eth_bond_slave_remove_lock_free(uint16
+ 					sizeof(*(rte_eth_devices[bonded_port_id].data->mac_addrs)));
+ 	}
+ 	if (internals->slave_count == 0) {
+-		internals->rx_offload_capa = 0;
++		internals->rx_offload_capa = DEV_RX_OFFLOAD_VLAN_FILTER;
+ 		internals->tx_offload_capa = 0;
+ 		internals->rx_queue_offload_capa = 0;
+ 		internals->tx_queue_offload_capa = 0;
