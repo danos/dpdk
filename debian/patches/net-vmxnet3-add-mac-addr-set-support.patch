@@ -1,0 +1,156 @@
+net/vmxnet3: add support for mac_addr_add/remove
+
+Adding a slave interface fails because add mac address is rejected
+by vmxnet3 driver.
+This adds support for the .mac_addr_add and .mac_addr_remove APIs
+by setting the interface into promiscuous mode when additional mac
+addresses have been added over and above the default one.
+Space is allocated to hold the additional addresses so that the
+get_mac_addr_index() function works.
+
+Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
+---
+ drivers/net/vmxnet3/vmxnet3_ethdev.c |   66 +++++++++++++++++++++++++++++++++--
+ drivers/net/vmxnet3/vmxnet3_ethdev.h |    4 +-
+ 2 files changed, 67 insertions(+), 3 deletions(-)
+
+--- a/drivers/net/vmxnet3/vmxnet3_ethdev.c
++++ b/drivers/net/vmxnet3/vmxnet3_ethdev.c
+@@ -67,7 +67,9 @@ static int vmxnet3_dev_start(struct rte_
+ static void vmxnet3_dev_stop(struct rte_eth_dev *dev);
+ static void vmxnet3_dev_close(struct rte_eth_dev *dev);
+ static void vmxnet3_dev_set_rxmode(struct vmxnet3_hw *hw, uint32_t feature, int set);
++static void __vmxnet3_dev_promiscuous_enable(struct rte_eth_dev *dev);
+ static void vmxnet3_dev_promiscuous_enable(struct rte_eth_dev *dev);
++static void __vmxnet3_dev_promiscuous_disable(struct rte_eth_dev *dev);
+ static void vmxnet3_dev_promiscuous_disable(struct rte_eth_dev *dev);
+ static void vmxnet3_dev_allmulticast_enable(struct rte_eth_dev *dev);
+ static void vmxnet3_dev_allmulticast_disable(struct rte_eth_dev *dev);
+@@ -93,6 +95,10 @@ static int vmxnet3_dev_vlan_filter_set(s
+ static int vmxnet3_dev_vlan_offload_set(struct rte_eth_dev *dev, int mask);
+ static int vmxnet3_mac_addr_set(struct rte_eth_dev *dev,
+ 				 struct ether_addr *mac_addr);
++static int
++vmxnet3_mac_addr_add(struct rte_eth_dev *dev, struct ether_addr *mac_addr,
++		     uint32_t index, __rte_unused uint32_t pool);
++static void vmxnet3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index);
+ static void vmxnet3_interrupt_handler(void *param);
+ 
+ int vmxnet3_logtype_init;
+@@ -123,6 +129,8 @@ static const struct eth_dev_ops vmxnet3_
+ 	.xstats_get           = vmxnet3_dev_xstats_get,
+ 	.stats_reset          = vmxnet3_dev_stats_reset,
+ 	.mac_addr_set         = vmxnet3_mac_addr_set,
++	.mac_addr_add         = vmxnet3_mac_addr_add,
++	.mac_addr_remove      = vmxnet3_mac_addr_remove,
+ 	.dev_infos_get        = vmxnet3_dev_info_get,
+ 	.dev_supported_ptypes_get = vmxnet3_dev_supported_ptypes_get,
+ 	.vlan_filter_set      = vmxnet3_dev_vlan_filter_set,
+@@ -1195,6 +1203,37 @@ vmxnet3_mac_addr_set(struct rte_eth_dev
+ 	return 0;
+ }
+ 
++static int
++vmxnet3_mac_addr_add(struct rte_eth_dev *dev, struct ether_addr *mac_addr,
++		     uint32_t index, __rte_unused uint32_t pool)
++{
++	struct vmxnet3_hw *hw = dev->data->dev_private;
++
++	/* Index 0 holds the default address */
++	if (index == 0 || index >= VMXNET3_MAX_MAC_ADDRS)
++		return -ENOSPC;
++	ether_addr_copy(mac_addr, &dev->data->mac_addrs[index]);
++	if (hw->extra_mac_addresses == 0)
++		__vmxnet3_dev_promiscuous_enable(dev);
++	hw->extra_mac_addresses |= (1 << index);
++
++	return 0;
++}
++
++static void
++vmxnet3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
++{
++	struct vmxnet3_hw *hw = dev->data->dev_private;
++
++	/* Index 0 holds the default address */
++	if (index == 0 || index >= VMXNET3_MAX_MAC_ADDRS)
++		return;
++	memset(&dev->data->mac_addrs[index], 0, ETHER_ADDR_LEN);
++	hw->extra_mac_addresses &= ~(1 << index);
++	if (hw->extra_mac_addresses == 0 && !hw->promiscuous_enabled)
++		__vmxnet3_dev_promiscuous_disable(dev);
++}
++
+ /* return 0 means link status changed, -1 means not changed */
+ static int
+ __vmxnet3_dev_link_update(struct rte_eth_dev *dev,
+@@ -1244,7 +1283,7 @@ vmxnet3_dev_set_rxmode(struct vmxnet3_hw
+ 
+ /* Promiscuous supported only if Vmxnet3_DriverShared is initialized in adapter */
+ static void
+-vmxnet3_dev_promiscuous_enable(struct rte_eth_dev *dev)
++__vmxnet3_dev_promiscuous_enable(struct rte_eth_dev *dev)
+ {
+ 	struct vmxnet3_hw *hw = dev->data->dev_private;
+ 	uint32_t *vf_table = hw->shared->devRead.rxFilterConf.vfTable;
+@@ -1256,9 +1295,18 @@ vmxnet3_dev_promiscuous_enable(struct rt
+ 			       VMXNET3_CMD_UPDATE_VLAN_FILTERS);
+ }
+ 
++static void
++vmxnet3_dev_promiscuous_enable(struct rte_eth_dev *dev)
++{
++	struct vmxnet3_hw *hw = dev->data->dev_private;
++
++	hw->promiscuous_enabled = 1;
++	__vmxnet3_dev_promiscuous_enable(dev);
++}
++
+ /* Promiscuous supported only if Vmxnet3_DriverShared is initialized in adapter */
+ static void
+-vmxnet3_dev_promiscuous_disable(struct rte_eth_dev *dev)
++__vmxnet3_dev_promiscuous_disable(struct rte_eth_dev *dev)
+ {
+ 	struct vmxnet3_hw *hw = dev->data->dev_private;
+ 	uint32_t *vf_table = hw->shared->devRead.rxFilterConf.vfTable;
+@@ -1273,6 +1321,20 @@ vmxnet3_dev_promiscuous_disable(struct r
+ 			       VMXNET3_CMD_UPDATE_VLAN_FILTERS);
+ }
+ 
++static void
++vmxnet3_dev_promiscuous_disable(struct rte_eth_dev *dev)
++{
++	struct vmxnet3_hw *hw = dev->data->dev_private;
++
++	hw->promiscuous_enabled = 0;
++
++	/* promiscuous still in use by vmxnet3_mac_addr_add() */
++	if (hw->extra_mac_addresses)
++		return;
++
++	__vmxnet3_dev_promiscuous_disable(dev);
++}
++
+ /* Allmulticast supported only if Vmxnet3_DriverShared is initialized in adapter */
+ static void
+ vmxnet3_dev_allmulticast_enable(struct rte_eth_dev *dev)
+--- a/drivers/net/vmxnet3/vmxnet3_ethdev.h
++++ b/drivers/net/vmxnet3/vmxnet3_ethdev.h
+@@ -7,7 +7,7 @@
+ 
+ #include <rte_io.h>
+ 
+-#define VMXNET3_MAX_MAC_ADDRS 1
++#define VMXNET3_MAX_MAC_ADDRS 10
+ 
+ /* UPT feature to negotiate */
+ #define VMXNET3_F_RXCSUM      0x0001
+@@ -66,6 +66,8 @@ struct vmxnet3_hw {
+ 	uint16_t subsystem_device_id;
+ 	uint16_t subsystem_vendor_id;
+ 	bool adapter_stopped;
++	bool promiscuous_enabled;
++	uint32_t extra_mac_addresses;
+ 
+ 	uint8_t perm_addr[ETHER_ADDR_LEN];
+ 	uint8_t num_tx_queues;
