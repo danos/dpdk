@@ -36,7 +36,6 @@ bonding-polled-slave-muxstate.patch
 ixgbe_filter_unknown_vlan_hdr.patch
 
 mlx5-cache-associated-network-device-index.patch
-mlx5-fix-eagain-on-admin-down.patch
 bypass-mlx5-extended-stats.patch
 mlx5-debug.patch
 mlx5-skip-legacy-ethtool.patch
