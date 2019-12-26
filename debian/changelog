@@ -1,3 +1,10 @@
+dpdk (19.11-2) experimental; urgency=medium
+
+  * dh-missing: ignore examples directory, as they are already installed
+    manually. (Closes: #947371)
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 26 Dec 2019 15:30:15 +0100
+
 dpdk (19.11-1) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
