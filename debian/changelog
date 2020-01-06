@@ -1,3 +1,12 @@
+dpdk (18.11.5-1vyatta6) unstable; urgency=medium
+
+  [ George Wilkie ]
+  * net/vmxnet3: add support for mac_addr_add/remove (Fixes: VRVDR-49403)
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 06 Jan 2020 11:32:57 -0500
+
 dpdk (18.11.5-1vyatta5) unstable; urgency=medium
 
   [ Mike Manning ]
