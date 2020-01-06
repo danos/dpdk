@@ -1,3 +1,12 @@
+dpdk (18.11.5-1vyatta5) unstable; urgency=medium
+
+  [ Mike Manning ]
+  * net/mlx5: fix link speed info when link is down
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 06 Jan 2020 08:50:10 -0500
+
 dpdk (18.11.5-1vyatta4) unstable; urgency=medium
 
   [ Charles (Chas) Williams ]
