@@ -47,7 +47,7 @@ fi
 # - pci doesn't initialize in all virt env causing command not found issues
 # - rather slow performance tests not suited for regular build associated tests: ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf
 
-python "/usr/share/dpdk/test/autotest.py" \
+python3 "/usr/share/dpdk/test/autotest.py" \
     "/usr/bin/dpdk-test" \
     "-KNI,power_acpi_cpufreq,power_kvm_vm,IVSHMEM,eal_flags,pci,ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf" \
 
