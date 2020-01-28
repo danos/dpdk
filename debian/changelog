@@ -1,3 +1,9 @@
+dpdk (19.11-3) experimental; urgency=medium
+
+  * d/p/test: transition to python3
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 28 Jan 2020 13:34:07 +0200
+
 dpdk (19.11-2) experimental; urgency=medium
 
   * dh-missing: ignore examples directory, as they are already installed
