@@ -1,3 +1,9 @@
+dpdk (18.11.5-1vyatta7) unstable; urgency=medium
+
+  * net/bonding: advertise rx vlan filter capability
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 11 Feb 2020 10:52:00 -0500
+
 dpdk (18.11.5-1vyatta6) unstable; urgency=medium
 
   [ George Wilkie ]
