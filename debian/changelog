@@ -1,3 +1,10 @@
+dpdk (18.11.6-1vyatta1) unstable; urgency=medium
+
+  * Merge tag 'v18.11.6' from dpdk-stable into branch 18.11.x
+  * Update local patches for latest stable release (Bugfix: VRVDR-50189)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 25 Feb 2020 10:46:55 -0500
+
 dpdk (18.11.5-1vyatta7) unstable; urgency=medium
 
   * net/bonding: advertise rx vlan filter capability
