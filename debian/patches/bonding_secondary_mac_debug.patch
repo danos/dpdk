@@ -4,8 +4,8 @@
 
 --- a/drivers/net/bonding/rte_eth_bond_pmd.c
 +++ b/drivers/net/bonding/rte_eth_bond_pmd.c
-@@ -384,6 +384,22 @@
- 	return total_tx_count;
+@@ -252,6 +252,23 @@ bond_ethdev_8023ad_flow_set(struct rte_e
+ 	return 0;
  }
  
 +static uint8_t
@@ -24,10 +24,11 @@
 +	}
 +	return 0;
 +}
- 
- static uint16_t
- bond_ethdev_rx_burst_8023ad(void *queue, struct rte_mbuf **bufs,
-@@ -452,7 +468,7 @@
++
+ static inline uint16_t
+ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+ 		bool dedicated_rxq)
+@@ -320,7 +337,7 @@ rx_burst_8023ad(void *queue, struct rte_
  				!collecting ||
  				(!promisc &&
  				 !is_multicast_ether_addr(&hdr->d_addr) &&
@@ -36,3 +37,11 @@
  						     &hdr->d_addr)))) {
  
  				if (hdr->ether_type == ether_type_slow_be) {
+@@ -650,7 +667,6 @@ ipv6_hash(struct ipv6_hdr *ipv6_hdr)
+ 			(word_src_addr[3] ^ word_dst_addr[3]);
+ }
+ 
+-
+ void
+ burst_xmit_l2_hash(struct rte_mbuf **buf, uint16_t nb_pkts,
+ 		uint16_t slave_count, uint16_t *slaves)

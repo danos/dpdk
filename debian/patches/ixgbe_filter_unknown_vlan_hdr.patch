@@ -33,7 +33,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	.rx_queue_release     = ixgbe_dev_rx_queue_release,
  	.rx_descriptor_done   = ixgbe_dev_rx_descriptor_done,
  	.rx_descriptor_status = ixgbe_dev_rx_descriptor_status,
-@@ -1102,7 +1102,7 @@ eth_ixgbe_dev_init(struct rte_eth_dev *e
+@@ -1104,7 +1104,7 @@ eth_ixgbe_dev_init(struct rte_eth_dev *e
  				     "Using default TX function.");
  		}
  
@@ -42,7 +42,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  		return 0;
  	}
-@@ -1631,7 +1631,7 @@ eth_ixgbevf_dev_init(struct rte_eth_dev
+@@ -1636,7 +1636,7 @@ eth_ixgbevf_dev_init(struct rte_eth_dev
  				     "No TX queues configured yet. Using default TX function.");
  		}
  
@@ -51,7 +51,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  		return 0;
  	}
-@@ -1899,8 +1899,8 @@ ixgbe_vlan_filter_set(struct rte_eth_dev
+@@ -1904,8 +1904,8 @@ ixgbe_vlan_filter_set(struct rte_eth_dev
  	uint32_t vid_idx;
  	uint32_t vid_bit;
  
@@ -62,9 +62,9 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	vfta = IXGBE_READ_REG(hw, IXGBE_VFTA(vid_idx));
  	if (on)
  		vfta |= vid_bit;
-@@ -3878,7 +3878,9 @@ ixgbe_dev_supported_ptypes_get(struct rt
+@@ -3896,7 +3896,9 @@ ixgbe_dev_supported_ptypes_get(struct rt
  
- #if defined(RTE_ARCH_X86)
+ #if defined(RTE_ARCH_X86) || defined(RTE_MACHINE_CPUFLAG_NEON)
  	if (dev->rx_pkt_burst == ixgbe_recv_pkts_vec ||
 -	    dev->rx_pkt_burst == ixgbe_recv_scattered_pkts_vec)
 +	    dev->rx_pkt_burst == ixgbe_recv_scattered_pkts_vec ||
@@ -73,7 +73,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  		return ptypes;
  #endif
  	return NULL;
-@@ -5328,8 +5330,8 @@ ixgbevf_vlan_filter_set(struct rte_eth_d
+@@ -5351,8 +5353,8 @@ ixgbevf_vlan_filter_set(struct rte_eth_d
  		PMD_INIT_LOG(ERR, "Unable to set VF vlan");
  		return ret;
  	}
@@ -86,7 +86,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	if (on)
 --- a/drivers/net/ixgbe/ixgbe_ethdev.h
 +++ b/drivers/net/ixgbe/ixgbe_ethdev.h
-@@ -576,6 +576,11 @@ int  ixgbe_dev_rx_queue_setup(struct rte
+@@ -586,6 +586,11 @@ int  ixgbe_dev_rx_queue_setup(struct rte
  		const struct rte_eth_rxconf *rx_conf,
  		struct rte_mempool *mb_pool);
  
@@ -98,7 +98,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  int  ixgbe_dev_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id,
  		uint16_t nb_tx_desc, unsigned int socket_id,
  		const struct rte_eth_txconf *tx_conf);
-@@ -787,4 +792,37 @@ ixgbe_ethertype_filter_remove(struct ixg
+@@ -807,4 +812,37 @@ ixgbe_ethertype_filter_remove(struct ixg
  	return idx;
  }
  
@@ -536,7 +536,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  		struct rte_mbuf *pkt, uint64_t flags)
 --- a/drivers/net/ixgbe/ixgbe_rxtx_vec_neon.c
 +++ b/drivers/net/ixgbe/ixgbe_rxtx_vec_neon.c
-@@ -149,6 +149,9 @@ static inline uint16_t
+@@ -211,6 +211,9 @@ static inline uint16_t
  _recv_raw_pkts_vec(struct ixgbe_rx_queue *rxq, struct rte_mbuf **rx_pkts,
  		   uint16_t nb_pkts, uint8_t *split_packet)
  {
@@ -546,7 +546,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	volatile union ixgbe_adv_rx_desc *rxdp;
  	struct ixgbe_rx_entry *sw_ring;
  	uint16_t nb_pkts_recd;
-@@ -272,8 +275,10 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue
+@@ -333,8 +336,10 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue
  		/* D.3 copy final 3,4 data to rx_pkts */
  		vst1q_u8((void *)&rx_pkts[pos + 3]->rx_descriptor_fields1,
  			 pkt_mb4);
@@ -557,7 +557,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  		/* D.2 pkt 1,2 set in_port/nb_seg and remove crc */
  		tmp = vsubq_u16(vreinterpretq_u16_u8(pkt_mb2), crc_adjust);
-@@ -294,8 +299,10 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue
+@@ -355,8 +360,10 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue
  		/* D.3 copy final 1,2 data to rx_pkts */
  		vst1q_u8((uint8_t *)&rx_pkts[pos + 1]->rx_descriptor_fields1,
  			 pkt_mb2);
@@ -566,5 +566,5 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  			 pkt_mb1);
 +		ixgbe_unknown_vlan_sw_filter_hdr(rx_pkts[pos], vfta, rxq);
  
- 		stat &= IXGBE_VPMD_DESC_DD_MASK;
+ 		desc_to_ptype_v(descs, rxq->pkt_type_mask, &rx_pkts[pos]);
  

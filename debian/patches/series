@@ -1,7 +1,6 @@
 # Patches for DPDK
 0001-net-bonding-advertise-rx-vlan-filter-capability.patch
 meson-build-fixes.patch
-igb-reset-phy-check-in-dev-stop-close.patch
 
 # Backport from dpdk master
 
