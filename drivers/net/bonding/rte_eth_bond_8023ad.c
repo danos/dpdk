@@ -638,7 +638,7 @@ tx_machine(struct bond_dev_private *internals, uint16_t slave_id)
 	SM_FLAG_CLR(port, NTT);
 }
 
-static uint8_t
+static uint16_t
 max_index(uint64_t *a, int n)
 {
 	if (n <= 0)
@@ -669,11 +669,11 @@ selection_logic(struct bond_dev_private *internals, uint16_t slave_id)
 	struct port *agg, *port;
 	uint16_t slaves_count, new_agg_id, i, j = 0;
 	uint16_t *slaves;
-	uint64_t agg_bandwidth[8] = {0};
-	uint64_t agg_count[8] = {0};
+	uint64_t agg_bandwidth[RTE_MAX_ETHPORTS] = {0};
+	uint64_t agg_count[RTE_MAX_ETHPORTS] = {0};
 	uint16_t default_slave = 0;
-	uint8_t mode_count_id, mode_band_id;
 	struct rte_eth_link link_info;
+	uint16_t agg_new_idx = 0;
 
 	slaves = internals->active_slaves;
 	slaves_count = internals->active_slave_count;
@@ -686,9 +686,9 @@ selection_logic(struct bond_dev_private *internals, uint16_t slave_id)
 		if (agg->aggregator_port_id != slaves[i])
 			continue;
 
-		agg_count[agg->aggregator_port_id] += 1;
+		agg_count[i] += 1;
 		rte_eth_link_get_nowait(slaves[i], &link_info);
-		agg_bandwidth[agg->aggregator_port_id] += link_info.link_speed;
+		agg_bandwidth[i] += link_info.link_speed;
 
 		/* Actors system ID is not checked since all slave device have the same
 		 * ID (MAC address). */
@@ -708,24 +708,22 @@ selection_logic(struct bond_dev_private *internals, uint16_t slave_id)
 
 	switch (internals->mode4.agg_selection) {
 	case AGG_COUNT:
-		mode_count_id = max_index(
-				(uint64_t *)agg_count, slaves_count);
-		new_agg_id = mode_count_id;
+		agg_new_idx = max_index(agg_count, slaves_count);
+		new_agg_id = slaves[agg_new_idx];
 		break;
 	case AGG_BANDWIDTH:
-		mode_band_id = max_index(
-				(uint64_t *)agg_bandwidth, slaves_count);
-		new_agg_id = mode_band_id;
+		agg_new_idx = max_index(agg_bandwidth, slaves_count);
+		new_agg_id = slaves[agg_new_idx];
 		break;
 	case AGG_STABLE:
 		if (default_slave == slaves_count)
-			new_agg_id = slave_id;
+			new_agg_id = slaves[slave_id];
 		else
 			new_agg_id = slaves[default_slave];
 		break;
 	default:
 		if (default_slave == slaves_count)
-			new_agg_id = slave_id;
+			new_agg_id = slaves[slave_id];
 		else
 			new_agg_id = slaves[default_slave];
 		break;
@@ -1301,11 +1299,12 @@ rte_eth_bond_8023ad_agg_selection_set(uint16_t port_id,
 	struct bond_dev_private *internals;
 	struct mode8023ad_private *mode4;
 
+	if (valid_bonded_port_id(port_id) != 0)
+		return -EINVAL;
+
 	bond_dev = &rte_eth_devices[port_id];
 	internals = bond_dev->data->dev_private;
 
-	if (valid_bonded_port_id(port_id) != 0)
-		return -EINVAL;
 	if (internals->mode != 4)
 		return -EINVAL;
 
@@ -1322,11 +1321,12 @@ int rte_eth_bond_8023ad_agg_selection_get(uint16_t port_id)
 	struct bond_dev_private *internals;
 	struct mode8023ad_private *mode4;
 
+	if (valid_bonded_port_id(port_id) != 0)
+		return -EINVAL;
+
 	bond_dev = &rte_eth_devices[port_id];
 	internals = bond_dev->data->dev_private;
 
-	if (valid_bonded_port_id(port_id) != 0)
-		return -EINVAL;
 	if (internals->mode != 4)
 		return -EINVAL;
 	mode4 = &internals->mode4;
@@ -1579,9 +1579,14 @@ int
 rte_eth_bond_8023ad_dedicated_queues_enable(uint16_t port)
 {
 	int retval = 0;
-	struct rte_eth_dev *dev = &rte_eth_devices[port];
-	struct bond_dev_private *internals = (struct bond_dev_private *)
-		dev->data->dev_private;
+	struct rte_eth_dev *dev;
+	struct bond_dev_private *internals;
+
+	if (valid_bonded_port_id(port) != 0)
+		return -EINVAL;
+
+	dev = &rte_eth_devices[port];
+	internals = dev->data->dev_private;
 
 	if (check_for_bonded_ethdev(dev) != 0)
 		return -1;
@@ -1603,9 +1608,14 @@ int
 rte_eth_bond_8023ad_dedicated_queues_disable(uint16_t port)
 {
 	int retval = 0;
-	struct rte_eth_dev *dev = &rte_eth_devices[port];
-	struct bond_dev_private *internals = (struct bond_dev_private *)
-		dev->data->dev_private;
+	struct rte_eth_dev *dev;
+	struct bond_dev_private *internals;
+
+	if (valid_bonded_port_id(port) != 0)
+		return -EINVAL;
+
+	dev = &rte_eth_devices[port];
+	internals = dev->data->dev_private;
 
 	if (check_for_bonded_ethdev(dev) != 0)
 		return -1;

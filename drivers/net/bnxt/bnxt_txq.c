@@ -35,7 +35,7 @@ static void bnxt_tx_queue_release_mbufs(struct bnxt_tx_queue *txq)
 	if (sw_ring) {
 		for (i = 0; i < txq->tx_ring->tx_ring_struct->ring_size; i++) {
 			if (sw_ring[i].mbuf) {
-				rte_pktmbuf_free(sw_ring[i].mbuf);
+				rte_pktmbuf_free_seg(sw_ring[i].mbuf);
 				sw_ring[i].mbuf = NULL;
 			}
 		}
@@ -113,6 +113,7 @@ int bnxt_tx_queue_setup_op(struct rte_eth_dev *eth_dev,
 	txq->bp = bp;
 	txq->nb_tx_desc = nb_desc;
 	txq->tx_free_thresh = tx_conf->tx_free_thresh;
+	txq->tx_deferred_start = tx_conf->tx_deferred_start;
 
 	rc = bnxt_init_tx_ring_struct(txq, socket_id);
 	if (rc)
@@ -138,6 +139,11 @@ int bnxt_tx_queue_setup_op(struct rte_eth_dev *eth_dev,
 	}
 
 	eth_dev->data->tx_queues[queue_idx] = txq;
+
+	if (txq->tx_deferred_start)
+		txq->tx_started = false;
+	else
+		txq->tx_started = true;
 
 out:
 	return rc;

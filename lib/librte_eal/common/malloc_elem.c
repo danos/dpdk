@@ -292,6 +292,11 @@ split_elem(struct malloc_elem *elem, struct malloc_elem *split_pt)
 	elem->next = split_pt;
 	elem->size = old_elem_size;
 	set_trailer(elem);
+	if (elem->pad) {
+		/* Update inner padding inner element size. */
+		elem = RTE_PTR_ADD(elem, elem->pad);
+		elem->size = old_elem_size - elem->pad;
+	}
 }
 
 /*
@@ -463,6 +468,10 @@ join_elem(struct malloc_elem *elem1, struct malloc_elem *elem2)
 	else
 		elem1->heap->last = elem1;
 	elem1->next = next;
+	if (elem1->pad) {
+		struct malloc_elem *inner = RTE_PTR_ADD(elem1, elem1->pad);
+		inner->size = elem1->size - elem1->pad;
+	}
 }
 
 struct malloc_elem *

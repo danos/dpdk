@@ -130,7 +130,7 @@ read_fd_message(int sockfd, char *buf, int buflen, int *fds, int max_fds,
 	}
 
 	if (msgh.msg_flags & (MSG_TRUNC | MSG_CTRUNC)) {
-		RTE_LOG(ERR, VHOST_CONFIG, "truncted msg\n");
+		RTE_LOG(ERR, VHOST_CONFIG, "truncated msg\n");
 		return -1;
 	}
 
@@ -856,6 +856,14 @@ rte_vhost_driver_register(const char *path, uint64_t flags)
 		goto out_free;
 	}
 	vsocket->dequeue_zero_copy = flags & RTE_VHOST_USER_DEQUEUE_ZERO_COPY;
+
+	if (vsocket->dequeue_zero_copy &&
+	    (flags & RTE_VHOST_USER_IOMMU_SUPPORT)) {
+		RTE_LOG(ERR, VHOST_CONFIG,
+			"error: enabling dequeue zero copy and IOMMU features "
+			"simultaneously is not supported\n");
+		goto out_mutex;
+	}
 
 	/*
 	 * Set the supported features correctly for the builtin vhost-user

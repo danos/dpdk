@@ -43,9 +43,6 @@ static void atl_dev_stats_reset(struct rte_eth_dev *dev);
 static int atl_fw_version_get(struct rte_eth_dev *dev, char *fw_version,
 			      size_t fw_size);
 
-static void atl_dev_info_get(struct rte_eth_dev *dev,
-			       struct rte_eth_dev_info *dev_info);
-
 static const uint32_t *atl_dev_supported_ptypes_get(struct rte_eth_dev *dev);
 
 static int atl_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu);
@@ -362,6 +359,8 @@ eth_atl_dev_init(struct rte_eth_dev *eth_dev)
 
 	hw->aq_nic_cfg = &adapter->hw_cfg;
 
+	pthread_mutex_init(&hw->mbox_mutex, NULL);
+
 	/* disable interrupt */
 	atl_disable_intr(hw);
 
@@ -424,6 +423,8 @@ eth_atl_dev_uninit(struct rte_eth_dev *eth_dev)
 
 	rte_free(eth_dev->data->mac_addrs);
 	eth_dev->data->mac_addrs = NULL;
+
+	pthread_mutex_destroy(&hw->mbox_mutex);
 
 	return 0;
 }
