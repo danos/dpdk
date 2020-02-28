@@ -5,7 +5,7 @@ Description: use dependency() for libbsd instead of manual append to ldflags
 Origin: https://patches.dpdk.org/patch/49998/
 --- a/config/meson.build
 +++ b/config/meson.build
-@@ -74,11 +74,11 @@ if numa_dep.found() and cc.has_header('n
+@@ -82,11 +82,11 @@
  endif
  
  # check for strlcpy
@@ -21,10 +21,10 @@ Origin: https://patches.dpdk.org/patch/49998/
 +	endif
  endif
  
- # add -include rte_config to cflags
+ # check for pcap
 --- a/lib/librte_eal/meson.build
 +++ b/lib/librte_eal/meson.build
-@@ -25,6 +25,9 @@ version = 9  # the version of the EAL AP
+@@ -25,6 +25,9 @@
  allow_experimental_apis = true
  deps += 'compat'
  deps += 'kvargs'
