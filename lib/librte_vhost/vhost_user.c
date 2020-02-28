@@ -384,8 +384,20 @@ vhost_user_set_vring_num(struct virtio_net **pdev,
 	 *
 	 *   Queue Size value is always a power of 2. The maximum Queue Size
 	 *   value is 32768.
+	 *
+	 * VIRTIO 1.1 2.7 Virtqueues says:
+	 *
+	 *   Packed virtqueues support up to 2^15 entries each.
 	 */
-	if ((vq->size & (vq->size - 1)) || vq->size > 32768) {
+	if (!vq_is_packed(dev)) {
+		if (vq->size & (vq->size - 1)) {
+			RTE_LOG(ERR, VHOST_CONFIG,
+				"invalid virtqueue size %u\n", vq->size);
+			return VH_RESULT_ERR;
+		}
+	}
+
+	if (vq->size > 32768) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"invalid virtqueue size %u\n", vq->size);
 		return VH_RESULT_ERR;
@@ -464,6 +476,9 @@ numa_realloc(struct virtio_net *dev, int index)
 	struct vring_used_elem_packed *new_shadow_used_packed;
 	struct batch_copy_elem *new_batch_copy_elems;
 	int ret;
+
+	if (dev->flags & VIRTIO_DEV_RUNNING)
+		return dev;
 
 	old_dev = dev;
 	vq = old_vq = dev->virtqueue[index];
@@ -613,16 +628,51 @@ ring_addr_to_vva(struct virtio_net *dev, struct vhost_virtqueue *vq,
 {
 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM)) {
 		uint64_t vva;
+		uint64_t req_size = *size;
 
 		vva = vhost_user_iotlb_cache_find(vq, ra,
 					size, VHOST_ACCESS_RW);
-		if (!vva)
-			vhost_user_iotlb_miss(dev, ra, VHOST_ACCESS_RW);
+		if (req_size != *size)
+			vhost_user_iotlb_miss(dev, (ra + *size),
+					      VHOST_ACCESS_RW);
 
 		return vva;
 	}
 
 	return qva_to_vva(dev, ra, size);
+}
+
+/*
+ * Converts vring log address to GPA
+ * If IOMMU is enabled, the log address is IOVA
+ * If IOMMU not enabled, the log address is already GPA
+ */
+static uint64_t
+translate_log_addr(struct virtio_net *dev, struct vhost_virtqueue *vq,
+		uint64_t log_addr)
+{
+	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM)) {
+		const uint64_t exp_size = sizeof(struct vring_used) +
+			sizeof(struct vring_used_elem) * vq->size;
+		uint64_t hva, gpa;
+		uint64_t size = exp_size;
+
+		hva = vhost_iova_to_vva(dev, vq, log_addr,
+					&size, VHOST_ACCESS_RW);
+		if (size != exp_size)
+			return 0;
+
+		gpa = hva_to_gpa(dev, hva, exp_size);
+		if (!gpa) {
+			RTE_LOG(ERR, VHOST_CONFIG,
+				"VQ: Failed to find GPA for log_addr: 0x%" PRIx64 " hva: 0x%" PRIx64 "\n",
+				log_addr, hva);
+			return 0;
+		}
+		return gpa;
+
+	} else
+		return log_addr;
 }
 
 static struct virtio_net *
@@ -632,11 +682,21 @@ translate_ring_addresses(struct virtio_net *dev, int vq_index)
 	struct vhost_vring_addr *addr = &vq->ring_addrs;
 	uint64_t len, expected_len;
 
+	if (addr->flags & (1 << VHOST_VRING_F_LOG)) {
+		vq->log_guest_addr =
+			translate_log_addr(dev, vq, addr->log_guest_addr);
+		if (vq->log_guest_addr == 0) {
+			RTE_LOG(DEBUG, VHOST_CONFIG,
+				"(%d) failed to map log_guest_addr.\n",
+				dev->vid);
+			return dev;
+		}
+	}
+
 	if (vq_is_packed(dev)) {
 		len = sizeof(struct vring_packed_desc) * vq->size;
 		vq->desc_packed = (struct vring_packed_desc *)(uintptr_t)
 			ring_addr_to_vva(dev, vq, addr->desc_user_addr, &len);
-		vq->log_guest_addr = 0;
 		if (vq->desc_packed == NULL ||
 				len != sizeof(struct vring_packed_desc) *
 				vq->size) {
@@ -674,6 +734,7 @@ translate_ring_addresses(struct virtio_net *dev, int vq_index)
 			return dev;
 		}
 
+		vq->access_ok = 1;
 		return dev;
 	}
 
@@ -731,7 +792,7 @@ translate_ring_addresses(struct virtio_net *dev, int vq_index)
 		vq->last_avail_idx = vq->used->idx;
 	}
 
-	vq->log_guest_addr = addr->log_guest_addr;
+	vq->access_ok = 1;
 
 	VHOST_LOG_DEBUG(VHOST_CONFIG, "(%d) mapped address desc: %p\n",
 			dev->vid, vq->desc);
@@ -756,6 +817,7 @@ vhost_user_set_vring_addr(struct virtio_net **pdev, struct VhostUserMsg *msg,
 	struct virtio_net *dev = *pdev;
 	struct vhost_virtqueue *vq;
 	struct vhost_vring_addr *addr = &msg->payload.addr;
+	bool access_ok;
 
 	if (validate_msg_fds(msg, 0) != 0)
 		return VH_RESULT_ERR;
@@ -766,6 +828,8 @@ vhost_user_set_vring_addr(struct virtio_net **pdev, struct VhostUserMsg *msg,
 	/* addr->index refers to the queue index. The txq 1, rxq is 0. */
 	vq = dev->virtqueue[msg->payload.addr.index];
 
+	access_ok = vq->access_ok;
+
 	/*
 	 * Rings addresses should not be interpreted as long as the ring is not
 	 * started and enabled
@@ -774,8 +838,9 @@ vhost_user_set_vring_addr(struct virtio_net **pdev, struct VhostUserMsg *msg,
 
 	vring_invalidate(dev, vq);
 
-	if (vq->enabled && (dev->features &
-				(1ULL << VHOST_USER_F_PROTOCOL_FEATURES))) {
+	if ((vq->enabled && (dev->features &
+				(1ULL << VHOST_USER_F_PROTOCOL_FEATURES))) ||
+			access_ok) {
 		dev = translate_ring_addresses(dev, msg->payload.addr.index);
 		if (!dev)
 			return VH_RESULT_ERR;
@@ -1153,10 +1218,11 @@ vhost_user_set_mem_table(struct virtio_net **pdev, struct VhostUserMsg *msg,
 				goto err_mmap;
 			}
 			RTE_LOG(INFO, VHOST_CONFIG,
-				"\t userfaultfd registered for range : %llx - %llx\n",
-				reg_struct.range.start,
-				reg_struct.range.start +
-				reg_struct.range.len - 1);
+				"\t userfaultfd registered for range : "
+				"%" PRIx64 " - %" PRIx64 "\n",
+				(uint64_t)reg_struct.range.start,
+				(uint64_t)reg_struct.range.start +
+				(uint64_t)reg_struct.range.len - 1);
 #else
 			goto err_mmap;
 #endif
@@ -1407,6 +1473,8 @@ vhost_user_get_vring_base(struct virtio_net **pdev,
 
 	msg->size = sizeof(msg->payload.state);
 	msg->fd_num = 0;
+
+	vring_invalidate(dev, vq);
 
 	return VH_RESULT_REPLY;
 }
@@ -1672,58 +1740,73 @@ vhost_user_set_req_fd(struct virtio_net **pdev, struct VhostUserMsg *msg,
 		return VH_RESULT_ERR;
 	}
 
+	if (dev->slave_req_fd >= 0)
+		close(dev->slave_req_fd);
+
 	dev->slave_req_fd = fd;
 
 	return VH_RESULT_OK;
 }
 
 static int
-is_vring_iotlb_update(struct vhost_virtqueue *vq, struct vhost_iotlb_msg *imsg)
+is_vring_iotlb_split(struct vhost_virtqueue *vq, struct vhost_iotlb_msg *imsg)
 {
 	struct vhost_vring_addr *ra;
-	uint64_t start, end;
+	uint64_t start, end, len;
 
 	start = imsg->iova;
 	end = start + imsg->size;
 
 	ra = &vq->ring_addrs;
-	if (ra->desc_user_addr >= start && ra->desc_user_addr < end)
+	len = sizeof(struct vring_desc) * vq->size;
+	if (ra->desc_user_addr < end && (ra->desc_user_addr + len) > start)
 		return 1;
-	if (ra->avail_user_addr >= start && ra->avail_user_addr < end)
+
+	len = sizeof(struct vring_avail) + sizeof(uint16_t) * vq->size;
+	if (ra->avail_user_addr < end && (ra->avail_user_addr + len) > start)
 		return 1;
-	if (ra->used_user_addr >= start && ra->used_user_addr < end)
+
+	len = sizeof(struct vring_used) +
+	       sizeof(struct vring_used_elem) * vq->size;
+	if (ra->used_user_addr < end && (ra->used_user_addr + len) > start)
 		return 1;
 
 	return 0;
 }
 
 static int
-is_vring_iotlb_invalidate(struct vhost_virtqueue *vq,
-				struct vhost_iotlb_msg *imsg)
+is_vring_iotlb_packed(struct vhost_virtqueue *vq, struct vhost_iotlb_msg *imsg)
 {
-	uint64_t istart, iend, vstart, vend;
+	struct vhost_vring_addr *ra;
+	uint64_t start, end, len;
 
-	istart = imsg->iova;
-	iend = istart + imsg->size - 1;
+	start = imsg->iova;
+	end = start + imsg->size;
 
-	vstart = (uintptr_t)vq->desc;
-	vend = vstart + sizeof(struct vring_desc) * vq->size - 1;
-	if (vstart <= iend && istart <= vend)
+	ra = &vq->ring_addrs;
+	len = sizeof(struct vring_packed_desc) * vq->size;
+	if (ra->desc_user_addr < end && (ra->desc_user_addr + len) > start)
 		return 1;
 
-	vstart = (uintptr_t)vq->avail;
-	vend = vstart + sizeof(struct vring_avail);
-	vend += sizeof(uint16_t) * vq->size - 1;
-	if (vstart <= iend && istart <= vend)
+	len = sizeof(struct vring_packed_desc_event);
+	if (ra->avail_user_addr < end && (ra->avail_user_addr + len) > start)
 		return 1;
 
-	vstart = (uintptr_t)vq->used;
-	vend = vstart + sizeof(struct vring_used);
-	vend += sizeof(struct vring_used_elem) * vq->size - 1;
-	if (vstart <= iend && istart <= vend)
+	len = sizeof(struct vring_packed_desc_event);
+	if (ra->used_user_addr < end && (ra->used_user_addr + len) > start)
 		return 1;
 
 	return 0;
+}
+
+static int is_vring_iotlb(struct virtio_net *dev,
+			  struct vhost_virtqueue *vq,
+			  struct vhost_iotlb_msg *imsg)
+{
+	if (vq_is_packed(dev))
+		return is_vring_iotlb_packed(vq, imsg);
+	else
+		return is_vring_iotlb_split(vq, imsg);
 }
 
 static int
@@ -1751,7 +1834,7 @@ vhost_user_iotlb_msg(struct virtio_net **pdev, struct VhostUserMsg *msg,
 			vhost_user_iotlb_cache_insert(vq, imsg->iova, vva,
 					len, imsg->perm);
 
-			if (is_vring_iotlb_update(vq, imsg))
+			if (is_vring_iotlb(dev, vq, imsg))
 				*pdev = dev = translate_ring_addresses(dev, i);
 		}
 		break;
@@ -1762,7 +1845,7 @@ vhost_user_iotlb_msg(struct virtio_net **pdev, struct VhostUserMsg *msg,
 			vhost_user_iotlb_cache_remove(vq, imsg->iova,
 					imsg->size);
 
-			if (is_vring_iotlb_invalidate(vq, imsg))
+			if (is_vring_iotlb(dev, vq, imsg))
 				vring_invalidate(dev, vq);
 		}
 		break;

@@ -37,8 +37,8 @@
 #include <rte_string_fns.h>
 #include <rte_kvargs.h>
 #include <rte_class.h>
+#include <rte_ether.h>
 
-#include "rte_ether.h"
 #include "rte_ethdev.h"
 #include "rte_ethdev_driver.h"
 #include "ethdev_profile.h"
@@ -1114,7 +1114,9 @@ rte_eth_dev_configure(uint16_t port_id, uint16_t nb_rx_q, uint16_t nb_tx_q,
 	 * Copy the dev_conf parameter into the dev structure.
 	 * rte_eth_dev_info_get() requires dev_conf, copy it before dev_info get
 	 */
-	memcpy(&dev->data->dev_conf, dev_conf, sizeof(dev->data->dev_conf));
+	if (dev_conf != &dev->data->dev_conf)
+		memcpy(&dev->data->dev_conf, dev_conf,
+		       sizeof(dev->data->dev_conf));
 
 	rte_eth_dev_info_get(port_id, &dev_info);
 
@@ -2532,6 +2534,13 @@ rte_eth_dev_info_get(uint16_t port_id, struct rte_eth_dev_info *dev_info)
 
 	RTE_FUNC_PTR_OR_RET(*dev->dev_ops->dev_infos_get);
 	(*dev->dev_ops->dev_infos_get)(dev, dev_info);
+
+	/* Maximum number of queues should be <= RTE_MAX_QUEUES_PER_PORT */
+	dev_info->max_rx_queues = RTE_MIN(dev_info->max_rx_queues,
+			RTE_MAX_QUEUES_PER_PORT);
+	dev_info->max_tx_queues = RTE_MIN(dev_info->max_tx_queues,
+			RTE_MAX_QUEUES_PER_PORT);
+
 	dev_info->driver_name = dev->device->driver->name;
 	dev_info->nb_rx_queues = dev->data->nb_rx_queues;
 	dev_info->nb_tx_queues = dev->data->nb_tx_queues;

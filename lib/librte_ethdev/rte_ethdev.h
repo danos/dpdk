@@ -154,8 +154,8 @@ extern "C" {
 #include <rte_errno.h>
 #include <rte_common.h>
 #include <rte_config.h>
+#include <rte_ether.h>
 
-#include "rte_ether.h"
 #include "rte_eth_ctrl.h"
 #include "rte_dev_info.h"
 
@@ -855,7 +855,7 @@ enum rte_fdir_status_mode {
  * A structure used to configure the Flow Director (FDIR) feature
  * of an Ethernet port.
  *
- * If mode is RTE_FDIR_DISABLE, the pballoc value is ignored.
+ * If mode is RTE_FDIR_MODE_NONE, the pballoc value is ignored.
  */
 struct rte_fdir_conf {
 	enum rte_fdir_mode mode; /**< Flow Director mode. */
@@ -2316,7 +2316,7 @@ int rte_eth_dev_set_mtu(uint16_t port_id, uint16_t mtu);
  *   Otherwise, disable VLAN filtering of VLAN packets tagged with *vlan_id*.
  * @return
  *   - (0) if successful.
- *   - (-ENOSUP) if hardware-assisted VLAN filtering not configured.
+ *   - (-ENOTSUP) if hardware-assisted VLAN filtering not configured.
  *   - (-ENODEV) if *port_id* invalid.
  *   - (-EIO) if device is removed.
  *   - (-ENOSYS) if VLAN filtering on *port_id* disabled.
@@ -2339,7 +2339,7 @@ int rte_eth_dev_vlan_filter(uint16_t port_id, uint16_t vlan_id, int on);
  *   If 0, Disable VLAN Stripping of the receive queue of the Ethernet port.
  * @return
  *   - (0) if successful.
- *   - (-ENOSUP) if hardware-assisted VLAN stripping not configured.
+ *   - (-ENOTSUP) if hardware-assisted VLAN stripping not configured.
  *   - (-ENODEV) if *port_id* invalid.
  *   - (-EINVAL) if *rx_queue_id* invalid.
  */
@@ -2359,7 +2359,7 @@ int rte_eth_dev_set_vlan_strip_on_queue(uint16_t port_id, uint16_t rx_queue_id,
  *   The Tag Protocol ID
  * @return
  *   - (0) if successful.
- *   - (-ENOSUP) if hardware-assisted VLAN TPID setup is not supported.
+ *   - (-ENOTSUP) if hardware-assisted VLAN TPID setup is not supported.
  *   - (-ENODEV) if *port_id* invalid.
  *   - (-EIO) if device is removed.
  */
@@ -2384,7 +2384,7 @@ int rte_eth_dev_set_vlan_ether_type(uint16_t port_id,
  *       ETH_VLAN_EXTEND_OFFLOAD
  * @return
  *   - (0) if successful.
- *   - (-ENOSUP) if hardware-assisted VLAN filtering not configured.
+ *   - (-ENOTSUP) if hardware-assisted VLAN filtering not configured.
  *   - (-ENODEV) if *port_id* invalid.
  *   - (-EIO) if device is removed.
  */

@@ -1359,7 +1359,7 @@ i40evf_handle_aq_msg(struct rte_eth_dev *dev)
 			}
 			break;
 		default:
-			PMD_DRV_LOG(ERR, "Request %u is not supported yet",
+			PMD_DRV_LOG(DEBUG, "Request %u is not supported yet",
 				    aq_opc);
 			break;
 		}
@@ -2073,13 +2073,15 @@ i40evf_dev_link_update(struct rte_eth_dev *dev,
 		new_link.link_speed = ETH_SPEED_NUM_40G;
 		break;
 	default:
-		new_link.link_speed = ETH_SPEED_NUM_100M;
+		new_link.link_speed = ETH_SPEED_NUM_NONE;
 		break;
 	}
 	/* full duplex only */
 	new_link.link_duplex = ETH_LINK_FULL_DUPLEX;
-	new_link.link_status = vf->link_up ? ETH_LINK_UP :
-					     ETH_LINK_DOWN;
+	new_link.link_status = vf->link_up &&
+				new_link.link_speed != ETH_SPEED_NUM_NONE
+				? ETH_LINK_UP
+				: ETH_LINK_DOWN;
 	new_link.link_autoneg =
 		!(dev->data->dev_conf.link_speeds & ETH_LINK_SPEED_FIXED);
 
@@ -2526,7 +2528,10 @@ i40evf_config_rss(struct i40e_vf *vf)
 	struct i40e_hw *hw = I40E_VF_TO_HW(vf);
 	struct rte_eth_rss_conf rss_conf;
 	uint32_t i, j, lut = 0, nb_q = (I40E_VFQF_HLUT_MAX_INDEX + 1) * 4;
+	uint32_t rss_lut_size = (I40E_VFQF_HLUT1_MAX_INDEX + 1) * 4;
 	uint16_t num;
+	uint8_t *lut_info;
+	int ret;
 
 	if (vf->dev_data->dev_conf.rxmode.mq_mode != ETH_MQ_RX_RSS) {
 		i40evf_disable_rss(vf);
@@ -2536,12 +2541,29 @@ i40evf_config_rss(struct i40e_vf *vf)
 
 	num = RTE_MIN(vf->dev_data->nb_rx_queues, I40E_MAX_QP_NUM_PER_VF);
 	/* Fill out the look up table */
-	for (i = 0, j = 0; i < nb_q; i++, j++) {
-		if (j >= num)
-			j = 0;
-		lut = (lut << 8) | j;
-		if ((i & 3) == 3)
-			I40E_WRITE_REG(hw, I40E_VFQF_HLUT(i >> 2), lut);
+	if (!(vf->flags & I40E_FLAG_RSS_AQ_CAPABLE)) {
+		for (i = 0, j = 0; i < nb_q; i++, j++) {
+			if (j >= num)
+				j = 0;
+			lut = (lut << 8) | j;
+			if ((i & 3) == 3)
+				I40E_WRITE_REG(hw, I40E_VFQF_HLUT(i >> 2), lut);
+		}
+	} else {
+		lut_info = rte_zmalloc("i40e_rss_lut", rss_lut_size, 0);
+		if (!lut_info) {
+			PMD_DRV_LOG(ERR, "No memory can be allocated");
+			return -ENOMEM;
+		}
+
+		for (i = 0; i < rss_lut_size; i++)
+			lut_info[i] = i % vf->num_queue_pairs;
+
+		ret = i40evf_set_rss_lut(&vf->vsi, lut_info,
+					 rss_lut_size);
+		rte_free(lut_info);
+		if (ret)
+			return ret;
 	}
 
 	rss_conf = vf->dev_data->dev_conf.rx_adv_conf.rss_conf;

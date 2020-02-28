@@ -65,6 +65,7 @@ uint16_t cxgbe_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 	struct sge_eth_txq *txq = (struct sge_eth_txq *)tx_queue;
 	uint16_t pkts_sent, pkts_remain;
 	uint16_t total_sent = 0;
+	uint16_t idx = 0;
 	int ret = 0;
 
 	CXGBE_DEBUG_TX(adapter, "%s: txq = %p; tx_pkts = %p; nb_pkts = %d\n",
@@ -73,12 +74,16 @@ uint16_t cxgbe_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 	t4_os_lock(&txq->txq_lock);
 	/* free up desc from already completed tx */
 	reclaim_completed_tx(&txq->q);
+	rte_prefetch0(rte_pktmbuf_mtod(tx_pkts[0], volatile void *));
 	while (total_sent < nb_pkts) {
 		pkts_remain = nb_pkts - total_sent;
 
 		for (pkts_sent = 0; pkts_sent < pkts_remain; pkts_sent++) {
-			ret = t4_eth_xmit(txq, tx_pkts[total_sent + pkts_sent],
-					  nb_pkts);
+			idx = total_sent + pkts_sent;
+			if ((idx + 1) < nb_pkts)
+				rte_prefetch0(rte_pktmbuf_mtod(tx_pkts[idx + 1],
+							volatile void *));
+			ret = t4_eth_xmit(txq, tx_pkts[idx], nb_pkts);
 			if (ret < 0)
 				break;
 		}
@@ -197,6 +202,9 @@ int cxgbe_dev_link_update(struct rte_eth_dev *eth_dev,
 	u8 old_link = pi->link_cfg.link_ok;
 
 	for (i = 0; i < CXGBE_LINK_STATUS_POLL_CNT; i++) {
+		if (!s->fw_evtq.desc)
+			break;
+
 		cxgbe_poll(&s->fw_evtq, NULL, budget, &work_done);
 
 		/* Exit if link status changed or always forced up */
@@ -230,6 +238,9 @@ int cxgbe_dev_set_link_up(struct rte_eth_dev *dev)
 	struct sge *s = &adapter->sge;
 	int ret;
 
+	if (!s->fw_evtq.desc)
+		return -ENOMEM;
+
 	/* Flush all link events */
 	cxgbe_poll(&s->fw_evtq, NULL, budget, &work_done);
 
@@ -255,6 +266,9 @@ int cxgbe_dev_set_link_down(struct rte_eth_dev *dev)
 	unsigned int work_done, budget = 32;
 	struct sge *s = &adapter->sge;
 	int ret;
+
+	if (!s->fw_evtq.desc)
+		return -ENOMEM;
 
 	/* Flush all link events */
 	cxgbe_poll(&s->fw_evtq, NULL, budget, &work_done);
