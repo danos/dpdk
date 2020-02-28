@@ -33,49 +33,9 @@ static const char bnxt_version[] =
 	"Broadcom NetXtreme driver " DRV_MODULE_NAME "\n";
 int bnxt_logtype_driver;
 
-#define PCI_VENDOR_ID_BROADCOM 0x14E4
-
-#define BROADCOM_DEV_ID_STRATUS_NIC_VF1 0x1606
-#define BROADCOM_DEV_ID_STRATUS_NIC_VF2 0x1609
-#define BROADCOM_DEV_ID_STRATUS_NIC 0x1614
-#define BROADCOM_DEV_ID_57414_VF 0x16c1
-#define BROADCOM_DEV_ID_57301 0x16c8
-#define BROADCOM_DEV_ID_57302 0x16c9
-#define BROADCOM_DEV_ID_57304_PF 0x16ca
-#define BROADCOM_DEV_ID_57304_VF 0x16cb
-#define BROADCOM_DEV_ID_57417_MF 0x16cc
-#define BROADCOM_DEV_ID_NS2 0x16cd
-#define BROADCOM_DEV_ID_57311 0x16ce
-#define BROADCOM_DEV_ID_57312 0x16cf
-#define BROADCOM_DEV_ID_57402 0x16d0
-#define BROADCOM_DEV_ID_57404 0x16d1
-#define BROADCOM_DEV_ID_57406_PF 0x16d2
-#define BROADCOM_DEV_ID_57406_VF 0x16d3
-#define BROADCOM_DEV_ID_57402_MF 0x16d4
-#define BROADCOM_DEV_ID_57407_RJ45 0x16d5
-#define BROADCOM_DEV_ID_57412 0x16d6
-#define BROADCOM_DEV_ID_57414 0x16d7
-#define BROADCOM_DEV_ID_57416_RJ45 0x16d8
-#define BROADCOM_DEV_ID_57417_RJ45 0x16d9
-#define BROADCOM_DEV_ID_5741X_VF 0x16dc
-#define BROADCOM_DEV_ID_57412_MF 0x16de
-#define BROADCOM_DEV_ID_57314 0x16df
-#define BROADCOM_DEV_ID_57317_RJ45 0x16e0
-#define BROADCOM_DEV_ID_5731X_VF 0x16e1
-#define BROADCOM_DEV_ID_57417_SFP 0x16e2
-#define BROADCOM_DEV_ID_57416_SFP 0x16e3
-#define BROADCOM_DEV_ID_57317_SFP 0x16e4
-#define BROADCOM_DEV_ID_57404_MF 0x16e7
-#define BROADCOM_DEV_ID_57406_MF 0x16e8
-#define BROADCOM_DEV_ID_57407_SFP 0x16e9
-#define BROADCOM_DEV_ID_57407_MF 0x16ea
-#define BROADCOM_DEV_ID_57414_MF 0x16ec
-#define BROADCOM_DEV_ID_57416_MF 0x16ee
-#define BROADCOM_DEV_ID_58802 0xd802
-#define BROADCOM_DEV_ID_58804 0xd804
-#define BROADCOM_DEV_ID_58808 0x16f0
-#define BROADCOM_DEV_ID_58802_VF 0xd800
-
+/*
+ * The set of PCI devices this driver supports
+ */
 static const struct rte_pci_id bnxt_pci_id_map[] = {
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BROADCOM,
 			 BROADCOM_DEV_ID_STRATUS_NIC_VF1) },
@@ -150,11 +110,11 @@ static const struct rte_pci_id bnxt_pci_id_map[] = {
 				     DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM | \
 				     DEV_RX_OFFLOAD_JUMBO_FRAME | \
 				     DEV_RX_OFFLOAD_KEEP_CRC | \
-				     DEV_RX_OFFLOAD_TCP_LRO)
+				     DEV_RX_OFFLOAD_TCP_LRO | \
+				     DEV_RX_OFFLOAD_SCATTER)
 
 static int bnxt_vlan_offload_set_op(struct rte_eth_dev *dev, int mask);
 static void bnxt_print_link_info(struct rte_eth_dev *eth_dev);
-static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu);
 static int bnxt_dev_uninit(struct rte_eth_dev *eth_dev);
 
 /***********************/
@@ -465,8 +425,7 @@ static void bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 
 	/* Fast path specifics */
 	dev_info->min_rx_bufsize = 1;
-	dev_info->max_rx_pktlen = BNXT_MAX_MTU + ETHER_HDR_LEN + ETHER_CRC_LEN
-				  + VLAN_TAG_SIZE * 2;
+	dev_info->max_rx_pktlen = BNXT_MAX_PKT_LEN;
 
 	dev_info->rx_offload_capa = BNXT_DEV_RX_OFFLOAD_SUPPORT;
 	if (bp->flags & BNXT_FLAG_PTP_SUPPORTED)
@@ -628,11 +587,18 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	int vlan_mask = 0;
 	int rc;
 
+	if (!eth_dev->data->nb_tx_queues || !eth_dev->data->nb_rx_queues) {
+		PMD_DRV_LOG(ERR, "Queues are not configured yet!\n");
+		return -EINVAL;
+	}
+
 	if (bp->rx_cp_nr_rings > RTE_ETHDEV_QUEUE_STAT_CNTRS) {
 		PMD_DRV_LOG(ERR,
 			"RxQ cnt %d > CONFIG_RTE_ETHDEV_QUEUE_STAT_CNTRS %d\n",
 			bp->rx_cp_nr_rings, RTE_ETHDEV_QUEUE_STAT_CNTRS);
 	}
+
+	bnxt_enable_int(bp);
 
 	rc = bnxt_init_chip(bp);
 	if (rc)
@@ -648,7 +614,6 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	if (rc)
 		goto error;
 
-	bnxt_enable_int(bp);
 	bp->flags |= BNXT_FLAG_INIT_DONE;
 	bp->dev_stopped = 0;
 	return 0;
@@ -671,7 +636,7 @@ static int bnxt_dev_set_link_up_op(struct rte_eth_dev *eth_dev)
 		eth_dev->data->dev_link.link_status = 1;
 
 	bnxt_print_link_info(eth_dev);
-	return 0;
+	return rc;
 }
 
 static int bnxt_dev_set_link_down_op(struct rte_eth_dev *eth_dev)
@@ -702,7 +667,9 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 		/* TBD: STOP HW queues DMA */
 		eth_dev->data->dev_link.link_status = 0;
 	}
-	bnxt_set_hwrm_link_config(bp, false);
+	bnxt_dev_set_link_down_op(eth_dev);
+	/* Wait for link to be reset and the async notification to process. */
+	rte_delay_ms(BNXT_LINK_WAIT_INTERVAL * 2);
 
 	/* Clean queue intr-vector mapping */
 	rte_intr_efd_disable(intr_handle);
@@ -714,6 +681,8 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 	bnxt_hwrm_port_clr_stats(bp);
 	bnxt_free_tx_mbufs(bp);
 	bnxt_free_rx_mbufs(bp);
+	/* Process any remaining notifications in default completion queue */
+	bnxt_int_handler(eth_dev);
 	bnxt_shutdown_nic(bp);
 	bp->dev_stopped = 1;
 }
@@ -848,8 +817,7 @@ out:
 	/* Timed out or success */
 	if (new.link_status != eth_dev->data->dev_link.link_status ||
 	new.link_speed != eth_dev->data->dev_link.link_speed) {
-		memcpy(&eth_dev->data->dev_link, &new,
-			sizeof(struct rte_eth_link));
+		rte_eth_linkstatus_set(eth_dev, &new);
 
 		_rte_eth_dev_callback_process(eth_dev,
 					      RTE_ETH_EVENT_INTR_LSC,
@@ -1340,141 +1308,97 @@ bnxt_udp_tunnel_port_del_op(struct rte_eth_dev *eth_dev,
 
 static int bnxt_del_vlan_filter(struct bnxt *bp, uint16_t vlan_id)
 {
-	struct bnxt_filter_info *filter, *temp_filter, *new_filter;
+	struct bnxt_filter_info *filter;
 	struct bnxt_vnic_info *vnic;
-	unsigned int i;
 	int rc = 0;
-	uint32_t chk = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_OVLAN;
+	uint32_t chk = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_IVLAN;
 
-	/* Cycle through all VNICs */
-	for (i = 0; i < bp->nr_vnics; i++) {
-		/*
-		 * For each VNIC and each associated filter(s)
-		 * if VLAN exists && VLAN matches vlan_id
-		 *      remove the MAC+VLAN filter
-		 *      add a new MAC only filter
-		 * else
-		 *      VLAN filter doesn't exist, just skip and continue
-		 */
-		vnic = &bp->vnic_info[i];
-		filter = STAILQ_FIRST(&vnic->filter);
-		while (filter) {
-			temp_filter = STAILQ_NEXT(filter, next);
-
-			if (filter->enables & chk &&
-			    filter->l2_ovlan == vlan_id) {
-				/* Must delete the filter */
-				STAILQ_REMOVE(&vnic->filter, filter,
-					      bnxt_filter_info, next);
-				bnxt_hwrm_clear_l2_filter(bp, filter);
-				STAILQ_INSERT_TAIL(&bp->free_filter_list,
-						   filter, next);
-
-				/*
-				 * Need to examine to see if the MAC
-				 * filter already existed or not before
-				 * allocating a new one
-				 */
-
-				new_filter = bnxt_alloc_filter(bp);
-				if (!new_filter) {
-					PMD_DRV_LOG(ERR,
-							"MAC/VLAN filter alloc failed\n");
-					rc = -ENOMEM;
-					goto exit;
-				}
-				STAILQ_INSERT_TAIL(&vnic->filter,
-						new_filter, next);
-				/* Inherit MAC from previous filter */
-				new_filter->mac_index =
-					filter->mac_index;
-				memcpy(new_filter->l2_addr, filter->l2_addr,
-				       ETHER_ADDR_LEN);
-				/* MAC only filter */
-				rc = bnxt_hwrm_set_l2_filter(bp,
-							     vnic->fw_vnic_id,
-							     new_filter);
-				if (rc)
-					goto exit;
-				PMD_DRV_LOG(INFO,
-					    "Del Vlan filter for %d\n",
-					    vlan_id);
-			}
-			filter = temp_filter;
+	/* if VLAN exists && VLAN matches vlan_id
+	 *	remove the MAC+VLAN filter
+	 *	add a new MAC only filter
+	 * else
+	 *	VLAN filter doesn't exist, just skip and continue
+	 */
+	vnic = BNXT_GET_DEFAULT_VNIC(bp);
+	filter = STAILQ_FIRST(&vnic->filter);
+	while (filter) {
+		/* Search for this matching MAC+VLAN filter */
+		if (filter->enables & chk && filter->l2_ivlan == vlan_id &&
+		    !memcmp(filter->l2_addr,
+			    bp->mac_addr,
+			    ETHER_ADDR_LEN)) {
+			/* Delete the filter */
+			rc = bnxt_hwrm_clear_l2_filter(bp, filter);
+			if (rc)
+				return rc;
+			STAILQ_REMOVE(&vnic->filter, filter,
+				      bnxt_filter_info, next);
+			STAILQ_INSERT_TAIL(&bp->free_filter_list, filter, next);
+			PMD_DRV_LOG(INFO,
+				    "Del vlan filter for %d\n",
+				    vlan_id);
+			return rc;
 		}
+		filter = STAILQ_NEXT(filter, next);
 	}
-exit:
-	return rc;
+	return -ENOENT;
 }
 
 static int bnxt_add_vlan_filter(struct bnxt *bp, uint16_t vlan_id)
 {
-	struct bnxt_filter_info *filter, *temp_filter, *new_filter;
+	struct bnxt_filter_info *filter;
 	struct bnxt_vnic_info *vnic;
-	unsigned int i;
 	int rc = 0;
 	uint32_t en = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_IVLAN |
 		HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_IVLAN_MASK;
 	uint32_t chk = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_IVLAN;
 
-	/* Cycle through all VNICs */
-	for (i = 0; i < bp->nr_vnics; i++) {
-		/*
-		 * For each VNIC and each associated filter(s)
-		 * if VLAN exists:
-		 *   if VLAN matches vlan_id
-		 *      VLAN filter already exists, just skip and continue
-		 *   else
-		 *      add a new MAC+VLAN filter
-		 * else
-		 *   Remove the old MAC only filter
-		 *    Add a new MAC+VLAN filter
-		 */
-		vnic = &bp->vnic_info[i];
-		filter = STAILQ_FIRST(&vnic->filter);
-		while (filter) {
-			temp_filter = STAILQ_NEXT(filter, next);
+	/* Implementation notes on the use of VNIC in this command:
+	 *
+	 * By default, these filters belong to default vnic for the function.
+	 * Once these filters are set up, only destination VNIC can be modified.
+	 * If the destination VNIC is not specified in this command,
+	 * then the HWRM shall only create an l2 context id.
+	 */
 
-			if (filter->enables & chk) {
-				if (filter->l2_ivlan == vlan_id)
-					goto cont;
-			} else {
-				/* Must delete the MAC filter */
-				STAILQ_REMOVE(&vnic->filter, filter,
-						bnxt_filter_info, next);
-				bnxt_hwrm_clear_l2_filter(bp, filter);
-				filter->l2_ovlan = 0;
-				STAILQ_INSERT_TAIL(&bp->free_filter_list,
-						   filter, next);
-			}
-			new_filter = bnxt_alloc_filter(bp);
-			if (!new_filter) {
-				PMD_DRV_LOG(ERR,
-						"MAC/VLAN filter alloc failed\n");
-				rc = -ENOMEM;
-				goto exit;
-			}
-			STAILQ_INSERT_TAIL(&vnic->filter, new_filter, next);
-			/* Inherit MAC from the previous filter */
-			new_filter->mac_index = filter->mac_index;
-			memcpy(new_filter->l2_addr, filter->l2_addr,
-			       ETHER_ADDR_LEN);
-			/* MAC + VLAN ID filter */
-			new_filter->l2_ivlan = vlan_id;
-			new_filter->l2_ivlan_mask = 0xF000;
-			new_filter->enables |= en;
-			rc = bnxt_hwrm_set_l2_filter(bp,
-					vnic->fw_vnic_id,
-					new_filter);
-			if (rc)
-				goto exit;
-			PMD_DRV_LOG(INFO,
-				    "Added Vlan filter for %d\n", vlan_id);
-cont:
-			filter = temp_filter;
-		}
+	vnic = BNXT_GET_DEFAULT_VNIC(bp);
+	filter = STAILQ_FIRST(&vnic->filter);
+	/* Check if the VLAN has already been added */
+	while (filter) {
+		if (filter->enables & chk && filter->l2_ivlan == vlan_id &&
+		    !memcmp(filter->l2_addr, bp->mac_addr, ETHER_ADDR_LEN))
+			return -EEXIST;
+
+		filter = STAILQ_NEXT(filter, next);
 	}
-exit:
+
+	/* No match found. Alloc a fresh filter and issue the L2_FILTER_ALLOC
+	 * command to create MAC+VLAN filter with the right flags, enables set.
+	 */
+	filter = bnxt_alloc_filter(bp);
+	if (!filter) {
+		PMD_DRV_LOG(ERR,
+			    "MAC/VLAN filter alloc failed\n");
+		return -ENOMEM;
+	}
+	/* MAC + VLAN ID filter */
+	filter->l2_ivlan = vlan_id;
+	filter->l2_ivlan_mask = 0x0FFF;
+	filter->enables |= en;
+	rc = bnxt_hwrm_set_l2_filter(bp, vnic->fw_vnic_id, filter);
+	if (rc) {
+		/* Free the newly allocated filter as we were
+		 * not able to create the filter in hardware.
+		 */
+		filter->fw_l2_filter_id = UINT64_MAX;
+		STAILQ_INSERT_TAIL(&bp->free_filter_list, filter, next);
+		return rc;
+	}
+
+	/* Add this new filter to the list */
+	STAILQ_INSERT_TAIL(&vnic->filter, filter, next);
+	PMD_DRV_LOG(INFO,
+		    "Added Vlan filter for %d\n", vlan_id);
 	return rc;
 }
 
@@ -1547,7 +1471,7 @@ bnxt_set_default_mac_addr_op(struct rte_eth_dev *dev, struct ether_addr *addr)
 		if (filter->mac_index != 0)
 			continue;
 
-		memcpy(filter->l2_addr, bp->mac_addr, ETHER_ADDR_LEN);
+		memcpy(filter->l2_addr, addr, ETHER_ADDR_LEN);
 		memset(filter->l2_addr_mask, 0xff, ETHER_ADDR_LEN);
 		filter->flags |= HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_PATH_RX;
 		filter->enables |=
@@ -1555,8 +1479,10 @@ bnxt_set_default_mac_addr_op(struct rte_eth_dev *dev, struct ether_addr *addr)
 			HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK;
 
 		rc = bnxt_hwrm_set_l2_filter(bp, vnic->fw_vnic_id, filter);
-		if (rc)
+		if (rc) {
+			memcpy(filter->l2_addr, bp->mac_addr, ETHER_ADDR_LEN);
 			return rc;
+		}
 
 		memcpy(bp->mac_addr, addr, ETHER_ADDR_LEN);
 		PMD_DRV_LOG(DEBUG, "Set MAC addr\n");
@@ -1591,6 +1517,10 @@ bnxt_dev_set_mc_addr_list_op(struct rte_eth_dev *eth_dev,
 	}
 
 	vnic->mc_addr_cnt = i;
+	if (vnic->mc_addr_cnt)
+		vnic->flags |= BNXT_VNIC_INFO_MCAST;
+	else
+		vnic->flags &= ~BNXT_VNIC_INFO_MCAST;
 
 allmulti:
 	return bnxt_hwrm_cfa_l2_set_rx_mask(bp, vnic, 0, NULL);
@@ -1629,7 +1559,7 @@ bnxt_rxq_info_get_op(struct rte_eth_dev *dev, uint16_t queue_id,
 
 	qinfo->conf.rx_free_thresh = rxq->rx_free_thresh;
 	qinfo->conf.rx_drop_en = 0;
-	qinfo->conf.rx_deferred_start = 0;
+	qinfo->conf.rx_deferred_start = rxq->rx_deferred_start;
 }
 
 static void
@@ -1651,12 +1581,17 @@ bnxt_txq_info_get_op(struct rte_eth_dev *dev, uint16_t queue_id,
 	qinfo->conf.tx_deferred_start = txq->tx_deferred_start;
 }
 
-static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
+int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 {
 	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_eth_dev_info dev_info;
+	uint32_t new_pkt_size;
 	uint32_t rc = 0;
 	uint32_t i;
+
+	/* Exit if receive queues are not configured yet */
+	if (!eth_dev->data->nb_rx_queues)
+		return rc;
 
 	bnxt_dev_info_get_op(eth_dev, &dev_info);
 
@@ -1665,6 +1600,8 @@ static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 			ETHER_MIN_MTU, BNXT_MAX_MTU);
 		return -EINVAL;
 	}
+	new_pkt_size = new_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN +
+		       VLAN_TAG_SIZE * BNXT_NUM_VLANS;
 
 	if (new_mtu > ETHER_MTU) {
 		bp->flags |= BNXT_FLAG_JUMBO;
@@ -1676,18 +1613,15 @@ static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 		bp->flags &= ~BNXT_FLAG_JUMBO;
 	}
 
-	eth_dev->data->dev_conf.rxmode.max_rx_pkt_len =
-		new_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN + VLAN_TAG_SIZE * 2;
-
-	eth_dev->data->mtu = new_mtu;
-	PMD_DRV_LOG(INFO, "New MTU is %d\n", eth_dev->data->mtu);
+	/* Is there a change in mtu setting? */
+	if (eth_dev->data->dev_conf.rxmode.max_rx_pkt_len == new_pkt_size)
+		return rc;
 
 	for (i = 0; i < bp->nr_vnics; i++) {
 		struct bnxt_vnic_info *vnic = &bp->vnic_info[i];
 		uint16_t size = 0;
 
-		vnic->mru = bp->eth_dev->data->mtu + ETHER_HDR_LEN +
-					ETHER_CRC_LEN + VLAN_TAG_SIZE * 2;
+		vnic->mru = BNXT_VNIC_MRU(new_mtu);
 		rc = bnxt_hwrm_vnic_cfg(bp, vnic);
 		if (rc)
 			break;
@@ -1700,6 +1634,12 @@ static int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 			if (rc)
 				return rc;
 		}
+	}
+
+	if (!rc) {
+		eth_dev->data->mtu = new_mtu;
+		eth_dev->data->dev_conf.rxmode.max_rx_pkt_len = new_pkt_size;
+		PMD_DRV_LOG(INFO, "New MTU is %d\n", new_mtu);
 	}
 
 	return rc;
@@ -1748,39 +1688,22 @@ bnxt_rx_queue_count_op(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 	struct bnxt_cp_ring_info *cpr;
 	struct bnxt_rx_queue *rxq;
 	struct rx_pkt_cmpl *rxcmp;
-	uint16_t cmp_type;
-	uint8_t cmp = 1;
-	bool valid;
 
 	rxq = dev->data->rx_queues[rx_queue_id];
 	cpr = rxq->cp_ring;
-	valid = cpr->valid;
+	raw_cons = cpr->cp_raw_cons;
 
-	while (raw_cons < rxq->nb_rx_desc) {
+	while (1) {
 		cons = RING_CMP(cpr->cp_ring_struct, raw_cons);
+		rte_prefetch0(&cpr->cp_desc_ring[cons]);
 		rxcmp = (struct rx_pkt_cmpl *)&cpr->cp_desc_ring[cons];
 
-		if (!CMPL_VALID(rxcmp, valid))
-			goto nothing_to_do;
-		valid = FLIP_VALID(cons, cpr->cp_ring_struct->ring_mask, valid);
-		cmp_type = CMP_TYPE(rxcmp);
-		if (cmp_type == RX_TPA_END_CMPL_TYPE_RX_TPA_END) {
-			cmp = (rte_le_to_cpu_32(
-					((struct rx_tpa_end_cmpl *)
-					 (rxcmp))->agg_bufs_v1) &
-			       RX_TPA_END_CMPL_AGG_BUFS_MASK) >>
-				RX_TPA_END_CMPL_AGG_BUFS_SFT;
-			desc++;
-		} else if (cmp_type == 0x11) {
-			desc++;
-			cmp = (rxcmp->agg_bufs_v1 &
-				   RX_PKT_CMPL_AGG_BUFS_MASK) >>
-				RX_PKT_CMPL_AGG_BUFS_SFT;
+		if (!CMP_VALID(rxcmp, raw_cons, cpr->cp_ring_struct)) {
+			break;
 		} else {
-			cmp = 1;
+			raw_cons++;
+			desc++;
 		}
-nothing_to_do:
-		raw_cons += cmp ? cmp : 2;
 	}
 
 	return desc;
@@ -2092,9 +2015,6 @@ parse_ntuple_filter(struct bnxt *bp,
 		PMD_DRV_LOG(ERR, "invalid src_port mask.");
 		return -EINVAL;
 	}
-
-	//TODO Priority
-	//nfilter->priority = (uint8_t)filter->priority;
 
 	bfilter->enables = en;
 	return 0;
@@ -2461,7 +2381,6 @@ bnxt_parse_fdir_filter(struct bnxt *bp,
 		PMD_DRV_LOG(ERR, "Invalid queue %d\n", fdir->action.rx_queue);
 		return -EINVAL;
 	}
-
 
 	if (fdir_mode == RTE_FDIR_MODE_PERFECT_MAC_VLAN) {
 		rte_memcpy(filter->dst_macaddr,
@@ -3223,6 +3142,45 @@ static int bnxt_init_board(struct rte_eth_dev *eth_dev)
 	return 0;
 }
 
+static int bnxt_setup_mac_addr(struct rte_eth_dev *eth_dev)
+{
+	struct bnxt *bp = eth_dev->data->dev_private;
+	int rc = 0;
+
+	eth_dev->data->mac_addrs = rte_zmalloc("bnxt_mac_addr_tbl",
+					       ETHER_ADDR_LEN *
+					       bp->max_l2_ctx,
+					       0);
+	if (eth_dev->data->mac_addrs == NULL) {
+		PMD_DRV_LOG(ERR, "Failed to alloc MAC addr tbl\n");
+		return -ENOMEM;
+	}
+
+	if (bnxt_check_zero_bytes(bp->dflt_mac_addr, ETHER_ADDR_LEN)) {
+		if (BNXT_PF(bp))
+			return -EINVAL;
+
+		/* Generate a random MAC address, if none was assigned by PF */
+		PMD_DRV_LOG(INFO, "VF MAC address not assigned by Host PF\n");
+		bnxt_eth_hw_addr_random(bp->mac_addr);
+		PMD_DRV_LOG(INFO,
+			    "Assign random MAC:%02X:%02X:%02X:%02X:%02X:%02X\n",
+			    bp->mac_addr[0], bp->mac_addr[1], bp->mac_addr[2],
+			    bp->mac_addr[3], bp->mac_addr[4], bp->mac_addr[5]);
+
+		rc = bnxt_hwrm_set_mac(bp);
+		if (!rc)
+			memcpy(&bp->eth_dev->data->mac_addrs[0], bp->mac_addr,
+			       ETHER_ADDR_LEN);
+		return rc;
+	}
+
+	/* Copy the permanent MAC from the FUNC_QCAPS response */
+	memcpy(bp->mac_addr, bp->dflt_mac_addr, ETHER_ADDR_LEN);
+	memcpy(&eth_dev->data->mac_addrs[0], bp->mac_addr, ETHER_ADDR_LEN);
+
+	return rc;
+}
 
 #define ALLOW_FUNC(x)	\
 	{ \
@@ -3230,15 +3188,126 @@ static int bnxt_init_board(struct rte_eth_dev *eth_dev)
 		bp->pf.vf_req_fwd[((arg) >> 5)] &= \
 		~rte_cpu_to_le_32(1 << ((arg) & 0x1f)); \
 	}
+
+static int bnxt_alloc_stats_mem(struct bnxt *bp)
+{
+	struct rte_pci_device *pci_dev = bp->pdev;
+	char mz_name[RTE_MEMZONE_NAMESIZE];
+	const struct rte_memzone *mz = NULL;
+	uint32_t total_alloc_len;
+	rte_iova_t mz_phys_addr;
+
+	if (pci_dev->id.device_id == BROADCOM_DEV_ID_NS2)
+		return 0;
+
+	snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
+		 "bnxt_%04x:%02x:%02x:%02x-%s", pci_dev->addr.domain,
+		 pci_dev->addr.bus, pci_dev->addr.devid,
+		 pci_dev->addr.function, "rx_port_stats");
+	mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
+	total_alloc_len =
+		RTE_CACHE_LINE_ROUNDUP(sizeof(struct rx_port_stats) +
+				       sizeof(struct rx_port_stats_ext) +
+				       512);
+	mz = rte_memzone_lookup(mz_name);
+	if (!mz) {
+		mz = rte_memzone_reserve(mz_name, total_alloc_len,
+					 SOCKET_ID_ANY,
+					 RTE_MEMZONE_2MB |
+					 RTE_MEMZONE_SIZE_HINT_ONLY |
+					 RTE_MEMZONE_IOVA_CONTIG);
+		if (mz == NULL)
+			return -ENOMEM;
+	}
+	memset(mz->addr, 0, mz->len);
+	mz_phys_addr = mz->iova;
+	if ((unsigned long)mz->addr == mz_phys_addr) {
+		PMD_DRV_LOG(DEBUG,
+			    "Memzone physical address same as virtual.\n");
+		PMD_DRV_LOG(DEBUG,
+			    "Using rte_mem_virt2iova()\n");
+		mz_phys_addr = rte_mem_virt2iova(mz->addr);
+		if (mz_phys_addr == RTE_BAD_IOVA) {
+			PMD_DRV_LOG(ERR,
+				    "Can't map address to physical memory\n");
+			return -ENOMEM;
+		}
+	}
+
+	bp->rx_mem_zone = (const void *)mz;
+	bp->hw_rx_port_stats = mz->addr;
+	bp->hw_rx_port_stats_map = mz_phys_addr;
+
+	snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
+		 "bnxt_%04x:%02x:%02x:%02x-%s", pci_dev->addr.domain,
+		 pci_dev->addr.bus, pci_dev->addr.devid,
+		 pci_dev->addr.function, "tx_port_stats");
+	mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
+	total_alloc_len =
+		RTE_CACHE_LINE_ROUNDUP(sizeof(struct tx_port_stats) +
+				       sizeof(struct tx_port_stats_ext) +
+				       512);
+	mz = rte_memzone_lookup(mz_name);
+	if (!mz) {
+		mz = rte_memzone_reserve(mz_name,
+					 total_alloc_len,
+					 SOCKET_ID_ANY,
+					 RTE_MEMZONE_2MB |
+					 RTE_MEMZONE_SIZE_HINT_ONLY |
+					 RTE_MEMZONE_IOVA_CONTIG);
+		if (mz == NULL)
+			return -ENOMEM;
+	}
+	memset(mz->addr, 0, mz->len);
+	mz_phys_addr = mz->iova;
+	if ((unsigned long)mz->addr == mz_phys_addr) {
+		PMD_DRV_LOG(DEBUG,
+			    "Memzone physical address same as virtual.\n");
+		PMD_DRV_LOG(DEBUG,
+			    "Using rte_mem_virt2iova()\n");
+		mz_phys_addr = rte_mem_virt2iova(mz->addr);
+		if (mz_phys_addr == RTE_BAD_IOVA) {
+			PMD_DRV_LOG(ERR,
+				    "Can't map address to physical memory\n");
+			return -ENOMEM;
+		}
+	}
+
+	bp->tx_mem_zone = (const void *)mz;
+	bp->hw_tx_port_stats = mz->addr;
+	bp->hw_tx_port_stats_map = mz_phys_addr;
+	bp->flags |= BNXT_FLAG_PORT_STATS;
+
+	/* Display extended statistics if FW supports it */
+	if (bp->hwrm_spec_code < HWRM_SPEC_CODE_1_8_4 ||
+	    bp->hwrm_spec_code == HWRM_SPEC_CODE_1_9_0)
+		return 0;
+
+	bp->hw_rx_port_stats_ext = (void *)
+		((uint8_t *)bp->hw_rx_port_stats +
+		 sizeof(struct rx_port_stats));
+	bp->hw_rx_port_stats_ext_map = bp->hw_rx_port_stats_map +
+		sizeof(struct rx_port_stats);
+	bp->flags |= BNXT_FLAG_EXT_RX_PORT_STATS;
+
+	if (bp->hwrm_spec_code < HWRM_SPEC_CODE_1_9_2) {
+		bp->hw_tx_port_stats_ext = (void *)
+				((uint8_t *)bp->hw_tx_port_stats +
+				 sizeof(struct tx_port_stats));
+		bp->hw_tx_port_stats_ext_map =
+				bp->hw_tx_port_stats_map +
+				sizeof(struct tx_port_stats);
+		bp->flags |= BNXT_FLAG_EXT_TX_PORT_STATS;
+	}
+
+	return 0;
+}
+
 static int
 bnxt_dev_init(struct rte_eth_dev *eth_dev)
 {
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
-	char mz_name[RTE_MEMZONE_NAMESIZE];
-	const struct rte_memzone *mz = NULL;
 	static int version_printed;
-	uint32_t total_alloc_len;
-	rte_iova_t mz_phys_addr;
 	struct bnxt *bp;
 	int rc;
 
@@ -3272,109 +3341,6 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev)
 		goto error;
 	}
 
-	if (pci_dev->id.device_id != BROADCOM_DEV_ID_NS2) {
-		snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
-			 "bnxt_%04x:%02x:%02x:%02x-%s", pci_dev->addr.domain,
-			 pci_dev->addr.bus, pci_dev->addr.devid,
-			 pci_dev->addr.function, "rx_port_stats");
-		mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
-		mz = rte_memzone_lookup(mz_name);
-		total_alloc_len = RTE_CACHE_LINE_ROUNDUP(
-					sizeof(struct rx_port_stats) +
-					sizeof(struct rx_port_stats_ext) +
-					512);
-		if (!mz) {
-			mz = rte_memzone_reserve(mz_name, total_alloc_len,
-					SOCKET_ID_ANY,
-					RTE_MEMZONE_2MB |
-					RTE_MEMZONE_SIZE_HINT_ONLY |
-					RTE_MEMZONE_IOVA_CONTIG);
-			if (mz == NULL)
-				return -ENOMEM;
-		}
-		memset(mz->addr, 0, mz->len);
-		mz_phys_addr = mz->iova;
-		if ((unsigned long)mz->addr == mz_phys_addr) {
-			PMD_DRV_LOG(INFO,
-				"Memzone physical address same as virtual using rte_mem_virt2iova()\n");
-			mz_phys_addr = rte_mem_virt2iova(mz->addr);
-			if (mz_phys_addr == 0) {
-				PMD_DRV_LOG(ERR,
-				"unable to map address to physical memory\n");
-				return -ENOMEM;
-			}
-		}
-
-		bp->rx_mem_zone = (const void *)mz;
-		bp->hw_rx_port_stats = mz->addr;
-		bp->hw_rx_port_stats_map = mz_phys_addr;
-
-		snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
-			 "bnxt_%04x:%02x:%02x:%02x-%s", pci_dev->addr.domain,
-			 pci_dev->addr.bus, pci_dev->addr.devid,
-			 pci_dev->addr.function, "tx_port_stats");
-		mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
-		mz = rte_memzone_lookup(mz_name);
-		total_alloc_len = RTE_CACHE_LINE_ROUNDUP(
-					sizeof(struct tx_port_stats) +
-					sizeof(struct tx_port_stats_ext) +
-					512);
-		if (!mz) {
-			mz = rte_memzone_reserve(mz_name,
-					total_alloc_len,
-					SOCKET_ID_ANY,
-					RTE_MEMZONE_2MB |
-					RTE_MEMZONE_SIZE_HINT_ONLY |
-					RTE_MEMZONE_IOVA_CONTIG);
-			if (mz == NULL)
-				return -ENOMEM;
-		}
-		memset(mz->addr, 0, mz->len);
-		mz_phys_addr = mz->iova;
-		if ((unsigned long)mz->addr == mz_phys_addr) {
-			PMD_DRV_LOG(WARNING,
-				"Memzone physical address same as virtual.\n");
-			PMD_DRV_LOG(WARNING,
-				"Using rte_mem_virt2iova()\n");
-			mz_phys_addr = rte_mem_virt2iova(mz->addr);
-			if (mz_phys_addr == 0) {
-				PMD_DRV_LOG(ERR,
-				"unable to map address to physical memory\n");
-				return -ENOMEM;
-			}
-		}
-
-		bp->tx_mem_zone = (const void *)mz;
-		bp->hw_tx_port_stats = mz->addr;
-		bp->hw_tx_port_stats_map = mz_phys_addr;
-
-		bp->flags |= BNXT_FLAG_PORT_STATS;
-
-		/* Display extended statistics if FW supports it */
-		if (bp->hwrm_spec_code < HWRM_SPEC_CODE_1_8_4 ||
-		    bp->hwrm_spec_code == HWRM_SPEC_CODE_1_9_0)
-			goto skip_ext_stats;
-
-		bp->hw_rx_port_stats_ext = (void *)
-			((uint8_t *)bp->hw_rx_port_stats +
-			 sizeof(struct rx_port_stats));
-		bp->hw_rx_port_stats_ext_map = bp->hw_rx_port_stats_map +
-			sizeof(struct rx_port_stats);
-		bp->flags |= BNXT_FLAG_EXT_RX_PORT_STATS;
-
-
-		if (bp->hwrm_spec_code < HWRM_SPEC_CODE_1_9_2) {
-			bp->hw_tx_port_stats_ext = (void *)
-				((uint8_t *)bp->hw_tx_port_stats +
-				 sizeof(struct tx_port_stats));
-			bp->hw_tx_port_stats_ext_map =
-				bp->hw_tx_port_stats_map +
-				sizeof(struct tx_port_stats);
-			bp->flags |= BNXT_FLAG_EXT_TX_PORT_STATS;
-		}
-	}
-
-skip_ext_stats:
 	rc = bnxt_alloc_hwrm_resources(bp);
 	if (rc) {
 		PMD_DRV_LOG(ERR,
@@ -3402,33 +3368,20 @@ skip_ext_stats:
 		PMD_DRV_LOG(ERR, "hwrm query capability failure rc: %x\n", rc);
 		goto error_free;
 	}
+
+	rc = bnxt_alloc_stats_mem(bp);
+	if (rc)
+		goto error_free;
+
 	if (bp->max_tx_rings == 0) {
 		PMD_DRV_LOG(ERR, "No TX rings available!\n");
 		rc = -EBUSY;
 		goto error_free;
 	}
-	eth_dev->data->mac_addrs = rte_zmalloc("bnxt_mac_addr_tbl",
-					ETHER_ADDR_LEN * bp->max_l2_ctx, 0);
-	if (eth_dev->data->mac_addrs == NULL) {
-		PMD_DRV_LOG(ERR,
-			"Failed to alloc %u bytes needed to store MAC addr tbl",
-			ETHER_ADDR_LEN * bp->max_l2_ctx);
-		rc = -ENOMEM;
-		goto error_free;
-	}
 
-	if (bnxt_check_zero_bytes(bp->dflt_mac_addr, ETHER_ADDR_LEN)) {
-		PMD_DRV_LOG(ERR,
-			    "Invalid MAC addr %02X:%02X:%02X:%02X:%02X:%02X\n",
-			    bp->dflt_mac_addr[0], bp->dflt_mac_addr[1],
-			    bp->dflt_mac_addr[2], bp->dflt_mac_addr[3],
-			    bp->dflt_mac_addr[4], bp->dflt_mac_addr[5]);
-		rc = -EINVAL;
+	rc = bnxt_setup_mac_addr(eth_dev);
+	if (rc)
 		goto error_free;
-	}
-	/* Copy the permanent MAC from the qcap response address now. */
-	memcpy(bp->mac_addr, bp->dflt_mac_addr, sizeof(bp->mac_addr));
-	memcpy(&eth_dev->data->mac_addrs[0], bp->mac_addr, ETHER_ADDR_LEN);
 
 	if (bp->max_ring_grps < bp->rx_cp_nr_rings) {
 		/* 1 ring is for default completion ring */

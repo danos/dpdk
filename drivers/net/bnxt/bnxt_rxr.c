@@ -61,17 +61,21 @@ static inline int bnxt_alloc_ag_data(struct bnxt_rx_queue *rxq,
 	struct bnxt_sw_rx_bd *rx_buf = &rxr->ag_buf_ring[prod];
 	struct rte_mbuf *mbuf;
 
+	if (rxbd == NULL) {
+		PMD_DRV_LOG(ERR, "Jumbo Frame. rxbd is NULL\n");
+		return -EINVAL;
+	}
+
+	if (rx_buf == NULL) {
+		PMD_DRV_LOG(ERR, "Jumbo Frame. rx_buf is NULL\n");
+		return -EINVAL;
+	}
+
 	mbuf = __bnxt_alloc_rx_data(rxq->mb_pool);
 	if (!mbuf) {
 		rte_atomic64_inc(&rxq->rx_mbuf_alloc_fail);
 		return -ENOMEM;
 	}
-
-	if (rxbd == NULL)
-		PMD_DRV_LOG(ERR, "Jumbo Frame. rxbd is NULL\n");
-	if (rx_buf == NULL)
-		PMD_DRV_LOG(ERR, "Jumbo Frame. rx_buf is NULL\n");
-
 
 	rx_buf->mbuf = mbuf;
 	mbuf->data_off = RTE_PKTMBUF_HEADROOM;
@@ -443,15 +447,21 @@ static int bnxt_rx_pkt(struct rte_mbuf **rx_pkt,
 
 	flags2_f = flags2_0xf(rxcmp1);
 	/* IP Checksum */
-	if (unlikely(((IS_IP_NONTUNNEL_PKT(flags2_f)) &&
-		      (RX_CMP_IP_CS_ERROR(rxcmp1))) ||
-		     (IS_IP_TUNNEL_PKT(flags2_f) &&
-		      (RX_CMP_IP_OUTER_CS_ERROR(rxcmp1))))) {
-		mbuf->ol_flags |= PKT_RX_IP_CKSUM_BAD;
-	} else if (unlikely(RX_CMP_IP_CS_UNKNOWN(rxcmp1))) {
-		mbuf->ol_flags |= PKT_RX_IP_CKSUM_UNKNOWN;
-	} else {
-		mbuf->ol_flags |= PKT_RX_IP_CKSUM_GOOD;
+	if (likely(IS_IP_NONTUNNEL_PKT(flags2_f))) {
+		if (unlikely(RX_CMP_IP_CS_ERROR(rxcmp1)))
+			mbuf->ol_flags |= PKT_RX_IP_CKSUM_BAD;
+		else if (unlikely(RX_CMP_IP_CS_UNKNOWN(rxcmp1)))
+			mbuf->ol_flags |= PKT_RX_IP_CKSUM_UNKNOWN;
+		else
+			mbuf->ol_flags |= PKT_RX_IP_CKSUM_GOOD;
+	} else if (IS_IP_TUNNEL_PKT(flags2_f)) {
+		if (unlikely(RX_CMP_IP_OUTER_CS_ERROR(rxcmp1) ||
+			     RX_CMP_IP_CS_ERROR(rxcmp1)))
+			mbuf->ol_flags |= PKT_RX_IP_CKSUM_BAD;
+		else if (unlikely(RX_CMP_IP_CS_UNKNOWN(rxcmp1)))
+			mbuf->ol_flags |= PKT_RX_IP_CKSUM_UNKNOWN;
+		else
+			mbuf->ol_flags |= PKT_RX_IP_CKSUM_GOOD;
 	}
 
 	/* L4 Checksum */
@@ -540,7 +550,7 @@ uint16_t bnxt_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 	bool evt = false;
 
 	/* If Rx Q was stopped return. RxQ0 cannot be stopped. */
-	if (unlikely(((rxq->rx_deferred_start ||
+	if (unlikely(((!rxq->rx_started ||
 		       !rte_spinlock_trylock(&rxq->lock)) &&
 		      rxq->queue_id)))
 		return 0;
@@ -663,10 +673,7 @@ int bnxt_init_rx_ring_struct(struct bnxt_rx_queue *rxq, unsigned int socket_id)
 	struct bnxt_rx_ring_info *rxr;
 	struct bnxt_ring *ring;
 
-	rxq->rx_buf_use_size = BNXT_MAX_MTU + ETHER_HDR_LEN + ETHER_CRC_LEN +
-			       (2 * VLAN_TAG_SIZE);
-	rxq->rx_buf_size = rxq->rx_buf_use_size + sizeof(struct rte_mbuf);
-
+	rxq->rx_buf_size = BNXT_MAX_PKT_LEN + sizeof(struct rte_mbuf);
 	rxr = rte_zmalloc_socket("bnxt_rx_ring",
 				 sizeof(struct bnxt_rx_ring_info),
 				 RTE_CACHE_LINE_SIZE, socket_id);
@@ -750,8 +757,7 @@ int bnxt_init_one_rx_ring(struct bnxt_rx_queue *rxq)
 	uint16_t size;
 
 	size = rte_pktmbuf_data_room_size(rxq->mb_pool) - RTE_PKTMBUF_HEADROOM;
-	if (rxq->rx_buf_use_size <= size)
-		size = rxq->rx_buf_use_size;
+	size = RTE_MIN(BNXT_MAX_PKT_LEN, size);
 
 	type = RX_PROD_PKT_BD_TYPE_RX_PROD_PKT | RX_PROD_PKT_BD_FLAGS_EOP_PAD;
 

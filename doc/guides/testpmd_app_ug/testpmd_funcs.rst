@@ -33,7 +33,7 @@ If you type a partial command and hit ``<TAB>`` you get a list of the available 
 
 .. note::
 
-   Some examples in this document are too long to fit on one line are are shown wrapped at `"\\"` for display purposes::
+   Some examples in this document are too long to fit on one line are shown wrapped at `"\\"` for display purposes::
 
       testpmd> set flow_ctrl rx (on|off) tx (on|off) (high_water) (low_water) \
                (pause_time) (send_xon) (port_id)
@@ -1601,7 +1601,7 @@ Enable or disable a per port Rx offloading on all Rx queues of a port::
                   vlan_strip, ipv4_cksum, udp_cksum, tcp_cksum, tcp_lro,
                   qinq_strip, outer_ipv4_cksum, macsec_strip,
                   header_split, vlan_filter, vlan_extend, jumbo_frame,
-                  crc_strip, scatter, timestamp, security, keep_crc
+                  scatter, timestamp, security, keep_crc
 
 This command should be run when the port is stopped, or else it will fail.
 
@@ -1616,7 +1616,7 @@ Enable or disable a per queue Rx offloading only on a specific Rx queue::
                   vlan_strip, ipv4_cksum, udp_cksum, tcp_cksum, tcp_lro,
                   qinq_strip, outer_ipv4_cksum, macsec_strip,
                   header_split, vlan_filter, vlan_extend, jumbo_frame,
-                  crc_strip, scatter, timestamp, security, keep_crc
+                  scatter, timestamp, security, keep_crc
 
 This command should be run when the port is stopped, or else it will fail.
 
@@ -1951,6 +1951,15 @@ Close all ports or a specific port::
 
    testpmd> port close (port_id|all)
 
+port reset
+~~~~~~~~~~
+
+Reset all ports or a specific port::
+
+   testpmd> port reset (port_id|all)
+
+User should stop port(s) before resetting and (re-)start after reset.
+
 port config - queue ring size
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2009,91 +2018,14 @@ Set the maximum packet length::
 
 This is equivalent to the ``--max-pkt-len`` command-line option.
 
-port config - CRC Strip
-~~~~~~~~~~~~~~~~~~~~~~~
-
-Set hardware CRC stripping on or off for all ports::
-
-   testpmd> port config all crc-strip (on|off)
-
-CRC stripping is on by default.
-
-The ``off`` option is equivalent to the ``--disable-crc-strip`` command-line option.
-
-port config - scatter
-~~~~~~~~~~~~~~~~~~~~~~~
-
-Set RX scatter mode on or off for all ports::
-
-   testpmd> port config all scatter (on|off)
-
-RX scatter mode is off by default.
-
-The ``on`` option is equivalent to the ``--enable-scatter`` command-line option.
-
-port config - RX Checksum
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Set hardware RX checksum offload to on or off for all ports::
-
-   testpmd> port config all rx-cksum (on|off)
-
-Checksum offload is off by default.
-
-The ``on`` option is equivalent to the ``--enable-rx-cksum`` command-line option.
-
-port config - VLAN
-~~~~~~~~~~~~~~~~~~
-
-Set hardware VLAN on or off for all ports::
-
-   testpmd> port config all hw-vlan (on|off)
-
-Hardware VLAN is off by default.
-
-The ``on`` option is equivalent to the ``--enable-hw-vlan`` command-line option.
-
-port config - VLAN filter
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Set hardware VLAN filter on or off for all ports::
-
-   testpmd> port config all hw-vlan-filter (on|off)
-
-Hardware VLAN filter is off by default.
-
-The ``on`` option is equivalent to the ``--enable-hw-vlan-filter`` command-line option.
-
-port config - VLAN strip
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-Set hardware VLAN strip on or off for all ports::
-
-   testpmd> port config all hw-vlan-strip (on|off)
-
-Hardware VLAN strip is off by default.
-
-The ``on`` option is equivalent to the ``--enable-hw-vlan-strip`` command-line option.
-
-port config - VLAN extend
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Set hardware VLAN extend on or off for all ports::
-
-   testpmd> port config all hw-vlan-extend (on|off)
-
-Hardware VLAN extend is off by default.
-
-The ``on`` option is equivalent to the ``--enable-hw-vlan-extend`` command-line option.
-
 port config - Drop Packets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Set packet drop for packets with no descriptors on or off for all ports::
+Enable or disable packet drop on all RX queues of all ports when no receive buffers available::
 
    testpmd> port config all drop-en (on|off)
 
-Packet dropping for packets with no descriptors is off by default.
+Packet dropping when no receive buffers available is off by default.
 
 The ``on`` option is equivalent to the ``--enable-drop-en`` command-line option.
 
@@ -2642,7 +2574,7 @@ Traffic Management
 ------------------
 
 The following section shows functions for configuring traffic management on
-on the ethernet device through the use of generic TM API.
+the ethernet device through the use of generic TM API.
 
 show port traffic management capability
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
