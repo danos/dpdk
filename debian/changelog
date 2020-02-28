@@ -1,3 +1,10 @@
+dpdk (18.11.6-1) UNRELEASED; urgency=medium
+
+  * New upstream version 18.11.6; For a list of changes see
+    http://doc.dpdk.org/guides-18.11/rel_notes/release_18_11.html
+
+ -- Luca Boccassi <bluca@debian.org>  Fri, 28 Feb 2020 18:22:51 +0000
+
 dpdk (18.11.5-1) unstable; urgency=medium
 
   * New upstream version 18.11.5; For a list of changes see
