@@ -134,6 +134,7 @@ librte_eal.so.18.11 librte-eal18.11 #MINVER#
  rte_hexdump@DPDK_2.0 16.04
  rte_hypervisor_get@DPDK_18.02 18.02
  rte_hypervisor_get_name@DPDK_18.02 18.02
+ rte_intr_ack@EXPERIMENTAL 18.11.6
  rte_intr_allow_others@DPDK_2.1 16.04
  rte_intr_callback_register@DPDK_2.0 16.04
  rte_intr_callback_unregister@DPDK_2.0 16.04
