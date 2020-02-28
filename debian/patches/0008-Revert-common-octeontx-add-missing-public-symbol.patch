@@ -1,0 +1,16 @@
+Author: Luca Boccassi <luca.boccassi@microsoft.com>
+Description: Revert "common/octeontx: add missing public symbol"
+ This reverts commit bd979fff652326e042c21aaaf3df1f515ffdff6e.
+ It changed the version of the symbol from @Base to @DPDK_18.05
+ which breaks ABI compatibility.
+Forwarded: yes
+--- a/drivers/common/octeontx/rte_common_octeontx_version.map
++++ b/drivers/common/octeontx/rte_common_octeontx_version.map
+@@ -1,7 +1,6 @@
+ DPDK_18.05 {
+ 	global:
+ 
+-	octeontx_logtype_mbox;
+ 	octeontx_mbox_set_ram_mbox_base;
+ 	octeontx_mbox_set_reg;
+ 	octeontx_mbox_send;
