@@ -1,2 +1,3 @@
 dpdk-doc: embedded-javascript-library
+dpdk-doc: package-contains-documentation-outside-usr-share-doc usr/share/dpdk/examples/bpf/README
 dpdk-doc: script-not-executable
