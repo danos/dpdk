@@ -172,6 +172,8 @@ ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
 	dh_install -p dpdk-modules-$(KVERS) lib/modules
 endif
+	# Strip RPATH, hard-coded in test/test/meson.build at the moment
+	chrpath --delete $(CURDIR)/debian/tmp/usr/bin/dpdk-test
 
 override_dh_install:
 	dh_install --exclude=fonts
