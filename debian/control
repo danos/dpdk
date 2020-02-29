@@ -30,7 +30,7 @@ Build-Depends: debhelper (>= 10.3~),
                texlive-fonts-recommended <!nodoc>,
                texlive-latex-extra <!nodoc>,
                zlib1g-dev,
-Standards-Version: 4.4.0
+Standards-Version: 4.5.0
 Rules-Requires-Root: no
 Section: libs
 Homepage: https://www.dpdk.org
