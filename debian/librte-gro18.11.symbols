@@ -1,0 +1,8 @@
+librte_gro.so.18.11 librte-gro18.11 #MINVER#
+ DPDK_17.08@DPDK_17.08 18.11
+ rte_gro_ctx_create@DPDK_17.08 18.11
+ rte_gro_ctx_destroy@DPDK_17.08 18.11
+ rte_gro_get_pkt_count@DPDK_17.08 18.11
+ rte_gro_reassemble@DPDK_17.08 18.11
+ rte_gro_reassemble_burst@DPDK_17.08 18.11
+ rte_gro_timeout_flush@DPDK_17.08 18.11
