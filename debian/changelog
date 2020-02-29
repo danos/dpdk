@@ -1,9 +1,23 @@
-dpdk (18.11.6-1) UNRELEASED; urgency=medium
+dpdk (18.11.6-1) unstable; urgency=medium
 
+  [ Luca Boccassi ]
   * New upstream version 18.11.6; For a list of changes see
     http://doc.dpdk.org/guides-18.11/rel_notes/release_18_11.html
+  * Drop avoid-as-needed-as-it-causes-overlinking.patch, merged upstream.
+  * Refresh remaining patches to remove fuzz from 18.11.6.
+  * Add patch to avoid changing stable symbol version, breaking ABI.
+  * Update librte-eal18.11.symbols with new experimental symbol from
+    18.11.6
 
- -- Luca Boccassi <bluca@debian.org>  Fri, 28 Feb 2020 18:22:51 +0000
+  [ Christian Ehrhardt ]
+  * d/*.lintian-overrides: add overrides for a few known but accepted
+    deficiencies
+
+  [ Luca Boccassi ]
+  * Use chrpath to strip RPATH from dpdk-test binary
+  * Add missing librte-gro symbols file
+
+ -- Luca Boccassi <bluca@debian.org>  Sat, 29 Feb 2020 11:58:26 +0000
 
 dpdk (18.11.5-1) unstable; urgency=medium
 
