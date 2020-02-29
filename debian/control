@@ -840,7 +840,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
+Description: Data Plane Development Kit (librte-pmd-dpaa-sec runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
@@ -854,7 +854,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
+Description: Data Plane Development Kit (librte-pmd-dpaa-event runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
@@ -868,7 +868,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
+Description: Data Plane Development Kit (librte-pmd-dpaa2 runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
@@ -882,7 +882,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
+Description: Data Plane Development Kit (librte-pmd-dpaa2-event runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
@@ -896,7 +896,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
+Description: Data Plane Development Kit (librte-pmd-dpaa2-sec runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
@@ -1632,7 +1632,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
-Description: Data Plane Development Kit (librte_mempool_octeontx runtime library)
+Description: Data Plane Development Kit (librte_mempool_octeontx common library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
