@@ -173,6 +173,9 @@ ifneq (,$(KVERS))
 	dh_install -p dpdk-modules-$(KVERS) lib/modules
 endif
 
+override_dh_install:
+	dh_install --exclude=fonts
+
 override_dh_dkms:
 	dh_dkms -V $(DEB_VERSION_UPSTREAM)
 
