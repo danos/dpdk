@@ -2,3 +2,23 @@
 include:
   - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/salsa-ci.yml
   - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/pipeline-jobs.yml
+
+lintian:
+  extends: .test-lintian
+  stage: test
+  image: $SALSA_CI_IMAGES_LINTIAN
+  except:
+    variables:
+      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+      - $SALSA_CI_DISABLE_LINTIAN =~ /^(1|yes|true)$/
+  script:
+    - lintian --suppress-tags symbols-file-missing-build-depends-package-field --display-info --pedantic ${WORKING_DIR}/*.changes | tee lintian.output || ECODE=$?
+    - lintian2junit.py --lintian-file lintian.output > ${WORKING_DIR}/lintian.xml
+    - exit ${ECODE-0}
+  variables:
+    GIT_STRATEGY: none
+  artifacts:
+    reports:
+      junit: ${WORKING_DIR}/lintian.xml
+  dependencies:
+    - build
