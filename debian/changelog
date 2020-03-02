@@ -1,3 +1,9 @@
+dpdk (18.11.6-1vyatta2) unstable; urgency=medium
+
+  * net/cxgbe: announce Tx multi-segments offload (Bugfix: VRVDR-50268)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 02 Mar 2020 07:44:45 -0500
+
 dpdk (18.11.6-1vyatta1) unstable; urgency=medium
 
   * Merge tag 'v18.11.6' from dpdk-stable into branch 18.11.x
