@@ -1,0 +1,19 @@
+Subject: [PATCH] net/ena: announce Tx multi-segments offload
+
+Multi-segs Tx is already supported by ena PMD. So, add the missing
+DEV_TX_OFFLOAD_MULTI_SEGS flag to the list of supported Tx offload
+features.
+
+Reported-by: Sameer Agrawal <sa503s@att.com>
+--- a/drivers/net/ena/ena_ethdev.c
++++ b/drivers/net/ena/ena_ethdev.c
+@@ -175,7 +175,8 @@ static const struct ena_stats ena_stats_
+ #define QUEUE_OFFLOADS (DEV_TX_OFFLOAD_TCP_CKSUM |\
+ 			DEV_TX_OFFLOAD_UDP_CKSUM |\
+ 			DEV_TX_OFFLOAD_IPV4_CKSUM |\
+-			DEV_TX_OFFLOAD_TCP_TSO)
++			DEV_TX_OFFLOAD_TCP_TSO |\
++			DEV_TX_OFFLOAD_MULTI_SEGS)
+ #define MBUF_OFFLOADS (PKT_TX_L4_MASK |\
+ 		       PKT_TX_IP_CKSUM |\
+ 		       PKT_TX_TCP_SEG)
