@@ -1,3 +1,10 @@
+dpdk (18.11.6-1vyatta3) unstable; urgency=medium
+
+  * ixgbe: stop delayed interrupt handler when starting (Bugfix:
+    VRVDR-48438)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 03 Mar 2020 10:36:38 -0500
+
 dpdk (18.11.6-1vyatta2) unstable; urgency=medium
 
   * net/cxgbe: announce Tx multi-segments offload (Bugfix: VRVDR-50268)
