@@ -1,3 +1,10 @@
+dpdk (18.11.5-1vyatta8) unstable; urgency=medium
+
+  * ixgbe: stop delayed interrupt handler when starting (Bugfix:
+    VRVDR-48438)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 03 Mar 2020 14:32:44 -0500
+
 dpdk (18.11.5-1vyatta7) unstable; urgency=medium
 
   * net/bonding: advertise rx vlan filter capability
