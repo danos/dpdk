@@ -1,3 +1,13 @@
+dpdk (18.11.6-1vyatta4) unstable; urgency=medium
+
+  [ Sameer Agrawal ]
+  * ena driver: add the missing DEV_TX_OFFLOAD_MULTI_SEGS flag to the list
+    of supported Tx offload features.
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 06 Mar 2020 17:09:34 -0500
+
 dpdk (18.11.6-1vyatta3) unstable; urgency=medium
 
   * ixgbe: stop delayed interrupt handler when starting (Bugfix:
