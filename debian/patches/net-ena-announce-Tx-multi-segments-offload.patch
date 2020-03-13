@@ -17,3 +17,12 @@ Reported-by: Sameer Agrawal <sa503s@att.com>
  #define MBUF_OFFLOADS (PKT_TX_L4_MASK |\
  		       PKT_TX_IP_CKSUM |\
  		       PKT_TX_TCP_SEG)
+@@ -1790,6 +1791,8 @@ static void ena_infos_get(struct rte_eth
+ 			DEV_TX_OFFLOAD_UDP_CKSUM |
+ 			DEV_TX_OFFLOAD_TCP_CKSUM;
+ 
++	tx_feat |= DEV_TX_OFFLOAD_MULTI_SEGS;
++
+ 	if (feat.offload.rx_supported &
+ 	    ENA_ADMIN_FEATURE_OFFLOAD_DESC_RX_L4_IPV4_CSUM_MASK)
+ 		rx_feat |= DEV_RX_OFFLOAD_IPV4_CKSUM |
