@@ -1,0 +1,64 @@
+From d759dde04785f952bfdded36cfc417ba68d58276 Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Tue, 26 Nov 2019 10:42:51 -0500
+Subject: [PATCH] net/virtio: fix tagging when not using Tx preparation
+
+If RTE_ETHDEV_TX_PREPARE_NOOP is configured, then the virtio will need
+to do the VLAN tag insertion on the transmit path.
+
+Fixes: 3f8fb604748b ("net/virtio: add Tx preparation")
+---
+ drivers/net/virtio/virtio_rxtx.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+--- a/drivers/net/virtio/virtio_rxtx.c
++++ b/drivers/net/virtio/virtio_rxtx.c
+@@ -1349,6 +1349,7 @@ virtio_xmit_pkts_prepare(void *tx_queue
+ 		}
+ #endif
+ 
++#ifndef RTE_ETHDEV_TX_PREPARE_NOOP
+ 		/* Do VLAN tag insertion */
+ 		if (unlikely(m->ol_flags & PKT_TX_VLAN_PKT)) {
+ 			error = rte_vlan_insert(&m);
+@@ -1362,6 +1363,7 @@ virtio_xmit_pkts_prepare(void *tx_queue
+ 				break;
+ 			}
+ 		}
++#endif
+ 
+ 		error = rte_net_intel_cksum_prepare(m);
+ 		if (unlikely(error)) {
+@@ -1402,6 +1404,21 @@ virtio_xmit_pkts(void *tx_queue, struct
+ 		struct rte_mbuf *txm = tx_pkts[nb_tx];
+ 		int can_push = 0, use_indirect = 0, slots, need;
+ 
++#ifdef RTE_ETHDEV_TX_PREPARE_NOOP
++		/* Do VLAN tag insertion */
++		if (unlikely(txm->ol_flags & PKT_TX_VLAN_PKT)) {
++			int error;
++
++			error = rte_vlan_insert(&txm);
++			if (unlikely(error)) {
++				rte_pktmbuf_free(txm);
++				continue;
++			}
++			/* vlan_insert may add a header mbuf */
++			tx_pkts[nb_tx] = txm;
++		}
++#endif
++
+ 		/* optimize ring usage */
+ 		if ((vtpci_with_feature(hw, VIRTIO_F_ANY_LAYOUT) ||
+ 		      vtpci_with_feature(hw, VIRTIO_F_VERSION_1)) &&
+--- a/config/rte_config.h
++++ b/config/rte_config.h
+@@ -55,6 +55,8 @@
+ #define RTE_MAX_QUEUES_PER_PORT 1024
+ #define RTE_ETHDEV_QUEUE_STAT_CNTRS 16
+ #define RTE_ETHDEV_RXTX_CALLBACKS 1
++#define RTE_ETHDEV_TX_PREPARE_NOOP 1
++
+ 
+ /* cryptodev defines */
+ #define RTE_CRYPTO_MAX_DEVS 64

@@ -1,0 +1,81 @@
+lib/librte_net
+
+Allow the correct insertion of the vlan_id into multi ref mbufs
+
+If the mbuf passed is multi referenced or indirect then clone and
+allocate a new head mbuf to insert the vlan to thus ensuring the
+shared packet is not changed.
+
+Signed-off-by: Simon Barber <sbarber@vyatta.att-mail.com>
+
+--- a/lib/librte_net/rte_ether.h
++++ b/lib/librte_net/rte_ether.h
+@@ -386,23 +386,58 @@ static inline int rte_vlan_insert(struct
+ 	struct vlan_hdr *vh;
+ 
+ 	/* Can't insert header if mbuf is shared */
+-	if (rte_mbuf_refcnt_read(*m) > 1) {
+-		struct rte_mbuf *copy;
++	if ((RTE_MBUF_INDIRECT(*m) &&
++	     rte_mbuf_refcnt_read(rte_mbuf_from_indirect(*m)) > 1) ||
++	    rte_mbuf_refcnt_read(*m) > 1) {
++		struct rte_mbuf *copy, *m0;
++		int err;
+ 
++		/* clone data and create a new mbuf for the header */
+ 		copy = rte_pktmbuf_clone(*m, (*m)->pool);
+ 		if (unlikely(copy == NULL))
+ 			return -ENOMEM;
++
++		m0 = rte_pktmbuf_alloc((*m)->pool);
++		if (unlikely(m0 == NULL)) {
++			rte_pktmbuf_free(copy);
++			return -ENOMEM;
++		}
++		m0->vlan_tci = copy->vlan_tci;
++		m0->vlan_tci_outer = copy->vlan_tci_outer;
++		m0->tx_offload = copy->tx_offload;
++		m0->hash = copy->hash;
++		m0->ol_flags = copy->ol_flags & ~IND_ATTACHED_MBUF;
++		m0->packet_type = copy->packet_type;
++		m0->timestamp = copy->timestamp;
++
++		/* copy eth hdr, leave space to append vlan */
++		oh = rte_pktmbuf_mtod(copy, struct ether_hdr *);
++		nh = rte_pktmbuf_mtod(m0, struct ether_hdr *);
++		memcpy(nh, oh, 2 * ETHER_ADDR_LEN);
++		rte_pktmbuf_adj(copy, 2 * ETHER_ADDR_LEN);
++		rte_pktmbuf_pkt_len(m0) = 2 * ETHER_ADDR_LEN
++					+ sizeof(struct vlan_hdr);
++		rte_pktmbuf_data_len(m0) = rte_pktmbuf_pkt_len(m0);
++
++		/* link new header to cloned data */
++		err = rte_pktmbuf_chain(m0, copy);
++		if (unlikely(err < 0)) {
++			rte_pktmbuf_free(m0);
++			rte_pktmbuf_free(copy);
++			return err;
++		}
++
+ 		rte_pktmbuf_free(*m);
+-		*m = copy;
++		*m = m0;
++	} else {
++		oh = rte_pktmbuf_mtod(*m, struct ether_hdr *);
++		nh = (struct ether_hdr *)
++			rte_pktmbuf_prepend(*m, sizeof(struct vlan_hdr));
++		if (nh == NULL)
++			return -ENOSPC;
++		memmove(nh, oh, 2 * ETHER_ADDR_LEN);
+ 	}
+ 
+-	oh = rte_pktmbuf_mtod(*m, struct ether_hdr *);
+-	nh = (struct ether_hdr *)
+-		rte_pktmbuf_prepend(*m, sizeof(struct vlan_hdr));
+-	if (nh == NULL)
+-		return -ENOSPC;
+-
+-	memmove(nh, oh, 2 * ETHER_ADDR_LEN);
+ 	nh->ether_type = rte_cpu_to_be_16(ETHER_TYPE_VLAN);
+ 
+ 	vh = (struct vlan_hdr *) (nh + 1);

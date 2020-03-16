@@ -1,0 +1,12 @@
+--- a/config/rte_config.h
++++ b/config/rte_config.h
+@@ -119,4 +119,9 @@
+ /* QEDE PMD defines */
+ #define RTE_LIBRTE_QEDE_FW ""
+ 
++#define RTE_SCHED_RED
++#define RTE_SCHED_COLLECT_STATS
++#define RTE_RED_SCALING 7
++#define RTE_RED_MAX_TH_MAX 8191
++
+ #endif /* _RTE_CONFIG_H_ */

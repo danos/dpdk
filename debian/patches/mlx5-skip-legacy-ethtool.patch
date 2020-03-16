@@ -1,0 +1,93 @@
+--- a/drivers/net/mlx5/mlx5_ethdev.c
++++ b/drivers/net/mlx5/mlx5_ethdev.c
+@@ -595,81 +595,6 @@ mlx5_dev_supported_ptypes_get(struct rte
+ }
+ 
+ /**
+- * DPDK callback to retrieve physical link information.
+- *
+- * @param dev
+- *   Pointer to Ethernet device structure.
+- * @param[out] link
+- *   Storage for current link status.
+- *
+- * @return
+- *   0 on success, a negative errno value otherwise and rte_errno is set.
+- */
+-static int
+-mlx5_link_update_unlocked_gset(struct rte_eth_dev *dev,
+-			       struct rte_eth_link *link)
+-{
+-	struct mlx5_priv *priv = dev->data->dev_private;
+-	struct ethtool_cmd edata = {
+-		.cmd = ETHTOOL_GSET /* Deprecated since Linux v4.5. */
+-	};
+-	struct ifreq ifr;
+-	struct rte_eth_link dev_link;
+-	int link_speed = 0;
+-	int ret;
+-
+-	ret = mlx5_ifreq(dev, SIOCGIFFLAGS, &ifr);
+-	if (ret) {
+-		DRV_LOG(WARNING, "port %u ioctl(SIOCGIFFLAGS) failed: %s",
+-			dev->data->port_id, strerror(rte_errno));
+-		return ret;
+-	}
+-	dev_link = (struct rte_eth_link) {
+-		.link_status = ((ifr.ifr_flags & IFF_UP) &&
+-				(ifr.ifr_flags & IFF_RUNNING)),
+-	};
+-	ifr = (struct ifreq) {
+-		.ifr_data = (void *)&edata,
+-	};
+-	ret = mlx5_ifreq(dev, SIOCETHTOOL, &ifr);
+-	if (ret) {
+-		DRV_LOG(WARNING,
+-			"port %u ioctl(SIOCETHTOOL, ETHTOOL_GSET) failed: %s",
+-			dev->data->port_id, strerror(rte_errno));
+-		return ret;
+-	}
+-	link_speed = ethtool_cmd_speed(&edata);
+-	if (link_speed == -1)
+-		dev_link.link_speed = ETH_SPEED_NUM_NONE;
+-	else
+-		dev_link.link_speed = link_speed;
+-	priv->link_speed_capa = 0;
+-	if (edata.supported & SUPPORTED_Autoneg)
+-		priv->link_speed_capa |= ETH_LINK_SPEED_AUTONEG;
+-	if (edata.supported & (SUPPORTED_1000baseT_Full |
+-			       SUPPORTED_1000baseKX_Full))
+-		priv->link_speed_capa |= ETH_LINK_SPEED_1G;
+-	if (edata.supported & SUPPORTED_10000baseKR_Full)
+-		priv->link_speed_capa |= ETH_LINK_SPEED_10G;
+-	if (edata.supported & (SUPPORTED_40000baseKR4_Full |
+-			       SUPPORTED_40000baseCR4_Full |
+-			       SUPPORTED_40000baseSR4_Full |
+-			       SUPPORTED_40000baseLR4_Full))
+-		priv->link_speed_capa |= ETH_LINK_SPEED_40G;
+-	dev_link.link_duplex = ((edata.duplex == DUPLEX_HALF) ?
+-				ETH_LINK_HALF_DUPLEX : ETH_LINK_FULL_DUPLEX);
+-	dev_link.link_autoneg = !(dev->data->dev_conf.link_speeds &
+-			ETH_LINK_SPEED_FIXED);
+-	if (((dev_link.link_speed && !dev_link.link_status) ||
+-	     (!dev_link.link_speed && dev_link.link_status))) {
+-		rte_errno = EAGAIN;
+-		return -rte_errno;
+-	}
+-	*link = dev_link;
+-	return 0;
+-}
+-
+-/**
+  * Retrieve physical link information (unlocked version using new ioctl).
+  *
+  * @param dev
+@@ -807,8 +732,6 @@ mlx5_link_update(struct rte_eth_dev *dev
+ 
+ 	do {
+ 		ret = mlx5_link_update_unlocked_gs(dev, &dev_link);
+-		if (ret == -ENOTSUP)
+-			ret = mlx5_link_update_unlocked_gset(dev, &dev_link);
+ 		if (ret == 0)
+ 			break;
+ 		/* Handle wait to complete situation. */

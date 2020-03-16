@@ -1,0 +1,230 @@
+From f4002dcbff684c019687e9d9daac29d6d757c668 Mon Sep 17 00:00:00 2001
+From: Alan Dewar <alan.dewar@intl.att.com>
+Date: Tue, 17 Jul 2018 14:07:25 +0100
+Subject: [PATCH] sched: add 64-bit counter retrieval API
+
+Add new APIs to retrieve counters in 64-bit wide fields.
+
+Signed-off-by: Alan Dewar <alan.dewar@intl.att.com>
+---
+ lib/librte_sched/rte_sched.c           | 72 ++++++++++++++++++++++++++++++++
+ lib/librte_sched/rte_sched.h           | 76 ++++++++++++++++++++++++++++++++++
+ lib/librte_sched/rte_sched_version.map |  2 +
+ 3 files changed, 150 insertions(+)
+
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -1389,6 +1389,43 @@ rte_sched_subport_read_stats(struct rte_
+ }
+ 
+ int
++rte_sched_subport_read_stats64(struct rte_sched_port *port,
++			       uint32_t subport_id,
++			       struct rte_sched_subport_stats64 *stats64,
++			       uint32_t *tc_ov)
++{
++	struct rte_sched_subport *s;
++	uint32_t tc;
++
++	/* Check user parameters */
++	if (port == NULL || subport_id >= port->n_subports_per_port ||
++	    stats64 == NULL || tc_ov == NULL)
++		return -1;
++
++	s = port->subport + subport_id;
++
++	/* Copy subport stats and clear */
++	for (tc = 0; tc < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; tc++) {
++		stats64->n_pkts_tc[tc] = s->stats.n_pkts_tc[tc];
++		stats64->n_pkts_tc_dropped[tc] =
++			s->stats.n_pkts_tc_dropped[tc];
++		stats64->n_bytes_tc[tc] = s->stats.n_bytes_tc[tc];
++		stats64->n_bytes_tc_dropped[tc] =
++			s->stats.n_bytes_tc_dropped[tc];
++#ifdef RTE_SCHED_RED
++		stats64->n_pkts_red_dropped[tc] =
++			s->stats.n_pkts_red_dropped[tc];
++#endif
++	}
++	memset(&s->stats, 0, sizeof(struct rte_sched_subport_stats));
++
++	/* Subport TC oversubscription status */
++	*tc_ov = s->tc_ov;
++
++	return 0;
++}
++
++int
+ rte_sched_queue_read_stats(struct rte_sched_port *port,
+ 	uint32_t queue_id,
+ 	struct rte_sched_queue_stats *stats,
+@@ -1412,6 +1449,46 @@ rte_sched_queue_read_stats(struct rte_sc
+ 	memset(&qe->stats, 0, sizeof(struct rte_sched_queue_stats));
+ 
+ 	/* Queue length */
++	*qlen = q->qw - q->qr;
++
++	return 0;
++}
++
++int
++rte_sched_queue_read_stats64(struct rte_sched_port *port,
++	uint32_t queue_id,
++	struct rte_sched_queue_stats64 *stats64,
++	uint16_t *qlen)
++{
++	struct rte_sched_queue *q;
++	struct rte_sched_queue_extra *qe;
++	uint32_t i;
++
++	/* Check user parameters */
++	if ((port == NULL) ||
++	    (queue_id >= rte_sched_port_queues_per_port(port)) ||
++		(stats64 == NULL) ||
++		(qlen == NULL)) {
++		return -1;
++	}
++	q = port->queue + queue_id;
++	qe = port->queue_extra + queue_id;
++
++	/* Copy queue stats and clear */
++	stats64->n_pkts = qe->stats.n_pkts;
++	stats64->n_pkts_dropped = qe->stats.n_pkts_dropped;
++	stats64->n_bytes = qe->stats.n_bytes;
++	stats64->n_bytes_dropped = qe->stats.n_bytes_dropped;
++#ifdef RTE_SCHED_RED
++	stats64->n_pkts_red_dropped = qe->stats.n_pkts_red_dropped;
++	for (i = 0; i < RTE_NUM_DSCP_MAPS; i++) {
++		stats64->n_pkts_red_dscp_dropped[i] =
++			qe->stats.n_pkts_red_dscp_dropped[i];
++	}
++#endif
++	memset(&qe->stats, 0, sizeof(struct rte_sched_queue_stats));
++
++	/* Queue length */
+ 	*qlen = q->qw - q->qr;
+ 
+ 	return 0;
+--- a/lib/librte_sched/rte_sched.h
++++ b/lib/librte_sched/rte_sched.h
+@@ -162,6 +162,26 @@ struct rte_sched_subport_stats {
+ #endif
+ };
+ 
++
++struct rte_sched_subport_stats64 {
++	/* Packets */
++	uint64_t n_pkts_tc[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	/**< Number of packets successfully written */
++	uint64_t n_pkts_tc_dropped[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	/**< Number of packets dropped */
++
++	/* Bytes */
++	uint64_t n_bytes_tc[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	/**< Number of bytes successfully written for each traffic class */
++	uint64_t n_bytes_tc_dropped[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	/**< Number of bytes dropped for each traffic class */
++
++#ifdef RTE_SCHED_RED
++	uint64_t n_pkts_red_dropped[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	/**< Number of packets dropped by red */
++#endif
++};
++
+ /*
+  * Pipe configuration parameters. The period and credits_per_period
+  * parameters are measured in bytes, with one byte meaning the time
+@@ -206,6 +226,21 @@ struct rte_sched_queue_stats {
+ 	uint32_t n_bytes_dropped;        /**< Bytes dropped */
+ };
+ 
++struct rte_sched_queue_stats64 {
++	/* Packets */
++	uint64_t n_pkts;                 /**< Packets successfully written */
++	uint64_t n_pkts_dropped;         /**< Packets dropped */
++#ifdef RTE_SCHED_RED
++	uint64_t n_pkts_red_dropped;	 /**< Packets dropped by RED */
++	uint64_t n_pkts_red_dscp_dropped[RTE_NUM_DSCP_MAPS];
++					/**< Packets dropped by RED per map */
++#endif
++
++	/* Bytes */
++	uint64_t n_bytes;                /**< Bytes successfully written */
++	uint64_t n_bytes_dropped;        /**< Bytes dropped */
++};
++
+ /** Port configuration parameters. */
+ struct rte_sched_port_params {
+ 	const char *name;                /**< String to be associated */
+@@ -454,6 +489,28 @@ rte_sched_subport_read_stats(struct rte_
+ 	uint32_t *tc_ov);
+ 
+ /**
++ * Hierarchical scheduler subport statistics 64-bit read
++ *
++ * @param port
++ *   Handle to port scheduler instance
++ * @param subport_id
++ *   Subport ID
++ * @param stats64
++ *   Pointer to pre-allocated subport statistics structure where the 64-bit
++ *   statistics counters should be stored
++ * @param tc_ov
++ *   Pointer to pre-allocated 4-entry array where the oversubscription status for
++ *   each of the 4 subport traffic classes should be stored.
++ * @return
++ *   0 upon success, error code otherwise
++ */
++int
++rte_sched_subport_read_stats64(struct rte_sched_port *port,
++	uint32_t subport_id,
++	struct rte_sched_subport_stats64 *stats64,
++	uint32_t *tc_ov);
++
++/**
+  * Hierarchical scheduler queue statistics read
+  *
+  * @param port
+@@ -476,6 +533,28 @@ rte_sched_queue_read_stats(struct rte_sc
+ 	uint16_t *qlen);
+ 
+ /**
++ * Hierarchical scheduler queue statistics 64-bit read
++ *
++ * @param port
++ *   Handle to port scheduler instance
++ * @param queue_id
++ *   Queue ID within port scheduler
++ * @param stats
++ *   Pointer to pre-allocated subport statistics structure where the
++ *   64-bit statistics counters should be stored
++ * @param qlen
++ *   Pointer to pre-allocated variable where the current queue length
++ *   should be stored.
++ * @return
++ *   0 upon success, error code otherwise
++ */
++int
++rte_sched_queue_read_stats64(struct rte_sched_port *port,
++	uint32_t queue_id,
++	struct rte_sched_queue_stats64 *stats64,
++	uint16_t *qlen);
++
++/**
+  * Scheduler hierarchy path write to packet descriptor. Typically
+  * called by the packet classification stage.
+  *
+--- a/lib/librte_sched/rte_sched_version.map
++++ b/lib/librte_sched/rte_sched_version.map
+@@ -50,8 +50,11 @@ DPDK_17.11 {
+ 	rte_sched_port_pkt_write_v2;
+ 	rte_red_queue_num_maps;
+ 	rte_sched_get_profile_for_pipe;
++	rte_sched_subport_read_stats64;
++	rte_sched_queue_read_stats64;
+ } DPDK_17.08;
+ 
++
+ EXPERIMENTAL {
+ 	global:
+ 

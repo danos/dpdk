@@ -1,0 +1,203 @@
+From 18321e39f562e20b42cd08b4bda92cacb94dfb1b Mon Sep 17 00:00:00 2001
+From: Alan Dewar <alan.dewar@intl.att.com>
+Date: Mon, 2 Oct 2017 16:40:37 +0100
+Subject: [PATCH] sched: make RED scaling configurable
+
+The RED code stores the weighted moving average in a 32-bit integer as
+a pseudo fixed-point floating number with 10 fractional bits.  Twelve
+other bits are used to encode the filter weight, leaving just 10 bits
+for the queue length.  This limits the maximum queue length supported
+by RED queues to 1024 packets.
+
+Introduce a new API to allow the RED scaling factor to be configured
+based upon maximum queue length.  If this API is not called, the RED
+scaling factor remains at its default value.
+
+Added some new RED scaling unit-tests to test with RED queue-lengths
+up to 8192 packets long.
+---
+ lib/librte_sched/rte_red.c             | 52 ++++++++++++++++++++++++++++++----
+ lib/librte_sched/rte_red.h             | 34 ++++++++++++++++++----
+ lib/librte_sched/rte_sched_version.map |  6 ++++
+ 3 files changed, 82 insertions(+), 10 deletions(-)
+
+--- a/lib/librte_sched/rte_red.c
++++ b/lib/librte_sched/rte_red.c
+@@ -14,6 +14,8 @@
+ static int rte_red_init_done = 0;     /**< Flag to indicate that global initialisation is done */
+ uint32_t rte_red_rand_val = 0;        /**< Random value cache */
+ uint32_t rte_red_rand_seed = 0;       /**< Seed for random number generation */
++uint8_t rte_red_scaling = RTE_RED_SCALING_DEFAULT;
++uint16_t rte_red_max_threshold = RTE_RED_DEFAULT_QUEUE_LENGTH - 1;
+ 
+ /**
+  * table[i] = log2(1-Wq) * Scale * -1
+@@ -37,7 +39,7 @@ __rte_red_init_tables(void)
+ 	double scale = 0.0;
+ 	double table_size = 0.0;
+ 
+-	scale = (double)(1 << RTE_RED_SCALING);
++	scale = (double)(1 << rte_red_scaling);
+ 	table_size = (double)(RTE_DIM(rte_red_pow2_frac_inv));
+ 
+ 	for (i = 0; i < RTE_DIM(rte_red_pow2_frac_inv); i++) {
+@@ -90,7 +92,7 @@ rte_red_config_init(struct rte_red_confi
+ 	if (red_cfg == NULL) {
+ 		return -1;
+ 	}
+-	if (max_th > RTE_RED_MAX_TH_MAX) {
++	if (max_th > rte_red_max_threshold) {
+ 		return -2;
+ 	}
+ 	if (min_th >= max_th) {
+@@ -119,11 +121,51 @@ rte_red_config_init(struct rte_red_confi
+ 		rte_red_init_done = 1;
+ 	}
+ 
+-	red_cfg->min_th = ((uint32_t) min_th) << (wq_log2 + RTE_RED_SCALING);
+-	red_cfg->max_th = ((uint32_t) max_th) << (wq_log2 + RTE_RED_SCALING);
+-	red_cfg->pa_const = (2 * (max_th - min_th) * maxp_inv) << RTE_RED_SCALING;
++	red_cfg->min_th = ((uint32_t) min_th) << (wq_log2 + rte_red_scaling);
++	red_cfg->max_th = ((uint32_t) max_th) << (wq_log2 + rte_red_scaling);
++	red_cfg->pa_const = (2 * (max_th - min_th) * maxp_inv) << rte_red_scaling;
+ 	red_cfg->maxp_inv = maxp_inv;
+ 	red_cfg->wq_log2 = wq_log2;
+ 
+ 	return 0;
+ }
++
++int
++rte_red_set_scaling(uint16_t max_red_queue_length)
++{
++	int8_t count;
++
++	if (rte_red_init_done)
++		/**
++		 * Can't change the scaling once the red table has been
++		 * computed.
++		 */
++		return -1;
++
++	if (max_red_queue_length < RTE_RED_MIN_QUEUE_LENGTH)
++		return -2;
++
++	if (max_red_queue_length > RTE_RED_MAX_QUEUE_LENGTH)
++		return -3;
++
++	if (!rte_is_power_of_2(max_red_queue_length))
++		return -4;
++
++	count = 0;
++	while (max_red_queue_length != 0) {
++		max_red_queue_length >>= 1;
++		count++;
++	}
++
++	rte_red_scaling -= count - RTE_RED_SCALING_DEFAULT;
++	rte_red_max_threshold = max_red_queue_length - 1;
++	return 0;
++}
++
++void
++rte_red_reset_scaling(void)
++{
++	rte_red_init_done = 0;
++	rte_red_scaling = RTE_RED_SCALING_DEFAULT;
++	rte_red_max_threshold = RTE_RED_DEFAULT_QUEUE_LENGTH - 1;
++}
+--- a/lib/librte_sched/rte_red.h
++++ b/lib/librte_sched/rte_red.h
+@@ -23,9 +23,11 @@ extern "C" {
+ #include <rte_cycles.h>
+ #include <rte_branch_prediction.h>
+ 
+-#define RTE_RED_SCALING                     10         /**< Fraction size for fixed-point */
++#define RTE_RED_SCALING_DEFAULT             10         /**< Fraction size for fixed-point */
+ #define RTE_RED_S                           (1 << 22)  /**< Packet size multiplied by number of leaf queues */
+-#define RTE_RED_MAX_TH_MAX                  1023       /**< Max threshold limit in fixed point format */
++#define RTE_RED_DEFAULT_QUEUE_LENGTH        1024       /**< Default Max RED queue length */
++#define RTE_RED_MIN_QUEUE_LENGTH            64
++#define RTE_RED_MAX_QUEUE_LENGTH            8192
+ #define RTE_RED_WQ_LOG2_MIN                 1          /**< Min inverse filter weight value */
+ #define RTE_RED_WQ_LOG2_MAX                 12         /**< Max inverse filter weight value */
+ #define RTE_RED_MAXP_INV_MIN                1          /**< Min inverse mark probability value */
+@@ -42,6 +44,8 @@ extern uint32_t rte_red_rand_val;
+ extern uint32_t rte_red_rand_seed;
+ extern uint16_t rte_red_log2_1_minus_Wq[RTE_RED_WQ_LOG2_NUM];
+ extern uint16_t rte_red_pow2_frac_inv[16];
++extern uint8_t rte_red_scaling;
++extern uint16_t rte_red_max_threshold;
+ 
+ /**
+  * RED configuration parameters passed by user
+@@ -108,6 +112,26 @@ rte_red_config_init(struct rte_red_confi
+ 	const uint16_t maxp_inv);
+ 
+ /**
++ * @brief Configures the global setting for the RED scaling factor
++ *
++ * @param max_red_queue_length [in] must be a power of two
++ *
++ * @return Operation status
++ * @retval 0 success
++ * @retval !0 error
++ */
++int
++rte_red_set_scaling(uint16_t max_red_queue_length);
++
++/**
++ * @brief Reset the RED scaling factor - only for use by RED unit-tests
++ *
++ * @return Operation status
++ */
++void
++rte_red_reset_scaling(void);
++
++/**
+  * @brief Generate random number for RED
+  *
+  * Implementation based on:
+@@ -177,7 +201,7 @@ __rte_red_calc_qempty_factor(uint8_t wq_
+ 	f = (n >> 6) & 0xf;
+ 	n >>= 10;
+ 
+-	if (n < RTE_RED_SCALING)
++	if (n < rte_red_scaling)
+ 		return (uint16_t) ((rte_red_pow2_frac_inv[f] + (1 << (n - 1))) >> n);
+ 
+ 	return 0;
+@@ -229,7 +253,7 @@ rte_red_enqueue_empty(const struct rte_r
+ 	if (m >= RTE_RED_2POW16) {
+ 		red->avg = 0;
+ 	} else {
+-		red->avg = (red->avg >> RTE_RED_SCALING) * __rte_red_calc_qempty_factor(red_cfg->wq_log2, (uint16_t) m);
++		red->avg = (red->avg >> rte_red_scaling) * __rte_red_calc_qempty_factor(red_cfg->wq_log2, (uint16_t) m);
+ 	}
+ 
+ 	return 0;
+@@ -336,7 +360,7 @@ rte_red_enqueue_nonempty(const struct rt
+ 	*/
+ 
+ 	/* avg update */
+-	red->avg += (q << RTE_RED_SCALING) - (red->avg >> red_cfg->wq_log2);
++	red->avg += (q << rte_red_scaling) - (red->avg >> red_cfg->wq_log2);
+ 
+ 	/* avg < min_th: do not mark the packet  */
+ 	if (red->avg < red_cfg->min_th) {
+--- a/lib/librte_sched/rte_sched_version.map
++++ b/lib/librte_sched/rte_sched_version.map
+@@ -30,6 +30,14 @@ DPDK_2.1 {
+ 
+ } DPDK_2.0;
+ 
++DPDK_17.08 {
++	global;
++
++	rte_red_max_threshold;
++	rte_red_scaling;
++	rte_red_set_scaling;
++} DPDK_2.1;
++
+ EXPERIMENTAL {
+ 	global:
+ 
