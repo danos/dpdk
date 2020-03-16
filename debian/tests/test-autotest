@@ -1,0 +1,58 @@
+#!/bin/bash
+set -u
+
+basedir=$(dirname "$0")
+. "${basedir}"/check-dpdk-supported-arch.sh
+
+# since these tests really execute dpdk code they have to check for the
+# required minimum cpu features
+ARCH=$(dpkg --print-architecture)
+echo "Check required features on arch: ${ARCH}"
+case "${ARCH}" in
+    amd64)
+        if ! grep -q '^flags.*sse3' /proc/cpuinfo; then
+            echo "Missing sse3 on ${ARCH} - not supported, SKIP test"
+            exit 0
+        fi
+        ;;
+    *)
+        echo "DPDK autotest not supported on ${ARCH}, SKIP test"
+        exit 0
+        ;;
+esac
+echo "no known missing feature on ${ARCH}, continue test"
+
+echo "Get required 1G huge pages"
+echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+sleep 5s
+realhp=$(cat /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages)
+if [[ "$realhp" != "512" ]]; then
+    echo "Unable to allocate the huge pages required for the test, SKIP test"
+    exit 0
+fi
+
+# Reasons for not being an dh_autotest
+# - needs root and hugepages
+# - build environment capabilities too unpredictable
+# - certain workarounds needed to get running, needing root for some which is
+#   not available in the build environment
+
+# blacklist reasons:
+# known upstream: http://www.dpdk.org/ml/archives/dev/2016-May/038849.html
+# - KNI: we deliver via dkms but test doesn't match
+# - power_acpi_cpufreq: in many environments blocked by other cpufreq
+# - power_kvm_vm_autotest: no avail in all environments, only for virt power management e.g. /dev/virtio-ports/virtio.serial.port.poweragent.0
+# - IVSHMEM fails in virtual environment
+# - eal_flags needs at least 8 cpus for lcores test not to fail
+# - pci doesn't initialize in all virt env causing command not found issues
+# - rather slow performance tests not suited for regular build associated tests: ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf
+
+python3 "/usr/share/dpdk/test/autotest.py" \
+    "/usr/bin/dpdk-test" \
+    "-KNI,power_acpi_cpufreq,power_kvm_vm,IVSHMEM,eal_flags,pci,ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf" \
+
+# Pass/Fail
+# For now the autotest is too unreliable, so we run it to get some logs in
+# different environments, but never (want to) fail until it is stable.
+
+echo "OK"

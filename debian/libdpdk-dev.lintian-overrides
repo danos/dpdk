@@ -1,0 +1,7 @@
+# dpdk is a massive package by the way as defined by upstream
+# accept the long depends list
+libdpdk-dev: field-too-long
+# This is a long discussion Upstream for being >common-baseline and for
+# even bleeding into dependent projects. Long term hope is that upstream will
+# get all code to properly runtime-detect but for now this is as it is.
+libdpdk-dev: pkg-config-bad-directive

@@ -1,0 +1,193 @@
+#!/usr/bin/make -f
+
+# see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
+DPKG_EXPORT_BUILDFLAGS = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+include /usr/share/dpkg/default.mk
+
+# Upstream now defines a single ABI across all libs that we will use
+DPDK_ABI := $(shell cat ABI_VERSION)
+# Experimental libs will have 0.200 on actual ABI 20.0
+DPDK_EXP_ABI := "0.$(shell cat ABI_VERSION | tr -d ".")"
+
+ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
+	export DH_VERBOSE=1
+	export DH_OPTIONS=-v
+endif
+
+# People rebuilding this package can overwrite RTE_MACHINE
+# via DEB_BUILD_OPTIONS if they like
+ifneq (,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
+    RTE_MACHINE ?= $(patsubst rte_machine=%,%,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
+endif
+# default to minimal base, without setting this it would build
+# -march=native which is a non portable invariant
+RTE_MACHINE ?= "default"
+
+# now stable with parallel comilation, so support -j
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    PAR := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    MAKEFLAGS += -j$(PAR)
+endif
+
+ifneq (,$(findstring nodoc,$(DEB_BUILD_PROFILES)))
+BUILD_DOCS=n
+else
+ifneq (,$(findstring nodoc,$(DEB_BUILD_OPTIONS)))
+BUILD_DOCS=n
+# to stop dh_installdoc from running
+export DEB_BUILD_PROFILES += nodoc
+else
+BUILD_DOCS=y
+endif
+endif
+
+# Allow to pass specific configure flags to meson as a comma separated list
+ifneq (,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS)))
+# GNU Makefile hack: can't directly escape comma and spaces, so use variables
+    comma := ,
+    space :=
+    space +=
+    DPDK_CONFIG_OPTIONS ?= $(subst $(comma),$(space),$(patsubst dpdk_config_options=%,%,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS))))
+endif
+
+# kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
+# optional binary kernel modules package. By default it will be built against
+# the current kernel, or ksrc can be passed with a path to the target kernel
+# sources instead.
+ifeq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
+DPDK_CONFIG_BUILD_KMOD=false
+KSRC=""
+else
+ifneq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
+    KSRC := $(patsubst ksrc=%,%,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
+else
+    KSRC := /lib/modules/$(shell LIST=$$(ls /lib/modules/); for dir in $$LIST; do test -d /lib/modules/$$dir/build && echo $$dir; done | sort -V | tail -n1)/build
+endif
+
+KVERS := $(shell perl debian/kernel-version $(KSRC))
+export KVERS
+export MODULE_CFLAGS=-fno-PIE
+
+DPDK_CONFIG_BUILD_KMOD=true
+
+# Since the binary module package is generated at build time depending on the
+# local kernel version, we have to append the new package in d/control.
+# We cannot use a separate control file since that wouldn't work with
+# dpkg-genchanges, and also would require a lot of overrides for debhelpers.
+get_built_using	?= $(filter-out (=),$(shell dpkg-query -f='$${source:Package} (=$${source:Version})' -W $1))
+
+build:
+	@if [ x"$(KVERS)" = x ] ; then \
+	    echo 'No version in $(KSRC)/include/linux/version.h' >&2; \
+	    exit 1; \
+	fi
+	sh debian/prep-modules $(KSRC)
+	cat debian/control.modules >> debian/control
+	dh $@ --with python3,dkms,systemd --buildsystem=meson
+endif
+
+%:
+	dh $@ --with python3,dkms,systemd --buildsystem=meson
+
+override_dh_gencontrol:
+	dh_gencontrol
+	# debian/files will not exist until dh_gencontrol has ran at least once,
+	# so we need to run gencontrol for libdpdk-dev after.
+	# The list of libraries and PMDs is everchanging, so generate the dependency
+	# list for libdpdk-dev to avoid having to maintain it manually.
+	# Same for the recommends list for dpdk, were we want the PMDs and the mempools.
+	dh_gencontrol -p libdpdk-dev -- -V"librte:Depends=`grep -E 'librte-*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p dpdk -- -V"librte:Suggests=`grep -E 'librte-(pmd|mempool).*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
+	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
+		-v`cat debian/VERSION` \
+		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
+endif
+
+override_dh_auto_clean:
+	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
+		debian/control.modules debian/VERSION
+	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
+	rm -f debian/dpdk-igb-uio-dkms.dkms
+	rm -f doc/guides/compressdevs/overview_feature_table.txt \
+		doc/guides/cryptodevs/overview_aead_table.txt \
+		doc/guides/cryptodevs/overview_asym_table.txt \
+		doc/guides/cryptodevs/overview_auth_table.txt \
+		doc/guides/cryptodevs/overview_cipher_table.txt \
+		doc/guides/cryptodevs/overview_feature_table.txt \
+		doc/guides/nics/overview_table.txt
+	dh_auto_clean
+
+override_dh_auto_configure:
+	dh_auto_configure -- $(DPDK_CONFIG_OPTIONS) \
+		--includedir=include/dpdk \
+		--default-library=shared \
+		-Dper_library_versions=false \
+		-Dinclude_subdir_arch=../$(DEB_HOST_MULTIARCH)/dpdk \
+		-Dmachine=$(RTE_MACHINE) \
+		-Dkernel_dir=$(KSRC) \
+		-Denable_kmods=$(DPDK_CONFIG_BUILD_KMOD)
+
+override_dh_auto_build-indep:
+ifeq (y,$(BUILD_DOCS))
+	dh_auto_build -- doc
+	# NINJA DOC INSTALL DOES NOT WORK - .buildinfo present, css missing
+	rm -f obj-$(DEB_HOST_MULTIARCH)/doc/guides/guides/.buildinfo
+endif
+
+# ninja install doc does not work, will rebuild everything,
+# only dpdk-doc as arch: all so just skip it
+override_dh_auto_install-indep:
+
+override_dh_auto_install-arch:
+	dh_auto_install
+	# have the DKMS build include the correct per-arch directory
+	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
+	# Package(s): libdpdk-<NAME><VER> (bare runtime libs and PMDs)
+	# if lib names end in a number, insert a "-"
+	# if libraries are fully experimental set zero as package name suffix, otherwise DPDK_ABI
+	for lib in $$(ls -1 debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/*.so.*); do \
+	  LN=$$(basename $${lib} | sed -e 's/\.so\.[0-9\.]*$$//' | tr '_' '-'); \
+	  if echo $${LN} | grep -q ".*[0-9]$$"; then \
+	    PKG="$${LN}-"; \
+	  else \
+	    PKG="$${LN}"; \
+	  fi; \
+	  if echo $${lib} | grep -q "\.so\.0\.[0-9]*$$"; then \
+	    PKG="$${PKG}$(DPDK_EXP_ABI)"; \
+	  else \
+	    PKG="$${PKG}$(DPDK_ABI)"; \
+	  fi; \
+	  LIBF="$$(basename $${lib})"; \
+	  dh_install -p $${PKG} usr/lib/$(DEB_HOST_MULTIARCH)/$${LIBF}; \
+	  if [ -f debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/*/*/$${LIBF} ]; then \
+	    dh_install -p $${PKG} usr/lib/$(DEB_HOST_MULTIARCH)/*/*/$${LIBF}; \
+	  fi; \
+	done
+	# Package: dpdk-igb-uio-dkms
+	dh_install -p dpdk-igb-uio-dkms kernel/linux/igb_uio/* \
+		usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
+ifneq (,$(KVERS))
+	# Package: dpdk-modules-<kernel version>
+	dh_install -p dpdk-modules-$(KVERS) lib/modules
+endif
+
+override_dh_dkms:
+	dh_dkms -V $(DEB_VERSION_UPSTREAM)
+
+override_dh_installinit:
+	dh_installinit --no-start --no-stop-on-upgrade
+
+override_dh_systemd_start:
+	dh_systemd_start --no-start --no-stop-on-upgrade
+
+override_dh_auto_test:
+
+override_dh_python3:
+	# dh_python only looks in /usr/share/package_name but dpdk-doc installs in
+	# /usr/share/dpdk, so pass /usr to catch all
+	dh_python3 --shebang=/usr/bin/python3 /usr
+
+override_dh_missing:
+	dh_missing --fail-missing
