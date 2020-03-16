@@ -10,6 +10,7 @@
 # So please install it in case you run into missing module issues.
 #
 # For the module igb_uio, please install the dpdk-igb-uio-dkms package.
+# For the module rte_kni, please install the dpdk-rte-kni-dkms package.
 #
 # <bus>	<id>		<driver>
 # pci	0000:04:00.0	vfio-pci

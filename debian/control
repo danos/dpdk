@@ -1,17 +1,17 @@
 Source: dpdk
 Priority: optional
-Maintainer: Debian DPDK Maintainers <pkg-dpdk-devel@lists.alioth.debian.org>
-Uploaders: Luca Boccassi <bluca@debian.org>,
-           Christian Ehrhardt <christian.ehrhardt@canonical.com>,
-           Santiago Ruano Rincón <santiagorr@riseup.net>,
+Maintainer: Vyatta Package Maintainers <DL-vyatta-help@att.com>
 Build-Depends: debhelper (>= 10.3~),
                dh-python,
+               dh-signobs,
                dkms,
+               ibverbs-providers,
                doxygen <!nodoc>,
                graphviz <!nodoc>,
                inkscape <!nodoc>,
                libbpf-dev,
                libbsd-dev,
+               libcap-dev,
                libelf-dev,
                libfdt-dev,
                libibverbs-dev (>= 16~),
@@ -22,6 +22,7 @@ Build-Depends: debhelper (>= 10.3~),
                libnuma-dev,
                libpcap-dev,
                libssl-dev,
+               linux-vyatta-kbuild | linux-headers-amd64 [amd64] | linux-headers,
                meson (>= 0.47.1~),
                pkg-config,
                python3,
@@ -67,6 +68,7 @@ Recommends: librte-mempool20.0,
             python3-pyelftools,
 Suggests: dpdk-doc,
           dpdk-igb-uio-dkms (= ${binary:Version}),
+          dpdk-rti-kni-dkms (= ${binary:Version}),
           linux-image-generic,
           ${librte:Suggests},
 Breaks: dpdk-dev (<< 18.11-4~),
@@ -83,7 +85,9 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Breaks: dpdk (<< 18.11-4~),
 Replaces: dpdk (<< 18.11-4),
 Depends: libdpdk-dev (>= ${source:Version}),
+         python3:any,
          ${misc:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
 Description: Data Plane Development Kit (dev tools)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -122,6 +126,28 @@ Description: Data Plane Development Kit (igb uio dkms)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the source code for the igb_uio kernel module.
+
+Package: dpdk-rte-kni-dkms
+Section: kernel
+Architecture: amd64 arm64 i386 ppc64el
+Depends: dkms,
+         libdpdk-dev (= ${binary:Version}),
+         libelf-dev,
+         make,
+         ${misc:Depends},
+Description: Data Plane Development Kit (rte kni dkms)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the source code for the rte_kni kernel module.
+
+Package: libdpdk-dbg
+Section: debug
+Architecture: all
+Depends: ${librte:Depends}, ${misc:Depends}
+Description: Data Plane Development Kit debug symbols
+ Virtual package to provide a single dependency point for
+ debug symbols for all DPDK libraries
 
 Package: libdpdk-dev
 Section: libdevel

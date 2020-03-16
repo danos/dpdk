@@ -67,6 +67,7 @@ librte_eal.so.20.0 librte-eal20.0 #MINVER#
  rte_eal_has_pci@DPDK_20.0 19.11
  rte_eal_hotplug_add@DPDK_20.0 19.11
  rte_eal_hotplug_remove@DPDK_20.0 19.11
+ rte_eal_hpet_init@DPDK_20.0 19.11
  rte_eal_init@DPDK_20.0 19.11
  rte_eal_iopl_init@DPDK_20.0 19.11
  rte_eal_iova_mode@DPDK_20.0 19.11
@@ -116,6 +117,8 @@ librte_eal.so.20.0 librte-eal20.0 #MINVER#
  rte_fbarray_set_free@EXPERIMENTAL 18.05
  rte_fbarray_set_used@EXPERIMENTAL 18.05
  rte_free@DPDK_20.0 19.11
+ rte_get_hpet_cycles@DPDK_20.0 19.11
+ rte_get_hpet_hz@DPDK_20.0 19.11
  rte_get_master_lcore@DPDK_20.0 19.11
  rte_get_next_lcore@DPDK_20.0 19.11
  rte_get_tsc_hz@DPDK_20.0 19.11

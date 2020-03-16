@@ -3,8 +3,10 @@ app/test/autotest.py usr/share/dpdk/test/
 app/test/autotest_data.py usr/share/dpdk/test/
 app/test/autotest_runner.py usr/share/dpdk/test/
 app/test/autotest_test_funcs.py usr/share/dpdk/test/
+usr/bin/cpu_layout.py
 usr/bin/dpdk-pdump
 usr/bin/dpdk-proc-info
+usr/bin/dpdk-setup.sh
 usr/bin/dpdk-test-bbdev
 usr/bin/dpdk-test-crypto-perf
 usr/bin/dpdk-test-eventdev

@@ -1,6 +1,8 @@
 # admin only test tools, documentation only maintained on the web (if at all) by upstream
+dpdk-dev: binary-without-manpage usr/bin/cpu_layout.py
 dpdk-dev: binary-without-manpage usr/bin/dpdk-pdump
 dpdk-dev: binary-without-manpage usr/bin/dpdk-proc-info
+dpdk-dev: binary-without-manpage usr/bin/dpdk-setup.sh
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test-acl
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test-bbdev

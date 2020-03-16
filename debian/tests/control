@@ -9,7 +9,7 @@ Depends: libdpdk-dev [amd64 arm64 i386 ppc64el], libc6, libc6-dev, gcc,
 
 Tests: test-dkms
 Restrictions: allow-stderr, isolation-machine, needs-root
-Depends: kmod, dpdk-igb-uio-dkms [amd64 arm64 i386 ppc64el],
+Depends: kmod, dpdk-igb-uio-dkms [amd64 arm64 i386 ppc64el], dpdk-rte-kni-dkms [amd64 arm64 i386 ppc64el]
 
 Tests: test-autotest
 Restrictions: allow-stderr, isolation-machine, needs-root

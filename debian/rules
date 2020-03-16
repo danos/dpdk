@@ -15,6 +15,17 @@ ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
 	export DH_OPTIONS=-v
 endif
 
+# Support Vyatta vendor specific options
+ifeq ($(shell dpkg-vendor --is Vyatta && echo yes),yes)
+    ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
+        DEB_BUILD_OPTIONS += dpdk_config_options=-Duse_hpet=true,-Dmax_ethports=128,-Dmax_numa_nodes=8
+    endif
+    ifeq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
+        DEB_BUILD_OPTIONS += kernel_modules ksrc=/lib/modules/$(shell ls -1 /lib/modules | sort | head -1)
+    endif
+    DEB_BUILD_OPTIONS += nodoc
+endif
+
 # People rebuilding this package can overwrite RTE_MACHINE
 # via DEB_BUILD_OPTIONS if they like
 ifneq (,$(filter rte_machine=%,$(DEB_BUILD_OPTIONS)))
@@ -62,10 +73,10 @@ else
 ifneq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
     KSRC := $(patsubst ksrc=%,%,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
 else
-    KSRC := /lib/modules/$(shell LIST=$$(ls /lib/modules/); for dir in $$LIST; do test -d /lib/modules/$$dir/build && echo $$dir; done | sort -V | tail -n1)/build
+    KSRC := /lib/modules/$(shell LIST=$$(ls /lib/modules/); for dir in $$LIST; do test -d /lib/modules/$$dir/build && echo $$dir; done | sort -V | tail -n1)
 endif
 
-KVERS := $(shell perl debian/kernel-version $(KSRC))
+KVERS := $(shell perl debian/kernel-version $(KSRC)/build)
 export KVERS
 export MODULE_CFLAGS=-fno-PIE
 
@@ -79,16 +90,16 @@ get_built_using	?= $(filter-out (=),$(shell dpkg-query -f='$${source:Package} (=
 
 build:
 	@if [ x"$(KVERS)" = x ] ; then \
-	    echo 'No version in $(KSRC)/include/linux/version.h' >&2; \
+	    echo 'No version in $(KSRC)/build/include/linux/version.h' >&2; \
 	    exit 1; \
 	fi
-	sh debian/prep-modules $(KSRC)
+	sh debian/prep-modules $(KSRC)/build
 	cat debian/control.modules >> debian/control
-	dh $@ --with python3,dkms,systemd --buildsystem=meson
+	dh $@ --with python3,dkms,systemd,signobs --buildsystem=meson
 endif
 
 %:
-	dh $@ --with python3,dkms,systemd --buildsystem=meson
+	dh $@ --with python3,dkms,systemd,signobs --buildsystem=meson
 
 override_dh_gencontrol:
 	dh_gencontrol
@@ -104,6 +115,7 @@ ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
 		-v`cat debian/VERSION` \
 		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
 endif
+	dh_gencontrol -p libdpdk-dbg -- -V"librte:Depends=`grep -E 'dbgsym' ./debian/files | grep 'librte' | sed -E 's/_/, /' | cut -d ' ' -f 1`"
 
 override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
@@ -168,10 +180,16 @@ override_dh_auto_install-arch:
 	# Package: dpdk-igb-uio-dkms
 	dh_install -p dpdk-igb-uio-dkms kernel/linux/igb_uio/* \
 		usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
+	# Package: dpdk-rte-kni-dkms
+	dh_install -p dpdk-rte-kni-dkms kernel/linux/kni/* \
+		usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
 	dh_install -p dpdk-modules-$(KVERS) lib/modules
+	echo "{\"dpdk-modules-$(KVERS)\": { \"files\": [ {\"sig_type\": \"linux-module\", \"file\": \"lib/modules/$(KVERS)/extra/dpdk/igb_uio.ko\"} ]}}" > debian/files.json
 endif
+	cp usertools/dpdk-setup.sh $(CURDIR)/debian/tmp/usr/bin
+	cp usertools/cpu_layout.py $(CURDIR)/debian/tmp/usr/bin
 
 override_dh_dkms:
 	dh_dkms -V $(DEB_VERSION_UPSTREAM)
