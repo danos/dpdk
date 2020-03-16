@@ -1,3 +1,12 @@
+dpdk (18.11.6-1vyatta5) unstable; urgency=medium
+
+  [ Sameer Agrawal ]
+  * Fix Tx offloads for ena driver. Fixes VRVDR-50381
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 16 Mar 2020 19:36:15 -0400
+
 dpdk (18.11.6-1vyatta4) unstable; urgency=medium
 
   [ Sameer Agrawal ]
