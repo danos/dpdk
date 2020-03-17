@@ -78,7 +78,7 @@ Signed-off-by: Alan Dewar <alan.dewar@intl.att.com>
 -	uint32_t pipe_tc3_rate_max;
 +	uint32_t pipe_low_prio_tc_rate_max;
  #ifdef RTE_SCHED_RED
- 	struct rte_red_config red_config[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE][e_RTE_METER_COLORS];
+ 	struct rte_red_config red_config[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE][RTE_COLORS];
  #endif
 @@ -260,8 +260,8 @@ rte_sched_port_queues_per_port(struct rt
  static inline struct rte_mbuf **
@@ -501,7 +501,7 @@ Signed-off-by: Alan Dewar <alan.dewar@intl.att.com>
  	s->stats.n_pkts_tc_dropped[tc_index] += 1;
 @@ -1233,7 +1298,7 @@ rte_sched_port_red_drop(struct rte_sched
  	uint32_t tc_index;
- 	enum rte_meter_color color;
+ 	enum rte_color color;
  
 -	tc_index = (qindex >> 2) & 0x3;
 +	tc_index = (qindex >> RTE_SCHED_WRR_BITS) & RTE_SCHED_TC_MASK;

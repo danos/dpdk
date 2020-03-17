@@ -18,7 +18,7 @@ Signed-off-by: Anthony Dempsey <anthonyjdempsey@gmail.com>
 +	uint32_t i;
 +
 +	for (i = 0; i < mc_addrs_num;) {
-+		if (is_broadcast_ether_addr(&mc_addrs[i]))
++		if (rte_is_broadcast_ether_addr(&mc_addrs[i]))
 +			mc_addrs[i] = mc_addrs[--mc_addrs_num];
 +		else
 +			i++;

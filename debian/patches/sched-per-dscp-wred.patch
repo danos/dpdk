@@ -247,7 +247,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  void
 +rte_sched_port_pkt_write_v2(struct rte_mbuf *pkt, uint32_t subport,
 +			    uint32_t pipe, uint32_t traffic_class,
-+			    uint32_t queue, enum rte_meter_color color,
++			    uint32_t queue, enum rte_color color,
 +			    uint16_t dscp)
 +{
 +	struct rte_sched_port_hierarchy *sched
@@ -404,7 +404,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
   *
   * @param params
 @@ -442,6 +488,31 @@ rte_sched_port_pkt_write(struct rte_mbuf
- 			 uint32_t queue, enum rte_meter_color color);
+ 			 uint32_t queue, enum rte_color color);
  
  /**
 + * Scheduler hierarchy path write to packet descriptor. Typically
@@ -428,7 +428,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 +void
 +rte_sched_port_pkt_write_v2(struct rte_mbuf *pkt, uint32_t subport,
 +			    uint32_t pipe, uint32_t traffic_class,
-+			    uint32_t queue, enum rte_meter_color color,
++			    uint32_t queue, enum rte_color color,
 +			    uint16_t dscp);
 +
 +/**

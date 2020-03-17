@@ -18,7 +18,7 @@ endif
 # Support Vyatta vendor specific options
 ifeq ($(shell dpkg-vendor --is Vyatta && echo yes),yes)
     ifeq (,$(filter dpdk_config=%,$(DEB_BUILD_OPTIONS)))
-        DEB_BUILD_OPTIONS += dpdk_config_options=-Duse_hpet=true,-Dmax_ethports=128,-Dmax_numa_nodes=8
+        DEB_BUILD_OPTIONS += dpdk_config_options=-Duse_hpet=true,-Dmax_ethports=128,-Dmax_numa_nodes=8,-Ddisable_drivers=net/softnic
     endif
     ifeq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
         DEB_BUILD_OPTIONS += kernel_modules ksrc=/lib/modules/$(shell ls -1 /lib/modules | sort | head -1)
@@ -188,6 +188,10 @@ ifneq (,$(KVERS))
 	dh_install -p dpdk-modules-$(KVERS) lib/modules
 	echo "{\"dpdk-modules-$(KVERS)\": { \"files\": [ {\"sig_type\": \"linux-module\", \"file\": \"lib/modules/$(KVERS)/extra/dpdk/igb_uio.ko\"} ]}}" > debian/files.json
 endif
+	cp obj-$(DEB_HOST_MULTIARCH)/app/dpdk-test-crypto-perf $(CURDIR)/debian/tmp/usr/bin
+	cp obj-$(DEB_HOST_MULTIARCH)/examples/dpdk-ipsec-secgw $(CURDIR)/debian/tmp/usr/bin
+	cp obj-$(DEB_HOST_MULTIARCH)/examples/dpdk-l3fwd $(CURDIR)/debian/tmp/usr/bin
+	cp obj-$(DEB_HOST_MULTIARCH)/examples/dpdk-l3fwd-acl $(CURDIR)/debian/tmp/usr/bin
 	cp usertools/dpdk-setup.sh $(CURDIR)/debian/tmp/usr/bin
 	cp usertools/cpu_layout.py $(CURDIR)/debian/tmp/usr/bin
 

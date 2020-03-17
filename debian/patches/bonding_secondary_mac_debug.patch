@@ -4,22 +4,22 @@
 
 --- a/drivers/net/bonding/rte_eth_bond_pmd.c
 +++ b/drivers/net/bonding/rte_eth_bond_pmd.c
-@@ -252,6 +252,23 @@ bond_ethdev_8023ad_flow_set(struct rte_e
+@@ -271,6 +271,23 @@ bond_ethdev_8023ad_flow_set(struct rte_e
  	return 0;
  }
  
 +static uint8_t
-+bond_mac_matches_config_mac(const struct ether_addr *addrs, const struct ether_addr *dst_addr)
++bond_mac_matches_config_mac(const struct rte_ether_addr *addrs, const struct rte_ether_addr *dst_addr)
 +{
 +	unsigned int i;
 +
 +	for (i = 0; i < BOND_MAX_MAC_ADDRS; i++) {
-+		const struct ether_addr *addr = addrs + i;
++		const struct rte_ether_addr *addr = addrs + i;
 +
-+		if (is_zero_ether_addr(addr))
++		if (rte_is_zero_ether_addr(addr))
 +			continue;
 +
-+		if (is_same_ether_addr(dst_addr, addr))
++		if (rte_is_same_ether_addr(dst_addr, addr))
 +			return 1;
 +	}
 +	return 0;
@@ -28,20 +28,12 @@
  static inline uint16_t
  rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
  		bool dedicated_rxq)
-@@ -320,7 +337,7 @@ rx_burst_8023ad(void *queue, struct rte_
+@@ -343,7 +360,7 @@ rx_burst_8023ad(void *queue, struct rte_
  				!collecting ||
  				(!promisc &&
- 				 !is_multicast_ether_addr(&hdr->d_addr) &&
--				 !is_same_ether_addr(bond_mac,
-+				 !bond_mac_matches_config_mac(bond_mac,
- 						     &hdr->d_addr)))) {
- 
- 				if (hdr->ether_type == ether_type_slow_be) {
-@@ -650,7 +667,6 @@ ipv6_hash(struct ipv6_hdr *ipv6_hdr)
- 			(word_src_addr[3] ^ word_dst_addr[3]);
- }
- 
--
- void
- burst_xmit_l2_hash(struct rte_mbuf **buf, uint16_t nb_pkts,
- 		uint16_t slave_count, uint16_t *slaves)
+ 				 ((rte_is_unicast_ether_addr(&hdr->d_addr) &&
+-				   !rte_is_same_ether_addr(bond_mac,
++				   !bond_mac_matches_config_mac(bond_mac,
+ 						       &hdr->d_addr)) ||
+ 				  (!allmulti &&
+ 				   rte_is_multicast_ether_addr(&hdr->d_addr)))))) {

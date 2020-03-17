@@ -24,7 +24,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
 
 --- a/drivers/net/ixgbe/ixgbe_ethdev.c
 +++ b/drivers/net/ixgbe/ixgbe_ethdev.c
-@@ -612,7 +612,7 @@ static const struct eth_dev_ops ixgbevf_
+@@ -629,7 +629,7 @@ static const struct eth_dev_ops ixgbevf_
  	.vlan_filter_set      = ixgbevf_vlan_filter_set,
  	.vlan_strip_queue_set = ixgbevf_vlan_strip_queue_set,
  	.vlan_offload_set     = ixgbevf_vlan_offload_set,
@@ -33,7 +33,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	.rx_queue_release     = ixgbe_dev_rx_queue_release,
  	.rx_descriptor_done   = ixgbe_dev_rx_descriptor_done,
  	.rx_descriptor_status = ixgbe_dev_rx_descriptor_status,
-@@ -1104,7 +1104,7 @@ eth_ixgbe_dev_init(struct rte_eth_dev *e
+@@ -1121,7 +1121,7 @@ eth_ixgbe_dev_init(struct rte_eth_dev *e
  				     "Using default TX function.");
  		}
  
@@ -42,7 +42,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  		return 0;
  	}
-@@ -1636,7 +1636,7 @@ eth_ixgbevf_dev_init(struct rte_eth_dev
+@@ -1599,7 +1599,7 @@ eth_ixgbevf_dev_init(struct rte_eth_dev
  				     "No TX queues configured yet. Using default TX function.");
  		}
  
@@ -51,7 +51,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  		return 0;
  	}
-@@ -1904,8 +1904,8 @@ ixgbe_vlan_filter_set(struct rte_eth_dev
+@@ -1855,8 +1855,8 @@ ixgbe_vlan_filter_set(struct rte_eth_dev
  	uint32_t vid_idx;
  	uint32_t vid_bit;
  
@@ -62,7 +62,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	vfta = IXGBE_READ_REG(hw, IXGBE_VFTA(vid_idx));
  	if (on)
  		vfta |= vid_bit;
-@@ -3896,7 +3896,9 @@ ixgbe_dev_supported_ptypes_get(struct rt
+@@ -3932,7 +3932,9 @@ ixgbe_dev_supported_ptypes_get(struct rt
  
  #if defined(RTE_ARCH_X86) || defined(RTE_MACHINE_CPUFLAG_NEON)
  	if (dev->rx_pkt_burst == ixgbe_recv_pkts_vec ||
@@ -73,7 +73,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  		return ptypes;
  #endif
  	return NULL;
-@@ -5351,8 +5353,8 @@ ixgbevf_vlan_filter_set(struct rte_eth_d
+@@ -5425,8 +5427,8 @@ ixgbevf_vlan_filter_set(struct rte_eth_d
  		PMD_INIT_LOG(ERR, "Unable to set VF vlan");
  		return ret;
  	}
@@ -86,7 +86,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	if (on)
 --- a/drivers/net/ixgbe/ixgbe_ethdev.h
 +++ b/drivers/net/ixgbe/ixgbe_ethdev.h
-@@ -586,6 +586,11 @@ int  ixgbe_dev_rx_queue_setup(struct rte
+@@ -591,6 +591,11 @@ int  ixgbe_dev_rx_queue_setup(struct rte
  		const struct rte_eth_rxconf *rx_conf,
  		struct rte_mempool *mb_pool);
  
@@ -98,7 +98,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  int  ixgbe_dev_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id,
  		uint16_t nb_tx_desc, unsigned int socket_id,
  		const struct rte_eth_txconf *tx_conf);
-@@ -807,4 +812,37 @@ ixgbe_ethertype_filter_remove(struct ixg
+@@ -812,4 +817,37 @@ ixgbe_ethertype_filter_remove(struct ixg
  	return idx;
  }
  
@@ -138,7 +138,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  #endif /* _IXGBE_ETHDEV_H_ */
 --- a/drivers/net/ixgbe/ixgbe_rxtx.c
 +++ b/drivers/net/ixgbe/ixgbe_rxtx.c
-@@ -1627,14 +1627,23 @@ ixgbe_rx_fill_from_stage(struct ixgbe_rx
+@@ -1630,14 +1630,23 @@ ixgbe_rx_fill_from_stage(struct ixgbe_rx
  			 uint16_t nb_pkts)
  {
  	struct rte_mbuf **stage = &rxq->rx_stage[rxq->rx_next_avail];
@@ -163,7 +163,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  	/* update internal queue state */
  	rxq->rx_nb_avail = (uint16_t)(rxq->rx_nb_avail - nb_pkts);
-@@ -1754,6 +1763,8 @@ ixgbe_recv_pkts(void *rx_queue, struct r
+@@ -1757,6 +1766,8 @@ ixgbe_recv_pkts(void *rx_queue, struct r
  	uint16_t nb_hold;
  	uint64_t pkt_flags;
  	uint64_t vlan_flags;
@@ -172,7 +172,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  	nb_rx = 0;
  	nb_hold = 0;
-@@ -1762,6 +1773,9 @@ ixgbe_recv_pkts(void *rx_queue, struct r
+@@ -1765,6 +1776,9 @@ ixgbe_recv_pkts(void *rx_queue, struct r
  	rx_ring = rxq->rx_ring;
  	sw_ring = rxq->sw_ring;
  	vlan_flags = rxq->vlan_flags;
@@ -182,7 +182,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	while (nb_rx < nb_pkts) {
  		/*
  		 * The order of operations here is important as the DD status
-@@ -1880,6 +1894,10 @@ ixgbe_recv_pkts(void *rx_queue, struct r
+@@ -1883,6 +1897,10 @@ ixgbe_recv_pkts(void *rx_queue, struct r
  			ixgbe_rxd_pkt_info_to_pkt_type(pkt_info,
  						       rxq->pkt_type_mask);
  
@@ -193,7 +193,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  		if (likely(pkt_flags & PKT_RX_RSS_HASH))
  			rxm->hash.rss = rte_le_to_cpu_32(
  						rxd.wb.lower.hi_dword.rss);
-@@ -2020,6 +2038,11 @@ ixgbe_recv_pkts_lro(void *rx_queue, stru
+@@ -2023,6 +2041,11 @@ ixgbe_recv_pkts_lro(void *rx_queue, stru
  	uint16_t nb_rx = 0;
  	uint16_t nb_hold = rxq->nb_rx_hold;
  	uint16_t prev_id = rxq->rx_tail;
@@ -205,7 +205,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  	while (nb_rx < nb_pkts) {
  		bool eop;
-@@ -2233,6 +2256,10 @@ next_desc:
+@@ -2236,6 +2259,10 @@ next_desc:
  		rte_packet_prefetch((char *)first_seg->buf_addr +
  			first_seg->data_off);
  
@@ -216,7 +216,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  		/*
  		 * Store the mbuf address into the next entry of the array
  		 * of returned packets.
-@@ -3083,6 +3110,25 @@ ixgbe_dev_rx_queue_setup(struct rte_eth_
+@@ -3087,6 +3114,25 @@ ixgbe_dev_rx_queue_setup(struct rte_eth_
  	return 0;
  }
  
@@ -242,7 +242,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  uint32_t
  ixgbe_dev_rx_queue_count(struct rte_eth_dev *dev, uint16_t rx_queue_id)
  {
-@@ -4581,7 +4627,7 @@ ixgbe_set_ivar(struct rte_eth_dev *dev,
+@@ -4626,7 +4672,7 @@ ixgbe_set_ivar(struct rte_eth_dev *dev,
  }
  
  void __attribute__((cold))
@@ -251,7 +251,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  {
  	uint16_t i, rx_using_sse;
  	struct ixgbe_adapter *adapter = dev->data->dev_private;
-@@ -4627,7 +4673,8 @@ ixgbe_set_rx_function(struct rte_eth_dev
+@@ -4672,7 +4718,8 @@ ixgbe_set_rx_function(struct rte_eth_dev
  					    "callback (port=%d).",
  				     dev->data->port_id);
  
@@ -261,7 +261,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  		} else if (adapter->rx_bulk_alloc_allowed) {
  			PMD_INIT_LOG(DEBUG, "Using a Scattered with bulk "
  					   "allocation callback (port=%d).",
-@@ -4656,7 +4703,8 @@ ixgbe_set_rx_function(struct rte_eth_dev
+@@ -4701,7 +4748,8 @@ ixgbe_set_rx_function(struct rte_eth_dev
  			     RTE_IXGBE_DESCS_PER_LOOP,
  			     dev->data->port_id);
  
@@ -271,7 +271,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	} else if (adapter->rx_bulk_alloc_allowed) {
  		PMD_INIT_LOG(DEBUG, "Rx Burst Bulk Alloc Preconditions are "
  				    "satisfied. Rx Burst Bulk Alloc function "
-@@ -4677,7 +4725,9 @@ ixgbe_set_rx_function(struct rte_eth_dev
+@@ -4722,7 +4770,9 @@ ixgbe_set_rx_function(struct rte_eth_dev
  
  	rx_using_sse =
  		(dev->rx_pkt_burst == ixgbe_recv_scattered_pkts_vec ||
@@ -282,7 +282,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  	for (i = 0; i < dev->data->nb_rx_queues; i++) {
  		struct ixgbe_rx_queue *rxq = dev->data->rx_queues[i];
-@@ -4998,7 +5048,7 @@ ixgbe_dev_rx_init(struct rte_eth_dev *de
+@@ -5048,7 +5098,7 @@ ixgbe_dev_rx_init(struct rte_eth_dev *de
  	if (rc)
  		return rc;
  
@@ -291,7 +291,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  	return 0;
  }
-@@ -5520,7 +5570,7 @@ ixgbevf_dev_rx_init(struct rte_eth_dev *
+@@ -5595,7 +5645,7 @@ ixgbevf_dev_rx_init(struct rte_eth_dev *
  		IXGBE_PSRTYPE_RQPL_SHIFT;
  	IXGBE_WRITE_REG(hw, IXGBE_VFPSRTYPE, psrtype);
  
@@ -300,7 +300,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  	return 0;
  }
-@@ -5746,6 +5796,24 @@ ixgbe_recv_pkts_vec(
+@@ -5821,6 +5871,24 @@ ixgbe_recv_pkts_vec(
  	void __rte_unused *rx_queue,
  	struct rte_mbuf __rte_unused **rx_pkts,
  	uint16_t __rte_unused nb_pkts)
@@ -366,21 +366,22 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  /* Takes an ethdev and a queue and sets up the tx function to be used based on
   * the queue parameters. Used in tx_queue_setup by primary process and then
   * in dev_init by secondary process when attaching to an existing ethdev.
-@@ -274,12 +299,16 @@ void ixgbe_set_tx_function(struct rte_et
+@@ -274,13 +299,17 @@ void ixgbe_set_tx_function(struct rte_et
   *
   * @dev rte_eth_dev handle
   */
 -void ixgbe_set_rx_function(struct rte_eth_dev *dev);
 +void ixgbe_set_rx_function(struct rte_eth_dev *dev, bool vf);
  
+ int ixgbe_check_supported_loopback_mode(struct rte_eth_dev *dev);
  uint16_t ixgbe_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts,
  		uint16_t nb_pkts);
  uint16_t ixgbe_recv_scattered_pkts_vec(void *rx_queue,
  		struct rte_mbuf **rx_pkts, uint16_t nb_pkts);
 +uint16_t ixgbevf_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts,
-+		uint16_t nb_pkts);
++			       uint16_t nb_pkts);
 +uint16_t ixgbevf_recv_scattered_pkts_vec(void *rx_queue,
-+		struct rte_mbuf **rx_pkts, uint16_t nb_pkts);
++				 struct rte_mbuf **rx_pkts, uint16_t nb_pkts);
  int ixgbe_rx_vec_dev_conf_condition_check(struct rte_eth_dev *dev);
  int ixgbe_rxq_vec_setup(struct ixgbe_rx_queue *rxq);
  void ixgbe_rx_queue_release_mbufs_vec(struct ixgbe_rx_queue *rxq);
@@ -546,7 +547,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  	volatile union ixgbe_adv_rx_desc *rxdp;
  	struct ixgbe_rx_entry *sw_ring;
  	uint16_t nb_pkts_recd;
-@@ -333,8 +336,10 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue
+@@ -331,8 +334,10 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue
  		/* D.3 copy final 3,4 data to rx_pkts */
  		vst1q_u8((void *)&rx_pkts[pos + 3]->rx_descriptor_fields1,
  			 pkt_mb4);
@@ -557,7 +558,7 @@ Signed-off-by: Tom Kiely <thomas.kiely@intl.att.com>
  
  		/* D.2 pkt 1,2 set in_port/nb_seg and remove crc */
  		tmp = vsubq_u16(vreinterpretq_u16_u8(pkt_mb2), crc_adjust);
-@@ -355,8 +360,10 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue
+@@ -361,8 +366,10 @@ _recv_raw_pkts_vec(struct ixgbe_rx_queue
  		/* D.3 copy final 1,2 data to rx_pkts */
  		vst1q_u8((uint8_t *)&rx_pkts[pos + 1]->rx_descriptor_fields1,
  			 pkt_mb2);

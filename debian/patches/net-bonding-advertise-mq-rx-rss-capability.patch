@@ -1,0 +1,22 @@
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1669,7 +1669,8 @@ slave_configure(struct rte_eth_dev *bond
+ 		slave_eth_dev->data->dev_conf.intr_conf.lsc = 1;
+ 
+ 	/* If RSS is enabled for bonding, try to enable it for slaves  */
+-	if (bonded_eth_dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) {
++	if (bonded_eth_dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG &&
++	    slave_eth_dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) {
+ 		if (internals->rss_key_len != 0) {
+ 			slave_eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key_len =
+ 					internals->rss_key_len;
+@@ -1683,7 +1684,8 @@ slave_configure(struct rte_eth_dev *bond
+ 				bonded_eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_hf;
+ 		slave_eth_dev->data->dev_conf.rxmode.mq_mode =
+ 				bonded_eth_dev->data->dev_conf.rxmode.mq_mode;
+-	}
++	} else
++		bonded_eth_dev->data->dev_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
+ 
+ 	rte_eth_dev_info_get(slave_eth_dev->data->port_id, &slave_info);
+ 

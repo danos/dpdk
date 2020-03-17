@@ -1,14 +1,13 @@
 --- a/drivers/net/mlx5/mlx5.c
 +++ b/drivers/net/mlx5/mlx5.c
-@@ -1456,12 +1456,12 @@
- 		.tx_vec_en = 1,
- 		.rx_vec_en = 1,
- 		.txq_inline = MLX5_ARG_UNSET,
+@@ -3269,11 +3269,11 @@ mlx5_pci_probe(struct rte_pci_driver *pc
+ 		.txq_inline_max = MLX5_ARG_UNSET,
+ 		.txq_inline_min = MLX5_ARG_UNSET,
+ 		.txq_inline_mpw = MLX5_ARG_UNSET,
 -		.txqs_inline = MLX5_ARG_UNSET,
 +		.txqs_inline = 1,
- 		.txqs_vec = MLX5_ARG_UNSET,
- 		.inline_max_packet_sz = MLX5_ARG_UNSET,
  		.vf_nl_en = 1,
+ 		.mr_ext_memseg_en = 1,
  		.mprq = {
 -			.enabled = 0, /* Disabled by default. */
 +			.enabled = 1, /* Enabled by default. */

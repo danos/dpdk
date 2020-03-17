@@ -17,11 +17,9 @@ Signed-off-by: Chas Williams <chas3@att.com>
  .../net/bonding/rte_eth_bond_8023ad_private.h   |  3 +++
  2 files changed, 15 insertions(+), 5 deletions(-)
 
-diff --git a/drivers/net/bonding/rte_eth_bond_8023ad.c b/drivers/net/bonding/rte_eth_bond_8023ad.c
-index 1e2afdf09..256ef3027 100644
 --- a/drivers/net/bonding/rte_eth_bond_8023ad.c
 +++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
-@@ -945,7 +945,8 @@ bond_mode_8023ad_activate_slave(struct rte_eth_dev *bond_dev,
+@@ -1022,7 +1022,8 @@ bond_mode_8023ad_activate_slave(struct r
  	memcpy(&port->partner, &initial, sizeof(struct port_params));
  
  	/* default states */
@@ -31,7 +29,7 @@ index 1e2afdf09..256ef3027 100644
  	port->partner_state = STATE_LACP_ACTIVE | STATE_AGGREGATION;
  	port->sm_flags = SM_FLAGS_BEGIN;
  
-@@ -1456,10 +1457,13 @@ rte_eth_bond_8023ad_ext_collect(uint16_t port_id, uint16_t slave_id,
+@@ -1543,10 +1544,13 @@ rte_eth_bond_8023ad_ext_collect(uint16_t
  
  	port = &bond_mode_8023ad_ports[slave_id];
  
@@ -47,7 +45,7 @@ index 1e2afdf09..256ef3027 100644
  
  	return 0;
  }
-@@ -1477,10 +1481,13 @@ rte_eth_bond_8023ad_ext_distrib(uint16_t port_id, uint16_t slave_id,
+@@ -1564,10 +1568,13 @@ rte_eth_bond_8023ad_ext_distrib(uint16_t
  
  	port = &bond_mode_8023ad_ports[slave_id];
  
@@ -63,10 +61,8 @@ index 1e2afdf09..256ef3027 100644
  
  	return 0;
  }
-diff --git a/drivers/net/bonding/rte_eth_bond_8023ad_private.h b/drivers/net/bonding/rte_eth_bond_8023ad_private.h
-index d905de425..534d3ec1d 100644
---- a/drivers/net/bonding/rte_eth_bond_8023ad_private.h
-+++ b/drivers/net/bonding/rte_eth_bond_8023ad_private.h
+--- a/drivers/net/bonding/eth_bond_8023ad_private.h
++++ b/drivers/net/bonding/eth_bond_8023ad_private.h
 @@ -76,7 +76,9 @@
  
  #define ACTOR_STATE(_p, _f) (!!CHECK_FLAGS((_p)->actor_state, STATE_ ## _f))
@@ -85,6 +81,3 @@ index d905de425..534d3ec1d 100644
  
  	/** The operational Actor's port parameters */
  	struct port_params actor;
--- 
-2.17.2
-

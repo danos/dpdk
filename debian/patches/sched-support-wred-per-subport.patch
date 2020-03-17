@@ -6,7 +6,7 @@
  	uint32_t qoffset;
 +
 +#ifdef RTE_SCHED_RED
-+	struct rte_red_config red_config[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE][e_RTE_METER_COLORS];
++	struct rte_red_config red_config[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE][RTE_COLORS];
 +#endif
  };
  
@@ -17,7 +17,7 @@
  				struct rte_sched_subport_params *params,
 -				uint16_t *qsize)
 +				uint16_t *qsize,
-+				struct rte_red_params red_params[][e_RTE_METER_COLORS])
++				struct rte_red_params red_params[][RTE_COLORS])
  {
  
  	struct rte_sched_subport *s;
@@ -32,11 +32,11 @@
 +
 +		if (!red_params) {
 +			/* Copy the red configuration from port */
-+			for (j = 0; j < e_RTE_METER_COLORS; j++)
++			for (j = 0; j < RTE_COLORS; j++)
 +				s->red_config[i][j] = port->red_config[i][j];
 +		} else {
 +			/* Subport has an individual red configuration */
-+			for (j = 0; j < e_RTE_METER_COLORS; j++) {
++			for (j = 0; j < RTE_COLORS; j++) {
 +				/* if min/max are both zero, then RED is
 +				 * disabled
 +				 */
@@ -75,7 +75,7 @@
  			    struct rte_sched_subport_params *params,
 -			    uint16_t *qsize)
 +			    uint16_t *qsize,
-+			    struct rte_red_params red_params[][e_RTE_METER_COLORS])
++			    struct rte_red_params red_params[][RTE_COLORS])
  {
  	return rte_sched_subport_config_common(port, subport_id, params,
 -					       qsize);
@@ -118,7 +118,7 @@
  			    struct rte_sched_subport_params *params,
 -			    uint16_t *qsize);
 +			    uint16_t *qsize,
-+			    struct rte_red_params red_params[][e_RTE_METER_COLORS]);
++			    struct rte_red_params red_params[][RTE_COLORS]);
  
  /**
   * Hierarchical scheduler pipe configuration
