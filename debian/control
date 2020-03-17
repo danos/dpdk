@@ -10,6 +10,7 @@ Build-Depends: debhelper (>= 10~),
                libcap-dev,
                libelf-dev,
                libibverbs-dev,
+               libipsec-mb-dev,
                libjansson-dev,
                libmnl-dev,
                libnuma-dev,
@@ -133,6 +134,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: libbsd-dev,
          libelf-dev,
          libibverbs-dev,
+         libipsec-mb-dev,
          libjansson-dev,
          libmnl-dev,
          libnuma-dev,
@@ -1873,3 +1875,18 @@ Description: DPDK test applications
  included in a debian package to make it easier to compare performance with
  the dataplane and help with easier troubleshooting of drivers.
 
+Package: dpdk-modules-4.19.0-trunk-vyatta-amd64
+Section: kernel
+Architecture: amd64 arm64 i386
+Depends: linux-image-4.19.0-trunk-vyatta-amd64-signed (= 4.19.75-0vyatta4) | linux-image-4.19.0-trunk-vyatta-amd64-unsigned (= 4.19.75-0vyatta4) | linux-image-4.19.0-trunk-vyatta-amd64 (= 4.19.75-0vyatta4)
+Provides: dpdk-modules,
+Conflicts: dpdk-igb-uio-dkms,
+           dpdk-rte-kni-dkms,
+Built-Using: ${built:using:kernel},
+Description: Data Plane Development Kit (rte kni, igb uio modules)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ This package contains the source code for the igb_uio kernel module.
+ .
+ This package provides the kernel drivers for userspace networking.
+ Includes Intel DPDK kernel modules.
