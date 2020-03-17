@@ -1,0 +1,28 @@
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -28,4 +28,4 @@
+ 	description: 'build unit tests')
+ option('max_ethports', type: 'string', value: '32',
+ 	description: 'maximum number of Ethernet devices in EAL')
+-option('examples', type: 'string', value: 'l3fwd,l3fwd-acl')
++option('examples', type: 'string', value: 'l3fwd,l3fwd-acl,ipsec-secgw')
+--- a/config/common_base
++++ b/config/common_base
+@@ -550,7 +550,7 @@
+ #
+ # Compile PMD for AESNI backed device
+ #
+-CONFIG_RTE_LIBRTE_PMD_AESNI_MB=n
++CONFIG_RTE_LIBRTE_PMD_AESNI_MB=y
+ 
+ #
+ # Compile PMD for Software backed device
+@@ -560,7 +560,7 @@
+ #
+ # Compile PMD for AESNI GCM device
+ #
+-CONFIG_RTE_LIBRTE_PMD_AESNI_GCM=n
++CONFIG_RTE_LIBRTE_PMD_AESNI_GCM=y
+ 
+ #
+ # Compile PMD for SNOW 3G device
