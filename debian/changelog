@@ -1,3 +1,22 @@
+dpdk (19.11-4) unstable; urgency=medium
+
+  * Refresh debian/copyright
+  * Add missing librte-gro symbols file
+  * Update watch file to look for 19.11 series, use https
+  * Fix Lintian Warning: duplicate-short-description
+  * Do not ship fonts in dpdk-doc
+  * Bump Standards-Version to 4.5.0, no changes.
+  * Ignore LW about README outside of doc dir
+  * dpdk-doc: add doc-base control files
+  * Add link to DPDK guides via Documentation in dpdk.service
+  * Override dpdk source: package-does-not-install-examples false positive
+  * Use chrpath to strip RPATH from dpdk-test binary
+  * Add missing symbols files
+  * Override default Lintian CI job to ignore symbols-file-missing-build-
+    depends-package-field
+
+ -- Luca Boccassi <bluca@debian.org>  Sun, 22 Mar 2020 12:08:42 +0000
+
 dpdk (19.11-3) experimental; urgency=medium
 
   * d/p/test: transition to python3
