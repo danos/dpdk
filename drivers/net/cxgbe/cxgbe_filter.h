@@ -6,7 +6,7 @@
 #ifndef _CXGBE_FILTER_H_
 #define _CXGBE_FILTER_H_
 
-#include "t4_msg.h"
+#include "base/t4_msg.h"
 /*
  * Defined bit width of user definable filter tuples
  */
@@ -102,7 +102,7 @@ struct ch_filter_specification {
 	uint32_t eport:2;	/* egress port to switch packet out */
 	uint32_t swapmac:1;     /* swap SMAC/DMAC for loopback packet */
 	uint32_t newvlan:2;     /* rewrite VLAN Tag */
-	uint8_t dmac[ETHER_ADDR_LEN];   /* new destination MAC address */
+	uint8_t dmac[RTE_ETHER_ADDR_LEN];   /* new destination MAC address */
 	uint16_t vlan;          /* VLAN Tag to insert */
 
 	/*
@@ -267,4 +267,6 @@ int cxgbe_validate_filter(struct adapter *adap,
 			  struct ch_filter_specification *fs);
 int cxgbe_get_filter_count(struct adapter *adapter, unsigned int fidx,
 			   u64 *c, int hash, bool get_byte);
+int cxgbe_clear_filter_count(struct adapter *adapter, unsigned int fidx,
+			     int hash, bool clear_byte);
 #endif /* _CXGBE_FILTER_H_ */

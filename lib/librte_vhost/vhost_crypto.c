@@ -189,6 +189,7 @@ struct vhost_crypto {
 	struct rte_hash *session_map;
 	struct rte_mempool *mbuf_pool;
 	struct rte_mempool *sess_pool;
+	struct rte_mempool *sess_priv_pool;
 	struct rte_mempool *wb_pool;
 
 	/** DPDK cryptodev ID */
@@ -358,7 +359,7 @@ vhost_crypto_create_sess(struct vhost_crypto *vcrypto,
 	}
 
 	if (rte_cryptodev_sym_session_init(vcrypto->cid, session, &xform1,
-			vcrypto->sess_pool) < 0) {
+			vcrypto->sess_priv_pool) < 0) {
 		VC_LOG_ERR("Failed to initialize session");
 		sess_param->session_id = -VIRTIO_CRYPTO_ERR;
 		return;
@@ -422,33 +423,39 @@ vhost_crypto_close_sess(struct vhost_crypto *vcrypto, uint64_t session_id)
 	return 0;
 }
 
-static enum vh_result
+static enum rte_vhost_msg_result
 vhost_crypto_msg_post_handler(int vid, void *msg)
 {
 	struct virtio_net *dev = get_device(vid);
 	struct vhost_crypto *vcrypto;
 	VhostUserMsg *vmsg = msg;
-	enum vh_result ret = VH_RESULT_OK;
+	enum rte_vhost_msg_result ret = RTE_VHOST_MSG_RESULT_OK;
 
 	if (dev == NULL) {
 		VC_LOG_ERR("Invalid vid %i", vid);
-		return VH_RESULT_ERR;
+		return RTE_VHOST_MSG_RESULT_ERR;
 	}
 
 	vcrypto = dev->extern_data;
 	if (vcrypto == NULL) {
 		VC_LOG_ERR("Cannot find required data, is it initialized?");
-		return VH_RESULT_ERR;
+		return RTE_VHOST_MSG_RESULT_ERR;
 	}
 
-	if (vmsg->request.master == VHOST_USER_CRYPTO_CREATE_SESS) {
+	switch (vmsg->request.master) {
+	case VHOST_USER_CRYPTO_CREATE_SESS:
 		vhost_crypto_create_sess(vcrypto,
 				&vmsg->payload.crypto_session);
 		vmsg->fd_num = 0;
-		ret = VH_RESULT_REPLY;
-	} else if (vmsg->request.master == VHOST_USER_CRYPTO_CLOSE_SESS) {
+		ret = RTE_VHOST_MSG_RESULT_REPLY;
+		break;
+	case VHOST_USER_CRYPTO_CLOSE_SESS:
 		if (vhost_crypto_close_sess(vcrypto, vmsg->payload.u64))
-			ret = VH_RESULT_ERR;
+			ret = RTE_VHOST_MSG_RESULT_ERR;
+		break;
+	default:
+		ret = RTE_VHOST_MSG_RESULT_NOT_HANDLED;
+		break;
 	}
 
 	return ret;
@@ -1340,9 +1347,11 @@ vhost_crypto_complete_one_vm_requests(struct rte_crypto_op **ops,
 	return processed;
 }
 
-int __rte_experimental
+int
 rte_vhost_crypto_create(int vid, uint8_t cryptodev_id,
-		struct rte_mempool *sess_pool, int socket_id)
+		struct rte_mempool *sess_pool,
+		struct rte_mempool *sess_priv_pool,
+		int socket_id)
 {
 	struct virtio_net *dev = get_device(vid);
 	struct rte_hash_parameters params = {0};
@@ -1370,6 +1379,7 @@ rte_vhost_crypto_create(int vid, uint8_t cryptodev_id,
 	}
 
 	vcrypto->sess_pool = sess_pool;
+	vcrypto->sess_priv_pool = sess_priv_pool;
 	vcrypto->cid = cryptodev_id;
 	vcrypto->cache_session_id = UINT64_MAX;
 	vcrypto->last_session_id = 1;
@@ -1430,7 +1440,7 @@ error_exit:
 	return ret;
 }
 
-int __rte_experimental
+int
 rte_vhost_crypto_free(int vid)
 {
 	struct virtio_net *dev = get_device(vid);
@@ -1459,7 +1469,7 @@ rte_vhost_crypto_free(int vid)
 	return 0;
 }
 
-int __rte_experimental
+int
 rte_vhost_crypto_set_zero_copy(int vid, enum rte_vhost_crypto_zero_copy option)
 {
 	struct virtio_net *dev = get_device(vid);
@@ -1514,7 +1524,7 @@ rte_vhost_crypto_set_zero_copy(int vid, enum rte_vhost_crypto_zero_copy option)
 	return 0;
 }
 
-uint16_t __rte_experimental
+uint16_t
 rte_vhost_crypto_fetch_requests(int vid, uint32_t qid,
 		struct rte_crypto_op **ops, uint16_t nb_ops)
 {
@@ -1624,7 +1634,7 @@ rte_vhost_crypto_fetch_requests(int vid, uint32_t qid,
 	return i;
 }
 
-uint16_t __rte_experimental
+uint16_t
 rte_vhost_crypto_finalize_requests(struct rte_crypto_op **ops,
 		uint16_t nb_ops, int *callfds, uint16_t *nb_callfds)
 {

@@ -29,8 +29,8 @@
 
 #define BNX2X_PMD_VER_PREFIX "BNX2X PMD"
 #define BNX2X_PMD_VERSION_MAJOR 1
-#define BNX2X_PMD_VERSION_MINOR 0
-#define BNX2X_PMD_VERSION_REVISION 7
+#define BNX2X_PMD_VERSION_MINOR 1
+#define BNX2X_PMD_VERSION_REVISION 0
 #define BNX2X_PMD_VERSION_PATCH 1
 
 static inline const char *
@@ -2182,8 +2182,10 @@ int bnx2x_tx_encap(struct bnx2x_tx_queue *txq, struct rte_mbuf *m0)
 
 	tx_start_bd = &txq->tx_ring[TX_BD(bd_prod, txq)].start_bd;
 
-	tx_start_bd->addr =
-	    rte_cpu_to_le_64(rte_mbuf_data_iova(m0));
+	tx_start_bd->addr_lo =
+	    rte_cpu_to_le_32(U64_LO(rte_mbuf_data_iova(m0)));
+	tx_start_bd->addr_hi =
+	    rte_cpu_to_le_32(U64_HI(rte_mbuf_data_iova(m0)));
 	tx_start_bd->nbytes = rte_cpu_to_le_16(m0->data_len);
 	tx_start_bd->bd_flags.as_bitfield = ETH_TX_BD_FLAGS_START_BD;
 	tx_start_bd->general_data =
@@ -2202,8 +2204,8 @@ int bnx2x_tx_encap(struct bnx2x_tx_queue *txq, struct rte_mbuf *m0)
 			tx_start_bd->vlan_or_ethertype =
 			    rte_cpu_to_le_16(pkt_prod);
 		else {
-			struct ether_hdr *eh =
-			    rte_pktmbuf_mtod(m0, struct ether_hdr *);
+			struct rte_ether_hdr *eh =
+			    rte_pktmbuf_mtod(m0, struct rte_ether_hdr *);
 
 			tx_start_bd->vlan_or_ethertype =
 			    rte_cpu_to_le_16(rte_be_to_cpu_16(eh->ether_type));
@@ -2213,14 +2215,14 @@ int bnx2x_tx_encap(struct bnx2x_tx_queue *txq, struct rte_mbuf *m0)
 	bd_prod = NEXT_TX_BD(bd_prod);
 	if (IS_VF(sc)) {
 		struct eth_tx_parse_bd_e2 *tx_parse_bd;
-		const struct ether_hdr *eh =
-		    rte_pktmbuf_mtod(m0, struct ether_hdr *);
+		const struct rte_ether_hdr *eh =
+		    rte_pktmbuf_mtod(m0, struct rte_ether_hdr *);
 		uint8_t mac_type = UNICAST_ADDRESS;
 
 		tx_parse_bd =
 		    &txq->tx_ring[TX_BD(bd_prod, txq)].parse_bd_e2;
-		if (is_multicast_ether_addr(&eh->d_addr)) {
-			if (is_broadcast_ether_addr(&eh->d_addr))
+		if (rte_is_multicast_ether_addr(&eh->d_addr)) {
+			if (rte_is_broadcast_ether_addr(&eh->d_addr))
 				mac_type = BROADCAST_ADDRESS;
 			else
 				mac_type = MULTICAST_ADDRESS;
@@ -4095,7 +4097,7 @@ static void bnx2x_attn_int_deasserted0(struct bnx2x_softc *sc, uint32_t attn)
 		REG_WR(sc, reg_offset, val);
 
 		rte_panic("FATAL HW block attention set0 0x%lx",
-			  (attn & HW_INTERRUT_ASSERT_SET_0));
+			  (attn & (unsigned long)HW_INTERRUT_ASSERT_SET_0));
 	}
 }
 
@@ -5015,13 +5017,14 @@ static void
 bnx2x_update_rx_prod(struct bnx2x_softc *sc, struct bnx2x_fastpath *fp,
 		   uint16_t rx_bd_prod, uint16_t rx_cq_prod)
 {
-	union ustorm_eth_rx_producers rx_prods;
+	struct ustorm_eth_rx_producers rx_prods;
 	uint32_t i;
 
+	memset(&rx_prods, 0, sizeof(rx_prods));
+
 	/* update producers */
-	rx_prods.prod.bd_prod = rx_bd_prod;
-	rx_prods.prod.cqe_prod = rx_cq_prod;
-	rx_prods.prod.reserved = 0;
+	rx_prods.bd_prod = rx_bd_prod;
+	rx_prods.cqe_prod = rx_cq_prod;
 
 	/*
 	 * Make sure that the BD and SGE data is updated before updating the
@@ -5034,9 +5037,8 @@ bnx2x_update_rx_prod(struct bnx2x_softc *sc, struct bnx2x_fastpath *fp,
 	wmb();
 
 	for (i = 0; i < (sizeof(rx_prods) / 4); i++) {
-		REG_WR(sc,
-		       (fp->ustorm_rx_prods_offset + (i * 4)),
-		       rx_prods.raw_data[i]);
+		REG_WR(sc, (fp->ustorm_rx_prods_offset + (i * 4)),
+		       ((uint32_t *)&rx_prods)[i]);
 	}
 
 	wmb();			/* keep prod updates ordered */
@@ -5228,20 +5230,6 @@ static void bnx2x_init_eq_ring(struct bnx2x_softc *sc)
 static void bnx2x_init_internal_common(struct bnx2x_softc *sc)
 {
 	int i;
-
-	if (IS_MF_SI(sc)) {
-/*
- * In switch independent mode, the TSTORM needs to accept
- * packets that failed classification, since approximate match
- * mac addresses aren't written to NIG LLH.
- */
-		REG_WR8(sc,
-			(BAR_TSTRORM_INTMEM +
-			 TSTORM_ACCEPT_CLASSIFY_FAILED_OFFSET), 2);
-	} else
-		REG_WR8(sc,
-			(BAR_TSTRORM_INTMEM +
-			 TSTORM_ACCEPT_CLASSIFY_FAILED_OFFSET), 0);
 
 	/*
 	 * Zero this manually as its initialization is currently missing
@@ -5796,15 +5784,12 @@ static void bnx2x_init_objs(struct bnx2x_softc *sc)
 				    VNICS_PER_PATH(sc));
 
 	/* RSS configuration object */
-	ecore_init_rss_config_obj(&sc->rss_conf_obj,
-				  sc->fp[0].cl_id,
-				  sc->fp[0].index,
-				  SC_FUNC(sc),
-				  SC_FUNC(sc),
+	ecore_init_rss_config_obj(sc, &sc->rss_conf_obj, sc->fp->cl_id,
+				  sc->fp->index, SC_FUNC(sc), SC_FUNC(sc),
 				  BNX2X_SP(sc, rss_rdata),
 				  (rte_iova_t)BNX2X_SP_MAPPING(sc, rss_rdata),
-				  ECORE_FILTER_RSS_CONF_PENDING,
-				  &sc->sp_state, ECORE_OBJ_TYPE_RX);
+				  ECORE_FILTER_RSS_CONF_PENDING, &sc->sp_state,
+				  ECORE_OBJ_TYPE_RX);
 }
 
 /*
@@ -5832,9 +5817,6 @@ static int bnx2x_func_start(struct bnx2x_softc *sc)
 	} else {		/* CHIP_IS_E1X */
 		start_params->network_cos_mode = FW_WRR;
 	}
-
-	start_params->gre_tunnel_mode = 0;
-	start_params->gre_tunnel_rss = 0;
 
 	return ecore_func_state_change(sc, &func_params);
 }
@@ -9599,7 +9581,7 @@ static int bnx2x_pci_get_caps(struct bnx2x_softc *sc)
 		return -ENOMEM;
 	}
 
-#ifndef __FreeBSD__
+#ifndef RTE_EXEC_ENV_FREEBSD
 	pci_read(sc, PCI_STATUS, &status, 2);
 	if (!(status & PCI_STATUS_CAP_LIST)) {
 #else
@@ -9610,7 +9592,7 @@ static int bnx2x_pci_get_caps(struct bnx2x_softc *sc)
 		return -1;
 	}
 
-#ifndef __FreeBSD__
+#ifndef RTE_EXEC_ENV_FREEBSD
 	pci_read(sc, PCI_CAPABILITY_LIST, &pci_cap.next, 1);
 #else
 	pci_read(sc, PCIR_CAP_PTR, &pci_cap.next, 1);
@@ -9649,8 +9631,8 @@ static void bnx2x_init_rte(struct bnx2x_softc *sc)
 }
 
 #define FW_HEADER_LEN 104
-#define FW_NAME_57711 "/lib/firmware/bnx2x/bnx2x-e1h-7.2.51.0.fw"
-#define FW_NAME_57810 "/lib/firmware/bnx2x/bnx2x-e2-7.2.51.0.fw"
+#define FW_NAME_57711 "/lib/firmware/bnx2x/bnx2x-e1h-7.13.11.0.fw"
+#define FW_NAME_57810 "/lib/firmware/bnx2x/bnx2x-e2-7.13.11.0.fw"
 
 void bnx2x_load_firmware(struct bnx2x_softc *sc)
 {
@@ -9810,13 +9792,13 @@ int bnx2x_attach(struct bnx2x_softc *sc)
 		bnx2x_get_phy_info(sc);
 	} else {
 		/* Left mac of VF unfilled, PF should set it for VF */
-		memset(sc->link_params.mac_addr, 0, ETHER_ADDR_LEN);
+		memset(sc->link_params.mac_addr, 0, RTE_ETHER_ADDR_LEN);
 	}
 
 	sc->wol = 0;
 
 	/* set the default MTU (changed via ifconfig) */
-	sc->mtu = ETHER_MTU;
+	sc->mtu = RTE_ETHER_MTU;
 
 	bnx2x_set_modes_bitmap(sc);
 
@@ -10366,7 +10348,7 @@ static int bnx2x_init_hw_common(struct bnx2x_softc *sc)
 
 	/* clean the DMAE memory */
 	sc->dmae_ready = 1;
-	ecore_init_fill(sc, TSEM_REG_PRAM, 0, 8);
+	ecore_init_fill(sc, TSEM_REG_PRAM, 0, 8, 1);
 
 	ecore_init_block(sc, BLOCK_TCM, PHASE_COMMON);
 
@@ -10394,7 +10376,6 @@ static int bnx2x_init_hw_common(struct bnx2x_softc *sc)
 		ecore_init_block(sc, BLOCK_TM, PHASE_COMMON);
 
 	ecore_init_block(sc, BLOCK_DORQ, PHASE_COMMON);
-	REG_WR(sc, DORQ_REG_DPM_CID_OFST, BNX2X_DB_SHIFT);
 
 	if (!CHIP_REV_IS_SLOW(sc)) {
 /* enable hw interrupt from doorbell Q */
@@ -11579,7 +11560,7 @@ static void bnx2x_reset_func(struct bnx2x_softc *sc)
 		ilt_cli.end = ILT_NUM_PAGE_ENTRIES - 1;
 		ilt_cli.client_num = ILT_CLIENT_TM;
 
-		ecore_ilt_boundry_init_op(sc, &ilt_cli, 0);
+		ecore_ilt_boundary_init_op(sc, &ilt_cli, 0, INITOP_CLEAR);
 	}
 
 	/* this assumes that reset_port() called before reset_func() */

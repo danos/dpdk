@@ -569,12 +569,12 @@ qede_alloc_mem_sb(struct qede_dev *qdev, struct ecore_sb_info *sb_info,
 		  uint16_t sb_id)
 {
 	struct ecore_dev *edev = QEDE_INIT_EDEV(qdev);
-	struct status_block_e4 *sb_virt;
+	struct status_block *sb_virt;
 	dma_addr_t sb_phys;
 	int rc;
 
 	sb_virt = OSAL_DMA_ALLOC_COHERENT(edev, &sb_phys,
-					  sizeof(struct status_block_e4));
+					  sizeof(struct status_block));
 	if (!sb_virt) {
 		DP_ERR(edev, "Status block allocation failed\n");
 		return -ENOMEM;
@@ -584,7 +584,7 @@ qede_alloc_mem_sb(struct qede_dev *qdev, struct ecore_sb_info *sb_info,
 	if (rc) {
 		DP_ERR(edev, "Status block initialization failed\n");
 		OSAL_DMA_FREE_COHERENT(edev, sb_virt, sb_phys,
-				       sizeof(struct status_block_e4));
+				       sizeof(struct status_block));
 		return rc;
 	}
 
@@ -683,7 +683,7 @@ void qede_dealloc_fp_resc(struct rte_eth_dev *eth_dev)
 		if (fp->sb_info) {
 			OSAL_DMA_FREE_COHERENT(edev, fp->sb_info->sb_virt,
 				fp->sb_info->sb_phys,
-				sizeof(struct status_block_e4));
+				sizeof(struct status_block));
 			rte_free(fp->sb_info);
 			fp->sb_info = NULL;
 		}
@@ -805,7 +805,7 @@ qede_rx_queue_start(struct rte_eth_dev *eth_dev, uint16_t rx_queue_id)
 		fp->rxq->hw_rxq_prod_addr = ret_params.p_prod;
 		fp->rxq->handle = ret_params.p_handle;
 
-		fp->rxq->hw_cons_ptr = &fp->sb_info->sb_virt->pi_array[RX_PI];
+		fp->rxq->hw_cons_ptr = &fp->sb_info->sb_pi_array[RX_PI];
 		qede_update_rx_prod(qdev, fp->rxq);
 		eth_dev->data->rx_queue_state[rx_queue_id] =
 			RTE_ETH_QUEUE_STATE_STARTED;
@@ -863,7 +863,7 @@ qede_tx_queue_start(struct rte_eth_dev *eth_dev, uint16_t tx_queue_id)
 		txq->doorbell_addr = ret_params.p_doorbell;
 		txq->handle = ret_params.p_handle;
 
-		txq->hw_cons_ptr = &fp->sb_info->sb_virt->pi_array[TX_PI(0)];
+		txq->hw_cons_ptr = &fp->sb_info->sb_pi_array[TX_PI(0)];
 		SET_FIELD(txq->tx_db.data.params, ETH_DB_DATA_DEST,
 				DB_DEST_XCM);
 		SET_FIELD(txq->tx_db.data.params, ETH_DB_DATA_AGG_CMD,
@@ -1078,36 +1078,38 @@ static inline uint8_t qede_check_notunn_csum_l4(uint16_t flag)
 static inline uint32_t qede_rx_cqe_to_pkt_type_outer(struct rte_mbuf *m)
 {
 	uint32_t packet_type = RTE_PTYPE_UNKNOWN;
-	struct ether_hdr *eth_hdr;
-	struct ipv4_hdr *ipv4_hdr;
-	struct ipv6_hdr *ipv6_hdr;
-	struct vlan_hdr *vlan_hdr;
+	struct rte_ether_hdr *eth_hdr;
+	struct rte_ipv4_hdr *ipv4_hdr;
+	struct rte_ipv6_hdr *ipv6_hdr;
+	struct rte_vlan_hdr *vlan_hdr;
 	uint16_t ethertype;
 	bool vlan_tagged = 0;
 	uint16_t len;
 
-	eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
-	len = sizeof(struct ether_hdr);
+	eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+	len = sizeof(struct rte_ether_hdr);
 	ethertype = rte_cpu_to_be_16(eth_hdr->ether_type);
 
 	 /* Note: Valid only if VLAN stripping is disabled */
-	if (ethertype == ETHER_TYPE_VLAN) {
+	if (ethertype == RTE_ETHER_TYPE_VLAN) {
 		vlan_tagged = 1;
-		vlan_hdr = (struct vlan_hdr *)(eth_hdr + 1);
-		len += sizeof(struct vlan_hdr);
+		vlan_hdr = (struct rte_vlan_hdr *)(eth_hdr + 1);
+		len += sizeof(struct rte_vlan_hdr);
 		ethertype = rte_cpu_to_be_16(vlan_hdr->eth_proto);
 	}
 
-	if (ethertype == ETHER_TYPE_IPv4) {
+	if (ethertype == RTE_ETHER_TYPE_IPV4) {
 		packet_type |= RTE_PTYPE_L3_IPV4;
-		ipv4_hdr = rte_pktmbuf_mtod_offset(m, struct ipv4_hdr *, len);
+		ipv4_hdr = rte_pktmbuf_mtod_offset(m,
+					struct rte_ipv4_hdr *, len);
 		if (ipv4_hdr->next_proto_id == IPPROTO_TCP)
 			packet_type |= RTE_PTYPE_L4_TCP;
 		else if (ipv4_hdr->next_proto_id == IPPROTO_UDP)
 			packet_type |= RTE_PTYPE_L4_UDP;
-	} else if (ethertype == ETHER_TYPE_IPv6) {
+	} else if (ethertype == RTE_ETHER_TYPE_IPV6) {
 		packet_type |= RTE_PTYPE_L3_IPV6;
-		ipv6_hdr = rte_pktmbuf_mtod_offset(m, struct ipv6_hdr *, len);
+		ipv6_hdr = rte_pktmbuf_mtod_offset(m,
+						struct rte_ipv6_hdr *, len);
 		if (ipv6_hdr->proto == IPPROTO_TCP)
 			packet_type |= RTE_PTYPE_L4_TCP;
 		else if (ipv6_hdr->proto == IPPROTO_UDP)
@@ -1269,7 +1271,7 @@ static inline uint32_t qede_rx_cqe_to_pkt_type(uint16_t flags)
 static inline uint8_t
 qede_check_notunn_csum_l3(struct rte_mbuf *m, uint16_t flag)
 {
-	struct ipv4_hdr *ip;
+	struct rte_ipv4_hdr *ip;
 	uint16_t pkt_csum;
 	uint16_t calc_csum;
 	uint16_t val;
@@ -1280,8 +1282,8 @@ qede_check_notunn_csum_l3(struct rte_mbuf *m, uint16_t flag)
 	if (unlikely(val)) {
 		m->packet_type = qede_rx_cqe_to_pkt_type(flag);
 		if (RTE_ETH_IS_IPV4_HDR(m->packet_type)) {
-			ip = rte_pktmbuf_mtod_offset(m, struct ipv4_hdr *,
-					   sizeof(struct ether_hdr));
+			ip = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr *,
+					   sizeof(struct rte_ether_hdr));
 			pkt_csum = ip->hdr_checksum;
 			ip->hdr_checksum = 0;
 			calc_csum = rte_ipv4_cksum(ip);
@@ -1600,17 +1602,17 @@ qede_recv_pkts(void *p_rxq, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 			/* Mark it as LRO packet */
 			ol_flags |= PKT_RX_LRO;
 			/* In split mode,  seg_len is same as len_on_first_bd
-			 * and ext_bd_len_list will be empty since there are
+			 * and bw_ext_bd_len_list will be empty since there are
 			 * no additional buffers
 			 */
 			PMD_RX_LOG(INFO, rxq,
-			    "TPA start[%d] - len_on_first_bd %d header %d"
-			    " [bd_list[0] %d], [seg_len %d]\n",
-			    cqe_start_tpa->tpa_agg_index,
-			    rte_le_to_cpu_16(cqe_start_tpa->len_on_first_bd),
-			    cqe_start_tpa->header_len,
-			    rte_le_to_cpu_16(cqe_start_tpa->ext_bd_len_list[0]),
-			    rte_le_to_cpu_16(cqe_start_tpa->seg_len));
+			 "TPA start[%d] - len_on_first_bd %d header %d"
+			 " [bd_list[0] %d], [seg_len %d]\n",
+			 cqe_start_tpa->tpa_agg_index,
+			 rte_le_to_cpu_16(cqe_start_tpa->len_on_first_bd),
+			 cqe_start_tpa->header_len,
+			 rte_le_to_cpu_16(cqe_start_tpa->bw_ext_bd_len_list[0]),
+			 rte_le_to_cpu_16(cqe_start_tpa->seg_len));
 
 		break;
 		case ETH_RX_CQE_TYPE_TPA_CONT:

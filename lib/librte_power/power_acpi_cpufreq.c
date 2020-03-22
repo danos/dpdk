@@ -15,6 +15,7 @@
 #include <rte_atomic.h>
 #include <rte_memcpy.h>
 #include <rte_memory.h>
+#include <rte_string_fns.h>
 
 #include "power_acpi_cpufreq.h"
 #include "power_common.h"
@@ -160,13 +161,17 @@ power_set_governor_userspace(struct rte_power_info *pi)
 		goto out;
 	}
 	/* Save the original governor */
-	snprintf(pi->governor_ori, sizeof(pi->governor_ori), "%s", buf);
+	strlcpy(pi->governor_ori, buf, sizeof(pi->governor_ori));
 
 	/* Write 'userspace' to the governor */
 	val = fseek(f, 0, SEEK_SET);
 	FOPS_OR_ERR_GOTO(val, out);
 
 	val = fputs(POWER_GOVERNOR_USERSPACE, f);
+	FOPS_OR_ERR_GOTO(val, out);
+
+	/* We need to flush to see if the fputs succeeds */
+	val = fflush(f);
 	FOPS_OR_ERR_GOTO(val, out);
 
 	ret = 0;
@@ -439,8 +444,13 @@ power_acpi_cpufreq_freqs(unsigned int lcore_id, uint32_t *freqs, uint32_t num)
 {
 	struct rte_power_info *pi;
 
-	if (lcore_id >= RTE_MAX_LCORE || !freqs) {
-		RTE_LOG(ERR, POWER, "Invalid input parameter\n");
+	if (lcore_id >= RTE_MAX_LCORE) {
+		RTE_LOG(ERR, POWER, "Invalid lcore ID\n");
+		return 0;
+	}
+
+	if (freqs == NULL) {
+		RTE_LOG(ERR, POWER, "NULL buffer supplied\n");
 		return 0;
 	}
 

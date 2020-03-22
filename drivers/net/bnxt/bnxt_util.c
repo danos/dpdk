@@ -20,7 +20,7 @@ int bnxt_check_zero_bytes(const uint8_t *bytes, int len)
 
 void bnxt_eth_hw_addr_random(uint8_t *mac_addr)
 {
-	eth_random_addr(mac_addr);
+	rte_eth_random_addr(mac_addr);
 
 	/* Set Organizationally Unique Identifier (OUI) prefix */
 	mac_addr[0] = 0x00;

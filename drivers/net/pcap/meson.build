@@ -7,4 +7,3 @@ if not dpdk_conf.has('RTE_PORT_PCAP')
 endif
 sources = files('rte_eth_pcap.c')
 ext_deps += pcap_dep
-pkgconfig_extra_libs += '-lpcap'

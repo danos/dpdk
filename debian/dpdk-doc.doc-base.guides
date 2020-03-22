@@ -1,0 +1,10 @@
+Document: dpdk-guides
+Title: Debian DPDK Guides
+Author: The DPDK Community
+Abstract:
+ This manual describes how to use the DPDK environment.
+Section: Programming/C
+
+Format: HTML
+Index: /usr/share/doc/dpdk/guides/index.html
+Files: /usr/share/doc/dpdk/guides/*/*.html

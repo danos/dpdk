@@ -12,7 +12,7 @@
 #include <rte_cycles.h>
 #include <rte_compat.h>
 
-#include "rte_eth_bond_private.h"
+#include "eth_bond_private.h"
 
 static void bond_mode_8023ad_ext_periodic_cb(void *arg);
 #ifdef RTE_LIBRTE_BOND_DEBUG_8023AD
@@ -126,7 +126,7 @@ bond_print_lacp(struct lacpdu *l)
 #define MODE4_DEBUG(fmt, ...) do { } while (0)
 #endif
 
-static const struct ether_addr lacp_mac_addr = {
+static const struct rte_ether_addr lacp_mac_addr = {
 	.addr_bytes = { 0x01, 0x80, 0xC2, 0x00, 0x00, 0x02 }
 };
 
@@ -322,7 +322,7 @@ rx_machine(struct bond_dev_private *internals, uint16_t slave_id,
 		agg = &bond_mode_8023ad_ports[port->aggregator_port_id];
 		bool match = port->actor.system_priority ==
 			lacp->partner.port_params.system_priority &&
-			is_same_ether_addr(&agg->actor.system,
+			rte_is_same_ether_addr(&agg->actor.system,
 			&lacp->partner.port_params.system) &&
 			port->actor.port_priority ==
 			lacp->partner.port_params.port_priority &&
@@ -575,9 +575,9 @@ tx_machine(struct bond_dev_private *internals, uint16_t slave_id)
 	hdr = rte_pktmbuf_mtod(lacp_pkt, struct lacpdu_header *);
 
 	/* Source and destination MAC */
-	ether_addr_copy(&lacp_mac_addr, &hdr->eth_hdr.d_addr);
+	rte_ether_addr_copy(&lacp_mac_addr, &hdr->eth_hdr.d_addr);
 	rte_eth_macaddr_get(slave_id, &hdr->eth_hdr.s_addr);
-	hdr->eth_hdr.ether_type = rte_cpu_to_be_16(ETHER_TYPE_SLOW);
+	hdr->eth_hdr.ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_SLOW);
 
 	lacpdu = &hdr->lacpdu;
 	memset(lacpdu, 0, sizeof(*lacpdu));
@@ -592,7 +592,8 @@ tx_machine(struct bond_dev_private *internals, uint16_t slave_id)
 	memcpy(&hdr->lacpdu.actor.port_params, &port->actor,
 			sizeof(port->actor));
 	agg = &bond_mode_8023ad_ports[port->aggregator_port_id];
-	ether_addr_copy(&agg->actor.system, &hdr->lacpdu.actor.port_params.system);
+	rte_ether_addr_copy(&agg->actor.system,
+			&hdr->lacpdu.actor.port_params.system);
 	lacpdu->actor.state = port->actor_state;
 
 	/* PARTNER */
@@ -674,6 +675,7 @@ selection_logic(struct bond_dev_private *internals, uint16_t slave_id)
 	uint16_t default_slave = 0;
 	struct rte_eth_link link_info;
 	uint16_t agg_new_idx = 0;
+	int ret;
 
 	slaves = internals->active_slaves;
 	slaves_count = internals->active_slave_count;
@@ -686,17 +688,24 @@ selection_logic(struct bond_dev_private *internals, uint16_t slave_id)
 		if (agg->aggregator_port_id != slaves[i])
 			continue;
 
+		ret = rte_eth_link_get_nowait(slaves[i], &link_info);
+		if (ret < 0) {
+			RTE_BOND_LOG(ERR,
+				"Slave (port %u) link get failed: %s\n",
+				slaves[i], rte_strerror(-ret));
+			continue;
+		}
 		agg_count[i] += 1;
-		rte_eth_link_get_nowait(slaves[i], &link_info);
 		agg_bandwidth[i] += link_info.link_speed;
 
 		/* Actors system ID is not checked since all slave device have the same
 		 * ID (MAC address). */
 		if ((agg->actor.key == port->actor.key &&
 			agg->partner.system_priority == port->partner.system_priority &&
-			is_same_ether_addr(&agg->partner.system, &port->partner.system) == 1
+			rte_is_same_ether_addr(&agg->partner.system,
+					&port->partner.system) == 1
 			&& (agg->partner.key == port->partner.key)) &&
-			is_zero_ether_addr(&port->partner.system) != 1 &&
+			rte_is_zero_ether_addr(&port->partner.system) != 1 &&
 			(agg->actor.key &
 				rte_cpu_to_be_16(BOND_LINK_FULL_DUPLEX_KEY)) != 0) {
 
@@ -789,7 +798,7 @@ rx_machine_update(struct bond_dev_private *internals, uint16_t slave_id,
 		RTE_ASSERT(lacp->lacpdu.subtype == SLOW_SUBTYPE_LACP);
 
 		partner = &lacp->lacpdu.partner;
-		if (is_same_ether_addr(&partner->port_params.system,
+		if (rte_is_same_ether_addr(&partner->port_params.system,
 			&internals->mode4.mac_addr)) {
 			/* This LACP frame is sending to the bonding port
 			 * so pass it to rx_machine.
@@ -808,7 +817,7 @@ bond_mode_8023ad_periodic_cb(void *arg)
 	struct bond_dev_private *internals = bond_dev->data->dev_private;
 	struct port *port;
 	struct rte_eth_link link_info;
-	struct ether_addr slave_addr;
+	struct rte_ether_addr slave_addr;
 	struct rte_mbuf *lacp_pkt = NULL;
 	uint16_t slave_id;
 	uint16_t i;
@@ -817,18 +826,25 @@ bond_mode_8023ad_periodic_cb(void *arg)
 	/* Update link status on each port */
 	for (i = 0; i < internals->active_slave_count; i++) {
 		uint16_t key;
+		int ret;
 
 		slave_id = internals->active_slaves[i];
-		rte_eth_link_get_nowait(slave_id, &link_info);
-		rte_eth_macaddr_get(slave_id, &slave_addr);
+		ret = rte_eth_link_get_nowait(slave_id, &link_info);
+		if (ret < 0) {
+			RTE_BOND_LOG(ERR,
+				"Slave (port %u) link get failed: %s\n",
+				slave_id, rte_strerror(-ret));
+		}
 
-		if (link_info.link_status != 0) {
+		if (ret >= 0 && link_info.link_status != 0) {
 			key = link_speed_key(link_info.link_speed) << 1;
 			if (link_info.link_duplex == ETH_LINK_FULL_DUPLEX)
 				key |= BOND_LINK_FULL_DUPLEX_KEY;
-		} else
+		} else {
 			key = 0;
+		}
 
+		rte_eth_macaddr_get(slave_id, &slave_addr);
 		port = &bond_mode_8023ad_ports[slave_id];
 
 		key = rte_cpu_to_be_16(key);
@@ -840,8 +856,8 @@ bond_mode_8023ad_periodic_cb(void *arg)
 			SM_FLAG_SET(port, NTT);
 		}
 
-		if (!is_same_ether_addr(&port->actor.system, &slave_addr)) {
-			ether_addr_copy(&slave_addr, &port->actor.system);
+		if (!rte_is_same_ether_addr(&port->actor.system, &slave_addr)) {
+			rte_ether_addr_copy(&slave_addr, &port->actor.system);
 			if (port->aggregator_port_id == slave_id)
 				SM_FLAG_SET(port, NTT);
 		}
@@ -906,6 +922,71 @@ bond_mode_8023ad_periodic_cb(void *arg)
 			bond_mode_8023ad_periodic_cb, arg);
 }
 
+static int
+bond_mode_8023ad_register_lacp_mac(uint16_t slave_id)
+{
+	int ret;
+
+	ret = rte_eth_allmulticast_enable(slave_id);
+	if (ret != 0) {
+		RTE_BOND_LOG(ERR,
+			"failed to enable allmulti mode for port %u: %s",
+			slave_id, rte_strerror(-ret));
+	}
+	if (rte_eth_allmulticast_get(slave_id)) {
+		RTE_BOND_LOG(DEBUG, "forced allmulti for port %u",
+			     slave_id);
+		bond_mode_8023ad_ports[slave_id].forced_rx_flags =
+				BOND_8023AD_FORCED_ALLMULTI;
+		return 0;
+	}
+
+	ret = rte_eth_promiscuous_enable(slave_id);
+	if (ret != 0) {
+		RTE_BOND_LOG(ERR,
+			"failed to enable promiscuous mode for port %u: %s",
+			slave_id, rte_strerror(-ret));
+	}
+	if (rte_eth_promiscuous_get(slave_id)) {
+		RTE_BOND_LOG(DEBUG, "forced promiscuous for port %u",
+			     slave_id);
+		bond_mode_8023ad_ports[slave_id].forced_rx_flags =
+				BOND_8023AD_FORCED_PROMISC;
+		return 0;
+	}
+
+	return -1;
+}
+
+static void
+bond_mode_8023ad_unregister_lacp_mac(uint16_t slave_id)
+{
+	int ret;
+
+	switch (bond_mode_8023ad_ports[slave_id].forced_rx_flags) {
+	case BOND_8023AD_FORCED_ALLMULTI:
+		RTE_BOND_LOG(DEBUG, "unset allmulti for port %u", slave_id);
+		ret = rte_eth_allmulticast_disable(slave_id);
+		if (ret != 0)
+			RTE_BOND_LOG(ERR,
+				"failed to disable allmulti mode for port %u: %s",
+				slave_id, rte_strerror(-ret));
+		break;
+
+	case BOND_8023AD_FORCED_PROMISC:
+		RTE_BOND_LOG(DEBUG, "unset promisc for port %u", slave_id);
+		ret = rte_eth_promiscuous_disable(slave_id);
+		if (ret != 0)
+			RTE_BOND_LOG(ERR,
+				"failed to disable promiscuous mode for port %u: %s",
+				slave_id, rte_strerror(-ret));
+		break;
+
+	default:
+		break;
+	}
+}
+
 void
 bond_mode_8023ad_activate_slave(struct rte_eth_dev *bond_dev,
 				uint16_t slave_id)
@@ -947,7 +1028,11 @@ bond_mode_8023ad_activate_slave(struct rte_eth_dev *bond_dev,
 
 	/* use this port as agregator */
 	port->aggregator_port_id = slave_id;
-	rte_eth_promiscuous_enable(slave_id);
+
+	if (bond_mode_8023ad_register_lacp_mac(slave_id) < 0) {
+		RTE_BOND_LOG(WARNING, "slave %u is most likely broken and won't receive LACP packets",
+			     slave_id);
+	}
 
 	timer_cancel(&port->warning_timer);
 
@@ -1021,6 +1106,8 @@ bond_mode_8023ad_deactivate_slave(struct rte_eth_dev *bond_dev __rte_unused,
 	old_partner_state = port->partner_state;
 	record_default(port);
 
+	bond_mode_8023ad_unregister_lacp_mac(slave_id);
+
 	/* If partner timeout state changes then disable timer */
 	if (!((old_partner_state ^ port->partner_state) &
 			STATE_LACP_SHORT_TIMEOUT))
@@ -1042,7 +1129,7 @@ void
 bond_mode_8023ad_mac_address_update(struct rte_eth_dev *bond_dev)
 {
 	struct bond_dev_private *internals = bond_dev->data->dev_private;
-	struct ether_addr slave_addr;
+	struct rte_ether_addr slave_addr;
 	struct port *slave, *agg_slave;
 	uint16_t slave_id, i, j;
 
@@ -1053,10 +1140,10 @@ bond_mode_8023ad_mac_address_update(struct rte_eth_dev *bond_dev)
 		slave = &bond_mode_8023ad_ports[slave_id];
 		rte_eth_macaddr_get(slave_id, &slave_addr);
 
-		if (is_same_ether_addr(&slave_addr, &slave->actor.system))
+		if (rte_is_same_ether_addr(&slave_addr, &slave->actor.system))
 			continue;
 
-		ether_addr_copy(&slave_addr, &slave->actor.system);
+		rte_ether_addr_copy(&slave_addr, &slave->actor.system);
 		/* Do nothing if this port is not an aggregator. In other case
 		 * Set NTT flag on every port that use this aggregator. */
 		if (slave->aggregator_port_id != slave_id)

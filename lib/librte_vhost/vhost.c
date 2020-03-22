@@ -282,6 +282,31 @@ cleanup_vq(struct vhost_virtqueue *vq, int destroy)
 		close(vq->kickfd);
 }
 
+void
+cleanup_vq_inflight(struct virtio_net *dev, struct vhost_virtqueue *vq)
+{
+	if (!(dev->protocol_features &
+	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)))
+		return;
+
+	if (vq_is_packed(dev)) {
+		if (vq->inflight_packed)
+			vq->inflight_packed = NULL;
+	} else {
+		if (vq->inflight_split)
+			vq->inflight_split = NULL;
+	}
+
+	if (vq->resubmit_inflight) {
+		if (vq->resubmit_inflight->resubmit_list) {
+			free(vq->resubmit_inflight->resubmit_list);
+			vq->resubmit_inflight->resubmit_list = NULL;
+		}
+		free(vq->resubmit_inflight);
+		vq->resubmit_inflight = NULL;
+	}
+}
+
 /*
  * Unmap any memory, close any file descriptors and
  * free any memory owned by a device.
@@ -293,8 +318,10 @@ cleanup_device(struct virtio_net *dev, int destroy)
 
 	vhost_backend_cleanup(dev);
 
-	for (i = 0; i < dev->nr_vring; i++)
+	for (i = 0; i < dev->nr_vring; i++) {
 		cleanup_vq(dev->virtqueue[i], destroy);
+		cleanup_vq_inflight(dev, dev->virtqueue[i]);
+	}
 }
 
 void
@@ -605,19 +632,6 @@ vhost_attach_vdpa_device(int vid, int did)
 }
 
 void
-vhost_detach_vdpa_device(int vid)
-{
-	struct virtio_net *dev = get_device(vid);
-
-	if (dev == NULL)
-		return;
-
-	vhost_user_host_notifier_ctrl(vid, false);
-
-	dev->vdpa_dev_id = -1;
-}
-
-void
 vhost_set_ifname(int vid, const char *if_name, unsigned int if_len)
 {
 	struct virtio_net *dev;
@@ -657,6 +671,28 @@ vhost_set_builtin_virtio_net(int vid, bool enable)
 		dev->flags |= VIRTIO_DEV_BUILTIN_VIRTIO_NET;
 	else
 		dev->flags &= ~VIRTIO_DEV_BUILTIN_VIRTIO_NET;
+}
+
+void
+vhost_enable_extbuf(int vid)
+{
+	struct virtio_net *dev = get_device(vid);
+
+	if (dev == NULL)
+		return;
+
+	dev->extbuf = 1;
+}
+
+void
+vhost_enable_linearbuf(int vid)
+{
+	struct virtio_net *dev = get_device(vid);
+
+	if (dev == NULL)
+		return;
+
+	dev->linearbuf = 1;
 }
 
 int
@@ -797,14 +833,328 @@ rte_vhost_get_vhost_vring(int vid, uint16_t vring_idx,
 	if (!vq)
 		return -1;
 
-	vring->desc  = vq->desc;
-	vring->avail = vq->avail;
-	vring->used  = vq->used;
+	if (vq_is_packed(dev)) {
+		vring->desc_packed = vq->desc_packed;
+		vring->driver_event = vq->driver_event;
+		vring->device_event = vq->device_event;
+	} else {
+		vring->desc = vq->desc;
+		vring->avail = vq->avail;
+		vring->used = vq->used;
+	}
 	vring->log_guest_addr  = vq->log_guest_addr;
 
 	vring->callfd  = vq->callfd;
 	vring->kickfd  = vq->kickfd;
 	vring->size    = vq->size;
+
+	return 0;
+}
+
+int
+rte_vhost_get_vhost_ring_inflight(int vid, uint16_t vring_idx,
+				  struct rte_vhost_ring_inflight *vring)
+{
+	struct virtio_net *dev;
+	struct vhost_virtqueue *vq;
+
+	dev = get_device(vid);
+	if (unlikely(!dev))
+		return -1;
+
+	if (vring_idx >= VHOST_MAX_VRING)
+		return -1;
+
+	vq = dev->virtqueue[vring_idx];
+	if (unlikely(!vq))
+		return -1;
+
+	if (vq_is_packed(dev)) {
+		if (unlikely(!vq->inflight_packed))
+			return -1;
+
+		vring->inflight_packed = vq->inflight_packed;
+	} else {
+		if (unlikely(!vq->inflight_split))
+			return -1;
+
+		vring->inflight_split = vq->inflight_split;
+	}
+
+	vring->resubmit_inflight = vq->resubmit_inflight;
+
+	return 0;
+}
+
+int
+rte_vhost_set_inflight_desc_split(int vid, uint16_t vring_idx,
+				  uint16_t idx)
+{
+	struct vhost_virtqueue *vq;
+	struct virtio_net *dev;
+
+	dev = get_device(vid);
+	if (unlikely(!dev))
+		return -1;
+
+	if (unlikely(!(dev->protocol_features &
+	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD))))
+		return 0;
+
+	if (unlikely(vq_is_packed(dev)))
+		return -1;
+
+	if (unlikely(vring_idx >= VHOST_MAX_VRING))
+		return -1;
+
+	vq = dev->virtqueue[vring_idx];
+	if (unlikely(!vq))
+		return -1;
+
+	if (unlikely(!vq->inflight_split))
+		return -1;
+
+	if (unlikely(idx >= vq->size))
+		return -1;
+
+	vq->inflight_split->desc[idx].counter = vq->global_counter++;
+	vq->inflight_split->desc[idx].inflight = 1;
+	return 0;
+}
+
+int
+rte_vhost_set_inflight_desc_packed(int vid, uint16_t vring_idx,
+				   uint16_t head, uint16_t last,
+				   uint16_t *inflight_entry)
+{
+	struct rte_vhost_inflight_info_packed *inflight_info;
+	struct virtio_net *dev;
+	struct vhost_virtqueue *vq;
+	struct vring_packed_desc *desc;
+	uint16_t old_free_head, free_head;
+
+	dev = get_device(vid);
+	if (unlikely(!dev))
+		return -1;
+
+	if (unlikely(!(dev->protocol_features &
+	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD))))
+		return 0;
+
+	if (unlikely(!vq_is_packed(dev)))
+		return -1;
+
+	if (unlikely(vring_idx >= VHOST_MAX_VRING))
+		return -1;
+
+	vq = dev->virtqueue[vring_idx];
+	if (unlikely(!vq))
+		return -1;
+
+	inflight_info = vq->inflight_packed;
+	if (unlikely(!inflight_info))
+		return -1;
+
+	if (unlikely(head >= vq->size))
+		return -1;
+
+	desc = vq->desc_packed;
+	old_free_head = inflight_info->old_free_head;
+	if (unlikely(old_free_head >= vq->size))
+		return -1;
+
+	free_head = old_free_head;
+
+	/* init header descriptor */
+	inflight_info->desc[old_free_head].num = 0;
+	inflight_info->desc[old_free_head].counter = vq->global_counter++;
+	inflight_info->desc[old_free_head].inflight = 1;
+
+	/* save desc entry in flight entry */
+	while (head != ((last + 1) % vq->size)) {
+		inflight_info->desc[old_free_head].num++;
+		inflight_info->desc[free_head].addr = desc[head].addr;
+		inflight_info->desc[free_head].len = desc[head].len;
+		inflight_info->desc[free_head].flags = desc[head].flags;
+		inflight_info->desc[free_head].id = desc[head].id;
+
+		inflight_info->desc[old_free_head].last = free_head;
+		free_head = inflight_info->desc[free_head].next;
+		inflight_info->free_head = free_head;
+		head = (head + 1) % vq->size;
+	}
+
+	inflight_info->old_free_head = free_head;
+	*inflight_entry = old_free_head;
+
+	return 0;
+}
+
+int
+rte_vhost_clr_inflight_desc_split(int vid, uint16_t vring_idx,
+				  uint16_t last_used_idx, uint16_t idx)
+{
+	struct virtio_net *dev;
+	struct vhost_virtqueue *vq;
+
+	dev = get_device(vid);
+	if (unlikely(!dev))
+		return -1;
+
+	if (unlikely(!(dev->protocol_features &
+	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD))))
+		return 0;
+
+	if (unlikely(vq_is_packed(dev)))
+		return -1;
+
+	if (unlikely(vring_idx >= VHOST_MAX_VRING))
+		return -1;
+
+	vq = dev->virtqueue[vring_idx];
+	if (unlikely(!vq))
+		return -1;
+
+	if (unlikely(!vq->inflight_split))
+		return -1;
+
+	if (unlikely(idx >= vq->size))
+		return -1;
+
+	rte_smp_mb();
+
+	vq->inflight_split->desc[idx].inflight = 0;
+
+	rte_smp_mb();
+
+	vq->inflight_split->used_idx = last_used_idx;
+	return 0;
+}
+
+int
+rte_vhost_clr_inflight_desc_packed(int vid, uint16_t vring_idx,
+				   uint16_t head)
+{
+	struct rte_vhost_inflight_info_packed *inflight_info;
+	struct virtio_net *dev;
+	struct vhost_virtqueue *vq;
+
+	dev = get_device(vid);
+	if (unlikely(!dev))
+		return -1;
+
+	if (unlikely(!(dev->protocol_features &
+	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD))))
+		return 0;
+
+	if (unlikely(!vq_is_packed(dev)))
+		return -1;
+
+	if (unlikely(vring_idx >= VHOST_MAX_VRING))
+		return -1;
+
+	vq = dev->virtqueue[vring_idx];
+	if (unlikely(!vq))
+		return -1;
+
+	inflight_info = vq->inflight_packed;
+	if (unlikely(!inflight_info))
+		return -1;
+
+	if (unlikely(head >= vq->size))
+		return -1;
+
+	rte_smp_mb();
+
+	inflight_info->desc[head].inflight = 0;
+
+	rte_smp_mb();
+
+	inflight_info->old_free_head = inflight_info->free_head;
+	inflight_info->old_used_idx = inflight_info->used_idx;
+	inflight_info->old_used_wrap_counter = inflight_info->used_wrap_counter;
+
+	return 0;
+}
+
+int
+rte_vhost_set_last_inflight_io_split(int vid, uint16_t vring_idx,
+				     uint16_t idx)
+{
+	struct virtio_net *dev;
+	struct vhost_virtqueue *vq;
+
+	dev = get_device(vid);
+	if (unlikely(!dev))
+		return -1;
+
+	if (unlikely(!(dev->protocol_features &
+	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD))))
+		return 0;
+
+	if (unlikely(vq_is_packed(dev)))
+		return -1;
+
+	if (unlikely(vring_idx >= VHOST_MAX_VRING))
+		return -1;
+
+	vq = dev->virtqueue[vring_idx];
+	if (unlikely(!vq))
+		return -1;
+
+	if (unlikely(!vq->inflight_split))
+		return -1;
+
+	vq->inflight_split->last_inflight_io = idx;
+	return 0;
+}
+
+int
+rte_vhost_set_last_inflight_io_packed(int vid, uint16_t vring_idx,
+				      uint16_t head)
+{
+	struct rte_vhost_inflight_info_packed *inflight_info;
+	struct virtio_net *dev;
+	struct vhost_virtqueue *vq;
+	uint16_t last;
+
+	dev = get_device(vid);
+	if (unlikely(!dev))
+		return -1;
+
+	if (unlikely(!(dev->protocol_features &
+	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD))))
+		return 0;
+
+	if (unlikely(!vq_is_packed(dev)))
+		return -1;
+
+	if (unlikely(vring_idx >= VHOST_MAX_VRING))
+		return -1;
+
+	vq = dev->virtqueue[vring_idx];
+	if (unlikely(!vq))
+		return -1;
+
+	inflight_info = vq->inflight_packed;
+	if (unlikely(!inflight_info))
+		return -1;
+
+	if (unlikely(head >= vq->size))
+		return -1;
+
+	last = inflight_info->desc[head].last;
+	if (unlikely(last >= vq->size))
+		return -1;
+
+	inflight_info->desc[last].next = inflight_info->free_head;
+	inflight_info->free_head = head;
+	inflight_info->used_idx += inflight_info->desc[head].num;
+	if (inflight_info->used_idx >= inflight_info->desc_num) {
+		inflight_info->used_idx -= inflight_info->desc_num;
+		inflight_info->used_wrap_counter =
+			!inflight_info->used_wrap_counter;
+	}
 
 	return 0;
 }
@@ -965,7 +1315,7 @@ rte_vhost_rx_queue_count(int vid, uint16_t qid)
 {
 	struct virtio_net *dev;
 	struct vhost_virtqueue *vq;
-	uint16_t ret = 0;
+	uint32_t ret = 0;
 
 	dev = get_device(vid);
 	if (dev == NULL)
@@ -1011,13 +1361,6 @@ int rte_vhost_get_log_base(int vid, uint64_t *log_base,
 	if (dev == NULL || log_base == NULL || log_size == NULL)
 		return -1;
 
-	if (unlikely(!(dev->flags & VIRTIO_DEV_BUILTIN_VIRTIO_NET))) {
-		RTE_LOG(ERR, VHOST_DATA,
-			"(%d) %s: built-in vhost net backend is disabled.\n",
-			dev->vid, __func__);
-		return -1;
-	}
-
 	*log_base = dev->log_base;
 	*log_size = dev->log_size;
 
@@ -1027,20 +1370,25 @@ int rte_vhost_get_log_base(int vid, uint64_t *log_base,
 int rte_vhost_get_vring_base(int vid, uint16_t queue_id,
 		uint16_t *last_avail_idx, uint16_t *last_used_idx)
 {
+	struct vhost_virtqueue *vq;
 	struct virtio_net *dev = get_device(vid);
 
 	if (dev == NULL || last_avail_idx == NULL || last_used_idx == NULL)
 		return -1;
 
-	if (unlikely(!(dev->flags & VIRTIO_DEV_BUILTIN_VIRTIO_NET))) {
-		RTE_LOG(ERR, VHOST_DATA,
-			"(%d) %s: built-in vhost net backend is disabled.\n",
-			dev->vid, __func__);
+	vq = dev->virtqueue[queue_id];
+	if (!vq)
 		return -1;
-	}
 
-	*last_avail_idx = dev->virtqueue[queue_id]->last_avail_idx;
-	*last_used_idx = dev->virtqueue[queue_id]->last_used_idx;
+	if (vq_is_packed(dev)) {
+		*last_avail_idx = (vq->avail_wrap_counter << 15) |
+				  vq->last_avail_idx;
+		*last_used_idx = (vq->used_wrap_counter << 15) |
+				 vq->last_used_idx;
+	} else {
+		*last_avail_idx = vq->last_avail_idx;
+		*last_used_idx = vq->last_used_idx;
+	}
 
 	return 0;
 }
@@ -1048,20 +1396,64 @@ int rte_vhost_get_vring_base(int vid, uint16_t queue_id,
 int rte_vhost_set_vring_base(int vid, uint16_t queue_id,
 		uint16_t last_avail_idx, uint16_t last_used_idx)
 {
+	struct vhost_virtqueue *vq;
 	struct virtio_net *dev = get_device(vid);
 
-	if (dev == NULL)
+	if (!dev)
 		return -1;
 
-	if (unlikely(!(dev->flags & VIRTIO_DEV_BUILTIN_VIRTIO_NET))) {
-		RTE_LOG(ERR, VHOST_DATA,
-			"(%d) %s: built-in vhost net backend is disabled.\n",
-			dev->vid, __func__);
+	vq = dev->virtqueue[queue_id];
+	if (!vq)
 		return -1;
+
+	if (vq_is_packed(dev)) {
+		vq->last_avail_idx = last_avail_idx & 0x7fff;
+		vq->avail_wrap_counter = !!(last_avail_idx & (1 << 15));
+		vq->last_used_idx = last_used_idx & 0x7fff;
+		vq->used_wrap_counter = !!(last_used_idx & (1 << 15));
+	} else {
+		vq->last_avail_idx = last_avail_idx;
+		vq->last_used_idx = last_used_idx;
 	}
 
-	dev->virtqueue[queue_id]->last_avail_idx = last_avail_idx;
-	dev->virtqueue[queue_id]->last_used_idx = last_used_idx;
+	return 0;
+}
 
+int
+rte_vhost_get_vring_base_from_inflight(int vid,
+				       uint16_t queue_id,
+				       uint16_t *last_avail_idx,
+				       uint16_t *last_used_idx)
+{
+	struct rte_vhost_inflight_info_packed *inflight_info;
+	struct virtio_net *dev = get_device(vid);
+
+	if (dev == NULL || last_avail_idx == NULL || last_used_idx == NULL)
+		return -1;
+
+	if (!vq_is_packed(dev))
+		return -1;
+
+	inflight_info = dev->virtqueue[queue_id]->inflight_packed;
+	if (!inflight_info)
+		return -1;
+
+	*last_avail_idx = (inflight_info->old_used_wrap_counter << 15) |
+			  inflight_info->old_used_idx;
+	*last_used_idx = *last_avail_idx;
+
+	return 0;
+}
+
+int rte_vhost_extern_callback_register(int vid,
+		struct rte_vhost_user_extern_ops const * const ops, void *ctx)
+{
+	struct virtio_net *dev = get_device(vid);
+
+	if (dev == NULL || ops == NULL)
+		return -1;
+
+	dev->extern_ops = *ops;
+	dev->extern_data = ctx;
 	return 0;
 }

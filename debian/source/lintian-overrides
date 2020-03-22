@@ -1,0 +1,5 @@
+# dpdk is a massive package by the way as defined by upstream
+# accept the long lists
+dpdk source: field-too-long
+# false positive, installed directly due to issues with meson doc install
+dpdk source: package-does-not-install-examples

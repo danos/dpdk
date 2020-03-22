@@ -14,12 +14,12 @@
 #include <rte_log.h>
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
-#include <rte_eal_memconfig.h>
 #include <rte_malloc.h>
 #include <rte_vfio.h>
 #include <rte_eal.h>
 #include <rte_bus.h>
 #include <rte_spinlock.h>
+#include <rte_tailq.h>
 
 #include "eal_filesystem.h"
 
@@ -458,9 +458,10 @@ pci_vfio_mmap_bar(int vfio_dev_fd, struct mapped_pci_resource *vfio_res,
 	struct pci_msix_table *msix_table = &vfio_res->msix_table;
 	struct pci_map *bar = &vfio_res->maps[bar_index];
 
-	if (bar->size == 0)
-		/* Skip this BAR */
+	if (bar->size == 0) {
+		RTE_LOG(DEBUG, EAL, "Bar size is 0, skip BAR%d\n", bar_index);
 		return 0;
+	}
 
 	if (msix_table->bar_index == bar_index) {
 		/*
@@ -469,8 +470,15 @@ pci_vfio_mmap_bar(int vfio_dev_fd, struct mapped_pci_resource *vfio_res,
 		 */
 		uint32_t table_start = msix_table->offset;
 		uint32_t table_end = table_start + msix_table->size;
-		table_end = (table_end + ~PAGE_MASK) & PAGE_MASK;
-		table_start &= PAGE_MASK;
+		table_end = RTE_ALIGN(table_end, PAGE_SIZE);
+		table_start = RTE_ALIGN_FLOOR(table_start, PAGE_SIZE);
+
+		/* If page-aligned start of MSI-X table is less than the
+		 * actual MSI-X table start address, reassign to the actual
+		 * start address.
+		 */
+		if (table_start < msix_table->offset)
+			table_start = msix_table->offset;
 
 		if (table_start == 0 && table_end >= bar->size) {
 			/* Cannot map this BAR */
@@ -482,8 +490,17 @@ pci_vfio_mmap_bar(int vfio_dev_fd, struct mapped_pci_resource *vfio_res,
 
 		memreg[0].offset = bar->offset;
 		memreg[0].size = table_start;
-		memreg[1].offset = bar->offset + table_end;
-		memreg[1].size = bar->size - table_end;
+		if (bar->size < table_end) {
+			/*
+			 * If MSI-X table end is beyond BAR end, don't attempt
+			 * to perform second mapping.
+			 */
+			memreg[1].offset = 0;
+			memreg[1].size = 0;
+		} else {
+			memreg[1].offset = bar->offset + table_end;
+			memreg[1].size = bar->size - table_end;
+		}
 
 		RTE_LOG(DEBUG, EAL,
 			"Trying to map BAR%d that contains the MSI-X "

@@ -1,2 +1,6 @@
 # meson installs this whether or not docs are built
 usr/share/doc/dpdk/guides/_static/css/custom.css
+# fonts are packaged and distributed separately
+usr/share/doc/dpdk/guides/_static/fonts
+# installed manually as "ninja install doc" does not work
+usr/share/dpdk/examples

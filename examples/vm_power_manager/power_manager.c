@@ -33,27 +33,13 @@
 	rte_spinlock_unlock(&global_core_freq_info[core_num].power_sl); \
 } while (0)
 
-#define POWER_SCALE_MASK(DIRECTION, core_mask, ret) do { \
-	int i; \
-	for (i = 0; core_mask; core_mask &= ~(1 << i++)) { \
-		if ((core_mask >> i) & 1) { \
-			if (!(ci.cd[i].global_enabled_cpus)) \
-				continue; \
-			rte_spinlock_lock(&global_core_freq_info[i].power_sl); \
-			if (rte_power_freq_##DIRECTION(i) != 1) \
-				ret = -1; \
-			rte_spinlock_unlock(&global_core_freq_info[i].power_sl); \
-		} \
-	} \
-} while (0)
-
 struct freq_info {
 	rte_spinlock_t power_sl;
 	uint32_t freqs[RTE_MAX_LCORE_FREQS];
 	unsigned num_freqs;
 } __rte_cache_aligned;
 
-static struct freq_info global_core_freq_info[POWER_MGR_MAX_CPUS];
+static struct freq_info global_core_freq_info[RTE_MAX_LCORE];
 
 struct core_info ci;
 
@@ -96,7 +82,7 @@ power_manager_init(void)
 	struct core_info *ci;
 	unsigned int max_core_num;
 
-	rte_power_set_env(PM_ENV_ACPI_CPUFREQ);
+	rte_power_set_env(PM_ENV_NOT_SET);
 
 	ci = get_core_info();
 	if (!ci) {
@@ -105,8 +91,8 @@ power_manager_init(void)
 		return -1;
 	}
 
-	if (ci->core_count > POWER_MGR_MAX_CPUS)
-		max_core_num = POWER_MGR_MAX_CPUS;
+	if (ci->core_count > RTE_MAX_LCORE)
+		max_core_num = RTE_MAX_LCORE;
 	else
 		max_core_num = ci->core_count;
 
@@ -145,9 +131,9 @@ power_manager_get_current_frequency(unsigned core_num)
 {
 	uint32_t freq, index;
 
-	if (core_num >= POWER_MGR_MAX_CPUS) {
+	if (core_num >= RTE_MAX_LCORE) {
 		RTE_LOG(ERR, POWER_MANAGER, "Core(%u) is out of range 0...%d\n",
-				core_num, POWER_MGR_MAX_CPUS-1);
+				core_num, RTE_MAX_LCORE-1);
 		return -1;
 	}
 	if (!(ci.cd[core_num].global_enabled_cpus))
@@ -179,8 +165,8 @@ power_manager_exit(void)
 		return -1;
 	}
 
-	if (ci->core_count > POWER_MGR_MAX_CPUS)
-		max_core_num = POWER_MGR_MAX_CPUS;
+	if (ci->core_count > RTE_MAX_LCORE)
+		max_core_num = RTE_MAX_LCORE;
 	else
 		max_core_num = ci->core_count;
 
@@ -195,60 +181,6 @@ power_manager_exit(void)
 		}
 		remove_core_from_monitor(i);
 	}
-	return ret;
-}
-
-int
-power_manager_scale_mask_up(uint64_t core_mask)
-{
-	int ret = 0;
-
-	POWER_SCALE_MASK(up, core_mask, ret);
-	return ret;
-}
-
-int
-power_manager_scale_mask_down(uint64_t core_mask)
-{
-	int ret = 0;
-
-	POWER_SCALE_MASK(down, core_mask, ret);
-	return ret;
-}
-
-int
-power_manager_scale_mask_min(uint64_t core_mask)
-{
-	int ret = 0;
-
-	POWER_SCALE_MASK(min, core_mask, ret);
-	return ret;
-}
-
-int
-power_manager_scale_mask_max(uint64_t core_mask)
-{
-	int ret = 0;
-
-	POWER_SCALE_MASK(max, core_mask, ret);
-	return ret;
-}
-
-int
-power_manager_enable_turbo_mask(uint64_t core_mask)
-{
-	int ret = 0;
-
-	POWER_SCALE_MASK(enable_turbo, core_mask, ret);
-	return ret;
-}
-
-int
-power_manager_disable_turbo_mask(uint64_t core_mask)
-{
-	int ret = 0;
-
-	POWER_SCALE_MASK(disable_turbo, core_mask, ret);
 	return ret;
 }
 
@@ -313,7 +245,7 @@ power_manager_scale_core_med(unsigned int core_num)
 	struct core_info *ci;
 
 	ci = get_core_info();
-	if (core_num >= POWER_MGR_MAX_CPUS)
+	if (core_num >= RTE_MAX_LCORE)
 		return -1;
 	if (!(ci->cd[core_num].global_enabled_cpus))
 		return -1;

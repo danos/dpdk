@@ -1,0 +1,10 @@
+Document: dpdk-api
+Title: Debian DPDK APIs
+Author: The DPDK Community
+Abstract:
+ This manual lists the Sphinx-generated DPDK APIs.
+Section: Programming/C
+
+Format: HTML
+Index: /usr/share/doc/dpdk/api/index.html
+Files: /usr/share/doc/dpdk/api/*.html

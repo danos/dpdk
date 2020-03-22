@@ -228,7 +228,7 @@ em_set_xmit_ctx(struct em_tx_queue* txq,
 	/* setup IPCS* fields */
 	ctx.lower_setup.ip_fields.ipcss = (uint8_t)l2len;
 	ctx.lower_setup.ip_fields.ipcso = (uint8_t)(l2len +
-			offsetof(struct ipv4_hdr, hdr_checksum));
+			offsetof(struct rte_ipv4_hdr, hdr_checksum));
 
 	/*
 	 * When doing checksum or TCP segmentation with IPv6 headers,
@@ -250,12 +250,12 @@ em_set_xmit_ctx(struct em_tx_queue* txq,
 	switch (flags & PKT_TX_L4_MASK) {
 	case PKT_TX_UDP_CKSUM:
 		ctx.upper_setup.tcp_fields.tucso = (uint8_t)(ipcse +
-				offsetof(struct udp_hdr, dgram_cksum));
+				offsetof(struct rte_udp_hdr, dgram_cksum));
 		cmp_mask |= TX_MACIP_LEN_CMP_MASK;
 		break;
 	case PKT_TX_TCP_CKSUM:
 		ctx.upper_setup.tcp_fields.tucso = (uint8_t)(ipcse +
-				offsetof(struct tcp_hdr, cksum));
+				offsetof(struct rte_tcp_hdr, cksum));
 		cmd_len |= E1000_TXD_CMD_TCP;
 		cmp_mask |= TX_MACIP_LEN_CMP_MASK;
 		break;
@@ -1011,17 +1011,17 @@ eth_em_recv_scattered_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 		 */
 		rxm->next = NULL;
 		if (unlikely(rxq->crc_len > 0)) {
-			first_seg->pkt_len -= ETHER_CRC_LEN;
-			if (data_len <= ETHER_CRC_LEN) {
+			first_seg->pkt_len -= RTE_ETHER_CRC_LEN;
+			if (data_len <= RTE_ETHER_CRC_LEN) {
 				rte_pktmbuf_free_seg(rxm);
 				first_seg->nb_segs--;
 				last_seg->data_len = (uint16_t)
 					(last_seg->data_len -
-					 (ETHER_CRC_LEN - data_len));
+					 (RTE_ETHER_CRC_LEN - data_len));
 				last_seg->next = NULL;
 			} else
-				rxm->data_len =
-					(uint16_t) (data_len - ETHER_CRC_LEN);
+				rxm->data_len = (uint16_t)
+					(data_len - RTE_ETHER_CRC_LEN);
 		}
 
 		/*
@@ -1374,7 +1374,7 @@ em_get_rx_port_offloads_capa(struct rte_eth_dev *dev)
 		DEV_RX_OFFLOAD_TCP_CKSUM   |
 		DEV_RX_OFFLOAD_KEEP_CRC    |
 		DEV_RX_OFFLOAD_SCATTER;
-	if (max_rx_pktlen > ETHER_MAX_LEN)
+	if (max_rx_pktlen > RTE_ETHER_MAX_LEN)
 		rx_offload_capa |= DEV_RX_OFFLOAD_JUMBO_FRAME;
 
 	return rx_offload_capa;
@@ -1469,7 +1469,7 @@ eth_em_rx_queue_setup(struct rte_eth_dev *dev,
 	rxq->queue_id = queue_idx;
 	rxq->port_id = dev->data->port_id;
 	if (dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_KEEP_CRC)
-		rxq->crc_len = ETHER_CRC_LEN;
+		rxq->crc_len = RTE_ETHER_CRC_LEN;
 	else
 		rxq->crc_len = 0;
 
@@ -1805,7 +1805,7 @@ eth_em_rx_init(struct rte_eth_dev *dev)
 		 *  call to configure
 		 */
 		if (dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_KEEP_CRC)
-			rxq->crc_len = ETHER_CRC_LEN;
+			rxq->crc_len = RTE_ETHER_CRC_LEN;
 		else
 			rxq->crc_len = 0;
 
@@ -1838,7 +1838,7 @@ eth_em_rx_init(struct rte_eth_dev *dev)
 		 * one buffer.
 		 */
 		if (rxmode->offloads & DEV_RX_OFFLOAD_JUMBO_FRAME ||
-				rctl_bsize < ETHER_MAX_LEN) {
+				rctl_bsize < RTE_ETHER_MAX_LEN) {
 			if (!dev->data->scattered_rx)
 				PMD_INIT_LOG(DEBUG, "forcing scatter mode");
 			dev->rx_pkt_burst =
@@ -2108,20 +2108,32 @@ em_flush_desc_rings(struct rte_eth_dev *dev)
 	struct e1000_hw *hw = E1000_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	uint16_t pci_cfg_status = 0;
+	int ret;
 
 	fextnvm11 = E1000_READ_REG(hw, E1000_FEXTNVM11);
 	E1000_WRITE_REG(hw, E1000_FEXTNVM11,
 			fextnvm11 | E1000_FEXTNVM11_DISABLE_MULR_FIX);
 	tdlen = E1000_READ_REG(hw, E1000_TDLEN(0));
-	rte_pci_read_config(pci_dev, &pci_cfg_status, sizeof(pci_cfg_status),
-				PCI_CFG_STATUS_REG);
+	ret = rte_pci_read_config(pci_dev, &pci_cfg_status,
+		   sizeof(pci_cfg_status), PCI_CFG_STATUS_REG);
+	if (ret < 0) {
+		PMD_DRV_LOG(ERR, "Failed to read PCI offset 0x%x",
+			    PCI_CFG_STATUS_REG);
+		return;
+	}
 
 	/* do nothing if we're not in faulty state, or if the queue is empty */
 	if ((pci_cfg_status & FLUSH_DESC_REQUIRED) && tdlen) {
 		/* flush desc ring */
 		e1000_flush_tx_ring(dev);
-		rte_pci_read_config(pci_dev, &pci_cfg_status,
+		ret = rte_pci_read_config(pci_dev, &pci_cfg_status,
 				sizeof(pci_cfg_status), PCI_CFG_STATUS_REG);
+		if (ret < 0) {
+			PMD_DRV_LOG(ERR, "Failed to read PCI offset 0x%x",
+					PCI_CFG_STATUS_REG);
+			return;
+		}
+
 		if (pci_cfg_status & FLUSH_DESC_REQUIRED)
 			e1000_flush_rx_ring(dev);
 	}

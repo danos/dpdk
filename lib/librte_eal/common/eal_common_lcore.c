@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <limits.h>
 #include <string.h>
-#include <dirent.h>
 
 #include <rte_errno.h>
 #include <rte_log.h>
@@ -16,6 +15,87 @@
 
 #include "eal_private.h"
 #include "eal_thread.h"
+
+unsigned int rte_get_master_lcore(void)
+{
+	return rte_eal_get_configuration()->master_lcore;
+}
+
+unsigned int rte_lcore_count(void)
+{
+	return rte_eal_get_configuration()->lcore_count;
+}
+
+int rte_lcore_index(int lcore_id)
+{
+	if (unlikely(lcore_id >= RTE_MAX_LCORE))
+		return -1;
+
+	if (lcore_id < 0)
+		lcore_id = (int)rte_lcore_id();
+
+	return lcore_config[lcore_id].core_index;
+}
+
+int rte_lcore_to_cpu_id(int lcore_id)
+{
+	if (unlikely(lcore_id >= RTE_MAX_LCORE))
+		return -1;
+
+	if (lcore_id < 0)
+		lcore_id = (int)rte_lcore_id();
+
+	return lcore_config[lcore_id].core_id;
+}
+
+rte_cpuset_t rte_lcore_cpuset(unsigned int lcore_id)
+{
+	return lcore_config[lcore_id].cpuset;
+}
+
+enum rte_lcore_role_t
+rte_eal_lcore_role(unsigned int lcore_id)
+{
+	struct rte_config *cfg = rte_eal_get_configuration();
+
+	if (lcore_id >= RTE_MAX_LCORE)
+		return ROLE_OFF;
+	return cfg->lcore_role[lcore_id];
+}
+
+int rte_lcore_is_enabled(unsigned int lcore_id)
+{
+	struct rte_config *cfg = rte_eal_get_configuration();
+
+	if (lcore_id >= RTE_MAX_LCORE)
+		return 0;
+	return cfg->lcore_role[lcore_id] == ROLE_RTE;
+}
+
+unsigned int rte_get_next_lcore(unsigned int i, int skip_master, int wrap)
+{
+	i++;
+	if (wrap)
+		i %= RTE_MAX_LCORE;
+
+	while (i < RTE_MAX_LCORE) {
+		if (!rte_lcore_is_enabled(i) ||
+		    (skip_master && (i == rte_get_master_lcore()))) {
+			i++;
+			if (wrap)
+				i %= RTE_MAX_LCORE;
+			continue;
+		}
+		break;
+	}
+	return i;
+}
+
+unsigned int
+rte_lcore_to_socket_id(unsigned int lcore_id)
+{
+	return lcore_config[lcore_id].socket_id;
+}
 
 static int
 socket_id_cmp(const void *a, const void *b)
@@ -106,14 +186,14 @@ rte_eal_cpu_init(void)
 	return 0;
 }
 
-unsigned int __rte_experimental
+unsigned int
 rte_socket_count(void)
 {
 	const struct rte_config *config = rte_eal_get_configuration();
 	return config->numa_node_count;
 }
 
-int __rte_experimental
+int
 rte_socket_id_by_idx(unsigned int idx)
 {
 	const struct rte_config *config = rte_eal_get_configuration();

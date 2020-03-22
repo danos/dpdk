@@ -12,6 +12,8 @@ SRCS-y += fips_validation_tdes.c
 SRCS-y += fips_validation_gcm.c
 SRCS-y += fips_validation_cmac.c
 SRCS-y += fips_validation_ccm.c
+SRCS-y += fips_validation_sha.c
+SRCS-y += fips_dev_self_test.c
 SRCS-y += main.c
 
 # Build using pkg-config variables if possible
@@ -51,8 +53,8 @@ ifeq ($(RTE_SDK),)
 $(error "Please define RTE_SDK environment variable")
 endif
 
-# Default target, can be overridden by command line or environment
-RTE_TARGET ?= x86_64-native-linuxapp-gcc
+# Default target, detect a build directory, by looking for a path with a .config
+RTE_TARGET ?= $(notdir $(abspath $(dir $(firstword $(wildcard $(RTE_SDK)/*/.config)))))
 
 INC += $(sort $(wildcard *.h))
 

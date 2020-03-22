@@ -115,11 +115,18 @@ static void enic_init_soft_stats(struct enic *enic)
 	enic_clear_soft_stats(enic);
 }
 
-void enic_dev_stats_clear(struct enic *enic)
+int enic_dev_stats_clear(struct enic *enic)
 {
-	if (vnic_dev_stats_clear(enic->vdev))
+	int ret;
+
+	ret = vnic_dev_stats_clear(enic->vdev);
+	if (ret != 0) {
 		dev_err(enic, "Error in clearing stats\n");
+		return ret;
+	}
 	enic_clear_soft_stats(enic);
+
+	return 0;
 }
 
 int enic_dev_stats_get(struct enic *enic, struct rte_eth_stats *r_stats)
@@ -350,7 +357,7 @@ enic_initial_post_rx(struct enic *enic, struct vnic_rq *rq)
 	rq->need_initial_post = false;
 }
 
-static void *
+void *
 enic_alloc_consistent(void *priv, size_t size,
 	dma_addr_t *dma_handle, u8 *name)
 {
@@ -390,7 +397,7 @@ enic_alloc_consistent(void *priv, size_t size,
 	return vaddr;
 }
 
-static void
+void
 enic_free_consistent(void *priv,
 		     __rte_unused size_t size,
 		     void *vaddr,
@@ -538,10 +545,10 @@ void enic_pick_rx_handler(struct rte_eth_dev *eth_dev)
 	if (enic_use_vector_rx_handler(eth_dev))
 		return;
 	if (enic->rq_count > 0 && enic->rq[0].data_queue_enable == 0) {
-		PMD_INIT_LOG(DEBUG, " use the non-scatter Rx handler");
+		ENICPMD_LOG(DEBUG, " use the non-scatter Rx handler");
 		eth_dev->rx_pkt_burst = &enic_noscatter_recv_pkts;
 	} else {
-		PMD_INIT_LOG(DEBUG, " use the normal Rx handler");
+		ENICPMD_LOG(DEBUG, " use the normal Rx handler");
 		eth_dev->rx_pkt_burst = &enic_recv_pkts;
 	}
 }
@@ -552,10 +559,10 @@ void enic_pick_tx_handler(struct rte_eth_dev *eth_dev)
 	struct enic *enic = pmd_priv(eth_dev);
 
 	if (enic->use_simple_tx_handler) {
-		PMD_INIT_LOG(DEBUG, " use the simple tx handler");
+		ENICPMD_LOG(DEBUG, " use the simple tx handler");
 		eth_dev->tx_pkt_burst = &enic_simple_xmit_pkts;
 	} else {
-		PMD_INIT_LOG(DEBUG, " use the default tx handler");
+		ENICPMD_LOG(DEBUG, " use the default tx handler");
 		eth_dev->tx_pkt_burst = &enic_xmit_pkts;
 	}
 }
@@ -602,6 +609,9 @@ int enic_enable(struct enic *enic)
 		dev_warning(enic, "Init of hash table for clsf failed."\
 			"Flow director feature will not work\n");
 
+	if (enic_fm_init(enic))
+		dev_warning(enic, "Init of flowman failed.\n");
+
 	for (index = 0; index < enic->rq_count; index++) {
 		err = enic_alloc_rx_queue_mbufs(enic,
 			&enic->rq[enic_rte_rq_idx_to_sop_idx(index)]);
@@ -633,13 +643,13 @@ int enic_enable(struct enic *enic)
 		 DEV_TX_OFFLOAD_TCP_CKSUM);
 	if ((eth_dev->data->dev_conf.txmode.offloads &
 	     ~simple_tx_offloads) == 0) {
-		PMD_INIT_LOG(DEBUG, " use the simple tx handler");
+		ENICPMD_LOG(DEBUG, " use the simple tx handler");
 		eth_dev->tx_pkt_burst = &enic_simple_xmit_pkts;
 		for (index = 0; index < enic->wq_count; index++)
 			enic_prep_wq_for_simple_tx(enic, index);
 		enic->use_simple_tx_handler = 1;
 	} else {
-		PMD_INIT_LOG(DEBUG, " use the default tx handler");
+		ENICPMD_LOG(DEBUG, " use the default tx handler");
 		eth_dev->tx_pkt_burst = &enic_xmit_pkts;
 	}
 
@@ -1059,6 +1069,7 @@ int enic_disable(struct enic *enic)
 	vnic_dev_disable(enic->vdev);
 
 	enic_clsf_destroy(enic);
+	enic_fm_destroy(enic);
 
 	if (!enic_is_sriov_vf(enic))
 		vnic_dev_del_addr(enic->vdev, enic->mac_addr);
@@ -1380,10 +1391,10 @@ int enic_set_vlan_strip(struct enic *enic)
 			       enic->rss_enable);
 }
 
-void enic_add_packet_filter(struct enic *enic)
+int enic_add_packet_filter(struct enic *enic)
 {
 	/* Args -> directed, multicast, broadcast, promisc, allmulti */
-	vnic_dev_packet_filter(enic->vdev, 1, 1, 1,
+	return vnic_dev_packet_filter(enic->vdev, 1, 1, 1,
 		enic->promisc, enic->allmulti);
 }
 
@@ -1394,12 +1405,10 @@ int enic_get_link_status(struct enic *enic)
 
 static void enic_dev_deinit(struct enic *enic)
 {
-	struct rte_eth_dev *eth_dev = enic->rte_dev;
-
 	/* stop link status checking */
 	vnic_dev_notify_unset(enic->vdev);
 
-	rte_free(eth_dev->data->mac_addrs);
+	/* mac_addrs is freed by rte_eth_dev_release_port() */
 	rte_free(enic->cq);
 	rte_free(enic->intr);
 	rte_free(enic->rq);
@@ -1684,13 +1693,14 @@ static int enic_dev_init(struct enic *enic)
 	/* Get the supported filters */
 	enic_fdir_info(enic);
 
-	eth_dev->data->mac_addrs = rte_zmalloc("enic_mac_addr", ETH_ALEN
-						* ENIC_MAX_MAC_ADDR, 0);
+	eth_dev->data->mac_addrs = rte_zmalloc("enic_mac_addr",
+					sizeof(struct rte_ether_addr) *
+					ENIC_UNICAST_PERFECT_FILTERS, 0);
 	if (!eth_dev->data->mac_addrs) {
 		dev_err(enic, "mac addr storage alloc failed, aborting.\n");
 		return -1;
 	}
-	ether_addr_copy((struct ether_addr *) enic->mac_addr,
+	rte_ether_addr_copy((struct rte_ether_addr *)enic->mac_addr,
 			eth_dev->data->mac_addrs);
 
 	vnic_dev_set_reset_flag(enic->vdev, 0);
@@ -1700,6 +1710,19 @@ static int enic_dev_init(struct enic *enic)
 	/* set up link status checking */
 	vnic_dev_notify_set(enic->vdev, -1); /* No Intr for notify */
 
+	/*
+	 * When Geneve with options offload is available, always disable it
+	 * first as it can interfere with user flow rules.
+	 */
+	if (enic->geneve_opt_avail) {
+		/*
+		 * Disabling fails if the feature is provisioned but
+		 * not enabled. So ignore result and do not log error.
+		 */
+		vnic_dev_overlay_offload_ctrl(enic->vdev,
+			OVERLAY_FEATURE_GENEVE,
+			OVERLAY_OFFLOAD_DISABLE);
+	}
 	enic->overlay_offload = false;
 	if (enic->disable_overlay && enic->vxlan) {
 		/*
@@ -1731,20 +1754,32 @@ static int enic_dev_init(struct enic *enic)
 		enic->overlay_offload = true;
 		dev_info(enic, "Overlay offload is enabled\n");
 	}
+	/* Geneve with options offload requires overlay offload */
+	if (enic->overlay_offload && enic->geneve_opt_avail &&
+	    enic->geneve_opt_request) {
+		if (vnic_dev_overlay_offload_ctrl(enic->vdev,
+				OVERLAY_FEATURE_GENEVE,
+				OVERLAY_OFFLOAD_ENABLE)) {
+			dev_err(enic, "failed to enable geneve+option\n");
+		} else {
+			enic->geneve_opt_enabled = 1;
+			dev_info(enic, "Geneve with options is enabled\n");
+		}
+	}
 	/*
 	 * Reset the vxlan port if HW vxlan parsing is available. It
 	 * is always enabled regardless of overlay offload
 	 * enable/disable.
 	 */
 	if (enic->vxlan) {
-		enic->vxlan_port = ENIC_DEFAULT_VXLAN_PORT;
+		enic->vxlan_port = RTE_VXLAN_DEFAULT_PORT;
 		/*
 		 * Reset the vxlan port to the default, as the NIC firmware
 		 * does not reset it automatically and keeps the old setting.
 		 */
 		if (vnic_dev_overlay_offload_cfg(enic->vdev,
 						 OVERLAY_CFG_VXLAN_PORT_UPDATE,
-						 ENIC_DEFAULT_VXLAN_PORT)) {
+						 RTE_VXLAN_DEFAULT_PORT)) {
 			dev_err(enic, "failed to update vxlan port\n");
 			return -EINVAL;
 		}
@@ -1759,7 +1794,7 @@ int enic_probe(struct enic *enic)
 	struct rte_pci_device *pdev = enic->pdev;
 	int err = -1;
 
-	dev_debug(enic, " Initializing ENIC PMD\n");
+	dev_debug(enic, "Initializing ENIC PMD\n");
 
 	/* if this is a secondary process the hardware is already initialized */
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)

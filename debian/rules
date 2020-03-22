@@ -5,7 +5,10 @@ DPKG_EXPORT_BUILDFLAGS = 1
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 include /usr/share/dpkg/default.mk
 
-DPDK_ABI := $(shell echo $(DEB_VERSION_UPSTREAM) | cut -d '-' -f1 | cut -d '.'  -f1-2 | cut -d '~' -f1)
+# Upstream now defines a single ABI across all libs that we will use
+DPDK_ABI := $(shell cat ABI_VERSION)
+# Experimental libs will have 0.200 on actual ABI 20.0
+DPDK_EXP_ABI := "0.$(shell cat ABI_VERSION | tr -d ".")"
 
 ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
 	export DH_VERBOSE=1
@@ -106,7 +109,7 @@ override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
-	rm -f debian/dpdk-igb-uio-dkms.dkms debian/dpdk-rte-kni-dkms.dkms
+	rm -f debian/dpdk-igb-uio-dkms.dkms
 	rm -f doc/guides/compressdevs/overview_feature_table.txt \
 		doc/guides/cryptodevs/overview_aead_table.txt \
 		doc/guides/cryptodevs/overview_asym_table.txt \
@@ -141,14 +144,20 @@ override_dh_auto_install-arch:
 	dh_auto_install
 	# have the DKMS build include the correct per-arch directory
 	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
-	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-rte-kni-dkms.dkms.in > debian/dpdk-rte-kni-dkms.dkms
 	# Package(s): libdpdk-<NAME><VER> (bare runtime libs and PMDs)
+	# if lib names end in a number, insert a "-"
+	# if libraries are fully experimental set zero as package name suffix, otherwise DPDK_ABI
 	for lib in $$(ls -1 debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/*.so.*); do \
 	  LN=$$(basename $${lib} | sed -e 's/\.so\.[0-9\.]*$$//' | tr '_' '-'); \
 	  if echo $${LN} | grep -q ".*[0-9]$$"; then \
-	    PKG=$${LN}-$(DPDK_ABI); \
+	    PKG="$${LN}-"; \
 	  else \
-	    PKG=$${LN}$(DPDK_ABI); \
+	    PKG="$${LN}"; \
+	  fi; \
+	  if echo $${lib} | grep -q "\.so\.0\.[0-9]*$$"; then \
+	    PKG="$${PKG}$(DPDK_EXP_ABI)"; \
+	  else \
+	    PKG="$${PKG}$(DPDK_ABI)"; \
 	  fi; \
 	  LIBF="$$(basename $${lib})"; \
 	  dh_install -p $${PKG} usr/lib/$(DEB_HOST_MULTIARCH)/$${LIBF}; \
@@ -159,15 +168,15 @@ override_dh_auto_install-arch:
 	# Package: dpdk-igb-uio-dkms
 	dh_install -p dpdk-igb-uio-dkms kernel/linux/igb_uio/* \
 		usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
-	# Package: dpdk-rte-kni-dkms
-	dh_install -p dpdk-rte-kni-dkms kernel/linux/kni/* \
-		usr/src/dpdk-rte-kni-$(DEB_VERSION_UPSTREAM)
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
 	dh_install -p dpdk-modules-$(KVERS) lib/modules
 endif
 	# Strip RPATH, hard-coded in test/test/meson.build at the moment
 	chrpath --delete $(CURDIR)/debian/tmp/usr/bin/dpdk-test
+
+override_dh_install:
+	dh_install --exclude=fonts
 
 override_dh_dkms:
 	dh_dkms -V $(DEB_VERSION_UPSTREAM)

@@ -12,9 +12,17 @@
 #include <rte_errno.h>
 #include <rte_branch_prediction.h>
 #include <rte_string_fns.h>
+#include <rte_mbuf.h>
+#include <rte_mbuf_dyn.h>
 #include "rte_ethdev.h"
 #include "rte_flow_driver.h"
 #include "rte_flow.h"
+
+/* Mbuf dynamic field name for metadata. */
+int rte_flow_dynf_metadata_offs = -1;
+
+/* Mbuf dynamic field flag bit number for metadata. */
+uint64_t rte_flow_dynf_metadata_mask;
 
 /**
  * Flow elements description tables.
@@ -74,6 +82,17 @@ static const struct rte_flow_desc_data rte_flow_desc_item[] = {
 		     sizeof(struct rte_flow_item_icmp6_nd_opt_tla_eth)),
 	MK_FLOW_ITEM(MARK, sizeof(struct rte_flow_item_mark)),
 	MK_FLOW_ITEM(META, sizeof(struct rte_flow_item_meta)),
+	MK_FLOW_ITEM(TAG, sizeof(struct rte_flow_item_tag)),
+	MK_FLOW_ITEM(GRE_KEY, sizeof(rte_be32_t)),
+	MK_FLOW_ITEM(GTP_PSC, sizeof(struct rte_flow_item_gtp_psc)),
+	MK_FLOW_ITEM(PPPOES, sizeof(struct rte_flow_item_pppoe)),
+	MK_FLOW_ITEM(PPPOED, sizeof(struct rte_flow_item_pppoe)),
+	MK_FLOW_ITEM(PPPOE_PROTO_ID,
+			sizeof(struct rte_flow_item_pppoe_proto_id)),
+	MK_FLOW_ITEM(NSH, sizeof(struct rte_flow_item_nsh)),
+	MK_FLOW_ITEM(IGMP, sizeof(struct rte_flow_item_igmp)),
+	MK_FLOW_ITEM(AH, sizeof(struct rte_flow_item_ah)),
+	MK_FLOW_ITEM(HIGIG2, sizeof(struct rte_flow_item_higig2_hdr)),
 };
 
 /** Generate flow_action[] entry. */
@@ -143,7 +162,44 @@ static const struct rte_flow_desc_data rte_flow_desc_action[] = {
 	MK_FLOW_ACTION(SET_TTL, sizeof(struct rte_flow_action_set_ttl)),
 	MK_FLOW_ACTION(SET_MAC_SRC, sizeof(struct rte_flow_action_set_mac)),
 	MK_FLOW_ACTION(SET_MAC_DST, sizeof(struct rte_flow_action_set_mac)),
+	MK_FLOW_ACTION(INC_TCP_SEQ, sizeof(rte_be32_t)),
+	MK_FLOW_ACTION(DEC_TCP_SEQ, sizeof(rte_be32_t)),
+	MK_FLOW_ACTION(INC_TCP_ACK, sizeof(rte_be32_t)),
+	MK_FLOW_ACTION(DEC_TCP_ACK, sizeof(rte_be32_t)),
+	MK_FLOW_ACTION(SET_TAG, sizeof(struct rte_flow_action_set_tag)),
+	MK_FLOW_ACTION(SET_META, sizeof(struct rte_flow_action_set_meta)),
 };
+
+int
+rte_flow_dynf_metadata_register(void)
+{
+	int offset;
+	int flag;
+
+	static const struct rte_mbuf_dynfield desc_offs = {
+		.name = RTE_MBUF_DYNFIELD_METADATA_NAME,
+		.size = sizeof(uint32_t),
+		.align = __alignof__(uint32_t),
+	};
+	static const struct rte_mbuf_dynflag desc_flag = {
+		.name = RTE_MBUF_DYNFLAG_METADATA_NAME,
+	};
+
+	offset = rte_mbuf_dynfield_register(&desc_offs);
+	if (offset < 0)
+		goto error;
+	flag = rte_mbuf_dynflag_register(&desc_flag);
+	if (flag < 0)
+		goto error;
+	rte_flow_dynf_metadata_offs = offset;
+	rte_flow_dynf_metadata_mask = (1ULL << flag);
+	return 0;
+
+error:
+	rte_flow_dynf_metadata_offs = -1;
+	rte_flow_dynf_metadata_mask = 0ULL;
+	return -rte_errno;
+}
 
 static int
 flow_err(uint16_t port_id, int ret, struct rte_flow_error *error)
@@ -179,11 +235,11 @@ rte_flow_expand_rss_item_complete(const struct rte_flow_item *item)
 			break;
 		ether_type = ((const struct rte_flow_item_eth *)
 				(item->spec))->type;
-		if (rte_be_to_cpu_16(ether_type) == ETHER_TYPE_IPv4)
+		if (rte_be_to_cpu_16(ether_type) == RTE_ETHER_TYPE_IPV4)
 			ret = RTE_FLOW_ITEM_TYPE_IPV4;
-		else if (rte_be_to_cpu_16(ether_type) == ETHER_TYPE_IPv6)
+		else if (rte_be_to_cpu_16(ether_type) == RTE_ETHER_TYPE_IPV6)
 			ret = RTE_FLOW_ITEM_TYPE_IPV6;
-		else if (rte_be_to_cpu_16(ether_type) == ETHER_TYPE_VLAN)
+		else if (rte_be_to_cpu_16(ether_type) == RTE_ETHER_TYPE_VLAN)
 			ret = RTE_FLOW_ITEM_TYPE_VLAN;
 		break;
 	case RTE_FLOW_ITEM_TYPE_VLAN:
@@ -196,11 +252,11 @@ rte_flow_expand_rss_item_complete(const struct rte_flow_item *item)
 			break;
 		ether_type = ((const struct rte_flow_item_vlan *)
 				(item->spec))->inner_type;
-		if (rte_be_to_cpu_16(ether_type) == ETHER_TYPE_IPv4)
+		if (rte_be_to_cpu_16(ether_type) == RTE_ETHER_TYPE_IPV4)
 			ret = RTE_FLOW_ITEM_TYPE_IPV4;
-		else if (rte_be_to_cpu_16(ether_type) == ETHER_TYPE_IPv6)
+		else if (rte_be_to_cpu_16(ether_type) == RTE_ETHER_TYPE_IPV6)
 			ret = RTE_FLOW_ITEM_TYPE_IPV6;
-		else if (rte_be_to_cpu_16(ether_type) == ETHER_TYPE_VLAN)
+		else if (rte_be_to_cpu_16(ether_type) == RTE_ETHER_TYPE_VLAN)
 			ret = RTE_FLOW_ITEM_TYPE_VLAN;
 		break;
 	case RTE_FLOW_ITEM_TYPE_IPV4:
@@ -992,7 +1048,7 @@ rte_flow_copy(struct rte_flow_desc *desc, size_t len,
  * Expand RSS flows into several possible flows according to the RSS hash
  * fields requested and the driver capabilities.
  */
-int __rte_experimental
+int
 rte_flow_expand_rss(struct rte_flow_expand_rss *buf, size_t size,
 		    const struct rte_flow_item *pattern, uint64_t types,
 		    const struct rte_flow_expand_node graph[],

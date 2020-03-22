@@ -1,3 +1,87 @@
+dpdk (19.11-3) experimental; urgency=medium
+
+  * d/p/test: transition to python3
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Tue, 28 Jan 2020 13:34:07 +0200
+
+dpdk (19.11-2) experimental; urgency=medium
+
+  * dh-missing: ignore examples directory, as they are already installed
+    manually. (Closes: #947371)
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 26 Dec 2019 15:30:15 +0100
+
+dpdk (19.11-1) experimental; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * New upstream release 19.11; for a full list of changes see:
+    http://doc.dpdk.org/guides-19.08/rel_notes/release_19_08.html
+    - Includes d/p/avoid-as-needed-as-it-causes-overlinking.patch: fix
+      overlinking in software using the dpdk pkg-config (LP: #1841759)
+    - d/control: bump versions to 19.11
+    - d/*.symbols: bump for 19.11
+    - rte-kni module support dropped upstream, remove former package
+      dpdk-rte-kni-dkms (LP: #1853195)
+    - d/p/fix-ppc64-mlx4-build.patch: drop patch now being upstream
+    - new Major ABI is set to 20.0 by upstream
+    - d/dpdk.lintian-overrides: it is ok that example shell scripts are
+      not executable
+    - d/control, d/*.symbols: new PMDs for qede pfe nitrox hns3 and
+      octeontx2-crypto
+    - d/control, d/*.symbols: new rte libraries rib and fib
+    - d/dpdk-dev.install: add new dpdk-test-sad
+    - d/rules: global ABI_VERSION now tracked in a file by upstream
+    - d/control: add new build-dependencies libisal-dev, libfdt-dev
+      and libbpf-dev
+    - d/control: drop no more built librte-pmd-ipn3ke20.0
+    - d/control: add new PMDs of 19.11 af-xdp and isal
+    - d/rules: add ability to handle fully experimental libs to be soname zero
+    - d/control: experimental only libs now are on an soname 0.200 (bbdev, bpf,
+      compressdev, fib, flow-classify, ipsec, rcu, rib, stack, telemetry)
+    - d/control: let libdpdk-dev depend on the new build dependencies
+  * fixup package reference in debian/librte-common-octeontx2-19.11.symbols
+  * drop duplicate debian/update-control.py helper
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 04 Dec 2019 14:29:26 +0000
+
+dpdk (19.08-1~git1) UNRELEASED; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * New upstream release 19.08; for a full list of changes see:
+    http://doc.dpdk.org/guides-19.08/rel_notes/release_19_08.html
+    - d/*.symbols: flat update for 19.08
+    - d/control: update to new major version number
+    - d/dpdk-dev.install: update new paths to dpdk-test
+    - d/control, d/librte-pmd-qede18.11.symbols: drop pmd-qede no more built
+      by default
+    - d/control, d/*.symbols: new PMDs librte-pmd-octeontx2
+      librte-pmd-bbdev-fpga-lte-fec librte-pmd-bbdev-turbo-sw librte-pmd-hinic
+      librte-pmd-ice librte-pmd-ipn3ke librte-pmd-memif
+      librte-pmd-octeontx2-event
+    - d/control, d/*.symbols: renamed PMDs
+      - librte-pmd-skeleton-rawdev -> librte-rawdev-skeleton
+      - librte-pmd-dpaa2-cmdif -> librte-rawdev-dpaa2-cmdif
+      - librte-pmd-dpaa2-qdma -> librte-rawdev-dpaa2-qdma
+      - librte-pmd-avf -> librte-pmd-iavf
+      - librte-pmd-ifpga-rawdev (somewhat indirectly replaced by
+        librte-pmd-ipn3ke)
+    - d/control: add new Homepage references
+    - d/control, d/*.symbols: new rawdev drivers librte-rawdev-ioat,
+      librte-rawdev-ntb and  librte-rawdev-octeontx2-dma
+    - d/control, d/*.symbols: add new libraries librte-common-octeontx2,
+      librte-ipsec, librte-mempool-octeontx2, librte-rcu and librte-stack
+    - d/dpdk-dev.install: new test binaries" debian/dpdk-dev.install
+    - d/dpdk-doc.install: add new examples path" debian/dpdk-doc.install
+    - d/*.symbols: add new and updated symbols
+    - d/p/fix-ppc64-mlx4-build.patch: fix FTBFS on ppc64el
+  * Drop patches now upstream
+    - 0004-build-bump-minimum-Meson-version-to-0.47.1.patch
+    - 0005-build-use-dependency-instead-of-find_library.patch
+    - 0006-build-reorder-libraries-and-build-eal-before-cmdline.patch
+    - 0007-build-use-dependency-for-libbsd-instead-of-manual-ap.patch
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Mon, 12 Aug 2019 13:23:49 +0200
+
 dpdk (18.11.6-1) unstable; urgency=medium
 
   [ Luca Boccassi ]
