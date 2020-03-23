@@ -1,3 +1,9 @@
+dpdk (18.11.6-1vyatta7) unstable; urgency=medium
+
+  * Revert "Include additional test applications"
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 23 Mar 2020 10:45:03 -0400
+
 dpdk (18.11.6-1vyatta6) unstable; urgency=medium
 
   [ Srinivas Narayan ]
