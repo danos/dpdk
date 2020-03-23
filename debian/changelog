@@ -1,3 +1,13 @@
+dpdk (18.11.6-1vyatta6) unstable; urgency=medium
+
+  [ Srinivas Narayan ]
+  * Include test ACL application
+  * Include additional test applications
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 23 Mar 2020 09:38:53 -0400
+
 dpdk (18.11.6-1vyatta5) unstable; urgency=medium
 
   [ Sameer Agrawal ]
