@@ -1,3 +1,12 @@
+dpdk (18.11.6-1vyatta8) unstable; urgency=medium
+
+  [ Sharmila Podury ]
+  * Bonding broken on KVM with virtio (Bugfix: VRVDR-50327)
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 26 Mar 2020 09:43:43 -0400
+
 dpdk (18.11.6-1vyatta7) unstable; urgency=medium
 
   * Revert "Include additional test applications"
