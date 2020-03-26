@@ -275,6 +275,23 @@ Description: Data Plane Development Kit (librte_bus_ifpga runtime library)
  .
  This package contains the runtime libraries for librte_bus_ifpga.
 
+Package: librte-rawdev-ifpga20.0
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://dpdk.org/doc/guides/rawdevs/ifpga_rawdev.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Description: Data Plane Development Kit (librte_rawdev_ifpga runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_rawdev_ifpga.
+ .
+ The SW IFPGA Rawdev Driver (ifpga_rawdev) provides a Rawdev driver that
+ utilizes Intel FPGA Software Stack OPAE(Open Programmable Acceleration Engine)
+ for FPGA management.
+
 Package: librte-pmd-ifc20.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
@@ -2110,6 +2127,23 @@ Description: Data Plane Development Kit (librte-pmd-isal runtime library)
  decompression driver support for utilizing Intel ISA-L library, which
  implements the deflate algorithm for both Deflate(compression) and
  Inflate(decompression).
+
+Package: librte-pmd-ipn3ke20.0
+Architecture: amd64 arm64 armhf ppc64el
+Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/ipn3ke.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-pmd-ipn3ke runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte_pmd_ipn3ke.
+ It provides poll mode driver support for Intel FPGA PAC(Programmable
+ Acceleration Card) N3000 based on the Intel Ethernet Controller
+ X710/XXV710 and Intel Arria 10 FPGA.
 
 Package: librte-rawdev-skeleton20.0
 Architecture: amd64 arm64 armhf i386 ppc64el
