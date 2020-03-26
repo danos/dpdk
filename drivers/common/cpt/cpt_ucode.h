@@ -298,7 +298,7 @@ cpt_fc_ciph_set_key(void *ctx, cipher_type_t type, const uint8_t *key,
 		cpt_fc_ciph_set_key_kasumi_f8_cbc(cpt_ctx, key, key_len);
 		goto success;
 	default:
-		break;
+		return -1;
 	}
 
 	/* Only for FC_GEN case */
@@ -377,7 +377,7 @@ fill_sg_comp_from_iov(sg_comp_t *list,
 {
 	int32_t j;
 	uint32_t extra_len = extra_buf ? extra_buf->size : 0;
-	uint32_t size = *psize - extra_len;
+	uint32_t size = *psize;
 	buf_ptr_t *bufs;
 
 	bufs = from->bufs;
@@ -385,9 +385,6 @@ fill_sg_comp_from_iov(sg_comp_t *list,
 		phys_addr_t e_dma_addr;
 		uint32_t e_len;
 		sg_comp_t *to = &list[i >> 2];
-
-		if (!bufs[j].size)
-			continue;
 
 		if (unlikely(from_offset)) {
 			if (from_offset >= bufs[j].size) {
@@ -420,18 +417,19 @@ fill_sg_comp_from_iov(sg_comp_t *list,
 				to->u.s.len[i % 4] = rte_cpu_to_be_16(e_len);
 			}
 
+			extra_len = RTE_MIN(extra_len, size);
 			/* Insert extra data ptr */
 			if (extra_len) {
 				i++;
 				to = &list[i >> 2];
 				to->u.s.len[i % 4] =
-					rte_cpu_to_be_16(extra_buf->size);
+					rte_cpu_to_be_16(extra_len);
 				to->ptr[i % 4] =
 					rte_cpu_to_be_64(extra_buf->dma_addr);
-
-				/* size already decremented by extra len */
+				size -= extra_len;
 			}
 
+			next_len = RTE_MIN(next_len, size);
 			/* insert the rest of the data */
 			if (next_len) {
 				i++;
@@ -2620,10 +2618,13 @@ fill_sess_aead(struct rte_crypto_sym_xform *xform,
 	sess->iv_length = aead_form->iv.length;
 	sess->aad_length = aead_form->aad_length;
 
-	cpt_fc_ciph_set_key(ctx, enc_type, aead_form->key.data,
-			aead_form->key.length, NULL);
+	if (unlikely(cpt_fc_ciph_set_key(ctx, enc_type, aead_form->key.data,
+			aead_form->key.length, NULL)))
+		return -1;
 
-	cpt_fc_auth_set_key(ctx, auth_type, NULL, 0, aead_form->digest_length);
+	if (unlikely(cpt_fc_auth_set_key(ctx, auth_type, NULL, 0,
+			aead_form->digest_length)))
+		return -1;
 
 	return 0;
 }
@@ -2723,8 +2724,9 @@ fill_sess_cipher(struct rte_crypto_sym_xform *xform,
 	sess->iv_length = c_form->iv.length;
 	sess->is_null = is_null;
 
-	cpt_fc_ciph_set_key(SESS_PRIV(sess), enc_type, c_form->key.data,
-			    c_form->key.length, NULL);
+	if (unlikely(cpt_fc_ciph_set_key(SESS_PRIV(sess), enc_type,
+			c_form->key.data, c_form->key.length, NULL)))
+		return -1;
 
 	return 0;
 }
@@ -2823,8 +2825,10 @@ fill_sess_auth(struct rte_crypto_sym_xform *xform,
 		sess->auth_iv_offset = a_form->iv.offset;
 		sess->auth_iv_length = a_form->iv.length;
 	}
-	cpt_fc_auth_set_key(SESS_PRIV(sess), auth_type, a_form->key.data,
-			    a_form->key.length, a_form->digest_length);
+	if (unlikely(cpt_fc_auth_set_key(SESS_PRIV(sess), auth_type,
+			a_form->key.data, a_form->key.length,
+			a_form->digest_length)))
+		return -1;
 
 	return 0;
 }
@@ -2867,9 +2871,13 @@ fill_sess_gmac(struct rte_crypto_sym_xform *xform,
 	sess->iv_length = a_form->iv.length;
 	sess->mac_len = a_form->digest_length;
 
-	cpt_fc_ciph_set_key(ctx, enc_type, a_form->key.data,
-			a_form->key.length, NULL);
-	cpt_fc_auth_set_key(ctx, auth_type, NULL, 0, a_form->digest_length);
+	if (unlikely(cpt_fc_ciph_set_key(ctx, enc_type, a_form->key.data,
+			a_form->key.length, NULL)))
+		return -1;
+
+	if (unlikely(cpt_fc_auth_set_key(ctx, auth_type, NULL, 0,
+			a_form->digest_length)))
+		return -1;
 
 	return 0;
 }

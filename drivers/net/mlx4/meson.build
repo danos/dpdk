@@ -9,11 +9,12 @@ if not is_linux
 endif
 build = true
 
-pmd_dlopen = (get_option('ibverbs_link') == 'dlopen')
+static_ibverbs = (get_option('ibverbs_link') == 'static')
+dlopen_ibverbs = (get_option('ibverbs_link') == 'dlopen')
 LIB_GLUE_BASE = 'librte_pmd_mlx4_glue.so'
 LIB_GLUE_VERSION = '18.02.0'
 LIB_GLUE = LIB_GLUE_BASE + '.' + LIB_GLUE_VERSION
-if pmd_dlopen
+if dlopen_ibverbs
 	dpdk_conf.set('RTE_IBVERBS_LINK_DLOPEN', 1)
 	cflags += [
 		'-DMLX4_GLUE="@0@"'.format(LIB_GLUE),
@@ -24,12 +25,15 @@ endif
 libnames = [ 'mlx4', 'ibverbs' ]
 libs = []
 foreach libname:libnames
-	lib = dependency('lib' + libname, required:false)
-	if not lib.found()
+	lib = dependency('lib' + libname, static:static_ibverbs, required:false)
+	if not lib.found() and not static_ibverbs
 		lib = cc.find_library(libname, required:false)
 	endif
 	if lib.found()
-		libs += [ lib ]
+		libs += lib
+		if not static_ibverbs and not dlopen_ibverbs
+			ext_deps += lib
+		endif
 	else
 		build = false
 		reason = 'missing dependency, "' + libname + '"'
@@ -37,8 +41,17 @@ foreach libname:libnames
 endforeach
 
 if build
+	if static_ibverbs or dlopen_ibverbs
+		# Build without adding shared libs to Requires.private
+		ibv_cflags = run_command(pkgconf, '--cflags', 'libibverbs').stdout()
+		ext_deps += declare_dependency(compile_args: ibv_cflags.split())
+	endif
+	if static_ibverbs
+		# Add static deps ldflags to internal apps and Libs.private
+		ibv_ldflags = run_command(ldflags_ibverbs_static, check:true).stdout()
+		ext_deps += declare_dependency(link_args:ibv_ldflags.split())
+	endif
 	allow_experimental_apis = true
-	ext_deps += libs
 	sources = files(
 		'mlx4.c',
 		'mlx4_ethdev.c',
@@ -51,7 +64,7 @@ if build
 		'mlx4_txq.c',
 		'mlx4_utils.c',
 	)
-	if not pmd_dlopen
+	if not dlopen_ibverbs
 		sources += files('mlx4_glue.c')
 	endif
 	cflags_options = [
@@ -103,7 +116,7 @@ if build
 	configure_file(output : 'mlx4_autoconf.h', configuration : config)
 endif
 # Build Glue Library
-if pmd_dlopen and build
+if dlopen_ibverbs and build
 	dlopen_name = 'mlx4_glue'
 	dlopen_lib_name = driver_name_fmt.format(dlopen_name)
 	dlopen_so_version = LIB_GLUE_VERSION
