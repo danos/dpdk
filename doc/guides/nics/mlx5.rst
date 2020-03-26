@@ -2,12 +2,14 @@
     Copyright 2015 6WIND S.A.
     Copyright 2015 Mellanox Technologies, Ltd
 
+.. include:: <isonum.txt>
+
 MLX5 poll mode driver
 =====================
 
 The MLX5 poll mode driver library (**librte_pmd_mlx5**) provides support
 for **Mellanox ConnectX-4**, **Mellanox ConnectX-4 Lx** , **Mellanox
-ConnectX-5**, **Mellanox ConnectX-6**, **Mellanox ConnectX-6DX** and
+ConnectX-5**, **Mellanox ConnectX-6**, **Mellanox ConnectX-6 Dx** and
 **Mellanox BlueField** families of 10/25/40/50/100/200 Gb/s adapters
 as well as their virtual functions (VF) in SR-IOV context.
 
@@ -107,20 +109,17 @@ Limitations
     process. If the external memory is registered by primary process but has
     different virtual address in secondary process, unexpected error may happen.
 
-- Flow pattern without any specific vlan will match for vlan packets as well:
+- When using Verbs flow engine (``dv_flow_en`` = 0), flow pattern without any
+  specific VLAN will match for VLAN packets as well:
 
   When VLAN spec is not specified in the pattern, the matching rule will be created with VLAN as a wild card.
   Meaning, the flow rule::
 
         flow create 0 ingress pattern eth / vlan vid is 3 / ipv4 / end ...
 
-  Will only match vlan packets with vid=3. and the flow rules::
+  Will only match vlan packets with vid=3. and the flow rule::
 
         flow create 0 ingress pattern eth / ipv4 / end ...
-
-  Or::
-
-        flow create 0 ingress pattern eth / vlan / ipv4 / end ...
 
   Will match any ipv4 packet (VLAN included).
 
@@ -270,6 +269,10 @@ These options can be modified in the ``.config`` file.
    64. Default armv8a configuration of make build and meson build set it to 128
    then brings performance degradation.
 
+This option is available in meson:
+
+- ``ibverbs_link`` can be ``static``, ``shared``, or ``dlopen``.
+
 Environment variables
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -315,9 +318,9 @@ Run-time configuration
 
   Supported on:
 
-  - x86_64 with ConnectX-4, ConnectX-4 LX, ConnectX-5, ConnectX-6, ConnectX-6 DX
+  - x86_64 with ConnectX-4, ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx
     and BlueField.
-  - POWER9 and ARMv8 with ConnectX-4 LX, ConnectX-5, ConnectX-6, ConnectX-6 DX
+  - POWER9 and ARMv8 with ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx
     and BlueField.
 
 - ``rxq_cqe_pad_en`` parameter [int]
@@ -348,9 +351,9 @@ Run-time configuration
 
   Supported on:
 
-  - x86_64 with ConnectX-4, ConnectX-4 LX, ConnectX-5, ConnectX-6, ConnectX-6 DX
+  - x86_64 with ConnectX-4, ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx
     and BlueField.
-  - POWER8 and ARMv8 with ConnectX-4 LX, ConnectX-5, ConnectX-6, ConnectX-6 DX
+  - POWER8 and ARMv8 with ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx
     and BlueField.
 
 - ``mprq_en`` parameter [int]
@@ -453,14 +456,14 @@ Run-time configuration
   If ``txq_inline_min`` key is not present, the value may be queried by the
   driver from the NIC via DevX if this feature is available. If there is no DevX
   enabled/supported the value 18 (supposing L2 header including VLAN) is set
-  for ConnectX-4 and ConnectX-4LX, and 0 is set by default for ConnectX-5
+  for ConnectX-4 and ConnectX-4 Lx, and 0 is set by default for ConnectX-5
   and newer NICs. If packet is shorter the ``txq_inline_min`` value, the entire
   packet is inlined.
 
   For ConnectX-4 NIC, driver does not allow specifying value below 18
   (minimal L2 header, including VLAN), error will be raised.
 
-  For ConnectX-4LX NIC, it is allowed to specify values below 18, but
+  For ConnectX-4 Lx NIC, it is allowed to specify values below 18, but
   it is not recommended and may prevent NIC from sending packets over
   some configurations.
 
@@ -543,7 +546,7 @@ Run-time configuration
 - ``txq_mpw_en`` parameter [int]
 
   A nonzero value enables Enhanced Multi-Packet Write (eMPW) for ConnectX-5,
-  ConnectX-6, ConnectX-6 DX and BlueField. eMPW allows the TX burst function to pack
+  ConnectX-6, ConnectX-6 Dx and BlueField. eMPW allows the TX burst function to pack
   up multiple packets in a single descriptor session in order to save PCI bandwidth
   and improve performance at the cost of a slightly higher CPU usage. When
   ``txq_inline_mpw`` is set along with ``txq_mpw_en``, TX burst function copies
@@ -559,16 +562,17 @@ Run-time configuration
   The rdma core library can map doorbell register in two ways, depending on the
   environment variable "MLX5_SHUT_UP_BF":
 
-  - As regular cached memory, if the variable is either missing or set to zero.
+  - As regular cached memory (usually with write combining attribute), if the
+    variable is either missing or set to zero.
   - As non-cached memory, if the variable is present and set to not "0" value.
 
   The type of mapping may slightly affect the Tx performance, the optimal choice
   is strongly relied on the host architecture and should be deduced practically.
 
   If ``tx_db_nc`` is set to zero, the doorbell is forced to be mapped to regular
-  memory, the PMD will perform the extra write memory barrier after writing to
-  doorbell, it might increase the needed CPU clocks per packet to send, but
-  latency might be improved.
+  memory (with write combining), the PMD will perform the extra write memory barrier
+  after writing to doorbell, it might increase the needed CPU clocks per packet
+  to send, but latency might be improved.
 
   If ``tx_db_nc`` is set to one, the doorbell is forced to be mapped to non
   cached memory, the PMD will not perform the extra write memory barrier
@@ -589,7 +593,7 @@ Run-time configuration
 
 - ``tx_vec_en`` parameter [int]
 
-  A nonzero value enables Tx vector on ConnectX-5, ConnectX-6, ConnectX-6 DX
+  A nonzero value enables Tx vector on ConnectX-5, ConnectX-6, ConnectX-6 Dx
   and BlueField NICs if the number of global Tx queues on the port is less than
   ``txqs_max_vec``. The parameter is deprecated and ignored.
 
@@ -886,7 +890,7 @@ Mellanox OFED/EN
   - ConnectX-5: **16.21.1000** and above.
   - ConnectX-5 Ex: **16.21.1000** and above.
   - ConnectX-6: **20.99.5374** and above.
-  - ConnectX-6 DX: **22.27.0090** and above.
+  - ConnectX-6 Dx: **22.27.0090** and above.
   - BlueField: **18.25.1010** and above.
 
 While these libraries and kernel modules are available on OpenFabrics
@@ -911,28 +915,43 @@ required from that distribution.
 Supported NICs
 --------------
 
-* Mellanox(R) ConnectX(R)-4 10G MCX4111A-XCAT (1x10G)
-* Mellanox(R) ConnectX(R)-4 10G MCX4121A-XCAT (2x10G)
-* Mellanox(R) ConnectX(R)-4 25G MCX4111A-ACAT (1x25G)
-* Mellanox(R) ConnectX(R)-4 25G MCX4121A-ACAT (2x25G)
-* Mellanox(R) ConnectX(R)-4 40G MCX4131A-BCAT (1x40G)
-* Mellanox(R) ConnectX(R)-4 40G MCX413A-BCAT (1x40G)
-* Mellanox(R) ConnectX(R)-4 40G MCX415A-BCAT (1x40G)
-* Mellanox(R) ConnectX(R)-4 50G MCX4131A-GCAT (1x50G)
-* Mellanox(R) ConnectX(R)-4 50G MCX413A-GCAT (1x50G)
-* Mellanox(R) ConnectX(R)-4 50G MCX414A-BCAT (2x50G)
-* Mellanox(R) ConnectX(R)-4 50G MCX415A-GCAT (2x50G)
-* Mellanox(R) ConnectX(R)-4 50G MCX416A-BCAT (2x50G)
-* Mellanox(R) ConnectX(R)-4 50G MCX416A-GCAT (2x50G)
-* Mellanox(R) ConnectX(R)-4 50G MCX415A-CCAT (1x100G)
-* Mellanox(R) ConnectX(R)-4 100G MCX416A-CCAT (2x100G)
-* Mellanox(R) ConnectX(R)-4 Lx 10G MCX4121A-XCAT (2x10G)
-* Mellanox(R) ConnectX(R)-4 Lx 25G MCX4121A-ACAT (2x25G)
-* Mellanox(R) ConnectX(R)-5 100G MCX556A-ECAT (2x100G)
-* Mellanox(R) ConnectX(R)-5 Ex EN 100G MCX516A-CDAT (2x100G)
-* Mellanox(R) ConnectX(R)-6 200G MCX654106A-HCAT (4x200G)
-* Mellanox(R) ConnectX(R)-6DX EN 100G MCX623106AN-CDAT (2*100g)
-* Mellanox(R) ConnectX(R)-6DX EN 200G MCX623105AN-VDAT (1*200g)
+The following Mellanox device families are supported by the same mlx5 driver:
+
+  - ConnectX-4
+  - ConnectX-4 Lx
+  - ConnectX-5
+  - ConnectX-5 Ex
+  - ConnectX-6
+  - ConnectX-6 Dx
+  - BlueField
+
+Below are detailed device names:
+
+* Mellanox\ |reg| ConnectX\ |reg|-4 10G MCX4111A-XCAT (1x10G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 10G MCX412A-XCAT (2x10G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 25G MCX4111A-ACAT (1x25G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 25G MCX412A-ACAT (2x25G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 40G MCX413A-BCAT (1x40G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 40G MCX4131A-BCAT (1x40G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 40G MCX415A-BCAT (1x40G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 50G MCX413A-GCAT (1x50G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 50G MCX4131A-GCAT (1x50G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 50G MCX414A-BCAT (2x50G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 50G MCX415A-GCAT (1x50G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 50G MCX416A-BCAT (2x50G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 50G MCX416A-GCAT (2x50G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 50G MCX415A-CCAT (1x100G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 100G MCX416A-CCAT (2x100G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 Lx 10G MCX4111A-XCAT (1x10G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 Lx 10G MCX4121A-XCAT (2x10G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 Lx 25G MCX4111A-ACAT (1x25G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 Lx 25G MCX4121A-ACAT (2x25G)
+* Mellanox\ |reg| ConnectX\ |reg|-4 Lx 40G MCX4131A-BCAT (1x40G)
+* Mellanox\ |reg| ConnectX\ |reg|-5 100G MCX556A-ECAT (2x100G)
+* Mellanox\ |reg| ConnectX\ |reg|-5 Ex EN 100G MCX516A-CDAT (2x100G)
+* Mellanox\ |reg| ConnectX\ |reg|-6 200G MCX654106A-HCAT (2x200G)
+* Mellanox\ |reg| ConnectX\ |reg|-6 Dx EN 100G MCX623106AN-CDAT (2x100G)
+* Mellanox\ |reg| ConnectX\ |reg|-6 Dx EN 200G MCX623105AN-VDAT (1x200G)
 
 Quick Start Guide on OFED/EN
 ----------------------------

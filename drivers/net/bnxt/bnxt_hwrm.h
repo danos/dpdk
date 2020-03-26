@@ -35,6 +35,9 @@ struct bnxt_cp_ring_info;
 #define HWRM_QUEUE_SERVICE_PROFILE_LOSSY \
 	HWRM_QUEUE_QPORTCFG_OUTPUT_QUEUE_ID0_SERVICE_PROFILE_LOSSY
 
+#define HWRM_QUEUE_SERVICE_PROFILE_UNKNOWN \
+	HWRM_QUEUE_QPORTCFG_OUTPUT_QUEUE_ID0_SERVICE_PROFILE_UNKNOWN
+
 #define HWRM_FUNC_RESOURCE_QCAPS_OUTPUT_VF_RESV_STRATEGY_MINIMAL_STATIC \
 	HWRM_FUNC_RESOURCE_QCAPS_OUTPUT_VF_RESERVATION_STRATEGY_MINIMAL_STATIC
 #define HWRM_FUNC_RESOURCE_QCAPS_OUTPUT_VF_RESV_STRATEGY_MAXIMAL \
@@ -117,7 +120,7 @@ int bnxt_hwrm_stat_ctx_free(struct bnxt *bp,
 int bnxt_hwrm_ctx_qstats(struct bnxt *bp, uint32_t cid, int idx,
 			 struct rte_eth_stats *stats, uint8_t rx);
 
-int bnxt_hwrm_ver_get(struct bnxt *bp);
+int bnxt_hwrm_ver_get(struct bnxt *bp, uint32_t timeout);
 
 int bnxt_hwrm_vnic_alloc(struct bnxt *bp, struct bnxt_vnic_info *vnic);
 int bnxt_hwrm_vnic_cfg(struct bnxt *bp, struct bnxt_vnic_info *vnic);

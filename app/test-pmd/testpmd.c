@@ -2549,32 +2549,17 @@ setup_attached_port(portid_t pi)
 	printf("Done\n");
 }
 
-void
-detach_port_device(portid_t port_id)
+static void
+detach_device(struct rte_device *dev)
 {
-	struct rte_device *dev;
 	portid_t sibling;
 
-	printf("Removing a device...\n");
-
-	if (port_id_is_invalid(port_id, ENABLED_WARN))
-		return;
-
-	dev = rte_eth_devices[port_id].device;
 	if (dev == NULL) {
 		printf("Device already removed\n");
 		return;
 	}
 
-	if (ports[port_id].port_status != RTE_PORT_CLOSED) {
-		if (ports[port_id].port_status != RTE_PORT_STOPPED) {
-			printf("Port not stopped\n");
-			return;
-		}
-		printf("Port was not closed\n");
-		if (ports[port_id].flow_list)
-			port_flow_flush(port_id);
-	}
+	printf("Removing a device...\n");
 
 	if (rte_dev_remove(dev) < 0) {
 		TESTPMD_LOG(ERR, "Failed to detach device %s\n", dev->name);
@@ -2592,14 +2577,33 @@ detach_port_device(portid_t port_id)
 
 	remove_invalid_ports();
 
-	printf("Device of port %u is detached\n", port_id);
+	printf("Device is detached\n");
 	printf("Now total ports is %d\n", nb_ports);
 	printf("Done\n");
 	return;
 }
 
 void
-detach_device(char *identifier)
+detach_port_device(portid_t port_id)
+{
+	if (port_id_is_invalid(port_id, ENABLED_WARN))
+		return;
+
+	if (ports[port_id].port_status != RTE_PORT_CLOSED) {
+		if (ports[port_id].port_status != RTE_PORT_STOPPED) {
+			printf("Port not stopped\n");
+			return;
+		}
+		printf("Port was not closed\n");
+		if (ports[port_id].flow_list)
+			port_flow_flush(port_id);
+	}
+
+	detach_device(rte_eth_devices[port_id].device);
+}
+
+void
+detach_devargs(char *identifier)
 {
 	struct rte_dev_iterator iterator;
 	struct rte_devargs da;
@@ -2790,6 +2794,7 @@ rmv_port_callback(void *arg)
 	int need_to_start = 0;
 	int org_no_link_check = no_link_check;
 	portid_t port_id = (intptr_t)arg;
+	struct rte_device *dev;
 
 	RTE_ETH_VALID_PORTID_OR_RET(port_id);
 
@@ -2800,8 +2805,12 @@ rmv_port_callback(void *arg)
 	no_link_check = 1;
 	stop_port(port_id);
 	no_link_check = org_no_link_check;
+
+	/* Save rte_device pointer before closing ethdev port */
+	dev = rte_eth_devices[port_id].device;
 	close_port(port_id);
-	detach_port_device(port_id);
+	detach_device(dev); /* might be already removed or have more ports */
+
 	if (need_to_start)
 		start_packet_forwarding(0);
 }
@@ -3570,5 +3579,10 @@ main(int argc, char** argv)
 			return 1;
 	}
 
-	return 0;
+	ret = rte_eal_cleanup();
+	if (ret != 0)
+		rte_exit(EXIT_FAILURE,
+			 "EAL cleanup failed: %s\n", strerror(-ret));
+
+	return EXIT_SUCCESS;
 }

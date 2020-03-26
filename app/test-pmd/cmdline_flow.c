@@ -4534,7 +4534,9 @@ parse_vc_action_mplsogre_decap(struct context *ctx, const struct token *token,
 	struct rte_flow_item_gre gre = {
 		.protocol = rte_cpu_to_be_16(ETHER_TYPE_MPLS_UNICAST),
 	};
-	struct rte_flow_item_mpls mpls;
+	struct rte_flow_item_mpls mpls = {
+		.ttl = 0,
+	};
 	uint8_t *header;
 	int ret;
 
@@ -6235,6 +6237,9 @@ flow_item_default_mask(const struct rte_flow_item *item)
 		break;
 	case RTE_FLOW_ITEM_TYPE_GTP_PSC:
 		mask = &rte_flow_item_gtp_psc_mask;
+		break;
+	case RTE_FLOW_ITEM_TYPE_GENEVE:
+		mask = &rte_flow_item_geneve_mask;
 		break;
 	case RTE_FLOW_ITEM_TYPE_PPPOE_PROTO_ID:
 		mask = &rte_flow_item_pppoe_proto_id_mask;
