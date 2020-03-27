@@ -1,3 +1,12 @@
+dpdk (18.11.6-1vyatta9) unstable; urgency=medium
+
+  [ Srinivas Narayan ]
+  * Include additional test applications
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 26 Mar 2020 21:10:22 -0400
+
 dpdk (18.11.6-1vyatta8) unstable; urgency=medium
 
   [ Sharmila Podury ]
