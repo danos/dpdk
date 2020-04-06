@@ -2129,7 +2129,7 @@ Description: Data Plane Development Kit (librte-pmd-isal runtime library)
  Inflate(decompression).
 
 Package: librte-pmd-ipn3ke20.0
-Architecture: amd64 arm64 armhf ppc64el
+Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/ipn3ke.html
 Pre-Depends: ${misc:Pre-Depends},
