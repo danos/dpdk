@@ -19,6 +19,7 @@ build-add-option-to-override-max-ethports.patch
 # Qos extensions
 sched-configurable-red-scaling.patch
 sched-fix-WRR-overflow-errors.patch
+sched-fix-port-time-rounding-error.patch
 sched-parametrize-QoS-traffic-classes-and-queues.patch
 sched-increase-to-eight-queues-per-traffic-class.patch
 sched-support-queue-limit-per-subport.patch
