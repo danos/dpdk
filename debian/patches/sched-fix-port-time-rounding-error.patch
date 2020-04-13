@@ -1,0 +1,75 @@
+From ef7c5905bcf5bc90812813158f69a903846b208c Mon Sep 17 00:00:00 2001
+From: Alan Dewar <alan.dewar@att.com>
+Date: Tue, 14 Apr 2020 09:55:20 +0100
+Subject: [PATCH] sched: fix port time rounding error
+
+The QoS scheduler works off port time that is computed from the number
+of CPU cycles that have elapsed since the last time the port was
+polled.   It divides the number of elapsed cycles to calculate how
+many bytes can be sent, however this division can generate rounding
+errors, where some fraction of a byte sent may be lost.
+
+Lose enough of these fractional bytes and the QoS scheduler
+underperforms.  The problem is worse with low bandwidths.
+
+To compensate for this rounding error this fix doesn't advance the
+port's time_cpu_cycles by the number of cycles that have elapsed,
+but by multiplying the computed number of bytes that can be sent
+(which has been rounded down) by number of cycles per byte.
+This will mean that port's time_cpu_cycles will lag behind the CPU
+cycles momentarily.  At the next poll, the lag will be taken into
+account.
+
+Fixes: de3cfa2c98 ("sched: initial import")
+
+Signed-off-by: Alan Dewar <alan.dewar@att.com>
+---
+ lib/librte_sched/rte_sched.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -200,6 +200,7 @@ struct rte_sched_port {
+ 	uint64_t time_cpu_bytes;      /* Current CPU time measured in bytes */
+ 	uint64_t time;                /* Current NIC TX time measured in bytes */
+ 	struct rte_reciprocal inv_cycles_per_byte; /* CPU cycles per byte */
++	uint64_t cycles_per_byte;
+ 
+ 	/* Scheduling loop detection */
+ 	uint32_t pipe_loop;
+@@ -711,6 +712,7 @@ rte_sched_port_config(struct rte_sched_p
+ 	cycles_per_byte = (rte_get_tsc_hz() << RTE_SCHED_TIME_SHIFT)
+ 		/ params->rate;
+ 	port->inv_cycles_per_byte = rte_reciprocal_value(cycles_per_byte);
++	port->cycles_per_byte = cycles_per_byte;
+ 
+ 	/* Scheduling loop detection */
+ 	port->pipe_loop = RTE_SCHED_PIPE_INVALID;
+@@ -2223,19 +2225,25 @@ static inline void
+ rte_sched_port_time_resync(struct rte_sched_port *port)
+ {
+ 	uint64_t cycles = rte_get_tsc_cycles();
+-	uint64_t cycles_diff = cycles - port->time_cpu_cycles;
++	uint64_t cycles_diff;
+ 	uint64_t bytes_diff;
+ 
++	if (cycles < port->time_cpu_cycles)
++		goto end;
++
++	cycles_diff = cycles - port->time_cpu_cycles;
+ 	/* Compute elapsed time in bytes */
+ 	bytes_diff = rte_reciprocal_divide(cycles_diff << RTE_SCHED_TIME_SHIFT,
+ 					   port->inv_cycles_per_byte);
+ 
+ 	/* Advance port time */
+-	port->time_cpu_cycles = cycles;
++	port->time_cpu_cycles +=
++		(bytes_diff * port->cycles_per_byte) >> RTE_SCHED_TIME_SHIFT;
+ 	port->time_cpu_bytes += bytes_diff;
+ 	if (port->time < port->time_cpu_bytes)
+ 		port->time = port->time_cpu_bytes;
+ 
++end:
+ 	/* Reset pipe loop detection */
+ 	port->pipe_loop = RTE_SCHED_PIPE_INVALID;
+ }
