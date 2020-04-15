@@ -1,3 +1,12 @@
+dpdk (18.11.5-1vyatta9) unstable; urgency=medium
+
+  [ Alan Dewar ]
+  * sched: fix port time rounding error (Fixes: VRVDR-50306)
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 15 Apr 2020 10:13:44 -0400
+
 dpdk (18.11.5-1vyatta8) unstable; urgency=medium
 
   * ixgbe: stop delayed interrupt handler when starting (Bugfix:
