@@ -2,9 +2,6 @@
 0001-ixgbe-stop-delayed-interrupt-handler-when-starting.patch
 0001-net-bonding-advertise-rx-vlan-filter-capability.patch
 
-# Backport from dpdk master
-0001-net-cxgbe-announce-Tx-multi-segments-offload.patch
-
 # Backport from dpdk stable
 
 # Backport from dpdk-net-next
@@ -42,11 +39,9 @@ mlx5-debug.patch
 mlx5-skip-legacy-ethtool.patch
 vlan-insert-clone-add_new-hdr-mbuf.patch
 i40evf-remove-braodcast-mac-from-set-mc-addr-list.patch
-add-build-option-for-l3fwd.patch
 mlx5-hardcode-devargs.patch
 bonding_secondary_mac_debug.patch
 net-vmxnet3-add-mac-addr-set-support.patch
 net-ena-announce-Tx-multi-segments-offload.patch
-add-build-option-for-l3fwd-acl.patch
 net-bonding-advertise-mq-rx-rss-capability.patch
 add-build-option-for-ipsecgw.patch

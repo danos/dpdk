@@ -14,5 +14,6 @@ librte_cfgfile.so.20.0 librte-cfgfile20.0 #MINVER#
  rte_cfgfile_section_entries@DPDK_20.0 19.11
  rte_cfgfile_section_entries_by_index@DPDK_20.0 19.11
  rte_cfgfile_section_num_entries@DPDK_20.0 19.11
+ rte_cfgfile_section_num_entries_by_index@DPDK_20.0 19.11
  rte_cfgfile_sections@DPDK_20.0 19.11
  rte_cfgfile_set_entry@DPDK_20.0 19.11

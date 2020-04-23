@@ -186,18 +186,17 @@ up to 8192 packets long.
  	if (red->avg < red_cfg->min_th) {
 --- a/lib/librte_sched/rte_sched_version.map
 +++ b/lib/librte_sched/rte_sched_version.map
-@@ -30,6 +30,14 @@ DPDK_2.1 {
- 
- } DPDK_2.0;
- 
-+DPDK_17.08 {
-+	global;
-+
+@@ -4,10 +4,13 @@ DPDK_2.0 {
+ 	rte_approx;
+ 	rte_red_config_init;
+ 	rte_red_log2_1_minus_Wq;
 +	rte_red_max_threshold;
+ 	rte_red_pow2_frac_inv;
+ 	rte_red_rand_seed;
+ 	rte_red_rand_val;
+ 	rte_red_rt_data_init;
 +	rte_red_scaling;
 +	rte_red_set_scaling;
-+} DPDK_2.1;
-+
- EXPERIMENTAL {
- 	global:
- 
+ 	rte_sched_pipe_config;
+ 	rte_sched_port_config;
+ 	rte_sched_port_dequeue;

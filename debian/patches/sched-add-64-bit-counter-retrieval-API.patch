@@ -14,7 +14,7 @@ Signed-off-by: Alan Dewar <alan.dewar@intl.att.com>
 
 --- a/lib/librte_sched/rte_sched.c
 +++ b/lib/librte_sched/rte_sched.c
-@@ -1389,6 +1389,43 @@ rte_sched_subport_read_stats(struct rte_
+@@ -1413,6 +1413,43 @@ rte_sched_subport_read_stats(struct rte_
  }
  
  int
@@ -58,7 +58,7 @@ Signed-off-by: Alan Dewar <alan.dewar@intl.att.com>
  rte_sched_queue_read_stats(struct rte_sched_port *port,
  	uint32_t queue_id,
  	struct rte_sched_queue_stats *stats,
-@@ -1412,6 +1449,46 @@ rte_sched_queue_read_stats(struct rte_sc
+@@ -1436,6 +1473,46 @@ rte_sched_queue_read_stats(struct rte_sc
  	memset(&qe->stats, 0, sizeof(struct rte_sched_queue_stats));
  
  	/* Queue length */
@@ -216,15 +216,15 @@ Signed-off-by: Alan Dewar <alan.dewar@intl.att.com>
   *
 --- a/lib/librte_sched/rte_sched_version.map
 +++ b/lib/librte_sched/rte_sched_version.map
-@@ -50,8 +50,11 @@ DPDK_17.11 {
+@@ -31,9 +31,11 @@ DPDK_2.0 {
+ 	rte_sched_port_pkt_write;
  	rte_sched_port_pkt_write_v2;
- 	rte_red_queue_num_maps;
- 	rte_sched_get_profile_for_pipe;
-+	rte_sched_subport_read_stats64;
+ 	rte_sched_queue_read_stats;
 +	rte_sched_queue_read_stats64;
- } DPDK_17.08;
+ 	rte_sched_subport_config;
+ 	rte_sched_subport_config_v2;
+ 	rte_sched_subport_read_stats;
++	rte_sched_subport_read_stats64;
  
-+
- EXPERIMENTAL {
- 	global:
- 
+ 	local: *;
+ };

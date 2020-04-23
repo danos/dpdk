@@ -91,7 +91,7 @@
  };
  
  struct rte_sched_pipe_profile {
-@@ -215,10 +221,6 @@ struct rte_sched_port {
+@@ -216,10 +222,6 @@ struct rte_sched_port {
  	struct rte_mbuf **pkts_out;
  	uint32_t n_pkts_out;
  
@@ -102,7 +102,7 @@
  	/* Large data structures */
  	struct rte_sched_subport *subport;
  	struct rte_sched_pipe *pipe;
-@@ -260,19 +262,28 @@ rte_sched_port_queues_per_port(struct rt
+@@ -261,19 +263,28 @@ rte_sched_port_queues_per_port(struct rt
  static inline struct rte_mbuf **
  rte_sched_port_qbase(struct rte_sched_port *port, uint32_t qindex)
  {
@@ -136,7 +136,7 @@
  }
  
  static int
-@@ -380,7 +391,9 @@ rte_sched_port_check_params(struct rte_s
+@@ -381,7 +392,9 @@ rte_sched_port_check_params(struct rte_s
  }
  
  static uint32_t
@@ -147,7 +147,7 @@
  {
  	uint32_t n_subports_per_port = params->n_subports_per_port;
  	uint32_t n_pipes_per_subport = params->n_pipes_per_subport;
-@@ -395,16 +408,19 @@ rte_sched_port_get_array_base(struct rte
+@@ -396,16 +409,19 @@ rte_sched_port_get_array_base(struct rte
  	uint32_t size_pipe_profiles
  		= RTE_SCHED_PIPE_PROFILES_PER_PORT * sizeof(struct rte_sched_pipe_profile);
  	uint32_t size_bmp_array = rte_bitmap_get_memory_footprint(n_queues_per_port);
@@ -173,7 +173,7 @@
  
  	base = 0;
  
-@@ -439,8 +455,9 @@ rte_sched_port_get_array_base(struct rte
+@@ -440,8 +456,9 @@ rte_sched_port_get_array_base(struct rte
  	return base;
  }
  
@@ -185,7 +185,7 @@
  {
  	uint32_t size0, size1;
  	int status;
-@@ -454,36 +471,78 @@ rte_sched_port_get_memory_footprint(stru
+@@ -455,36 +472,78 @@ rte_sched_port_get_memory_footprint(stru
  	}
  
  	size0 = sizeof(struct rte_sched_port);
@@ -274,7 +274,7 @@
  }
  
  static char *
-@@ -522,6 +581,24 @@ rte_sched_build_wrr_cost_string(struct r
+@@ -523,6 +582,24 @@ rte_sched_build_wrr_cost_string(struct r
  	return output_str;
  }
  
@@ -299,7 +299,7 @@
  static void
  rte_sched_port_log_pipe_profile(struct rte_sched_port *port, uint32_t i)
  {
-@@ -701,16 +778,12 @@ rte_sched_port_config_pipe_profile_table
+@@ -702,16 +779,12 @@ rte_sched_port_config_pipe_profile_table
  	}
  }
  
@@ -320,7 +320,7 @@
  
  	/* Allocate memory to store the data structures */
  	port = rte_zmalloc_socket("qos_params", mem_size, RTE_CACHE_LINE_SIZE,
-@@ -771,30 +844,34 @@ rte_sched_port_config(struct rte_sched_p
+@@ -774,30 +847,34 @@ rte_sched_port_config(struct rte_sched_p
  	port->pkts_out = NULL;
  	port->n_pkts_out = 0;
  
@@ -365,7 +365,7 @@
  
  	/* Pipe profile table */
  	rte_sched_port_config_pipe_profile_table(port, params);
-@@ -816,6 +893,35 @@ rte_sched_port_config(struct rte_sched_p
+@@ -820,6 +897,35 @@ rte_sched_port_config(struct rte_sched_p
  	return port;
  }
  
@@ -401,7 +401,7 @@
  void
  rte_sched_port_free(struct rte_sched_port *port)
  {
-@@ -849,13 +955,16 @@ rte_sched_port_log_subport_config(struct
+@@ -853,13 +959,16 @@ rte_sched_port_log_subport_config(struct
  {
  	struct rte_sched_subport *s = port->subport + i;
  	char credits_str[(13 * RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE) + 3];
@@ -418,7 +418,7 @@
  		"    Traffic class 3 oversubscription: wm min = %u, wm max = %u\n",
  		i,
  
-@@ -867,17 +976,20 @@ rte_sched_port_log_subport_config(struct
+@@ -871,17 +980,20 @@ rte_sched_port_log_subport_config(struct
  		/* Traffic classes */
  		s->tc_period,
  		credits_str,
@@ -443,7 +443,7 @@
  	struct rte_sched_subport *s;
  	uint32_t i;
  
-@@ -921,15 +1033,13 @@ rte_sched_subport_config(struct rte_sche
+@@ -925,15 +1037,13 @@ rte_sched_subport_config(struct rte_sche
  
  	/* Traffic Classes (TCs) */
  	s->tc_period = rte_sched_time_ms_to_bytes(params->tc_period, port->rate);
@@ -461,7 +461,7 @@
  #ifdef RTE_SCHED_SUBPORT_TC_OV
  	/* TC oversubscription */
  	s->tc_ov_wm_min = port->mtu;
-@@ -942,12 +1052,31 @@ rte_sched_subport_config(struct rte_sche
+@@ -946,12 +1056,31 @@ rte_sched_subport_config(struct rte_sche
  	s->tc_ov_rate = 0;
  #endif
  
@@ -495,18 +495,22 @@
  	uint32_t pipe_id,
 --- a/lib/librte_sched/rte_sched_version.map
 +++ b/lib/librte_sched/rte_sched_version.map
-@@ -36,6 +36,14 @@ DPDK_17.08 {
+@@ -13,15 +13,18 @@ DPDK_2.0 {
  	rte_red_set_scaling;
- } DPDK_2.1;
- 
-+DPDK_17.11 {
-+	global;
-+
+ 	rte_sched_pipe_config;
+ 	rte_sched_port_config;
 +	rte_sched_port_config_v2;
-+	rte_sched_subport_config_v2;
+ 	rte_sched_port_dequeue;
+ 	rte_sched_port_enqueue;
+ 	rte_sched_port_free;
+ 	rte_sched_port_get_memory_footprint;
 +	rte_sched_port_get_memory_footprint_v2;
-+} DPDK_17.08;
-+
- EXPERIMENTAL {
- 	global:
+ 	rte_sched_port_pkt_read_color;
+ 	rte_sched_port_pkt_read_tree_path;
+ 	rte_sched_port_pkt_write;
+ 	rte_sched_queue_read_stats;
+ 	rte_sched_subport_config;
++	rte_sched_subport_config_v2;
+ 	rte_sched_subport_read_stats;
  
+ 	local: *;

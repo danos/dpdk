@@ -14,13 +14,11 @@ Signed-off-by: Chas Williams <chas3@att.com>
  drivers/net/ixgbe/ixgbe_ethdev.c | 3 +++
  1 file changed, 3 insertions(+)
 
-diff --git a/drivers/net/ixgbe/ixgbe_ethdev.c b/drivers/net/ixgbe/ixgbe_ethdev.c
-index 2a248a3f2..61962a864 100644
 --- a/drivers/net/ixgbe/ixgbe_ethdev.c
 +++ b/drivers/net/ixgbe/ixgbe_ethdev.c
-@@ -2565,6 +2565,9 @@ ixgbe_dev_start(struct rte_eth_dev *dev)
+@@ -2600,6 +2600,9 @@ ixgbe_dev_start(struct rte_eth_dev *dev)
  	/* Stop the link setup handler before resetting the HW. */
- 	rte_eal_alarm_cancel(ixgbe_dev_setup_link_alarm_handler, dev);
+ 	ixgbe_dev_cancel_link_thread(dev);
  
 +	/* Stop the delayed interrupt handler. */
 +	rte_eal_alarm_cancel(ixgbe_dev_interrupt_delayed_handler, dev);
@@ -28,6 +26,3 @@ index 2a248a3f2..61962a864 100644
  	/* disable uio/vfio intr/eventfd mapping */
  	rte_intr_disable(intr_handle);
  
--- 
-2.11.0
-

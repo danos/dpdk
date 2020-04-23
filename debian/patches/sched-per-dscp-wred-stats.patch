@@ -204,7 +204,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  enum grinder_state {
  	e_GRINDER_PREFETCH_PIPE = 0,
  	e_GRINDER_PREFETCH_TC_QUEUE_ARRAYS,
-@@ -246,7 +238,7 @@ rte_sched_port_queues_per_subport(struct
+@@ -247,7 +239,7 @@ rte_sched_port_queues_per_subport(struct
  
  #endif
  
@@ -213,7 +213,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  rte_sched_port_queues_per_port(struct rte_sched_port *port)
  {
  	return RTE_SCHED_QUEUES_PER_PIPE * port->n_pipes_per_subport * port->n_subports_per_port;
-@@ -1279,6 +1271,7 @@ rte_sched_pipe_config_v2(struct rte_sche
+@@ -1283,6 +1275,7 @@ rte_sched_pipe_config_v2(struct rte_sche
  	int ret;
  	struct rte_sched_pipe_params *p_profs;
  	struct rte_red_pipe_params *wred_params;
@@ -221,7 +221,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	ret = rte_sched_pipe_config(port, subport_id, pipe_id, pipe_profile);
  	if (ret != 0)
-@@ -1288,11 +1281,10 @@ rte_sched_pipe_config_v2(struct rte_sche
+@@ -1292,11 +1285,10 @@ rte_sched_pipe_config_v2(struct rte_sche
  
  	SLIST_FOREACH(wred_params, &p_profs->qred_head, list) {
  		int i;
@@ -235,7 +235,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  		qindex = rte_sched_port_qindex(port, subport_id, pipe_id,
  					       tc, qindex);
  		qxtra = port->queue_extra + qindex;
-@@ -1310,6 +1302,24 @@ rte_sched_pipe_config_v2(struct rte_sche
+@@ -1314,6 +1306,24 @@ rte_sched_pipe_config_v2(struct rte_sche
  		}
  		qxtra->qred.num_maps = wred_params->red_q_params.num_maps;
  
@@ -260,7 +260,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  		RTE_LOG(DEBUG, SCHED,
  			"Setup per Q wred sub %u pip %u qind %u maps %u\n",
  			subport_id, pipe_id, qindex, qxtra->qred.num_maps);
-@@ -1537,7 +1547,7 @@ rte_sched_port_red_drop(struct rte_sched
+@@ -1541,7 +1551,7 @@ rte_sched_port_red_drop(struct rte_sched
  	red = &qe->red;
  
  	if (qe->qred.num_maps) {
@@ -269,7 +269,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  		struct rte_sched_port_hierarchy *sched =
  			(struct rte_sched_port_hierarchy *) &pkt->hash.sched;
  		uint64_t dscp_mask;
-@@ -1552,6 +1562,12 @@ rte_sched_port_red_drop(struct rte_sched
+@@ -1556,6 +1566,12 @@ rte_sched_port_red_drop(struct rte_sched
  		/* If we haven't found a dscp match then force a drop */
  		if (i >= qe->qred.num_maps)
  			return 1;
@@ -282,7 +282,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	}
  
  	return rte_red_enqueue(red_cfg, red, qlen, port->time);
-@@ -1603,6 +1619,25 @@ debug_check_queue_slab(struct rte_sched_
+@@ -1607,6 +1623,25 @@ debug_check_queue_slab(struct rte_sched_
  
  #endif /* RTE_SCHED_DEBUG */
  
@@ -308,7 +308,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  static inline uint32_t
  rte_sched_port_enqueue_qptrs_prefetch0(struct rte_sched_port *port,
  				       struct rte_mbuf *pkt)
-@@ -2598,3 +2633,9 @@ rte_sched_port_dequeue(struct rte_sched_
+@@ -2608,3 +2643,9 @@ rte_sched_port_dequeue(struct rte_sched_
  
  	return count;
  }
@@ -408,12 +408,17 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  #endif
 --- a/lib/librte_sched/rte_sched_version.map
 +++ b/lib/librte_sched/rte_sched_version.map
-@@ -50,6 +50,8 @@ DPDK_17.11 {
- 	rte_red_free_q_params;
- 	rte_sched_pipe_config_v2;
- 	rte_sched_port_pkt_write_v2;
+@@ -10,11 +10,13 @@ DPDK_2.0 {
+ 	rte_red_log2_1_minus_Wq;
+ 	rte_red_max_threshold;
+ 	rte_red_pow2_frac_inv;
 +	rte_red_queue_num_maps;
+ 	rte_red_rand_seed;
+ 	rte_red_rand_val;
+ 	rte_red_rt_data_init;
+ 	rte_red_scaling;
+ 	rte_red_set_scaling;
 +	rte_sched_get_profile_for_pipe;
- } DPDK_17.08;
- 
- EXPERIMENTAL {
+ 	rte_sched_pipe_config;
+ 	rte_sched_pipe_config_v2;
+ 	rte_sched_port_config;

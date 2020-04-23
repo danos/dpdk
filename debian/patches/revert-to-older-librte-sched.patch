@@ -3882,35 +3882,7 @@
  rte_min_pos_4_u16(uint16_t *x)
 --- a/lib/librte_sched/rte_sched_version.map
 +++ b/lib/librte_sched/rte_sched_version.map
-@@ -1,4 +1,4 @@
--DPDK_20.0 {
-+DPDK_2.0 {
- 	global:
- 
- 	rte_approx;
-@@ -14,9 +14,6 @@ DPDK_20.0 {
- 	rte_sched_port_enqueue;
- 	rte_sched_port_free;
- 	rte_sched_port_get_memory_footprint;
--	rte_sched_port_pkt_read_color;
--	rte_sched_port_pkt_read_tree_path;
--	rte_sched_port_pkt_write;
- 	rte_sched_queue_read_stats;
- 	rte_sched_subport_config;
- 	rte_sched_subport_read_stats;
-@@ -24,8 +21,17 @@ DPDK_20.0 {
- 	local: *;
- };
- 
-+DPDK_2.1 {
-+	global:
-+
-+	rte_sched_port_pkt_write;
-+	rte_sched_port_pkt_read_tree_path;
-+	rte_sched_port_pkt_read_color;
-+
-+} DPDK_2.0;
-+
+@@ -27,5 +27,5 @@ DPDK_20.0 {
  EXPERIMENTAL {
  	global:
  

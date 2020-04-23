@@ -60,6 +60,8 @@ ifneq (,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS)))
     space :=
     space +=
     DPDK_CONFIG_OPTIONS ?= $(subst $(comma),$(space),$(patsubst dpdk_config_options=%,%,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS))))
+    DPDK_CONFIG_OPTIONS += -Dexamples=l3fwd,l3fwd-acl,ipsec-secgw
+    DPDK_CONFIG_OPTIONS += -Ddisable_drivers=net/softnic,net/ipn3ke,raw/ifpga
 endif
 
 # kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
