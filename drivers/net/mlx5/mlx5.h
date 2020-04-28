@@ -173,6 +173,8 @@ struct mlx5_devx_mkey_attr {
 struct mlx5_hca_qos_attr {
 	uint32_t sup:1;	/* Whether QOS is supported. */
 	uint32_t srtcm_sup:1; /* Whether srTCM mode is supported. */
+	uint32_t flow_meter_reg_share:1;
+	/* Whether reg_c share is supported. */
 	uint8_t log_max_flow_meter;
 	/* Power of the maximum supported meters. */
 	uint8_t flow_meter_reg_c_ids;
@@ -626,6 +628,7 @@ struct mlx5_flow_id_pool {
 	/**< The next index that can be used without any free elements. */
 	uint32_t *curr; /**< Pointer to the index to pop. */
 	uint32_t *last; /**< Pointer to the last element in the empty arrray. */
+	uint32_t max_id; /**< Maximum id can be allocated from the pool. */
 };
 
 /*
@@ -727,6 +730,7 @@ struct mlx5_priv {
 	unsigned int dr_shared:1; /* DV/DR data is shared. */
 	unsigned int counter_fallback:1; /* Use counter fallback management. */
 	unsigned int mtr_en:1; /* Whether support meter. */
+	unsigned int mtr_reg_share:1; /* Whether support meter REG_C share. */
 	uint16_t domain_id; /* Switch domain identifier. */
 	uint16_t vport_id; /* Associated VF vport index (if any). */
 	uint32_t vport_meta_tag; /* Used for vport index match ove VF LAG. */
@@ -784,6 +788,7 @@ struct mlx5_priv {
 	/* UAR same-page access control required in 32bit implementations. */
 #endif
 	uint8_t skip_default_rss_reta; /* Skip configuration of default reta. */
+	uint8_t fdb_def_rule; /* Whether fdb jump to table 1 is configured. */
 };
 
 #define PORT_ID(priv) ((priv)->dev_data->port_id)

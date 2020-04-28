@@ -297,8 +297,8 @@ mempool_ops_alloc_once(struct rte_mempool *mp)
  * zone. Return the number of objects added, or a negative value
  * on error.
  */
-int
-rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
+static int
+__rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
 	rte_iova_t iova, size_t len, rte_mempool_memchunk_free_cb_t *free_cb,
 	void *opaque)
 {
@@ -332,7 +332,7 @@ rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
 		off = RTE_PTR_ALIGN_CEIL(vaddr, RTE_MEMPOOL_ALIGN) - vaddr;
 
 	if (off > len) {
-		ret = -EINVAL;
+		ret = 0;
 		goto fail;
 	}
 
@@ -343,7 +343,7 @@ rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
 
 	/* not enough room to store one object */
 	if (i == 0) {
-		ret = -EINVAL;
+		ret = 0;
 		goto fail;
 	}
 
@@ -353,6 +353,21 @@ rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
 
 fail:
 	rte_free(memhdr);
+	return ret;
+}
+
+int
+rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
+	rte_iova_t iova, size_t len, rte_mempool_memchunk_free_cb_t *free_cb,
+	void *opaque)
+{
+	int ret;
+
+	ret = __rte_mempool_populate_iova(mp, vaddr, iova, len, free_cb,
+					opaque);
+	if (ret == 0)
+		ret = -EINVAL;
+
 	return ret;
 }
 
@@ -406,14 +421,19 @@ rte_mempool_populate_virt(struct rte_mempool *mp, char *addr,
 				break;
 		}
 
-		ret = rte_mempool_populate_iova(mp, addr + off, iova,
+		ret = __rte_mempool_populate_iova(mp, addr + off, iova,
 			phys_len, free_cb, opaque);
+		if (ret == 0)
+			continue;
 		if (ret < 0)
 			goto fail;
 		/* no need to call the free callback for next chunks */
 		free_cb = NULL;
 		cnt += ret;
 	}
+
+	if (cnt == 0)
+		return -EINVAL;
 
 	return cnt;
 
@@ -463,6 +483,7 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 	unsigned mz_id, n;
 	int ret;
 	bool need_iova_contig_obj;
+	size_t max_alloc_size = SIZE_MAX;
 
 	ret = mempool_ops_alloc_once(mp);
 	if (ret != 0)
@@ -542,27 +563,21 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 		if (min_chunk_size == (size_t)mem_size)
 			mz_flags |= RTE_MEMZONE_IOVA_CONTIG;
 
-		mz = rte_memzone_reserve_aligned(mz_name, mem_size,
+		/* Allocate a memzone, retrying with a smaller area on ENOMEM */
+		do {
+			mz = rte_memzone_reserve_aligned(mz_name,
+				RTE_MIN((size_t)mem_size, max_alloc_size),
 				mp->socket_id, mz_flags, align);
 
-		/* don't try reserving with 0 size if we were asked to reserve
-		 * IOVA-contiguous memory.
-		 */
-		if (min_chunk_size < (size_t)mem_size && mz == NULL) {
-			/* not enough memory, retry with the biggest zone we
-			 * have
-			 */
-			mz = rte_memzone_reserve_aligned(mz_name, 0,
-					mp->socket_id, mz_flags, align);
-		}
+			if (mz == NULL && rte_errno != ENOMEM)
+				break;
+
+			max_alloc_size = RTE_MIN(max_alloc_size,
+						(size_t)mem_size) / 2;
+		} while (mz == NULL && max_alloc_size >= min_chunk_size);
+
 		if (mz == NULL) {
 			ret = -rte_errno;
-			goto fail;
-		}
-
-		if (mz->len < min_chunk_size) {
-			rte_memzone_free(mz);
-			ret = -ENOMEM;
 			goto fail;
 		}
 
@@ -645,8 +660,10 @@ rte_mempool_populate_anon(struct rte_mempool *mp)
 	}
 
 	ret = mempool_ops_alloc_once(mp);
-	if (ret != 0)
-		return ret;
+	if (ret < 0) {
+		rte_errno = -ret;
+		return 0;
+	}
 
 	size = get_anon_size(mp);
 	if (size < 0) {
@@ -670,8 +687,10 @@ rte_mempool_populate_anon(struct rte_mempool *mp)
 
 	ret = rte_mempool_populate_virt(mp, addr, size, getpagesize(),
 		rte_mempool_memchunk_anon_free, addr);
-	if (ret == 0)
+	if (ret < 0) {
+		rte_errno = -ret;
 		goto fail;
+	}
 
 	return mp->populated_size;
 

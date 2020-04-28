@@ -2358,6 +2358,7 @@ hns3_query_pf_resource(struct hns3_hw *hw)
 	hw->total_tqps_num = rte_le_to_cpu_16(req->tqp_num);
 	pf->pkt_buf_size = rte_le_to_cpu_16(req->buf_size) << HNS3_BUF_UNIT_S;
 	hw->tqps_num = RTE_MIN(hw->total_tqps_num, HNS3_MAX_TQP_NUM_PER_FUNC);
+	pf->func_num = rte_le_to_cpu_16(req->pf_own_fun_number);
 
 	if (req->tx_buf_size)
 		pf->tx_buf_size =
@@ -2634,6 +2635,7 @@ hns3_map_tqp(struct hns3_hw *hw)
 	uint16_t tqps_num = hw->total_tqps_num;
 	uint16_t func_id;
 	uint16_t tqp_id;
+	bool is_pf;
 	int num;
 	int ret;
 	int i;
@@ -2645,10 +2647,11 @@ hns3_map_tqp(struct hns3_hw *hw)
 	tqp_id = 0;
 	num = DIV_ROUND_UP(hw->total_tqps_num, HNS3_MAX_TQP_NUM_PER_FUNC);
 	for (func_id = 0; func_id < num; func_id++) {
+		is_pf = func_id == 0 ? true : false;
 		for (i = 0;
 		     i < HNS3_MAX_TQP_NUM_PER_FUNC && tqp_id < tqps_num; i++) {
 			ret = hns3_map_tqps_to_func(hw, func_id, tqp_id++, i,
-						    true);
+						    is_pf);
 			if (ret)
 				return ret;
 		}
@@ -3550,6 +3553,26 @@ hns3_set_promisc_mode(struct hns3_hw *hw, bool en_uc_pmc, bool en_mc_pmc)
 }
 
 static int
+hns3_clear_all_vfs_promisc_mode(struct hns3_hw *hw)
+{
+	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+	struct hns3_pf *pf = &hns->pf;
+	struct hns3_promisc_param param;
+	uint16_t func_id;
+	int ret;
+
+	/* func_id 0 is denoted PF, the VFs start from 1 */
+	for (func_id = 1; func_id < pf->func_num; func_id++) {
+		hns3_promisc_param_init(&param, false, false, false, func_id);
+		ret = hns3_cmd_set_promisc_mode(hw, &param);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int
 hns3_dev_promiscuous_enable(struct rte_eth_dev *dev)
 {
 	struct hns3_adapter *hns = dev->data->dev_private;
@@ -3763,7 +3786,7 @@ hns3_get_mac_link_status(struct hns3_hw *hw)
 	ret = hns3_cmd_send(hw, &desc, 1);
 	if (ret) {
 		hns3_err(hw, "get link status cmd failed %d", ret);
-		return ret;
+		return ETH_LINK_DOWN;
 	}
 
 	req = (struct hns3_link_status_cmd *)desc.data;
@@ -3831,6 +3854,13 @@ hns3_init_hardware(struct hns3_adapter *hns)
 	ret = hns3_set_promisc_mode(hw, false, false);
 	if (ret) {
 		PMD_INIT_LOG(ERR, "Failed to set promisc mode: %d", ret);
+		goto err_mac_init;
+	}
+
+	ret = hns3_clear_all_vfs_promisc_mode(hw);
+	if (ret) {
+		PMD_INIT_LOG(ERR, "Failed to clear all vfs promisc mode: %d",
+			     ret);
 		goto err_mac_init;
 	}
 
@@ -4043,6 +4073,7 @@ hns3_dev_start(struct rte_eth_dev *eth_dev)
 	rte_spinlock_unlock(&hw->lock);
 	hns3_set_rxtx_function(eth_dev);
 	hns3_mp_req_start_rxtx(eth_dev);
+	rte_eal_alarm_set(HNS3_SERVICE_INTERVAL, hns3_service_handler, eth_dev);
 
 	hns3_info(hw, "hns3 dev start successful!");
 	return 0;
@@ -4091,6 +4122,7 @@ hns3_dev_stop(struct rte_eth_dev *eth_dev)
 		hns3_dev_release_mbufs(hns);
 		hw->adapter_state = HNS3_NIC_CONFIGURED;
 	}
+	rte_eal_alarm_cancel(hns3_service_handler, eth_dev);
 	rte_spinlock_unlock(&hw->lock);
 }
 
@@ -4112,7 +4144,6 @@ hns3_dev_close(struct rte_eth_dev *eth_dev)
 	hw->adapter_state = HNS3_NIC_CLOSING;
 	hns3_reset_abort(hns);
 	hw->adapter_state = HNS3_NIC_CLOSED;
-	rte_eal_alarm_cancel(hns3_service_handler, eth_dev);
 
 	hns3_configure_all_mc_mac_addr(hns, true);
 	hns3_remove_all_vlan_table(hns);
@@ -4573,7 +4604,8 @@ hns3_stop_service(struct hns3_adapter *hns)
 	struct rte_eth_dev *eth_dev;
 
 	eth_dev = &rte_eth_devices[hw->data->port_id];
-	rte_eal_alarm_cancel(hns3_service_handler, eth_dev);
+	if (hw->adapter_state == HNS3_NIC_STARTED)
+		rte_eal_alarm_cancel(hns3_service_handler, eth_dev);
 	hw->mac.link_status = ETH_LINK_DOWN;
 
 	hns3_set_rxtx_function(eth_dev);
@@ -4614,7 +4646,9 @@ hns3_start_service(struct hns3_adapter *hns)
 	eth_dev = &rte_eth_devices[hw->data->port_id];
 	hns3_set_rxtx_function(eth_dev);
 	hns3_mp_req_start_rxtx(eth_dev);
-	hns3_service_handler(eth_dev);
+	if (hw->adapter_state == HNS3_NIC_STARTED)
+		hns3_service_handler(eth_dev);
+
 	return 0;
 }
 
@@ -4870,7 +4904,6 @@ hns3_dev_init(struct rte_eth_dev *eth_dev)
 		hns3_notify_reset_ready(hw, false);
 	}
 
-	rte_eal_alarm_set(HNS3_SERVICE_INTERVAL, hns3_service_handler, eth_dev);
 	hns3_info(hw, "hns3 dev initialization successful!");
 	return 0;
 

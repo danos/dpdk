@@ -654,10 +654,10 @@ check_err_cqe_seen(volatile struct mlx5_err_cqe *err_cqe)
  *   Pointer to the error CQE.
  *
  * @return
- *   Negative value if queue recovery failed,
- *   the last Tx buffer element to free otherwise.
+ *   Negative value if queue recovery failed, otherwise
+ *   the error completion entry is handled successfully.
  */
-int
+static int
 mlx5_tx_error_cqe_handle(struct mlx5_txq_data *restrict txq,
 			 volatile struct mlx5_err_cqe *err_cqe)
 {
@@ -701,18 +701,14 @@ mlx5_tx_error_cqe_handle(struct mlx5_txq_data *restrict txq,
 			 */
 			txq->stats.oerrors += ((txq->wqe_ci & wqe_m) -
 						new_wqe_pi) & wqe_m;
-		if (tx_recover_qp(txq_ctrl) == 0) {
-			txq->cq_ci++;
-			/* Release all the remaining buffers. */
-			return txq->elts_head;
+		if (tx_recover_qp(txq_ctrl)) {
+			/* Recovering failed - retry later on the same WQE. */
+			return -1;
 		}
-		/* Recovering failed - try again later on the same WQE. */
-		return -1;
-	} else {
-		txq->cq_ci++;
+		/* Release all the remaining buffers. */
+		txq_free_elts(txq_ctrl);
 	}
-	/* Do not release buffers. */
-	return txq->elts_tail;
+	return 0;
 }
 
 /**
@@ -2034,8 +2030,6 @@ mlx5_tx_copy_elts(struct mlx5_txq_data *restrict txq,
  *   Pointer to TX queue structure.
  * @param valid CQE pointer
  *   if not NULL update txq->wqe_pi and flush the buffers
- * @param itail
- *   if not negative - flush the buffers till this index.
  * @param olx
  *   Configured Tx offloads mask. It is fully defined at
  *   compile time and may be used for optimization.
@@ -2043,25 +2037,17 @@ mlx5_tx_copy_elts(struct mlx5_txq_data *restrict txq,
 static __rte_always_inline void
 mlx5_tx_comp_flush(struct mlx5_txq_data *restrict txq,
 		   volatile struct mlx5_cqe *last_cqe,
-		   int itail,
 		   unsigned int olx __rte_unused)
 {
-	uint16_t tail;
-
 	if (likely(last_cqe != NULL)) {
+		uint16_t tail;
+
 		txq->wqe_pi = rte_be_to_cpu_16(last_cqe->wqe_counter);
-		tail = ((volatile struct mlx5_wqe_cseg *)
-			(txq->wqes + (txq->wqe_pi & txq->wqe_m)))->misc;
-	} else if (itail >= 0) {
-		tail = (uint16_t)itail;
-	} else {
-		return;
-	}
-	rte_compiler_barrier();
-	*txq->cq_db = rte_cpu_to_be_32(txq->cq_ci);
-	if (likely(tail != txq->elts_tail)) {
-		mlx5_tx_free_elts(txq, tail, olx);
-		assert(tail == txq->elts_tail);
+		tail = txq->fcqs[(txq->cq_ci - 1) & txq->cqe_m];
+		if (likely(tail != txq->elts_tail)) {
+			mlx5_tx_free_elts(txq, tail, olx);
+			assert(tail == txq->elts_tail);
+		}
 	}
 }
 
@@ -2085,6 +2071,7 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 {
 	unsigned int count = MLX5_TX_COMP_MAX_CQE;
 	volatile struct mlx5_cqe *last_cqe = NULL;
+	uint16_t ci = txq->cq_ci;
 	int ret;
 
 	static_assert(MLX5_CQE_STATUS_HW_OWN < 0, "Must be negative value");
@@ -2092,8 +2079,8 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 	do {
 		volatile struct mlx5_cqe *cqe;
 
-		cqe = &txq->cqes[txq->cq_ci & txq->cqe_m];
-		ret = check_cqe(cqe, txq->cqe_s, txq->cq_ci);
+		cqe = &txq->cqes[ci & txq->cqe_m];
+		ret = check_cqe(cqe, txq->cqe_s, ci);
 		if (unlikely(ret != MLX5_CQE_STATUS_SW_OWN)) {
 			if (likely(ret != MLX5_CQE_STATUS_ERR)) {
 				/* No new CQEs in completion queue. */
@@ -2107,33 +2094,53 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 			 * here, before we might perform SQ reset.
 			 */
 			rte_wmb();
+			txq->cq_ci = ci;
 			ret = mlx5_tx_error_cqe_handle
 				(txq, (volatile struct mlx5_err_cqe *)cqe);
+			if (unlikely(ret < 0)) {
+				/*
+				 * Some error occurred on queue error
+				 * handling, we do not advance the index
+				 * here, allowing to retry on next call.
+				 */
+				return;
+			}
 			/*
-			 * Flush buffers, update consuming index
-			 * if recovery succeeded. Otherwise
-			 * just try to recover later.
+			 * We are going to fetch all entries with
+			 * MLX5_CQE_SYNDROME_WR_FLUSH_ERR status.
+			 * The send queue is supposed to be empty.
 			 */
+			++ci;
+			txq->cq_pi = ci;
 			last_cqe = NULL;
-			break;
+			continue;
 		}
 		/* Normal transmit completion. */
-		++txq->cq_ci;
+		assert(ci != txq->cq_pi);
+		assert((txq->fcqs[ci & txq->cqe_m] >> 16) == cqe->wqe_counter);
+		++ci;
 		last_cqe = cqe;
-#ifndef NDEBUG
-		if (txq->cq_pi)
-			--txq->cq_pi;
-#endif
-	/*
-	 * We have to restrict the amount of processed CQEs
-	 * in one tx_burst routine call. The CQ may be large
-	 * and many CQEs may be updated by the NIC in one
-	 * transaction. Buffers freeing is time consuming,
-	 * multiple iterations may introduce significant
-	 * latency.
-	 */
-	} while (--count);
-	mlx5_tx_comp_flush(txq, last_cqe, ret, olx);
+		/*
+		 * We have to restrict the amount of processed CQEs
+		 * in one tx_burst routine call. The CQ may be large
+		 * and many CQEs may be updated by the NIC in one
+		 * transaction. Buffers freeing is time consuming,
+		 * multiple iterations may introduce significant
+		 * latency.
+		 */
+		if (likely(--count == 0))
+			break;
+	} while (true);
+	if (likely(ci != txq->cq_ci)) {
+		/*
+		 * Update completion queue consuming index
+		 * and ring doorbell to notify hardware.
+		 */
+		rte_compiler_barrier();
+		txq->cq_ci = ci;
+		*txq->cq_db = rte_cpu_to_be_32(ci);
+		mlx5_tx_comp_flush(txq, last_cqe, olx);
+	}
 }
 
 /**
@@ -2145,9 +2152,6 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
  *   Pointer to TX queue structure.
  * @param loc
  *   Pointer to burst routine local context.
- * @param multi,
- *   Routine is called from multi-segment sending loop,
- *   do not correct the elts_head according to the pkts_copy.
  * @param olx
  *   Configured Tx offloads mask. It is fully defined at
  *   compile time and may be used for optimization.
@@ -2155,13 +2159,12 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 static __rte_always_inline void
 mlx5_tx_request_completion(struct mlx5_txq_data *restrict txq,
 			   struct mlx5_txq_local *restrict loc,
-			   bool multi,
 			   unsigned int olx)
 {
 	uint16_t head = txq->elts_head;
 	unsigned int part;
 
-	part = (MLX5_TXOFF_CONFIG(INLINE) || multi) ?
+	part = MLX5_TXOFF_CONFIG(INLINE) ?
 	       0 : loc->pkts_sent - loc->pkts_copy;
 	head += part;
 	if ((uint16_t)(head - txq->elts_comp) >= MLX5_TX_COMP_THRESH ||
@@ -2175,15 +2178,15 @@ mlx5_tx_request_completion(struct mlx5_txq_data *restrict txq,
 		/* Request unconditional completion on last WQE. */
 		last->cseg.flags = RTE_BE32(MLX5_COMP_ALWAYS <<
 					    MLX5_COMP_MODE_OFFSET);
-		/* Save elts_head in unused "immediate" field of WQE. */
-		last->cseg.misc = head;
-		/*
-		 * A CQE slot must always be available. Count the
-		 * issued CEQ "always" request instead of production
-		 * index due to here can be CQE with errors and
-		 * difference with ci may become inconsistent.
-		 */
-		assert(txq->cqe_s > ++txq->cq_pi);
+		/* Save elts_head in dedicated free on completion queue. */
+#ifdef NDEBUG
+		txq->fcqs[txq->cq_pi++ & txq->cqe_m] = head;
+#else
+		txq->fcqs[txq->cq_pi++ & txq->cqe_m] = head |
+					(last->cseg.opcode >> 8) << 16;
+#endif
+		/* A CQE slot must always be available. */
+		assert((txq->cq_pi - txq->cq_ci) <= txq->cqe_s);
 	}
 }
 
@@ -2818,8 +2821,14 @@ mlx5_tx_dseg_empw(struct mlx5_txq_data *restrict txq,
 	unsigned int part;
 	uint8_t *pdst;
 
-	dseg->bcount = rte_cpu_to_be_32(len | MLX5_ETH_WQE_DATA_INLINE);
-	pdst = &dseg->inline_data[0];
+	if (!MLX5_TXOFF_CONFIG(MPW)) {
+		/* Store the descriptor byte counter for eMPW sessions. */
+		dseg->bcount = rte_cpu_to_be_32(len | MLX5_ETH_WQE_DATA_INLINE);
+		pdst = &dseg->inline_data[0];
+	} else {
+		/* The entire legacy MPW session counter is stored on close. */
+		pdst = (uint8_t *)dseg;
+	}
 	/*
 	 * The WQEBB space availability is checked by caller.
 	 * Here we should be aware of WQE ring buffer wraparound only.
@@ -2831,7 +2840,8 @@ mlx5_tx_dseg_empw(struct mlx5_txq_data *restrict txq,
 		len -= part;
 		if (likely(!len)) {
 			pdst += part;
-			pdst = RTE_PTR_ALIGN(pdst, MLX5_WSEG_SIZE);
+			if (!MLX5_TXOFF_CONFIG(MPW))
+				pdst = RTE_PTR_ALIGN(pdst, MLX5_WSEG_SIZE);
 			/* Note: no final wraparound check here. */
 			return (struct mlx5_wqe_dseg *)pdst;
 		}
@@ -2879,9 +2889,16 @@ mlx5_tx_dseg_vlan(struct mlx5_txq_data *restrict txq,
 	static_assert(MLX5_DSEG_MIN_INLINE_SIZE ==
 				 (2 * RTE_ETHER_ADDR_LEN),
 		      "invalid Data Segment data size");
-	dseg->bcount = rte_cpu_to_be_32((len + sizeof(struct rte_vlan_hdr)) |
-					MLX5_ETH_WQE_DATA_INLINE);
-	pdst = &dseg->inline_data[0];
+	if (!MLX5_TXOFF_CONFIG(MPW)) {
+		/* Store the descriptor byte counter for eMPW sessions. */
+		dseg->bcount = rte_cpu_to_be_32
+				((len + sizeof(struct rte_vlan_hdr)) |
+				 MLX5_ETH_WQE_DATA_INLINE);
+		pdst = &dseg->inline_data[0];
+	} else {
+		/* The entire legacy MPW session counter is stored on close. */
+		pdst = (uint8_t *)dseg;
+	}
 	memcpy(pdst, buf, MLX5_DSEG_MIN_INLINE_SIZE);
 	buf += MLX5_DSEG_MIN_INLINE_SIZE;
 	pdst += MLX5_DSEG_MIN_INLINE_SIZE;
@@ -2904,7 +2921,8 @@ mlx5_tx_dseg_vlan(struct mlx5_txq_data *restrict txq,
 		len -= part;
 		if (likely(!len)) {
 			pdst += part;
-			pdst = RTE_PTR_ALIGN(pdst, MLX5_WSEG_SIZE);
+			if (!MLX5_TXOFF_CONFIG(MPW))
+				pdst = RTE_PTR_ALIGN(pdst, MLX5_WSEG_SIZE);
 			/* Note: no final wraparound check here. */
 			return (struct mlx5_wqe_dseg *)pdst;
 		}
@@ -3120,8 +3138,6 @@ mlx5_tx_packet_multi_tso(struct mlx5_txq_data *restrict txq,
 	wqe->cseg.sq_ds = rte_cpu_to_be_32(txq->qp_num_8s | ds);
 	txq->wqe_ci += (ds + 3) / 4;
 	loc->wqe_free -= (ds + 3) / 4;
-	/* Request CQE generation if limits are reached. */
-	mlx5_tx_request_completion(txq, loc, true, olx);
 	return MLX5_TXCMP_CODE_MULTI;
 }
 
@@ -3230,8 +3246,6 @@ mlx5_tx_packet_multi_send(struct mlx5_txq_data *restrict txq,
 	} while (true);
 	txq->wqe_ci += (ds + 3) / 4;
 	loc->wqe_free -= (ds + 3) / 4;
-	/* Request CQE generation if limits are reached. */
-	mlx5_tx_request_completion(txq, loc, true, olx);
 	return MLX5_TXCMP_CODE_MULTI;
 }
 
@@ -3388,8 +3402,6 @@ do_align:
 	wqe->cseg.sq_ds = rte_cpu_to_be_32(txq->qp_num_8s | ds);
 	txq->wqe_ci += (ds + 3) / 4;
 	loc->wqe_free -= (ds + 3) / 4;
-	/* Request CQE generation if limits are reached. */
-	mlx5_tx_request_completion(txq, loc, true, olx);
 	return MLX5_TXCMP_CODE_MULTI;
 }
 
@@ -3599,8 +3611,6 @@ mlx5_tx_burst_tso(struct mlx5_txq_data *restrict txq,
 		--loc->elts_free;
 		++loc->pkts_sent;
 		--pkts_n;
-		/* Request CQE generation if limits are reached. */
-		mlx5_tx_request_completion(txq, loc, false, olx);
 		if (unlikely(!pkts_n || !loc->elts_free || !loc->wqe_free))
 			return MLX5_TXCMP_CODE_EXIT;
 		loc->mbuf = *pkts++;
@@ -3750,7 +3760,7 @@ mlx5_tx_sdone_empw(struct mlx5_txq_data *restrict txq,
 		   struct mlx5_txq_local *restrict loc,
 		   unsigned int ds,
 		   unsigned int slen,
-		   unsigned int olx)
+		   unsigned int olx __rte_unused)
 {
 	assert(!MLX5_TXOFF_CONFIG(INLINE));
 #ifdef MLX5_PMD_SOFT_COUNTERS
@@ -3765,8 +3775,6 @@ mlx5_tx_sdone_empw(struct mlx5_txq_data *restrict txq,
 	loc->wqe_last->cseg.sq_ds = rte_cpu_to_be_32(txq->qp_num_8s | ds);
 	txq->wqe_ci += (ds + 3) / 4;
 	loc->wqe_free -= (ds + 3) / 4;
-	/* Request CQE generation if limits are reached. */
-	mlx5_tx_request_completion(txq, loc, false, olx);
 }
 
 /*
@@ -3797,20 +3805,36 @@ mlx5_tx_idone_empw(struct mlx5_txq_data *restrict txq,
 		   unsigned int slen,
 		   unsigned int olx __rte_unused)
 {
+	struct mlx5_wqe_dseg *dseg = &loc->wqe_last->dseg[0];
+
 	assert(MLX5_TXOFF_CONFIG(INLINE));
-	assert((len % MLX5_WSEG_SIZE) == 0);
 #ifdef MLX5_PMD_SOFT_COUNTERS
 	/* Update sent data bytes counter. */
 	 txq->stats.obytes += slen;
 #else
 	(void)slen;
 #endif
-	len = len / MLX5_WSEG_SIZE + 2;
+	if (MLX5_TXOFF_CONFIG(MPW) && dseg->bcount == RTE_BE32(0)) {
+		/*
+		 * If the legacy MPW session contains the inline packets
+		 * we should set the only inline data segment length
+		 * and align the total length to the segment size.
+		 */
+		assert(len > sizeof(dseg->bcount));
+		dseg->bcount = rte_cpu_to_be_32((len - sizeof(dseg->bcount)) |
+						MLX5_ETH_WQE_DATA_INLINE);
+		len = (len + MLX5_WSEG_SIZE - 1) / MLX5_WSEG_SIZE + 2;
+	} else {
+		/*
+		 * The session is not legacy MPW or contains the
+		 * data buffer pointer segments.
+		 */
+		assert((len % MLX5_WSEG_SIZE) == 0);
+		len = len / MLX5_WSEG_SIZE + 2;
+	}
 	loc->wqe_last->cseg.sq_ds = rte_cpu_to_be_32(txq->qp_num_8s | len);
 	txq->wqe_ci += (len + 3) / 4;
 	loc->wqe_free -= (len + 3) / 4;
-	/* Request CQE generation if limits are reached. */
-	mlx5_tx_request_completion(txq, loc, false, olx);
 }
 
 /**
@@ -4011,8 +4035,6 @@ next_empw:
 		txq->wqe_ci += (2 + part + 3) / 4;
 		loc->wqe_free -= (2 + part + 3) / 4;
 		pkts_n -= part;
-		/* Request CQE generation if limits are reached. */
-		mlx5_tx_request_completion(txq, loc, false, olx);
 		if (unlikely(!pkts_n || !loc->elts_free || !loc->wqe_free))
 			return MLX5_TXCMP_CODE_EXIT;
 		loc->mbuf = *pkts++;
@@ -4088,6 +4110,15 @@ mlx5_tx_burst_empw_inline(struct mlx5_txq_data *restrict txq,
 			       loc->wqe_free) * MLX5_WQE_SIZE -
 					MLX5_WQE_CSEG_SIZE -
 					MLX5_WQE_ESEG_SIZE;
+		/* Limit the room for legacy MPW sessions for performance. */
+		if (MLX5_TXOFF_CONFIG(MPW))
+			room = RTE_MIN(room,
+				       RTE_MAX(txq->inlen_empw +
+					       sizeof(dseg->bcount) +
+					       (MLX5_TXOFF_CONFIG(VLAN) ?
+					       sizeof(struct rte_vlan_hdr) : 0),
+					       MLX5_MPW_INLINE_MAX_PACKETS *
+					       MLX5_WQE_DSEG_SIZE));
 		/* Build WQE till we have space, packets and resources. */
 		part = room;
 		for (;;) {
@@ -4117,8 +4148,28 @@ mlx5_tx_burst_empw_inline(struct mlx5_txq_data *restrict txq,
 			/* Inline or not inline - that's the Question. */
 			if (dlen > txq->inlen_empw)
 				goto pointer_empw;
+			if (MLX5_TXOFF_CONFIG(MPW)) {
+				if (dlen > txq->inlen_send)
+					goto pointer_empw;
+				tlen = dlen;
+				if (part == room) {
+					/* Open new inline MPW session. */
+					tlen += sizeof(dseg->bcount);
+					dseg->bcount = RTE_BE32(0);
+					dseg = RTE_PTR_ADD
+						(dseg, sizeof(dseg->bcount));
+				} else {
+					/*
+					 * No pointer and inline descriptor
+					 * intermix for legacy MPW sessions.
+					 */
+					if (loc->wqe_last->dseg[0].bcount)
+						break;
+				}
+			} else {
+				tlen = sizeof(dseg->bcount) + dlen;
+			}
 			/* Inline entire packet, optional VLAN insertion. */
-			tlen = sizeof(dseg->bcount) + dlen;
 			if (MLX5_TXOFF_CONFIG(VLAN) &&
 			    loc->mbuf->ol_flags & PKT_TX_VLAN_PKT) {
 				/*
@@ -4143,7 +4194,8 @@ mlx5_tx_burst_empw_inline(struct mlx5_txq_data *restrict txq,
 				dseg = mlx5_tx_dseg_empw(txq, loc, dseg,
 							 dptr, dlen, olx);
 			}
-			tlen = RTE_ALIGN(tlen, MLX5_WSEG_SIZE);
+			if (!MLX5_TXOFF_CONFIG(MPW))
+				tlen = RTE_ALIGN(tlen, MLX5_WSEG_SIZE);
 			assert(room >= tlen);
 			room -= tlen;
 			/*
@@ -4153,6 +4205,14 @@ mlx5_tx_burst_empw_inline(struct mlx5_txq_data *restrict txq,
 			rte_pktmbuf_free_seg(loc->mbuf);
 			goto next_mbuf;
 pointer_empw:
+			/*
+			 * No pointer and inline descriptor
+			 * intermix for legacy MPW sessions.
+			 */
+			if (MLX5_TXOFF_CONFIG(MPW) &&
+			    part != room &&
+			    loc->wqe_last->dseg[0].bcount == RTE_BE32(0))
+				break;
 			/*
 			 * Not inlinable VLAN packets are
 			 * proceeded outside of this routine.
@@ -4496,8 +4556,6 @@ mlx5_tx_burst_single_send(struct mlx5_txq_data *restrict txq,
 		}
 		++loc->pkts_sent;
 		--pkts_n;
-		/* Request CQE generation if limits are reached. */
-		mlx5_tx_request_completion(txq, loc, false, olx);
 		if (unlikely(!pkts_n || !loc->elts_free || !loc->wqe_free))
 			return MLX5_TXCMP_CODE_EXIT;
 		loc->mbuf = *pkts++;
@@ -4776,6 +4834,8 @@ enter_send_single:
 	/* Take a shortcut if nothing is sent. */
 	if (unlikely(loc.pkts_sent == loc.pkts_loop))
 		goto burst_exit;
+	/* Request CQE generation if limits are reached. */
+	mlx5_tx_request_completion(txq, &loc, olx);
 	/*
 	 * Ring QP doorbell immediately after WQE building completion
 	 * to improve latencies. The pure software related data treatment
@@ -4977,7 +5037,7 @@ MLX5_TXOFF_DECL(iv,
 
 /*
  * Generate routines with Legacy Multi-Packet Write support.
- * This mode is supported by ConnectX-4LX only and imposes
+ * This mode is supported by ConnectX-4 Lx only and imposes
  * offload limitations, not supported:
  *   - ACL/Flows (metadata are becoming meaningless)
  *   - WQE Inline headers
@@ -4994,6 +5054,10 @@ MLX5_TXOFF_DECL(mci_mpw,
 		MLX5_TXOFF_CONFIG_MULTI | MLX5_TXOFF_CONFIG_CSUM |
 		MLX5_TXOFF_CONFIG_INLINE | MLX5_TXOFF_CONFIG_EMPW |
 		MLX5_TXOFF_CONFIG_MPW)
+
+MLX5_TXOFF_DECL(mc_mpw,
+		MLX5_TXOFF_CONFIG_MULTI | MLX5_TXOFF_CONFIG_CSUM |
+		MLX5_TXOFF_CONFIG_EMPW | MLX5_TXOFF_CONFIG_MPW)
 
 MLX5_TXOFF_DECL(i_mpw,
 		MLX5_TXOFF_CONFIG_INLINE | MLX5_TXOFF_CONFIG_EMPW |
@@ -5150,6 +5214,10 @@ MLX5_TXOFF_INFO(mci_mpw,
 		MLX5_TXOFF_CONFIG_MULTI | MLX5_TXOFF_CONFIG_CSUM |
 		MLX5_TXOFF_CONFIG_INLINE | MLX5_TXOFF_CONFIG_EMPW |
 		MLX5_TXOFF_CONFIG_MPW)
+
+MLX5_TXOFF_INFO(mc_mpw,
+		MLX5_TXOFF_CONFIG_MULTI | MLX5_TXOFF_CONFIG_CSUM |
+		MLX5_TXOFF_CONFIG_EMPW | MLX5_TXOFF_CONFIG_MPW)
 
 MLX5_TXOFF_INFO(i_mpw,
 		MLX5_TXOFF_CONFIG_INLINE | MLX5_TXOFF_CONFIG_EMPW |

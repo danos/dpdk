@@ -196,11 +196,14 @@ static pthread_mutex_t mlx5_ibv_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 /**
  * Allocate ID pool structure.
  *
+ * @param[in] max_id
+ *   The maximum id can be allocated from the pool.
+ *
  * @return
  *   Pointer to pool object, NULL value otherwise.
  */
 struct mlx5_flow_id_pool *
-mlx5_flow_id_pool_alloc(void)
+mlx5_flow_id_pool_alloc(uint32_t max_id)
 {
 	struct mlx5_flow_id_pool *pool;
 	void *mem;
@@ -223,6 +226,7 @@ mlx5_flow_id_pool_alloc(void)
 	pool->curr = pool->free_arr;
 	pool->last = pool->free_arr + MLX5_FLOW_MIN_ID_POOL_SIZE;
 	pool->base_index = 0;
+	pool->max_id = max_id;
 	return pool;
 error:
 	rte_free(pool);
@@ -257,7 +261,7 @@ uint32_t
 mlx5_flow_id_get(struct mlx5_flow_id_pool *pool, uint32_t *id)
 {
 	if (pool->curr == pool->free_arr) {
-		if (pool->base_index == UINT32_MAX) {
+		if (pool->base_index == pool->max_id) {
 			rte_errno  = ENOMEM;
 			DRV_LOG(ERR, "no free id");
 			return -rte_errno;
@@ -590,7 +594,7 @@ mlx5_alloc_shared_ibctx(const struct mlx5_dev_spawn_data *spawn,
 			goto error;
 		}
 	}
-	sh->flow_id_pool = mlx5_flow_id_pool_alloc();
+	sh->flow_id_pool = mlx5_flow_id_pool_alloc(UINT32_MAX);
 	if (!sh->flow_id_pool) {
 		DRV_LOG(ERR, "can't create flow id pool");
 		err = ENOMEM;
@@ -673,12 +677,12 @@ mlx5_free_shared_ibctx(struct mlx5_ibv_shared *sh)
 	assert(rte_eal_process_type() == RTE_PROC_PRIMARY);
 	if (--sh->refcnt)
 		goto exit;
-	/* Release created Memory Regions. */
-	mlx5_mr_release(sh);
 	/* Remove from memory callback device list. */
 	rte_rwlock_write_lock(&mlx5_shared_data->mem_event_rwlock);
 	LIST_REMOVE(sh, mem_event_cb);
 	rte_rwlock_write_unlock(&mlx5_shared_data->mem_event_rwlock);
+	/* Release created Memory Regions. */
+	mlx5_mr_release(sh);
 	/* Remove context from the global device list. */
 	LIST_REMOVE(sh, next);
 	/*
@@ -868,8 +872,13 @@ mlx5_alloc_shared_dr(struct mlx5_priv *priv)
 {
 	struct mlx5_ibv_shared *sh = priv->sh;
 	char s[MLX5_HLIST_NAMESIZE];
-	int err = mlx5_alloc_table_hash_list(priv);
+	int err = 0;
 
+	if (!sh->flow_tbls)
+		err = mlx5_alloc_table_hash_list(priv);
+	else
+		DRV_LOG(DEBUG, "sh->flow_tbls[%p] already created, reuse\n",
+			(void *)sh->flow_tbls);
 	if (err)
 		return err;
 	/* Create tags hash list table. */
@@ -1697,7 +1706,7 @@ out:
  *   key is specified in devargs
  * - if DevX is enabled the inline mode is queried from the
  *   device (HCA attributes and NIC vport context if needed).
- * - otherwise L2 mode (18 bytes) is assumed for ConnectX-4/4LX
+ * - otherwise L2 mode (18 bytes) is assumed for ConnectX-4/4 Lx
  *   and none (0 bytes) for other NICs
  *
  * @param spawn
@@ -2543,6 +2552,8 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 				priv->mtr_color_reg = ffs(reg_c_mask) - 1 +
 						      REG_C_0;
 				priv->mtr_en = 1;
+				priv->mtr_reg_share =
+				      config.hca_attr.qos.flow_meter_reg_share;
 				DRV_LOG(DEBUG, "The REG_C meter uses is %d",
 					priv->mtr_color_reg);
 			}
@@ -2675,7 +2686,12 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 		err = mlx5_alloc_shared_dr(priv);
 		if (err)
 			goto error;
-		priv->qrss_id_pool = mlx5_flow_id_pool_alloc();
+		/*
+		 * RSS id is shared with meter flow id. Meter flow id can only
+		 * use the 24 MSB of the register.
+		 */
+		priv->qrss_id_pool = mlx5_flow_id_pool_alloc(UINT32_MAX >>
+				     MLX5_MTR_COLOR_BITS);
 		if (!priv->qrss_id_pool) {
 			DRV_LOG(ERR, "can't create flow id pool");
 			err = ENOMEM;

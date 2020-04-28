@@ -389,11 +389,8 @@ int bnxt_stats_get_op(struct rte_eth_dev *eth_dev,
 	if (rc)
 		return rc;
 
-	memset(bnxt_stats, 0, sizeof(*bnxt_stats));
-	if (!(bp->flags & BNXT_FLAG_INIT_DONE)) {
-		PMD_DRV_LOG(ERR, "Device Initialization not complete!\n");
+	if (!eth_dev->data->dev_started)
 		return -EIO;
-	}
 
 	num_q_stats = RTE_MIN(bp->rx_cp_nr_rings,
 			      (unsigned int)RTE_ETHDEV_QUEUE_STAT_CNTRS);
@@ -437,7 +434,7 @@ int bnxt_stats_reset_op(struct rte_eth_dev *eth_dev)
 	if (ret)
 		return ret;
 
-	if (!(bp->flags & BNXT_FLAG_INIT_DONE)) {
+	if (!eth_dev->data->dev_started) {
 		PMD_DRV_LOG(ERR, "Device Initialization not complete!\n");
 		return -EINVAL;
 	}
