@@ -50,3 +50,4 @@ net-ena-announce-Tx-multi-segments-offload.patch
 add-build-option-for-l3fwd-acl.patch
 net-bonding-advertise-mq-rx-rss-capability.patch
 add-build-option-for-ipsecgw.patch
+mlx5-disable-dv-flow.patch
