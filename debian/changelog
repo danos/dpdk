@@ -2,4 +2,4 @@ dpdk (19.11-0vyatta1) unstable; urgency=medium
 
   * Initial release of Vyatta version of DPDK 19.11
 
- -- Charles (Chas) Williams <ciwillia@mail.eng.vyatta.net>  Tue, 07 Apr 2020 09:08:25 -0400
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 28 Apr 2020 19:17:57 -0400
