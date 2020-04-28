@@ -34,7 +34,6 @@ bonding-polled-slave-muxstate.patch
 # PF-VF fixes for Intel drivers
 ixgbe_filter_unknown_vlan_hdr.patch
 
-bypass-mlx5-extended-stats.patch
 mlx5-debug.patch
 mlx5-skip-legacy-ethtool.patch
 vlan-insert-clone-add_new-hdr-mbuf.patch
