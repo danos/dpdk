@@ -1,3 +1,12 @@
+dpdk (18.11.6-1vyatta8.1) unstable; urgency=medium
+
+  [ Alan Dewar ]
+  * sched: fix port time rounding error (Fixes: VRVDR-50306)
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 30 Apr 2020 09:22:57 -0400
+
 dpdk (18.11.6-1vyatta8) unstable; urgency=medium
 
   [ Sharmila Podury ]
