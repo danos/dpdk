@@ -12,7 +12,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 ---
 --- a/lib/librte_sched/rte_sched.c
 +++ b/lib/librte_sched/rte_sched.c
-@@ -86,7 +86,7 @@ struct rte_sched_subport {
+@@ -57,7 +57,7 @@ struct rte_sched_subport {
  	/* Traffic classes (TCs) */
  	uint64_t tc_time; /* time of next update */
  	uint32_t tc_credits_per_period[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
@@ -21,7 +21,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	uint16_t qsize[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
  	uint32_t tc_period;
  
-@@ -137,7 +137,7 @@ struct rte_sched_pipe {
+@@ -108,7 +108,7 @@ struct rte_sched_pipe {
  
  	/* Traffic classes (TCs) */
  	uint64_t tc_time; /* time of next update */
@@ -30,7 +30,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	/* Weighted Round Robin (WRR) */
  	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
-@@ -1744,6 +1744,7 @@ grinder_credits_update(struct rte_sched_
+@@ -1794,6 +1794,7 @@ grinder_credits_update(struct rte_sched_
  	struct rte_sched_pipe_profile *params = grinder->pipe_params;
  	uint64_t n_periods;
  	uint32_t tc;
@@ -38,7 +38,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	/* Subport TB */
  	n_periods = (port->time - subport->tb_time) / subport->tb_period;
-@@ -1760,19 +1761,43 @@ grinder_credits_update(struct rte_sched_
+@@ -1810,19 +1811,43 @@ grinder_credits_update(struct rte_sched_
  	/* Subport TCs */
  	if (unlikely(port->time >= subport->tc_time)) {
  		for (tc = 0; tc < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; tc++) {
@@ -88,7 +88,16 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	}
  }
  
-@@ -1883,19 +1908,19 @@ grinder_credits_check(struct rte_sched_p
+@@ -1924,7 +1949,7 @@ grinder_credits_update(struct rte_sched_
+ #ifndef RTE_SCHED_SUBPORT_TC_OV
+ 
+ static inline int
+-grinder_credits_check(struct rte_sched_port *port, uint32_t pos)
++grinder_credits_check(struct rte_sched_port *port, uint32_t pos, uint32_t *time)
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+ 	struct rte_sched_subport *subport = grinder->subport;
+@@ -1933,28 +1958,33 @@ grinder_credits_check(struct rte_sched_p
  	uint32_t tc_index = grinder->tc_index;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
  	uint32_t subport_tb_credits = subport->tb_credits;
@@ -114,7 +123,12 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (!enough_credits)
  		return 0;
-@@ -1903,8 +1928,8 @@ grinder_credits_check(struct rte_sched_p
+ 
++	if (pkt_len > pipe_tc_credits)
++		*time = pipe_tc_credits;
++	else
++		*time = pkt_len;
++
  	/* Update port credits */
  	subport->tb_credits -= pkt_len;
  	subport->tc_credits[tc_index] -= pkt_len;
@@ -124,3 +138,40 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	return 1;
  }
+@@ -1962,7 +1992,7 @@ grinder_credits_check(struct rte_sched_p
+ #else
+ 
+ static inline int
+-grinder_credits_check(struct rte_sched_port *port, uint32_t pos)
++grinder_credits_check(struct rte_sched_port *port, uint32_t pos, uint32_t *time)
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+ 	struct rte_sched_subport *subport = grinder->subport;
+@@ -1992,6 +2022,8 @@ grinder_credits_check(struct rte_sched_p
+ 	if (!enough_credits)
+ 		return 0;
+ 
++	*time = pkt_len;
++
+ 	/* Update pipe and subport credits */
+ 	subport->tb_credits -= pkt_len;
+ 	subport->tc_credits[tc_index] -= pkt_len;
+@@ -2012,15 +2044,16 @@ grinder_schedule(struct rte_sched_port *
+ 	struct rte_sched_queue *queue = grinder->queue[grinder->qpos];
+ 	struct rte_mbuf *pkt = grinder->pkt;
+ 	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
++	uint32_t time;
+ 
+-	if (!grinder_credits_check(port, pos))
++	if (!grinder_credits_check(port, pos, &time))
+ 		return 0;
+ 
+ 	if (pkt_len < 0)
+ 		pkt_len = 0;
+ 
+ 	/* Advance port time */
+-	port->time += pkt_len;
++	port->time += time;
+ 
+ 	/* Send packet */
+ 	port->pkts_out[port->n_pkts_out++] = pkt;
