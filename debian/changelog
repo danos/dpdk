@@ -1,3 +1,12 @@
+dpdk (18.11.6-1vyatta11) unstable; urgency=medium
+
+  [ aroberts ]
+  * Don't progress the port time for borrowed bytes
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 04 May 2020 08:41:45 -0400
+
 dpdk (18.11.6-1vyatta10) unstable; urgency=medium
 
   [ Alan Dewar ]
