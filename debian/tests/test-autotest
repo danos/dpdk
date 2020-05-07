@@ -46,18 +46,13 @@ sed -i -e '/^runner = autotest_runner.AutotestRunner(cmdline/i cmdline = "%s -c 
 
 # blacklist reasons:
 # known upstream: http://www.dpdk.org/ml/archives/dev/2016-May/038849.html
-# - KNI: we deliver via dkms but test doesn't match
-# - power_acpi_cpufreq: in many environments blocked by other cpufreq
-# - power_kvm_vm_autotest: no avail in all environments, only for virt power management e.g. /dev/virtio-ports/virtio.serial.port.poweragent.0
-# - IVSHMEM fails in virtual environment
-# - eal_flags needs at least 8 cpus for lcores test not to fail
-# - pci doesn't initialize in all virt env causing command not found issues
-# - rather slow performance tests not suited for regular build associated tests: ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf
+# Updated for >=19.11 with new known failing results in our test env (e.g. --no-huge)
+# We excluded anything that didn't reliable (3/3 runs) deliver a good result
 
 python3 "/usr/share/dpdk/test/autotest.py" \
     "/usr/bin/dpdk-test" \
     "x86_64-default-linuxapp-gcc" \
-    "-KNI,power_acpi_cpufreq,power_kvm_vm,IVSHMEM,eal_flags,pci,ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf" \
+    "-ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf,reciprocal_division,reciprocal_division_perf,lpm_perf,red_all,barrier,hash_multiwriter,timer_racecond,efd,hash_functions,eventdev_selftest_sw,member_perf,efd_perf,lpm6_perf,red_perf,distributor_perf,ring_pmd_perf,pmd_perf,ring_perf,link_bonding,link_bonding_mode4,link_bonding_rssconf,cryptodev_sw_mrvl,cryptodev_dpaa2_sec,cryptodev_dpaa_sec,cryptodev_qat,cryptodev_aesni_mb,cryptodev_openssl,cryptodev_scheduler,cryptodev_aesni_gcm,cryptodev_null,cryptodev_sw_snow3g,cryptodev_sw_kasumi,cryptodev_sw_zuc,dump_struct_sizes,dump_mempool,dump_malloc_stats,dump_devargs,dump_log_types,dump_ring,dump_physmem,dump_memzone,timer,resource,rwlock,logs,eal_flags,hash,ultiprocess,mbuf,per_lcore,ring,mempool,atomic,eventdev_selftest_octeontx,table,event_eth_rx_adapter,link_bonding_mode4,multiprocess,bitmap_test,hash_multiwriter,service,hash_functions,cryptodev_sw_mvsam,cryptodev_dpaa2_sec,cryptodev_dpaa_sec,cryptodev_qat,cryptodev_sw_snow3g,cryptodev_sw_kasumi,cryptodev_sw_zuc,kni,bitratestats,latencystats,power_cpufreq,power_kvm_vm,hash_readwrite,hash_readwrite_lf,fib6_perf,rcu_qsbr,rcu_qsbr_perf,ring_perf"
 
 # Pass/Fail
 # For now the autotest is too unreliable, so we run it to get some logs in
