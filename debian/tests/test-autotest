@@ -37,6 +37,13 @@ fi
 # - certain workarounds needed to get running, needing root for some which is
 #   not available in the build environment
 
+# due to limitations in autopkgtest environments we have to lower the defaults
+# no concurrent executuon (also helps debugging on a hang)
+sed -i -e '/^runner = autotest_runner.AutotestRunner(cmdline/i n_processes = 1' /usr/share/dpdk/test/autotest.py
+# if this masek is >#cpus it breaks fatally
+# lets assume we always have at least 2 CPUs (not the former assumed 4)
+sed -i -e '/^runner = autotest_runner.AutotestRunner(cmdline/i cmdline = "%s -c 0x3" % (sys.argv[1])' /usr/share/dpdk/test/autotest.py
+
 # blacklist reasons:
 # known upstream: http://www.dpdk.org/ml/archives/dev/2016-May/038849.html
 # - KNI: we deliver via dkms but test doesn't match
