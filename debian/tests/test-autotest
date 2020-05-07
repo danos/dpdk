@@ -49,6 +49,7 @@ fi
 
 python3 "/usr/share/dpdk/test/autotest.py" \
     "/usr/bin/dpdk-test" \
+    "x86_64-default-linuxapp-gcc" \
     "-KNI,power_acpi_cpufreq,power_kvm_vm,IVSHMEM,eal_flags,pci,ring_perf,mempool_perf,memcpy_perf,hash_perf,timer_perf" \
 
 # Pass/Fail
