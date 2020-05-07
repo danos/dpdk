@@ -12,12 +12,12 @@ case "${ARCH}" in
     amd64)
         if ! grep -q '^flags.*sse3' /proc/cpuinfo; then
             echo "Missing sse3 on ${ARCH} - not supported, SKIP test"
-            exit 0
+            exit 77
         fi
         ;;
     *)
         echo "DPDK autotest not supported on ${ARCH}, SKIP test"
-        exit 0
+        exit 77
         ;;
 esac
 echo "no known missing feature on ${ARCH}, continue test"
@@ -28,7 +28,7 @@ sleep 5s
 realhp=$(cat /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages)
 if [[ "$realhp" != "512" ]]; then
     echo "Unable to allocate the huge pages required for the test, SKIP test"
-    exit 0
+    exit 77
 fi
 
 # Reasons for not being an dh_autotest
