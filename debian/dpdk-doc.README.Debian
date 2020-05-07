@@ -4,7 +4,7 @@ dpdk for Debian
 This package is currently compiled for the lowest possible CPU requirements.
 Which still requires at least SSE3 to be supported by the CPU.
 
-dpdk (runtime) / libdpdk0:
+dpdk (runtime) / librte*:
 
 For runtime /etc/dpdk/interfaces holds a list of PCI devices to be assigned
 to DPDK compatible drivers and /etc/dpdk/dpdk.conf allows one to define the
@@ -25,29 +25,17 @@ avoid bugs by dpdk and the kernel working on them simultaneously. It is
 recommended to reassign them to dpdk compatible drivers using
 /etc/dpdk/interfaces (just as you would with any physical card).
 
-libdpdk0 contains the shared object needed to run a program in terms of symbol
-resolution, but none of the other runtime environment pieces.
-
 dpdk-dev / libdpdk-dev:
 
 The minimum requirement for developing external applications is libdpdk-dev,
 which brings the headers and library files.
 
-In dpdk-dev is the upstream makefile environment. Sample applications, which
-are shipped in dpdk-doc, are providing makefiles.
-Those makefiles need to find the dpdk build system. To do so they need some
-environment variables defined:
- export RTE_TARGET="$(uname -m)-default-linuxapp-gcc"
- export RTE_SDK="/usr/share/dpdk/"
- export RTE_INCLUDE="/usr/include/dpdk"
-Those can be set by the user to overwrite with a custom path/config. If no
-custom environment is used it is recommended to source the file
-/usr/share/dpdk/dpdk-sdk-env.sh which comes with dpdk-dev.
-If the paths ever change or there will be more/less variables needed to build
-against dpdk-dev that file will be adjusted for you.
+To link against dpdk, simply use the provided pkg-config file, eg in a Makefile:
 
-Alternatively /usr/include/dpdk/rte_config.h has to be pre-included:
-CFLAGS  += -I/usr/include/dpdk -irte_config.h
+CFLAGS += $(shell pkg-config --cflags libdpdk)
+LDFLAGS += $(shell pkg-config --libs libdpdk)
+
+In dpdk-dev helper programs and test binaries, like testpmd, can be found.
 
 librte-pmd-* and DPDK PMD autoloading:
 
