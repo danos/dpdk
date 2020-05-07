@@ -2,8 +2,7 @@ Description: fix autopkgtest for python3
  There are some python3 incompatibilities left in autotest_runner.py
  - encoding on check_output
  - StringIO
-Forwarded: no
-X-Not-Forwarded-Reason: experimental
+Forwarded: yes, http://mails.dpdk.org/archives/dev/2020-May/166890.html
 Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
 Last-Update: 2020-05-05
 --- a/app/test/autotest_runner.py
