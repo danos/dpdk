@@ -45,3 +45,4 @@ net-ena-announce-Tx-multi-segments-offload.patch
 net-bonding-advertise-mq-rx-rss-capability.patch
 add-build-option-for-ipsecgw.patch
 mlx5-disable-dv-flow.patch
+i40e-bringup.patch
