@@ -53,3 +53,4 @@ net-vmxnet3-add-mac-addr-set-support.patch
 net-ena-announce-Tx-multi-segments-offload.patch
 add-build-option-for-l3fwd-acl.patch
 net-bonding-advertise-mq-rx-rss-capability.patch
+net-virtio-add-mac-addr-set-support.patch

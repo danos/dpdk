@@ -1,0 +1,180 @@
+From 7db31cc6763db4e6870a5e43c019a3897df3b0eb Mon Sep 17 00:00:00 2001
+From: Mark Gillott <mgillott@vyatta.att-mail.com>
+Date: Tue, 12 May 2020 17:54:15 +0100
+Subject: [PATCH] net/virtio: use promiscuous mode when secondary MAC fails
+
+The addition (and removal) of secondary MAC addresses may not be
+supported by the underlying "backend" driver. When the port is being
+used as part of a bond interface, the failure propagates through to
+bonding resulting in a part-configured interface. See
+slave_add_mac_addresses() and __eth_bond_slave_add_lock_free().
+
+If there is no support for secondary MAC addresses, have the add
+function turn on promiscuous mode. Similarly on removal of the last
+secondary address, turn off promiscuous mode.
+
+Signed-off-by: Mark Gillott <mgillott@vyatta.att-mail.com>
+---
+ drivers/net/virtio/virtio_ethdev.c |   73 +++++++++++++++++++++++++++++++++++--
+ drivers/net/virtio/virtio_pci.h    |    2 +
+ 2 files changed, 73 insertions(+), 2 deletions(-)
+
+--- a/drivers/net/virtio/virtio_pci.h
++++ b/drivers/net/virtio/virtio_pci.h
+@@ -230,7 +230,9 @@ struct virtio_hw {
+ 	struct virtnet_ctl *cvq;
+ 	uint64_t    req_guest_features;
+ 	uint64_t    guest_features;
++	uint64_t    extra_mac_addresses;
+ 	uint32_t    max_queue_pairs;
++	bool        promiscuous_enabled;
+ 	bool        started;
+ 	uint16_t	max_mtu;
+ 	uint16_t    vtnet_hdr_size;
+--- a/drivers/net/virtio/virtio_ethdev.c
++++ b/drivers/net/virtio/virtio_ethdev.c
+@@ -609,8 +609,8 @@ virtio_dev_close(struct rte_eth_dev *dev
+ 	virtio_free_queues(hw);
+ }
+ 
+-static void
+-virtio_dev_promiscuous_enable(struct rte_eth_dev *dev)
++static int
++__virtio_dev_promiscuous_enable(struct rte_eth_dev *dev)
+ {
+ 	struct virtio_hw *hw = dev->data->dev_private;
+ 	struct virtio_pmd_ctrl ctrl;
+@@ -619,7 +619,7 @@ virtio_dev_promiscuous_enable(struct rte
+ 
+ 	if (!vtpci_with_feature(hw, VIRTIO_NET_F_CTRL_RX)) {
+ 		PMD_INIT_LOG(INFO, "host does not support rx control");
+-		return;
++		return -ENOTSUP;
+ 	}
+ 
+ 	ctrl.hdr.class = VIRTIO_NET_CTRL_RX;
+@@ -628,12 +628,16 @@ virtio_dev_promiscuous_enable(struct rte
+ 	dlen[0] = 1;
+ 
+ 	ret = virtio_send_command(hw->cvq, &ctrl, dlen, 1);
+-	if (ret)
++	if (ret) {
+ 		PMD_INIT_LOG(ERR, "Failed to enable promisc");
++		return -EAGAIN;
++	}
++
++	return 0;
+ }
+ 
+-static void
+-virtio_dev_promiscuous_disable(struct rte_eth_dev *dev)
++static int
++__virtio_dev_promiscuous_disable(struct rte_eth_dev *dev)
+ {
+ 	struct virtio_hw *hw = dev->data->dev_private;
+ 	struct virtio_pmd_ctrl ctrl;
+@@ -642,7 +646,7 @@ virtio_dev_promiscuous_disable(struct rt
+ 
+ 	if (!vtpci_with_feature(hw, VIRTIO_NET_F_CTRL_RX)) {
+ 		PMD_INIT_LOG(INFO, "host does not support rx control");
+-		return;
++		return -ENOTSUP;
+ 	}
+ 
+ 	ctrl.hdr.class = VIRTIO_NET_CTRL_RX;
+@@ -651,8 +655,37 @@ virtio_dev_promiscuous_disable(struct rt
+ 	dlen[0] = 1;
+ 
+ 	ret = virtio_send_command(hw->cvq, &ctrl, dlen, 1);
+-	if (ret)
++	if (ret) {
+ 		PMD_INIT_LOG(ERR, "Failed to disable promisc");
++		return -EAGAIN;
++	}
++
++	return 0;
++}
++
++static void
++virtio_dev_promiscuous_enable(struct rte_eth_dev *dev)
++{
++	struct virtio_hw *hw = dev->data->dev_private;
++
++	hw->promiscuous_enabled = 1;
++	(void)__virtio_dev_promiscuous_enable(dev);
++}
++
++static void
++virtio_dev_promiscuous_disable(struct rte_eth_dev *dev)
++{
++	struct virtio_hw *hw = dev->data->dev_private;
++
++	hw->promiscuous_enabled = 0;
++
++	/*
++	 * Is promiscuous mode still in use by virtio_mac_addr_add()?
++	 */
++	if (hw->extra_mac_addresses != 0)
++		return;
++
++	(void)__virtio_dev_promiscuous_disable(dev);
+ }
+ 
+ static void
+@@ -1028,6 +1061,28 @@ virtio_mac_addr_add(struct rte_eth_dev *
+ 		return -EINVAL;
+ 	}
+ 
++	if (!vtpci_with_feature(hw, VIRTIO_NET_F_CTRL_MAC_ADDR)) {
++		uint64_t extramacs;
++		int err;
++
++		extramacs = hw->extra_mac_addresses;
++		hw->extra_mac_addresses |= (1 << index);
++		if (extramacs != 0)
++			return 0;
++
++		err = __virtio_dev_promiscuous_enable(dev);
++		if (err < 0)
++			PMD_DRV_LOG(ERR,
++				    "not supported, promiscuous failed %d",
++				    err);
++		else
++			PMD_DRV_LOG(DEBUG,
++				    "not supported, port %d promiscuous enabled",
++				    dev->data->port_id);
++
++		return err;
++	}
++
+ 	uc = alloca(VIRTIO_MAX_MAC_ADDRS * ETHER_ADDR_LEN + sizeof(uc->entries));
+ 	uc->entries = 0;
+ 	mc = alloca(VIRTIO_MAX_MAC_ADDRS * ETHER_ADDR_LEN + sizeof(mc->entries));
+@@ -1058,6 +1113,27 @@ virtio_mac_addr_remove(struct rte_eth_de
+ 		return;
+ 	}
+ 
++	if (!vtpci_with_feature(hw, VIRTIO_NET_F_CTRL_MAC_ADDR)) {
++		int err = 0;
++
++		hw->extra_mac_addresses &= ~(1 << index);
++		if ((hw->extra_mac_addresses != 0) ||
++		    hw->promiscuous_enabled)
++			return;
++
++		err = __virtio_dev_promiscuous_disable(dev);
++		if (err < 0)
++			PMD_DRV_LOG(ERR,
++				    "not supported, promiscuous failed %d",
++				    err);
++		else
++			PMD_DRV_LOG(DEBUG,
++				    "not supported, port %d promiscuous disabled",
++				    dev->data->port_id);
++
++		return;
++	}
++
+ 	uc = alloca(VIRTIO_MAX_MAC_ADDRS * ETHER_ADDR_LEN + sizeof(uc->entries));
+ 	uc->entries = 0;
+ 	mc = alloca(VIRTIO_MAX_MAC_ADDRS * ETHER_ADDR_LEN + sizeof(mc->entries));
