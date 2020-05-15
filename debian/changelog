@@ -1,3 +1,26 @@
+dpdk (19.11.1-0vyatta2) unstable; urgency=medium
+
+  [ Srinivas Narayan ]
+  * Disable flow steering in mlx5 driver
+  * Remove change to bypass extended stats
+
+  [ aroberts ]
+  * Don't progress the port time for borrowed bytes
+
+  [ Srinivas Narayan ]
+  * i40e: interface bringup
+
+  [ Shweta Choudaha ]
+  * net/i40e: Fix double vlan config API for X722
+
+  [ Mark Gillott ]
+  * net/virtio: use promiscuous mode when secondary MAC fails (Fixes:
+    VRVDR-51067)
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 15 May 2020 09:08:07 -0400
+
 dpdk (19.11.1-0vyatta1) unstable; urgency=medium
 
   [ Stephen Hemminger ]
