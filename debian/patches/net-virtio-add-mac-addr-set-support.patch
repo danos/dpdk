@@ -89,7 +89,7 @@ Signed-off-by: Mark Gillott <mgillott@vyatta.att-mail.com>
  	}
  
 +	if (!vtpci_with_feature(hw, VIRTIO_NET_F_CTRL_MAC_ADDR)) {
-+		uint32_t extramacs;
++		uint64_t extramacs;
 +		int err;
 +
 +		extramacs = hw->extra_mac_addresses;
