@@ -4,7 +4,6 @@
 meson-build-fixes.patch
 
 # Backport from dpdk master
-0001-net-cxgbe-announce-Tx-multi-segments-offload.patch
 
 # Backport from dpdk stable
 
@@ -38,7 +37,6 @@ bonding-polled-slave-muxstate.patch
 # PF-VF fixes for Intel drivers
 ixgbe_filter_unknown_vlan_hdr.patch
 
-mlx5-cache-associated-network-device-index.patch
 bypass-mlx5-extended-stats.patch
 mlx5-debug.patch
 mlx5-skip-legacy-ethtool.patch
