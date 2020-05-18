@@ -1,3 +1,29 @@
+dpdk (19.11.2-0vyatta1) unstable; urgency=medium
+
+  [ Maxime Coquelin ]
+  * vhost: check log mmap offset and size overflow
+  * vhost: fix vring index check
+  * vhost/crypto: validate keys lengths
+
+  [ Marvin Liu ]
+  * vhost: fix translated address not checked
+
+  [ Xiaolong Ye ]
+  * vhost: fix potential memory space leak
+
+  [ Xuan Ding ]
+  * vhost: fix potential fd leak
+
+  [ Luca Boccassi ]
+  * version: 19.11.2
+
+  [ Mark Gillott ]
+  * net/virtio: Fix local extra_mac_addresses variable
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 18 May 2020 14:08:30 -0400
+
 dpdk (19.11.1-0vyatta2) unstable; urgency=medium
 
   [ Srinivas Narayan ]
