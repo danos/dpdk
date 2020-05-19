@@ -7,6 +7,9 @@ igb-reset-phy-check-in-dev-stop-close.patch
 # Backport from dpdk master
 
 # Backport from dpdk stable
+0001-vhost-check-log-mmap-offset-and-size-overflow.patch
+0002-vhost-fix-vring-index-check.patch
+0003-vhost-crypto-validate-keys-lengths.patch
 
 # Backport from dpdk-net-next
 0001-net-virtio-fix-tagging-when-not-using-Tx-preparation.patch

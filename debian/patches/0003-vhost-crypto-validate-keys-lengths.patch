@@ -1,0 +1,76 @@
+From 5e4bc0f0e1e48e652e89512cb166e04e909f0c1f Mon Sep 17 00:00:00 2001
+From: Maxime Coquelin <maxime.coquelin@redhat.com>
+Date: Tue, 21 Apr 2020 19:10:09 +0200
+Subject: [PATCH 3/3] vhost/crypto: validate keys lengths
+
+transform_cipher_param() and transform_chain_param() handle
+the payload data for the VHOST_USER_CRYPTO_CREATE_SESS
+message. These payloads have to be validated, since it
+could come from untrusted sources.
+
+Two buffers and their lengths are defined in this payload,
+one the the auth key and one for the cipher key. But above
+functions do not validate the key length inputs, which could
+lead to read out of bounds, as buffers have static sizes of
+64 bytes for the cipher key and 512 bytes for the auth key.
+
+This patch adds necessary checks on the key length field
+before being used.
+
+Fixes: e80a98708166 ("vhost/crypto: add session message handler")
+
+This issue has been assigned CVE-2020-10724
+
+Reported-by: Ilja Van Sprundel <ivansprundel@ioactive.com>
+Signed-off-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+Reviewed-by: Xiaolong Ye <xiaolong.ye@intel.com>
+Reviewed-by: Ilja Van Sprundel <ivansprundel@ioactive.com>
+---
+ lib/librte_vhost/vhost_crypto.c | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/lib/librte_vhost/vhost_crypto.c b/lib/librte_vhost/vhost_crypto.c
+index cf01c7ebe..8934365f2 100644
+--- a/lib/librte_vhost/vhost_crypto.c
++++ b/lib/librte_vhost/vhost_crypto.c
+@@ -236,6 +236,11 @@ transform_cipher_param(struct rte_crypto_sym_xform *xform,
+ 	if (unlikely(ret < 0))
+ 		return ret;
+ 
++	if (param->cipher_key_len > VHOST_USER_CRYPTO_MAX_CIPHER_KEY_LENGTH) {
++		VC_LOG_DBG("Invalid cipher key length\n");
++		return -VIRTIO_CRYPTO_BADMSG;
++	}
++
+ 	xform->type = RTE_CRYPTO_SYM_XFORM_CIPHER;
+ 	xform->cipher.key.length = param->cipher_key_len;
+ 	if (xform->cipher.key.length > 0)
+@@ -286,6 +291,12 @@ transform_chain_param(struct rte_crypto_sym_xform *xforms,
+ 			&xform_cipher->cipher.algo);
+ 	if (unlikely(ret < 0))
+ 		return ret;
++
++	if (param->cipher_key_len > VHOST_USER_CRYPTO_MAX_CIPHER_KEY_LENGTH) {
++		VC_LOG_DBG("Invalid cipher key length\n");
++		return -VIRTIO_CRYPTO_BADMSG;
++	}
++
+ 	xform_cipher->type = RTE_CRYPTO_SYM_XFORM_CIPHER;
+ 	xform_cipher->cipher.key.length = param->cipher_key_len;
+ 	xform_cipher->cipher.key.data = param->cipher_key_buf;
+@@ -300,6 +311,12 @@ transform_chain_param(struct rte_crypto_sym_xform *xforms,
+ 	ret = auth_algo_transform(param->hash_algo, &xform_auth->auth.algo);
+ 	if (unlikely(ret < 0))
+ 		return ret;
++
++	if (param->auth_key_len > VHOST_USER_CRYPTO_MAX_HMAC_KEY_LENGTH) {
++		VC_LOG_DBG("Invalid auth key length\n");
++		return -VIRTIO_CRYPTO_BADMSG;
++	}
++
+ 	xform_auth->auth.digest_length = param->digest_len;
+ 	xform_auth->auth.key.length = param->auth_key_len;
+ 	xform_auth->auth.key.data = param->auth_key_buf;
+-- 
+2.11.0
+
