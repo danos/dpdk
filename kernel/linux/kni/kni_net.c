@@ -121,7 +121,7 @@ kni_net_open(struct net_device *dev)
 	struct kni_dev *kni = netdev_priv(dev);
 
 	netif_start_queue(dev);
-	if (dflt_carrier == 1)
+	if (kni_dflt_carrier == 1)
 		netif_carrier_on(dev);
 	else
 		netif_carrier_off(dev);
@@ -596,8 +596,13 @@ kni_net_rx(struct kni_dev *kni)
 /*
  * Deal with a transmit timeout.
  */
+#ifdef HAVE_TX_TIMEOUT_TXQUEUE
+static void
+kni_net_tx_timeout(struct net_device *dev, unsigned int txqueue)
+#else
 static void
 kni_net_tx_timeout(struct net_device *dev)
+#endif
 {
 	struct kni_dev *kni = netdev_priv(dev);
 

@@ -1410,7 +1410,7 @@ cmdline_parse_inst_t cmd_set_port_setup_on = {
 struct cmd_operate_attach_port_result {
 	cmdline_fixed_string_t port;
 	cmdline_fixed_string_t keyword;
-	cmdline_fixed_string_t identifier;
+	cmdline_multi_string_t identifier;
 };
 
 static void cmd_operate_attach_port_parsed(void *parsed_result,
@@ -1433,7 +1433,7 @@ cmdline_parse_token_string_t cmd_operate_attach_port_keyword =
 			keyword, "attach");
 cmdline_parse_token_string_t cmd_operate_attach_port_identifier =
 	TOKEN_STRING_INITIALIZER(struct cmd_operate_attach_port_result,
-			identifier, NULL);
+			identifier, TOKEN_STRING_MULTI);
 
 cmdline_parse_inst_t cmd_operate_attach_port = {
 	.f = cmd_operate_attach_port_parsed,
@@ -6899,9 +6899,10 @@ cmd_priority_flow_ctrl_set_parsed(void *parsed_result,
 	 * the RTE_FC_RX_PAUSE, Respond to the pause frame at the Tx side.
 	 */
 	static enum rte_eth_fc_mode rx_tx_onoff_2_pfc_mode[2][2] = {
-			{RTE_FC_NONE, RTE_FC_RX_PAUSE}, {RTE_FC_TX_PAUSE, RTE_FC_FULL}
+		{RTE_FC_NONE, RTE_FC_TX_PAUSE}, {RTE_FC_RX_PAUSE, RTE_FC_FULL}
 	};
 
+	memset(&pfc_conf, 0, sizeof(struct rte_eth_pfc_conf));
 	rx_fc_enable = (!strncmp(res->rx_pfc_mode, "on",2)) ? 1 : 0;
 	tx_fc_enable = (!strncmp(res->tx_pfc_mode, "on",2)) ? 1 : 0;
 	pfc_conf.fc.mode       = rx_tx_onoff_2_pfc_mode[rx_fc_enable][tx_fc_enable];

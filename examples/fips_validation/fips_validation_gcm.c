@@ -46,6 +46,10 @@ struct fips_test_callback gcm_interim_vectors[] = {
 		{KEYLEN_STR, parser_read_uint32_bit_val, &vec.cipher_auth.key},
 		{IVLEN_STR, parser_read_uint32_bit_val, &vec.iv},
 		{PTLEN_STR, parser_read_uint32_bit_val, &vec.pt},
+		{PTLEN_STR, parser_read_uint32_bit_val, &vec.ct},
+		/**< The NIST test vectors use 'PTlen' to denote input text
+		 *  length in case of decrypt & encrypt operations.
+		 */
 		{AADLEN_STR, parser_read_uint32_bit_val, &vec.cipher_auth.aad},
 		{TAGLEN_STR, parser_read_uint32_bit_val,
 				&vec.cipher_auth.digest},

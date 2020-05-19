@@ -63,8 +63,8 @@ M: Cristian Dumitrescu <cristian.dumitrescu@intel.com>
 T: git://dpdk.org/next/dpdk-next-pipeline
 
 Stable Branches
-M: Yuanhan Liu <yliu@fridaylinux.org>
 M: Luca Boccassi <bluca@debian.org>
+M: Kevin Traynor <ktraynor@redhat.com>
 T: git://dpdk.org/dpdk-stable
 
 Security Issues
@@ -318,7 +318,7 @@ F: lib/librte_ethdev/
 F: devtools/test-null.sh
 
 Flow API
-M: Adrien Mazarguil <adrien.mazarguil@6wind.com>
+M: Ori Kam <orika@mellanox.com>
 T: git://dpdk.org/next/dpdk-next-net
 F: app/test-pmd/cmdline_flow.c
 F: doc/guides/prog_guide/rte_flow.rst
@@ -780,7 +780,7 @@ F: drivers/net/null/
 F: doc/guides/nics/features/null.ini
 
 Fail-safe PMD
-M: Gaetan Rivet <gaetan.rivet@6wind.com>
+M: Gaetan Rivet <grive@u256.net>
 F: drivers/net/failsafe/
 F: doc/guides/nics/fail_safe.rst
 F: doc/guides/nics/features/failsafe.ini
@@ -1168,7 +1168,7 @@ F: lib/librte_kvargs/
 F: test/test/test_kvargs.c
 
 PCI
-M: Gaetan Rivet <gaetan.rivet@6wind.com>
+M: Gaetan Rivet <grive@u256.net>
 F: lib/librte_pci/
 
 Power management

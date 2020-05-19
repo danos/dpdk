@@ -1702,19 +1702,22 @@ enum i40e_status_code i40e_aq_get_phy_capabilities(struct i40e_hw *hw,
 		status = i40e_asq_send_command(hw, &desc, abilities,
 					       abilities_size, cmd_details);
 
-		if (status != I40E_SUCCESS)
-			break;
-
-		if (hw->aq.asq_last_status == I40E_AQ_RC_EIO) {
+		switch (hw->aq.asq_last_status) {
+		case I40E_AQ_RC_EIO:
 			status = I40E_ERR_UNKNOWN_PHY;
 			break;
-		} else if (hw->aq.asq_last_status == I40E_AQ_RC_EAGAIN) {
+		case I40E_AQ_RC_EAGAIN:
 			i40e_msec_delay(1);
 			total_delay++;
 			status = I40E_ERR_TIMEOUT;
+			break;
+		/* also covers I40E_AQ_RC_OK */
+		default:
+			break;
 		}
-	} while ((hw->aq.asq_last_status != I40E_AQ_RC_OK) &&
-		 (total_delay < max_delay));
+
+	} while ((hw->aq.asq_last_status == I40E_AQ_RC_EAGAIN) &&
+		(total_delay < max_delay));
 
 	if (status != I40E_SUCCESS)
 		return status;
@@ -4302,7 +4305,7 @@ enum i40e_status_code i40e_aq_set_lldp_mib(struct i40e_hw *hw,
 
 	cmd->type = mib_type;
 	cmd->length = CPU_TO_LE16(buff_size);
-	cmd->address_high = CPU_TO_LE32(I40E_HI_WORD((u64)buff));
+	cmd->address_high = CPU_TO_LE32(I40E_HI_DWORD((u64)buff));
 	cmd->address_low =  CPU_TO_LE32(I40E_LO_DWORD((u64)buff));
 
 	status = i40e_asq_send_command(hw, &desc, buff, buff_size, cmd_details);

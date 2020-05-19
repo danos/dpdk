@@ -374,6 +374,7 @@ static int ixgbe_dev_udp_tunnel_port_del(struct rte_eth_dev *dev,
 					 struct rte_eth_udp_tunnel *udp_tunnel);
 static int ixgbe_filter_restore(struct rte_eth_dev *dev);
 static void ixgbe_l2_tunnel_conf(struct rte_eth_dev *dev);
+static int ixgbe_wait_for_link_up(struct ixgbe_hw *hw);
 
 /*
  * Define VF Stats MACRO for Non "cleared on read" register
@@ -1153,8 +1154,8 @@ eth_ixgbe_dev_init(struct rte_eth_dev *eth_dev, void *init_params __rte_unused)
 	memset(dcb_config, 0, sizeof(struct ixgbe_dcb_config));
 	ixgbe_dcb_init(hw, dcb_config);
 	/* Get Hardware Flow Control setting */
-	hw->fc.requested_mode = ixgbe_fc_full;
-	hw->fc.current_mode = ixgbe_fc_full;
+	hw->fc.requested_mode = ixgbe_fc_none;
+	hw->fc.current_mode = ixgbe_fc_none;
 	hw->fc.pause_time = IXGBE_FC_PAUSE;
 	for (i = 0; i < IXGBE_DCB_MAX_TRAFFIC_CLASS; i++) {
 		hw->fc.low_water[i] = IXGBE_FC_LO;
@@ -2572,6 +2573,39 @@ ixgbe_set_vf_rate_limit(struct rte_eth_dev *dev, uint16_t vf,
 	return 0;
 }
 
+static int
+ixgbe_flow_ctrl_enable(struct rte_eth_dev *dev, struct ixgbe_hw *hw)
+{
+	struct ixgbe_adapter *adapter = dev->data->dev_private;
+	int err;
+	uint32_t mflcn;
+
+	err = ixgbe_fc_enable(hw);
+
+	/* Not negotiated is not an error case */
+	if (err == IXGBE_SUCCESS || err == IXGBE_ERR_FC_NOT_NEGOTIATED) {
+		/*
+		 *check if we want to forward MAC frames - driver doesn't
+		 *have native capability to do that,
+		 *so we'll write the registers ourselves
+		 */
+
+		mflcn = IXGBE_READ_REG(hw, IXGBE_MFLCN);
+
+		/* set or clear MFLCN.PMCF bit depending on configuration */
+		if (adapter->mac_ctrl_frame_fwd != 0)
+			mflcn |= IXGBE_MFLCN_PMCF;
+		else
+			mflcn &= ~IXGBE_MFLCN_PMCF;
+
+		IXGBE_WRITE_REG(hw, IXGBE_MFLCN, mflcn);
+		IXGBE_WRITE_FLUSH(hw);
+
+		return 0;
+	}
+	return err;
+}
+
 /*
  * Configure device link speed and setup link.
  * It returns 0 on success.
@@ -2708,6 +2742,12 @@ ixgbe_dev_start(struct rte_eth_dev *dev)
 
 	ixgbe_restore_statistics_mapping(dev);
 
+	err = ixgbe_flow_ctrl_enable(dev, hw);
+	if (err < 0) {
+		PMD_INIT_LOG(ERR, "enable flow ctrl err");
+		goto error;
+	}
+
 	err = ixgbe_dev_rxtx_start(dev);
 	if (err < 0) {
 		PMD_INIT_LOG(ERR, "Unable to start rxtx queues");
@@ -2831,6 +2871,11 @@ skip_link_setup:
 			    "please call hierarchy_commit() "
 			    "before starting the port");
 
+	/* wait for the controller to acquire link */
+	err = ixgbe_wait_for_link_up(hw);
+	if (err)
+		goto error;
+
 	/*
 	 * Update link status right before return, because it may
 	 * start link configuration process in a separate thread.
@@ -2919,6 +2964,8 @@ ixgbe_dev_stop(struct rte_eth_dev *dev)
 	tm_conf->committed = false;
 
 	adapter->rss_reta_updated = 0;
+
+	adapter->mac_ctrl_frame_fwd = 0;
 }
 
 /*
@@ -4078,6 +4125,38 @@ ixgbe_dev_setup_link_alarm_handler(void *param)
 	intr->flags &= ~IXGBE_FLAG_NEED_LINK_CONFIG;
 }
 
+/*
+ * In freebsd environment, nic_uio drivers do not support interrupts,
+ * rte_intr_callback_register() will fail to register interrupts.
+ * We can not make link status to change from down to up by interrupt
+ * callback. So we need to wait for the controller to acquire link
+ * when ports start.
+ * It returns 0 on link up.
+ */
+static int
+ixgbe_wait_for_link_up(struct ixgbe_hw *hw)
+{
+#ifdef RTE_EXEC_ENV_FREEBSD
+	int err, i, link_up = 0;
+	uint32_t speed = 0;
+	const int nb_iter = 25;
+
+	for (i = 0; i < nb_iter; i++) {
+		err = ixgbe_check_link(hw, &speed, &link_up, 0);
+		if (err)
+			return err;
+		if (link_up)
+			return 0;
+		msec_delay(200);
+	}
+
+	return 0;
+#else
+	RTE_SET_USED(hw);
+	return 0;
+#endif
+}
+
 /* return 0 means link status changed, -1 means not changed */
 int
 ixgbe_dev_link_update_share(struct rte_eth_dev *dev,
@@ -4119,9 +4198,11 @@ ixgbe_dev_link_update_share(struct rte_eth_dev *dev,
 		return rte_eth_linkstatus_set(dev, &link);
 	}
 
-	esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
-	if ((esdp_reg & IXGBE_ESDP_SDP3))
-		link_up = 0;
+	if (ixgbe_get_media_type(hw) == ixgbe_media_type_fiber) {
+		esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
+		if ((esdp_reg & IXGBE_ESDP_SDP3))
+			link_up = 0;
+	}
 
 	if (link_up == 0) {
 		if (ixgbe_get_media_type(hw) == ixgbe_media_type_fiber) {
@@ -4598,10 +4679,10 @@ static int
 ixgbe_flow_ctrl_set(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
 {
 	struct ixgbe_hw *hw;
+	struct ixgbe_adapter *adapter = dev->data->dev_private;
 	int err;
 	uint32_t rx_buf_size;
 	uint32_t max_high_water;
-	uint32_t mflcn;
 	enum ixgbe_fc_mode rte_fcmode_2_ixgbe_fcmode[] = {
 		ixgbe_fc_none,
 		ixgbe_fc_rx_pause,
@@ -4633,31 +4714,14 @@ ixgbe_flow_ctrl_set(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
 	hw->fc.low_water[0]   = fc_conf->low_water;
 	hw->fc.send_xon       = fc_conf->send_xon;
 	hw->fc.disable_fc_autoneg = !fc_conf->autoneg;
+	adapter->mac_ctrl_frame_fwd = fc_conf->mac_ctrl_frame_fwd;
 
-	err = ixgbe_fc_enable(hw);
-
-	/* Not negotiated is not an error case */
-	if ((err == IXGBE_SUCCESS) || (err == IXGBE_ERR_FC_NOT_NEGOTIATED)) {
-
-		/* check if we want to forward MAC frames - driver doesn't have native
-		 * capability to do that, so we'll write the registers ourselves */
-
-		mflcn = IXGBE_READ_REG(hw, IXGBE_MFLCN);
-
-		/* set or clear MFLCN.PMCF bit depending on configuration */
-		if (fc_conf->mac_ctrl_frame_fwd != 0)
-			mflcn |= IXGBE_MFLCN_PMCF;
-		else
-			mflcn &= ~IXGBE_MFLCN_PMCF;
-
-		IXGBE_WRITE_REG(hw, IXGBE_MFLCN, mflcn);
-		IXGBE_WRITE_FLUSH(hw);
-
-		return 0;
+	err = ixgbe_flow_ctrl_enable(dev, hw);
+	if (err < 0) {
+		PMD_INIT_LOG(ERR, "ixgbe_flow_ctrl_enable = 0x%x", err);
+		return -EIO;
 	}
-
-	PMD_INIT_LOG(ERR, "ixgbe_fc_enable = 0x%x", err);
-	return -EIO;
+	return err;
 }
 
 /**

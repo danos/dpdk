@@ -1005,7 +1005,7 @@ eth_dev_close(struct rte_eth_dev *dev)
 			rte_free(dev->data->tx_queues[i]);
 
 	free(internal->dev_name);
-	free(internal->iface_name);
+	rte_free(internal->iface_name);
 	rte_free(internal);
 
 	dev->data->dev_private = NULL;
@@ -1246,9 +1246,11 @@ eth_dev_vhost_create(struct rte_vdev_device *dev, char *iface_name,
 	internal->dev_name = strdup(name);
 	if (internal->dev_name == NULL)
 		goto error;
-	internal->iface_name = strdup(iface_name);
+	internal->iface_name = rte_malloc_socket(name, strlen(iface_name) + 1,
+						 0, numa_node);
 	if (internal->iface_name == NULL)
 		goto error;
+	strcpy(internal->iface_name, iface_name);
 
 	list->eth_dev = eth_dev;
 	pthread_mutex_lock(&internal_list_lock);
@@ -1286,11 +1288,11 @@ eth_dev_vhost_create(struct rte_vdev_device *dev, char *iface_name,
 	}
 
 	rte_eth_dev_probing_finish(eth_dev);
-	return data->port_id;
+	return 0;
 
 error:
 	if (internal) {
-		free(internal->iface_name);
+		rte_free(internal->iface_name);
 		free(internal->dev_name);
 	}
 	rte_free(vring_state);
@@ -1351,8 +1353,11 @@ rte_pmd_vhost_probe(struct rte_vdev_device *dev)
 			VHOST_LOG(ERR, "Failed to probe %s\n", name);
 			return -1;
 		}
-		/* TODO: request info from primary to set up Rx and Tx */
+		eth_dev->rx_pkt_burst = eth_vhost_rx;
+		eth_dev->tx_pkt_burst = eth_vhost_tx;
 		eth_dev->dev_ops = &ops;
+		if (dev->device.numa_node == SOCKET_ID_ANY)
+			dev->device.numa_node = rte_socket_id();
 		eth_dev->device = &dev->device;
 		rte_eth_dev_probing_finish(eth_dev);
 		return 0;
@@ -1424,8 +1429,10 @@ rte_pmd_vhost_probe(struct rte_vdev_device *dev)
 	if (dev->device.numa_node == SOCKET_ID_ANY)
 		dev->device.numa_node = rte_socket_id();
 
-	eth_dev_vhost_create(dev, iface_name, queues, dev->device.numa_node,
-		flags);
+	ret = eth_dev_vhost_create(dev, iface_name, queues,
+				   dev->device.numa_node, flags);
+	if (ret == -1)
+		VHOST_LOG(ERR, "Failed to create %s\n", name);
 
 out_free:
 	rte_kvargs_free(kvlist);

@@ -342,8 +342,11 @@ static int bnxt_init_chip(struct bnxt *bp)
 
 	/* enable uio/vfio intr/eventfd mapping */
 	rc = rte_intr_enable(intr_handle);
+#ifndef RTE_EXEC_ENV_FREEBSD
+	/* In FreeBSD OS, nic_uio driver does not support interrupts */
 	if (rc)
 		goto err_free;
+#endif
 
 	rc = bnxt_get_hwrm_link_config(bp, &new);
 	if (rc) {
@@ -404,6 +407,7 @@ static int bnxt_init_nic(struct bnxt *bp)
 static void bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 				  struct rte_eth_dev_info *dev_info)
 {
+	struct rte_pci_device *pdev = RTE_DEV_TO_PCI(eth_dev->device);
 	struct bnxt *bp = eth_dev->data->dev_private;
 	uint16_t max_vnics, i, j, vpool, vrxq;
 	unsigned int max_rx_rings;
@@ -414,7 +418,7 @@ static void bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 
 	/* PF/VF specifics */
 	if (BNXT_PF(bp))
-		dev_info->max_vfs = bp->pdev->max_vfs;
+		dev_info->max_vfs = pdev->max_vfs;
 	max_rx_rings = RTE_MIN(bp->max_rx_rings, bp->max_stat_ctx);
 	/* For the sake of symmetry, max_rx_queues = max_tx_queues */
 	dev_info->max_rx_queues = max_rx_rings;
@@ -604,7 +608,7 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	if (rc)
 		goto error;
 
-	bnxt_link_update_op(eth_dev, 1);
+	bnxt_link_update(eth_dev, 1, ETH_LINK_UP);
 
 	if (rx_offloads & DEV_RX_OFFLOAD_VLAN_FILTER)
 		vlan_mask |= ETH_VLAN_FILTER_MASK;
@@ -663,13 +667,12 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 	rte_intr_disable(intr_handle);
 
 	bp->flags &= ~BNXT_FLAG_INIT_DONE;
-	if (bp->eth_dev->data->dev_started) {
-		/* TBD: STOP HW queues DMA */
-		eth_dev->data->dev_link.link_status = 0;
-	}
 	bnxt_dev_set_link_down_op(eth_dev);
-	/* Wait for link to be reset and the async notification to process. */
-	rte_delay_ms(BNXT_LINK_WAIT_INTERVAL * 2);
+
+	/* Wait for link to be reset and the async notification to process.
+	 * During reset recovery, there is no need to wait
+	 */
+	bnxt_link_update(eth_dev, 1, ETH_LINK_DOWN);
 
 	/* Clean queue intr-vector mapping */
 	rte_intr_efd_disable(intr_handle);
@@ -788,12 +791,14 @@ static int bnxt_mac_addr_add_op(struct rte_eth_dev *eth_dev,
 	return rc;
 }
 
-int bnxt_link_update_op(struct rte_eth_dev *eth_dev, int wait_to_complete)
+int bnxt_link_update(struct rte_eth_dev *eth_dev, int wait_to_complete,
+		     bool exp_link_status)
 {
 	int rc = 0;
 	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_eth_link new;
-	unsigned int cnt = BNXT_LINK_WAIT_CNT;
+	int cnt = exp_link_status ? BNXT_LINK_UP_WAIT_CNT :
+		  BNXT_LINK_DOWN_WAIT_CNT;
 
 	memset(&new, 0, sizeof(new));
 	do {
@@ -807,7 +812,7 @@ int bnxt_link_update_op(struct rte_eth_dev *eth_dev, int wait_to_complete)
 			goto out;
 		}
 
-		if (!wait_to_complete || new.link_status)
+		if (!wait_to_complete || new.link_status == exp_link_status)
 			break;
 
 		rte_delay_ms(BNXT_LINK_WAIT_INTERVAL);
@@ -827,6 +832,12 @@ out:
 	}
 
 	return rc;
+}
+
+static int bnxt_link_update_op(struct rte_eth_dev *eth_dev,
+			       int wait_to_complete)
+{
+	return bnxt_link_update(eth_dev, wait_to_complete, ETH_LINK_UP);
 }
 
 static void bnxt_promiscuous_enable_op(struct rte_eth_dev *eth_dev)
@@ -2898,9 +2909,9 @@ bnxt_get_eeprom_length_op(struct rte_eth_dev *dev)
 	uint32_t dir_entries;
 	uint32_t entry_length;
 
-	PMD_DRV_LOG(INFO, "%04x:%02x:%02x:%02x\n",
-		bp->pdev->addr.domain, bp->pdev->addr.bus,
-		bp->pdev->addr.devid, bp->pdev->addr.function);
+	PMD_DRV_LOG(INFO, PCI_PRI_FMT "\n",
+		    bp->pdev->addr.domain, bp->pdev->addr.bus,
+		    bp->pdev->addr.devid, bp->pdev->addr.function);
 
 	rc = bnxt_hwrm_nvm_get_dir_info(bp, &dir_entries, &entry_length);
 	if (rc != 0)
@@ -2917,10 +2928,10 @@ bnxt_get_eeprom_op(struct rte_eth_dev *dev,
 	uint32_t index;
 	uint32_t offset;
 
-	PMD_DRV_LOG(INFO, "%04x:%02x:%02x:%02x in_eeprom->offset = %d "
-		"len = %d\n", bp->pdev->addr.domain,
-		bp->pdev->addr.bus, bp->pdev->addr.devid,
-		bp->pdev->addr.function, in_eeprom->offset, in_eeprom->length);
+	PMD_DRV_LOG(INFO, PCI_PRI_FMT " in_eeprom->offset = %d len = %d\n",
+		    bp->pdev->addr.domain, bp->pdev->addr.bus,
+		    bp->pdev->addr.devid, bp->pdev->addr.function,
+		    in_eeprom->offset, in_eeprom->length);
 
 	if (in_eeprom->offset == 0) /* special offset value to get directory */
 		return bnxt_get_nvram_directory(bp, in_eeprom->length,
@@ -2988,10 +2999,10 @@ bnxt_set_eeprom_op(struct rte_eth_dev *dev,
 	uint8_t index, dir_op;
 	uint16_t type, ext, ordinal, attr;
 
-	PMD_DRV_LOG(INFO, "%04x:%02x:%02x:%02x in_eeprom->offset = %d "
-		"len = %d\n", bp->pdev->addr.domain,
-		bp->pdev->addr.bus, bp->pdev->addr.devid,
-		bp->pdev->addr.function, in_eeprom->offset, in_eeprom->length);
+	PMD_DRV_LOG(INFO, PCI_PRI_FMT " in_eeprom->offset = %d len = %d\n",
+		    bp->pdev->addr.domain, bp->pdev->addr.bus,
+		    bp->pdev->addr.devid, bp->pdev->addr.function,
+		    in_eeprom->offset, in_eeprom->length);
 
 	if (!BNXT_PF(bp)) {
 		PMD_DRV_LOG(ERR, "NVM write not supported from a VF\n");
@@ -3221,18 +3232,6 @@ static int bnxt_alloc_stats_mem(struct bnxt *bp)
 	}
 	memset(mz->addr, 0, mz->len);
 	mz_phys_addr = mz->iova;
-	if ((unsigned long)mz->addr == mz_phys_addr) {
-		PMD_DRV_LOG(DEBUG,
-			    "Memzone physical address same as virtual.\n");
-		PMD_DRV_LOG(DEBUG,
-			    "Using rte_mem_virt2iova()\n");
-		mz_phys_addr = rte_mem_virt2iova(mz->addr);
-		if (mz_phys_addr == RTE_BAD_IOVA) {
-			PMD_DRV_LOG(ERR,
-				    "Can't map address to physical memory\n");
-			return -ENOMEM;
-		}
-	}
 
 	bp->rx_mem_zone = (const void *)mz;
 	bp->hw_rx_port_stats = mz->addr;
@@ -3260,18 +3259,6 @@ static int bnxt_alloc_stats_mem(struct bnxt *bp)
 	}
 	memset(mz->addr, 0, mz->len);
 	mz_phys_addr = mz->iova;
-	if ((unsigned long)mz->addr == mz_phys_addr) {
-		PMD_DRV_LOG(DEBUG,
-			    "Memzone physical address same as virtual.\n");
-		PMD_DRV_LOG(DEBUG,
-			    "Using rte_mem_virt2iova()\n");
-		mz_phys_addr = rte_mem_virt2iova(mz->addr);
-		if (mz_phys_addr == RTE_BAD_IOVA) {
-			PMD_DRV_LOG(ERR,
-				    "Can't map address to physical memory\n");
-			return -ENOMEM;
-		}
-	}
 
 	bp->tx_mem_zone = (const void *)mz;
 	bp->hw_tx_port_stats = mz->addr;
@@ -3314,12 +3301,6 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev)
 	if (version_printed++ == 0)
 		PMD_DRV_LOG(INFO, "%s\n", bnxt_version);
 
-	rte_eth_copy_pci_info(eth_dev, pci_dev);
-
-	bp = eth_dev->data->dev_private;
-
-	bp->dev_stopped = 1;
-
 	eth_dev->dev_ops = &bnxt_dev_ops;
 	eth_dev->rx_pkt_burst = &bnxt_recv_pkts;
 	eth_dev->tx_pkt_burst = &bnxt_xmit_pkts;
@@ -3330,6 +3311,12 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev)
 	 */
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
+
+	rte_eth_copy_pci_info(eth_dev, pci_dev);
+
+	bp = eth_dev->data->dev_private;
+
+	bp->dev_stopped = 1;
 
 	if (bnxt_vf_pciid(pci_dev->id.device_id))
 		bp->flags |= BNXT_FLAG_VF;
@@ -3347,7 +3334,7 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev)
 			"hwrm resource allocation failure rc: %x\n", rc);
 		goto error_free;
 	}
-	rc = bnxt_hwrm_ver_get(bp);
+	rc = bnxt_hwrm_ver_get(bp, DFLT_HWRM_CMD_TIMEOUT);
 	if (rc)
 		goto error_free;
 	rc = bnxt_hwrm_queue_qportcfg(bp);

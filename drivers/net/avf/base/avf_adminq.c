@@ -113,6 +113,7 @@ enum avf_status_code avf_alloc_adminq_arq_ring(struct avf_hw *hw)
  **/
 void avf_free_adminq_asq(struct avf_hw *hw)
 {
+	avf_free_virt_mem(hw, &hw->aq.asq.cmd_buf);
 	avf_free_dma_mem(hw, &hw->aq.asq.desc_buf);
 }
 
@@ -396,7 +397,7 @@ enum avf_status_code avf_init_asq(struct avf_hw *hw)
 	/* initialize base registers */
 	ret_code = avf_config_asq_regs(hw);
 	if (ret_code != AVF_SUCCESS)
-		goto init_adminq_free_rings;
+		goto init_config_regs;
 
 	/* success! */
 	hw->aq.asq.count = hw->aq.num_asq_entries;
@@ -404,6 +405,10 @@ enum avf_status_code avf_init_asq(struct avf_hw *hw)
 
 init_adminq_free_rings:
 	avf_free_adminq_asq(hw);
+	return ret_code;
+
+init_config_regs:
+	avf_free_asq_bufs(hw);
 
 init_adminq_exit:
 	return ret_code;
@@ -846,6 +851,8 @@ enum avf_status_code avf_asq_send_command(struct avf_hw *hw,
 		cmd_completed = true;
 		if ((enum avf_admin_queue_err)retval == AVF_AQ_RC_OK)
 			status = AVF_SUCCESS;
+		else if ((enum avf_admin_queue_err)retval == AVF_AQ_RC_EBUSY)
+			status = AVF_ERR_NOT_READY;
 		else
 			status = AVF_ERR_ADMIN_QUEUE_ERROR;
 		hw->aq.asq_last_status = (enum avf_admin_queue_err)retval;
