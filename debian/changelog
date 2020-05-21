@@ -1,3 +1,14 @@
+dpdk (18.11.5-1vyatta11) unstable; urgency=medium
+
+  [ Mark Gillott ]
+  * net/virtio: use promiscuous mode when secondary MAC fails (Fixes:
+    VRVDR-51067)
+
+  [ Charles (Chas) Williams ]
+  * vhost: backport security fixes (Bugfix: VRVDR-51054)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 21 May 2020 10:43:32 -0400
+
 dpdk (18.11.5-1vyatta10) unstable; urgency=medium
 
   [ aroberts ]
