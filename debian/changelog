@@ -1,3 +1,9 @@
+dpdk (18.11.6-1vyatta8.4) unstable; urgency=medium
+
+  * vhost: backport security fixes (Bugfix: VRVDR-51054)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 21 May 2020 10:42:39 -0400
+
 dpdk (18.11.6-1vyatta8.3) unstable; urgency=medium
 
   [ Mark Gillott ]
