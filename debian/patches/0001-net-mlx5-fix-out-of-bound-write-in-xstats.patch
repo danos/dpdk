@@ -61,3 +61,12 @@ Signed-off-by: Chas Williams <3chas3@gmail.com>
  		if (ret)
  			return ret;
  		for (i = 0; i != mlx5_stats_n; ++i) {
+@@ -494,7 +496,7 @@ mlx5_xstats_reset(struct rte_eth_dev *de
+ 	}
+ 	if (xstats_ctrl->stats_n != stats_n)
+ 		mlx5_stats_init(dev);
+-	ret = mlx5_read_dev_counters(dev, counters);
++	ret = mlx5_read_dev_counters(dev, counters, n);
+ 	if (ret) {
+ 		DRV_LOG(ERR, "port %u cannot read device counters: %s",
+ 			dev->data->port_id, strerror(rte_errno));
