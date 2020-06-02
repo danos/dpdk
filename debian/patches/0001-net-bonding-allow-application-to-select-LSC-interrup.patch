@@ -1,0 +1,52 @@
+From 0f82c578b90552a1a7d21f38614da82c4da493b5 Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Tue, 2 Jun 2020 09:53:03 -0400
+Subject: [PATCH] net/bonding: allow application to select LSC interrupts
+
+The application knows if it is capable of handling interrupts
+and whether LSC should be enabled in the interrupt configuration.
+
+Fixes: a45b288ef21a ("bond: support link status polling")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chas Williams <3chas3@gmail.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 612a64599..4d42acd96 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1693,10 +1693,6 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
+ 	/* Stop slave */
+ 	rte_eth_dev_stop(slave_eth_dev->data->port_id);
+ 
+-	/* Enable interrupts on slave device if supported */
+-	if (slave_eth_dev->data->dev_flags & RTE_ETH_DEV_INTR_LSC)
+-		slave_eth_dev->data->dev_conf.intr_conf.lsc = 1;
+-
+ 	/* If RSS is enabled for bonding, try to enable it for slaves  */
+ 	if (bonded_eth_dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) {
+ 		if (internals->rss_key_len != 0) {
+@@ -1838,7 +1834,7 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
+ 	}
+ 
+ 	/* If lsc interrupt is set, check initial slave's link status */
+-	if (slave_eth_dev->data->dev_flags & RTE_ETH_DEV_INTR_LSC) {
++	if (slave_eth_dev->data->dev_conf.intr_conf.lsc) {
+ 		slave_eth_dev->dev_ops->link_update(slave_eth_dev, 0);
+ 		bond_ethdev_lsc_event_callback(slave_eth_dev->data->port_id,
+ 			RTE_ETH_EVENT_INTR_LSC, &bonded_eth_dev->data->port_id,
+@@ -1895,7 +1891,7 @@ slave_add(struct bond_dev_private *internals,
+ 	/* Mark slave devices that don't support interrupts so we can
+ 	 * compensate when we start the bond
+ 	 */
+-	if (!(slave_eth_dev->data->dev_flags & RTE_ETH_DEV_INTR_LSC)) {
++	if (!slave_eth_dev->data->dev_conf.intr_conf.lsc) {
+ 		slave_details->link_status_poll_enabled = 1;
+ 	}
+ 
+-- 
+2.24.1
+
