@@ -2542,7 +2542,6 @@ i40e_flow_parse_fdir_pattern(struct rte_eth_dev *dev,
 				if (next_type == RTE_FLOW_ITEM_TYPE_VLAN ||
 				    ether_type == RTE_ETHER_TYPE_IPV4 ||
 				    ether_type == RTE_ETHER_TYPE_IPV6 ||
-				    ether_type == RTE_ETHER_TYPE_ARP ||
 				    ether_type == outer_tpid) {
 					rte_flow_error_set(error, EINVAL,
 						     RTE_FLOW_ERROR_TYPE_ITEM,
@@ -2587,7 +2586,6 @@ i40e_flow_parse_fdir_pattern(struct rte_eth_dev *dev,
 
 				if (ether_type == RTE_ETHER_TYPE_IPV4 ||
 				    ether_type == RTE_ETHER_TYPE_IPV6 ||
-				    ether_type == RTE_ETHER_TYPE_ARP ||
 				    ether_type == outer_tpid) {
 					rte_flow_error_set(error, EINVAL,
 						     RTE_FLOW_ERROR_TYPE_ITEM,
@@ -3208,8 +3206,7 @@ i40e_flow_parse_fdir_filter(struct rte_eth_dev *dev,
 
 	cons_filter_type = RTE_ETH_FILTER_FDIR;
 
-	if (dev->data->dev_conf.fdir_conf.mode != RTE_FDIR_MODE_PERFECT ||
-		pf->fdir.fdir_vsi == NULL) {
+	if (pf->fdir.fdir_vsi == NULL) {
 		/* Enable fdir when fdir flow is added at first time. */
 		ret = i40e_fdir_setup(pf);
 		if (ret != I40E_SUCCESS) {
@@ -3225,9 +3222,11 @@ i40e_flow_parse_fdir_filter(struct rte_eth_dev *dev,
 					   NULL, "Failed to configure fdir.");
 			goto err;
 		}
-
-		dev->data->dev_conf.fdir_conf.mode = RTE_FDIR_MODE_PERFECT;
 	}
+
+	/* If create the first fdir rule, enable fdir check for rx queues */
+	if (TAILQ_EMPTY(&pf->fdir.fdir_list))
+		i40e_fdir_rx_proc_enable(dev, 1);
 
 	return 0;
 err:
@@ -4332,7 +4331,34 @@ i40e_flow_parse_rss_action(struct rte_eth_dev *dev,
 	struct i40e_rte_flow_rss_conf *rss_info = &pf->rss_info;
 	uint16_t i, j, n, tmp;
 	uint32_t index = 0;
-	uint64_t hf_bit = 1;
+
+	static const struct {
+		uint64_t rss_type;
+		enum i40e_filter_pctype pctype;
+	} pctype_match_table[] = {
+		{ETH_RSS_FRAG_IPV4,
+			I40E_FILTER_PCTYPE_FRAG_IPV4},
+		{ETH_RSS_NONFRAG_IPV4_TCP,
+			I40E_FILTER_PCTYPE_NONF_IPV4_TCP},
+		{ETH_RSS_NONFRAG_IPV4_UDP,
+			I40E_FILTER_PCTYPE_NONF_IPV4_UDP},
+		{ETH_RSS_NONFRAG_IPV4_SCTP,
+			I40E_FILTER_PCTYPE_NONF_IPV4_SCTP},
+		{ETH_RSS_NONFRAG_IPV4_OTHER,
+			I40E_FILTER_PCTYPE_NONF_IPV4_OTHER},
+		{ETH_RSS_FRAG_IPV6,
+			I40E_FILTER_PCTYPE_FRAG_IPV6},
+		{ETH_RSS_NONFRAG_IPV6_TCP,
+			I40E_FILTER_PCTYPE_NONF_IPV6_TCP},
+		{ETH_RSS_NONFRAG_IPV6_UDP,
+			I40E_FILTER_PCTYPE_NONF_IPV6_UDP},
+		{ETH_RSS_NONFRAG_IPV6_SCTP,
+			I40E_FILTER_PCTYPE_NONF_IPV6_SCTP},
+		{ETH_RSS_NONFRAG_IPV6_OTHER,
+			I40E_FILTER_PCTYPE_NONF_IPV6_OTHER},
+		{ETH_RSS_L2_PAYLOAD,
+			I40E_FILTER_PCTYPE_L2_PAYLOAD},
+	};
 
 	NEXT_ITEM_OF_ACTION(act, actions, index);
 	rss = act->conf;
@@ -4350,9 +4376,10 @@ i40e_flow_parse_rss_action(struct rte_eth_dev *dev,
 	}
 
 	if (action_flag) {
-		for (n = 0; n < 64; n++) {
-			if (rss->types & (hf_bit << n)) {
-				conf_info->region[0].hw_flowtype[0] = n;
+		for (j = 0; j < RTE_DIM(pctype_match_table); j++) {
+			if (rss->types & pctype_match_table[j].rss_type) {
+				conf_info->region[0].hw_flowtype[0] =
+					(uint8_t)pctype_match_table[j].pctype;
 				conf_info->region[0].flowtype_num = 1;
 				conf_info->queue_region_number = 1;
 				break;
@@ -4796,9 +4823,6 @@ i40e_flow_destroy(struct rte_eth_dev *dev,
 
 		/* If the last flow is destroyed, disable fdir. */
 		if (!ret && TAILQ_EMPTY(&pf->fdir.fdir_list)) {
-			i40e_fdir_teardown(pf);
-			dev->data->dev_conf.fdir_conf.mode =
-				   RTE_FDIR_MODE_NONE;
 			i40e_fdir_rx_proc_enable(dev, 0);
 		}
 		break;
@@ -4956,9 +4980,6 @@ i40e_flow_flush(struct rte_eth_dev *dev, struct rte_flow_error *error)
 		return -rte_errno;
 	}
 
-	/* Disable FDIR processing as all FDIR rules are now flushed */
-	i40e_fdir_rx_proc_enable(dev, 0);
-
 	return ret;
 }
 
@@ -4994,9 +5015,10 @@ i40e_flow_flush_fdir_filter(struct i40e_pf *pf)
 		for (pctype = I40E_FILTER_PCTYPE_NONF_IPV4_UDP;
 		     pctype <= I40E_FILTER_PCTYPE_L2_PAYLOAD; pctype++)
 			pf->fdir.inset_flag[pctype] = 0;
-	}
 
-	i40e_fdir_teardown(pf);
+		/* Disable FDIR processing as all FDIR rules are now flushed */
+		i40e_fdir_rx_proc_enable(dev, 0);
+	}
 
 	return ret;
 }

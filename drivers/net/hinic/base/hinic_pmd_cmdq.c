@@ -7,6 +7,7 @@
 #include "hinic_pmd_hwif.h"
 #include "hinic_pmd_wq.h"
 #include "hinic_pmd_mgmt.h"
+#include "hinic_pmd_mbox.h"
 #include "hinic_pmd_cmdq.h"
 
 #define CMDQ_CMD_TIMEOUT				5000 /* millisecond */
@@ -171,8 +172,7 @@ struct hinic_cmd_buf *hinic_alloc_cmd_buf(void *hwdev)
 		return NULL;
 	}
 
-	cmd_buf->buf = pci_pool_alloc(cmdqs->cmd_buf_pool, GFP_KERNEL,
-				      &cmd_buf->dma_addr);
+	cmd_buf->buf = pci_pool_alloc(cmdqs->cmd_buf_pool, &cmd_buf->dma_addr);
 	if (!cmd_buf->buf) {
 		PMD_DRV_LOG(ERR, "Allocate cmd from the pool failed");
 		goto alloc_pci_buf_err;
@@ -440,11 +440,17 @@ static int hinic_set_cmdq_ctxts(struct hinic_hwdev *hwdev)
 					     cmdq_ctxt, in_size, NULL,
 					     NULL, 0);
 		if (err) {
-			PMD_DRV_LOG(ERR, "Set cmdq ctxt failed");
+			if (err == HINIC_MBOX_PF_BUSY_ACTIVE_FW ||
+				err == HINIC_DEV_BUSY_ACTIVE_FW) {
+				cmdqs->status |= HINIC_CMDQ_SET_FAIL;
+				PMD_DRV_LOG(ERR, "PF or VF fw is hot active");
+			}
+			PMD_DRV_LOG(ERR, "Set cmdq ctxt failed, err: %d", err);
 			return -EFAULT;
 		}
 	}
 
+	cmdqs->status &= ~HINIC_CMDQ_SET_FAIL;
 	cmdqs->status |= HINIC_CMDQ_ENABLE;
 
 	return 0;

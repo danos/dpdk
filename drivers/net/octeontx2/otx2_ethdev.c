@@ -350,10 +350,7 @@ nix_cq_rq_init(struct rte_eth_dev *eth_dev, struct otx2_eth_dev *dev,
 	aq->rq.first_skip = first_skip;
 	aq->rq.later_skip = (sizeof(struct rte_mbuf) / 8);
 	aq->rq.flow_tagw = 32; /* 32-bits */
-	aq->rq.lpb_sizem1 = rte_pktmbuf_data_room_size(mp);
-	aq->rq.lpb_sizem1 += rte_pktmbuf_priv_size(mp);
-	aq->rq.lpb_sizem1 += sizeof(struct rte_mbuf);
-	aq->rq.lpb_sizem1 /= 8;
+	aq->rq.lpb_sizem1 = mp->elt_size / 8;
 	aq->rq.lpb_sizem1 -= 1; /* Expressed in size minus one */
 	aq->rq.ena = 1;
 	aq->rq.pb_caching = 0x2; /* First cache aligned block to LLC */
@@ -1115,10 +1112,12 @@ nix_store_queue_cfg_and_then_release(struct rte_eth_dev *eth_dev)
 	txq = (struct otx2_eth_txq **)eth_dev->data->tx_queues;
 	for (i = 0; i < nb_txq; i++) {
 		if (txq[i] == NULL) {
-			otx2_err("txq[%d] is already released", i);
-			goto fail;
+			tx_qconf[i].valid = false;
+			otx2_info("txq[%d] is already released", i);
+			continue;
 		}
 		memcpy(&tx_qconf[i], &txq[i]->qconf, sizeof(*tx_qconf));
+		tx_qconf[i].valid = true;
 		otx2_nix_tx_queue_release(txq[i]);
 		eth_dev->data->tx_queues[i] = NULL;
 	}
@@ -1126,10 +1125,12 @@ nix_store_queue_cfg_and_then_release(struct rte_eth_dev *eth_dev)
 	rxq = (struct otx2_eth_rxq **)eth_dev->data->rx_queues;
 	for (i = 0; i < nb_rxq; i++) {
 		if (rxq[i] == NULL) {
-			otx2_err("rxq[%d] is already released", i);
-			goto fail;
+			rx_qconf[i].valid = false;
+			otx2_info("rxq[%d] is already released", i);
+			continue;
 		}
 		memcpy(&rx_qconf[i], &rxq[i]->qconf, sizeof(*rx_qconf));
+		rx_qconf[i].valid = true;
 		otx2_nix_rx_queue_release(rxq[i]);
 		eth_dev->data->rx_queues[i] = NULL;
 	}
@@ -1184,6 +1185,8 @@ nix_restore_queue_cfg(struct rte_eth_dev *eth_dev)
 	 * queues are already setup in port_configure().
 	 */
 	for (i = 0; i < nb_txq; i++) {
+		if (!tx_qconf[i].valid)
+			continue;
 		rc = otx2_nix_tx_queue_setup(eth_dev, i, tx_qconf[i].nb_desc,
 					     tx_qconf[i].socket_id,
 					     &tx_qconf[i].conf.tx);
@@ -1199,6 +1202,8 @@ nix_restore_queue_cfg(struct rte_eth_dev *eth_dev)
 	free(tx_qconf); tx_qconf = NULL;
 
 	for (i = 0; i < nb_rxq; i++) {
+		if (!rx_qconf[i].valid)
+			continue;
 		rc = otx2_nix_rx_queue_setup(eth_dev, i, rx_qconf[i].nb_desc,
 					     rx_qconf[i].socket_id,
 					     &rx_qconf[i].conf.rx,
@@ -1641,6 +1646,9 @@ otx2_nix_configure(struct rte_eth_dev *eth_dev)
 		otx2_err("Failed to init nix_lf rc=%d", rc);
 		goto fail_offloads;
 	}
+
+	otx2_nix_err_intr_enb_dis(eth_dev, true);
+	otx2_nix_ras_intr_enb_dis(eth_dev, true);
 
 	if (dev->ptp_en &&
 	    dev->npc_flow.switch_header_type == OTX2_PRIV_FLAGS_HIGIG) {

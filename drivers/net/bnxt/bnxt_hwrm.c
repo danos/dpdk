@@ -164,8 +164,9 @@ static int bnxt_hwrm_send_message(struct bnxt *bp, void *msg,
 		    rte_cpu_to_le_16(req->req_type) == HWRM_VER_GET)
 			return -ETIMEDOUT;
 
-		PMD_DRV_LOG(ERR, "Error(timeout) sending msg 0x%04x\n",
-			    req->req_type);
+		PMD_DRV_LOG(ERR,
+			    "Error(timeout) sending msg 0x%04x, seq_id %d\n",
+			    req->req_type, req->seq_id);
 		return -ETIMEDOUT;
 	}
 	return 0;
@@ -221,6 +222,8 @@ static int bnxt_hwrm_send_message(struct bnxt *bp, void *msg,
 			rc = -EINVAL; \
 		else if (rc == HWRM_ERR_CODE_CMD_NOT_SUPPORTED) \
 			rc = -ENOTSUP; \
+		else if (rc == HWRM_ERR_CODE_HOT_RESET_PROGRESS) \
+			rc = -EAGAIN; \
 		else if (rc > 0) \
 			rc = -EIO; \
 		return rc; \
@@ -249,6 +252,8 @@ static int bnxt_hwrm_send_message(struct bnxt *bp, void *msg,
 			rc = -EINVAL; \
 		else if (rc == HWRM_ERR_CODE_CMD_NOT_SUPPORTED) \
 			rc = -ENOTSUP; \
+		else if (rc == HWRM_ERR_CODE_HOT_RESET_PROGRESS) \
+			rc = -EAGAIN; \
 		else if (rc > 0) \
 			rc = -EIO; \
 		return rc; \
@@ -641,7 +646,12 @@ static int __bnxt_hwrm_func_qcaps(struct bnxt *bp)
 	}
 
 	bp->fw_fid = rte_le_to_cpu_32(resp->fid);
-	memcpy(bp->dflt_mac_addr, &resp->mac_address, RTE_ETHER_ADDR_LEN);
+	if (!bnxt_check_zero_bytes(resp->mac_address, RTE_ETHER_ADDR_LEN)) {
+		bp->flags |= BNXT_FLAG_DFLT_MAC_SET;
+		memcpy(bp->mac_addr, &resp->mac_address, RTE_ETHER_ADDR_LEN);
+	} else {
+		bp->flags &= ~BNXT_FLAG_DFLT_MAC_SET;
+	}
 	bp->max_rsscos_ctx = rte_le_to_cpu_16(resp->max_rsscos_ctx);
 	bp->max_cp_rings = rte_le_to_cpu_16(resp->max_cmpl_rings);
 	bp->max_tx_rings = rte_le_to_cpu_16(resp->max_tx_rings);
@@ -2366,13 +2376,6 @@ void bnxt_free_hwrm_rx_ring(struct bnxt *bp, int queue_index)
 		if (BNXT_HAS_RING_GRPS(bp))
 			bp->grp_info[queue_index].rx_fw_ring_id =
 							INVALID_HW_RING_ID;
-		memset(rxr->rx_desc_ring, 0,
-		       rxr->rx_ring_struct->ring_size *
-		       sizeof(*rxr->rx_desc_ring));
-		memset(rxr->rx_buf_ring, 0,
-		       rxr->rx_ring_struct->ring_size *
-		       sizeof(*rxr->rx_buf_ring));
-		rxr->rx_prod = 0;
 	}
 	ring = rxr->ag_ring_struct;
 	if (ring->fw_ring_id != INVALID_HW_RING_ID) {
@@ -2380,11 +2383,6 @@ void bnxt_free_hwrm_rx_ring(struct bnxt *bp, int queue_index)
 				    BNXT_CHIP_THOR(bp) ?
 				    HWRM_RING_FREE_INPUT_RING_TYPE_RX_AGG :
 				    HWRM_RING_FREE_INPUT_RING_TYPE_RX);
-		ring->fw_ring_id = INVALID_HW_RING_ID;
-		memset(rxr->ag_buf_ring, 0,
-		       rxr->ag_ring_struct->ring_size *
-		       sizeof(*rxr->ag_buf_ring));
-		rxr->ag_prod = 0;
 		if (BNXT_HAS_RING_GRPS(bp))
 			bp->grp_info[queue_index].ag_fw_ring_id =
 							INVALID_HW_RING_ID;
@@ -4868,7 +4866,6 @@ int bnxt_hwrm_set_mac(struct bnxt *bp)
 
 	HWRM_CHECK_RESULT();
 
-	memcpy(bp->dflt_mac_addr, bp->mac_addr, RTE_ETHER_ADDR_LEN);
 	HWRM_UNLOCK();
 
 	return rc;
