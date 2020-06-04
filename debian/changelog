@@ -1,3 +1,9 @@
+dpdk (19.11.3~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate 19.11.3~rc1
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 04 Jun 2020 15:02:45 +0100
+
 dpdk (19.11.2-1) unstable; urgency=medium
 
   [ Christian Ehrhardt ]
