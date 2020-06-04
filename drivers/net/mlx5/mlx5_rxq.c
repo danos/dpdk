@@ -36,6 +36,7 @@
 #include "mlx5_autoconf.h"
 #include "mlx5_defs.h"
 #include "mlx5_glue.h"
+#include "mlx5_flow.h"
 
 /* Default RSS hash key also used for ConnectX-3. */
 uint8_t rss_hash_default_key[] = {
@@ -1260,6 +1261,7 @@ mlx5_rxq_obj_hairpin_new(struct rte_eth_dev *dev, uint16_t idx)
 	struct mlx5_devx_create_rq_attr attr = { 0 };
 	struct mlx5_rxq_obj *tmpl = NULL;
 	int ret = 0;
+	uint32_t max_wq_data;
 
 	assert(rxq_data);
 	assert(!rxq_ctrl->obj);
@@ -1275,11 +1277,15 @@ mlx5_rxq_obj_hairpin_new(struct rte_eth_dev *dev, uint16_t idx)
 	tmpl->type = MLX5_RXQ_OBJ_TYPE_DEVX_HAIRPIN;
 	tmpl->rxq_ctrl = rxq_ctrl;
 	attr.hairpin = 1;
-	/* Workaround for hairpin startup */
-	attr.wq_attr.log_hairpin_num_packets = log2above(32);
-	/* Workaround for packets larger than 1KB */
+	max_wq_data = priv->config.hca_attr.log_max_hairpin_wq_data_sz;
+	/* Jumbo frames > 9KB should be supported, and more packets. */
 	attr.wq_attr.log_hairpin_data_sz =
-			priv->config.hca_attr.log_max_hairpin_wq_data_sz;
+			(max_wq_data < MLX5_HAIRPIN_JUMBO_LOG_SIZE) ?
+			max_wq_data : MLX5_HAIRPIN_JUMBO_LOG_SIZE;
+	/* Set the packets number to the maximum value for performance. */
+	attr.wq_attr.log_hairpin_num_packets =
+			attr.wq_attr.log_hairpin_data_sz -
+			MLX5_HAIRPIN_QUEUE_STRIDE;
 	tmpl->rq = mlx5_devx_cmd_create_rq(priv->sh->ctx, &attr,
 					   rxq_ctrl->socket);
 	if (!tmpl->rq) {
@@ -1762,9 +1768,10 @@ mlx5_rxq_new(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 	struct mlx5_priv *priv = dev->data->dev_private;
 	struct mlx5_rxq_ctrl *tmpl;
 	unsigned int mb_len = rte_pktmbuf_data_room_size(mp);
+	unsigned int mprq_stride_nums;
 	unsigned int mprq_stride_size;
+	unsigned int mprq_stride_cap;
 	struct mlx5_dev_config *config = &priv->config;
-	unsigned int strd_headroom_en;
 	/*
 	 * Always allocate extra slots, even if eventually
 	 * the vector Rx will not be used.
@@ -1810,42 +1817,42 @@ mlx5_rxq_new(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 	tmpl->socket = socket;
 	if (dev->data->dev_conf.intr_conf.rxq)
 		tmpl->irq = 1;
-	/*
-	 * LRO packet may consume all the stride memory, hence we cannot
-	 * guaranty head-room near the packet memory in the stride.
-	 * In this case scatter is, for sure, enabled and an empty mbuf may be
-	 * added in the start for the head-room.
-	 */
-	if (lro_on_queue && RTE_PKTMBUF_HEADROOM > 0 &&
-	    non_scatter_min_mbuf_size > mb_len) {
-		strd_headroom_en = 0;
-		mprq_stride_size = RTE_MIN(max_rx_pkt_len,
-					1u << config->mprq.max_stride_size_n);
-	} else {
-		strd_headroom_en = 1;
-		mprq_stride_size = non_scatter_min_mbuf_size;
-	}
+	mprq_stride_nums = config->mprq.stride_num_n ?
+		config->mprq.stride_num_n : MLX5_MPRQ_STRIDE_NUM_N;
+	mprq_stride_size = non_scatter_min_mbuf_size <=
+		(1U << config->mprq.max_stride_size_n) ?
+		log2above(non_scatter_min_mbuf_size) : MLX5_MPRQ_STRIDE_SIZE_N;
+	mprq_stride_cap = (config->mprq.stride_num_n ?
+		(1U << config->mprq.stride_num_n) : (1U << mprq_stride_nums)) *
+			(config->mprq.stride_size_n ?
+		(1U << config->mprq.stride_size_n) : (1U << mprq_stride_size));
 	/*
 	 * This Rx queue can be configured as a Multi-Packet RQ if all of the
 	 * following conditions are met:
 	 *  - MPRQ is enabled.
 	 *  - The number of descs is more than the number of strides.
-	 *  - max_rx_pkt_len plus overhead is less than the max size of a
-	 *    stride.
+	 *  - max_rx_pkt_len plus overhead is less than the max size
+	 *    of a stride or mprq_stride_size is specified by a user.
+	 *    Need to nake sure that there are enough stides to encap
+	 *    the maximum packet size in case mprq_stride_size is set.
 	 *  Otherwise, enable Rx scatter if necessary.
 	 */
-	if (mprq_en &&
-	    desc > (1U << config->mprq.stride_num_n) &&
-	    mprq_stride_size <= (1U << config->mprq.max_stride_size_n)) {
+	if (mprq_en && desc > (1U << mprq_stride_nums) &&
+	    (non_scatter_min_mbuf_size <=
+	     (1U << config->mprq.max_stride_size_n) ||
+	     (config->mprq.stride_size_n &&
+	      non_scatter_min_mbuf_size <= mprq_stride_cap))) {
 		/* TODO: Rx scatter isn't supported yet. */
 		tmpl->rxq.sges_n = 0;
 		/* Trim the number of descs needed. */
-		desc >>= config->mprq.stride_num_n;
-		tmpl->rxq.strd_num_n = config->mprq.stride_num_n;
-		tmpl->rxq.strd_sz_n = RTE_MAX(log2above(mprq_stride_size),
-					      config->mprq.min_stride_size_n);
+		desc >>= mprq_stride_nums;
+		tmpl->rxq.strd_num_n = config->mprq.stride_num_n ?
+			config->mprq.stride_num_n : mprq_stride_nums;
+		tmpl->rxq.strd_sz_n = config->mprq.stride_size_n ?
+			config->mprq.stride_size_n : mprq_stride_size;
 		tmpl->rxq.strd_shift_en = MLX5_MPRQ_TWO_BYTE_SHIFT;
-		tmpl->rxq.strd_headroom_en = strd_headroom_en;
+		tmpl->rxq.strd_scatter_en =
+				!!(offloads & DEV_RX_OFFLOAD_SCATTER);
 		tmpl->rxq.mprq_max_memcpy_len = RTE_MIN(first_mb_free_size,
 				config->mprq.max_memcpy_len);
 		max_lro_size = RTE_MIN(max_rx_pkt_len,
@@ -1889,14 +1896,24 @@ mlx5_rxq_new(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 		tmpl->rxq.sges_n = sges_n;
 		max_lro_size = max_rx_pkt_len;
 	}
-	if (mprq_en && !mlx5_rxq_mprq_enabled(&tmpl->rxq))
+	if (config->mprq.enabled && !mlx5_rxq_mprq_enabled(&tmpl->rxq))
 		DRV_LOG(WARNING,
-			"port %u MPRQ is requested but cannot be enabled"
-			" (requested: desc = %u, stride_sz = %u,"
-			" supported: min_stride_num = %u, max_stride_sz = %u).",
-			dev->data->port_id, desc, mprq_stride_size,
-			(1 << config->mprq.stride_num_n),
-			(1 << config->mprq.max_stride_size_n));
+			"port %u MPRQ is requested but cannot be enabled\n"
+			" (requested: pkt_sz = %u, desc_num = %u,"
+			" rxq_num = %u, stride_sz = %u, stride_num = %u\n"
+			"  supported: min_rxqs_num = %u,"
+			" min_stride_sz = %u, max_stride_sz = %u).",
+			dev->data->port_id, non_scatter_min_mbuf_size,
+			desc, priv->rxqs_n,
+			config->mprq.stride_size_n ?
+				(1U << config->mprq.stride_size_n) :
+				(1U << mprq_stride_size),
+			config->mprq.stride_num_n ?
+				(1U << config->mprq.stride_num_n) :
+				(1U << mprq_stride_nums),
+			config->mprq.min_rxqs_num,
+			(1U << config->mprq.min_stride_size_n),
+			(1U << config->mprq.max_stride_size_n));
 	DRV_LOG(DEBUG, "port %u maximum number of segments per packet: %u",
 		dev->data->port_id, 1 << tmpl->rxq.sges_n);
 	if (desc % (1 << tmpl->rxq.sges_n)) {
@@ -2465,13 +2482,42 @@ mlx5_hrxq_new(struct rte_eth_dev *dev,
 		memset(&tir_attr, 0, sizeof(tir_attr));
 		tir_attr.disp_type = MLX5_TIRC_DISP_TYPE_INDIRECT;
 		tir_attr.rx_hash_fn = MLX5_RX_HASH_FN_TOEPLITZ;
-		memcpy(&tir_attr.rx_hash_field_selector_outer, &hash_fields,
-		       sizeof(uint64_t));
+		tir_attr.tunneled_offload_en = !!tunnel;
+		/* If needed, translate hash_fields bitmap to PRM format. */
+		if (hash_fields) {
+#ifdef HAVE_IBV_DEVICE_TUNNEL_SUPPORT
+			struct mlx5_rx_hash_field_select *rx_hash_field_select =
+					hash_fields & IBV_RX_HASH_INNER ?
+					&tir_attr.rx_hash_field_selector_inner :
+					&tir_attr.rx_hash_field_selector_outer;
+#else
+			struct mlx5_rx_hash_field_select *rx_hash_field_select =
+					&tir_attr.rx_hash_field_selector_outer;
+#endif
+
+			/* 1 bit: 0: IPv4, 1: IPv6. */
+			rx_hash_field_select->l3_prot_type =
+				!!(hash_fields & MLX5_IPV6_IBV_RX_HASH);
+			/* 1 bit: 0: TCP, 1: UDP. */
+			rx_hash_field_select->l4_prot_type =
+				!!(hash_fields & MLX5_UDP_IBV_RX_HASH);
+			/* Bitmask which sets which fields to use in RX Hash. */
+			rx_hash_field_select->selected_fields =
+			((!!(hash_fields & MLX5_L3_SRC_IBV_RX_HASH)) <<
+			 MLX5_RX_HASH_FIELD_SELECT_SELECTED_FIELDS_SRC_IP) |
+			(!!(hash_fields & MLX5_L3_DST_IBV_RX_HASH)) <<
+			 MLX5_RX_HASH_FIELD_SELECT_SELECTED_FIELDS_DST_IP |
+			(!!(hash_fields & MLX5_L4_SRC_IBV_RX_HASH)) <<
+			 MLX5_RX_HASH_FIELD_SELECT_SELECTED_FIELDS_L4_SPORT |
+			(!!(hash_fields & MLX5_L4_DST_IBV_RX_HASH)) <<
+			 MLX5_RX_HASH_FIELD_SELECT_SELECTED_FIELDS_L4_DPORT;
+		}
 		if (rxq_ctrl->obj->type == MLX5_RXQ_OBJ_TYPE_DEVX_HAIRPIN)
 			tir_attr.transport_domain = priv->sh->td->id;
 		else
 			tir_attr.transport_domain = priv->sh->tdn;
-		memcpy(tir_attr.rx_hash_toeplitz_key, rss_key, rss_key_len);
+		memcpy(tir_attr.rx_hash_toeplitz_key, rss_key,
+		       MLX5_RSS_HASH_KEY_LEN);
 		tir_attr.indirect_table = ind_tbl->rqt->id;
 		if (dev->data->dev_conf.lpbk_mode)
 			tir_attr.self_lb_block =

@@ -493,14 +493,12 @@ flow_verbs_translate_item_ipv6(struct mlx5_flow *dev_flow,
 		ipv6.val.traffic_class = (vtc_flow_val & RTE_IPV6_HDR_TC_MASK) >>
 					 RTE_IPV6_HDR_TC_SHIFT;
 		ipv6.val.next_hdr = spec->hdr.proto;
-		ipv6.val.hop_limit = spec->hdr.hop_limits;
 		ipv6.mask.flow_label =
 			rte_cpu_to_be_32((vtc_flow_mask & RTE_IPV6_HDR_FL_MASK) >>
 					 RTE_IPV6_HDR_FL_SHIFT);
 		ipv6.mask.traffic_class = (vtc_flow_mask & RTE_IPV6_HDR_TC_MASK) >>
 					  RTE_IPV6_HDR_TC_SHIFT;
 		ipv6.mask.next_hdr = mask->hdr.proto;
-		ipv6.mask.hop_limit = mask->hdr.hop_limits;
 		/* Remove unwanted bits from values. */
 		for (i = 0; i < RTE_DIM(ipv6.val.src_ip); ++i) {
 			ipv6.val.src_ip[i] &= ipv6.mask.src_ip[i];
@@ -509,7 +507,6 @@ flow_verbs_translate_item_ipv6(struct mlx5_flow *dev_flow,
 		ipv6.val.flow_label &= ipv6.mask.flow_label;
 		ipv6.val.traffic_class &= ipv6.mask.traffic_class;
 		ipv6.val.next_hdr &= ipv6.mask.next_hdr;
-		ipv6.val.hop_limit &= ipv6.mask.hop_limit;
 	}
 	flow_verbs_spec_add(&dev_flow->verbs, &ipv6, size);
 }
@@ -589,6 +586,28 @@ flow_verbs_translate_item_udp(struct mlx5_flow *dev_flow,
 		udp.val.src_port &= udp.mask.src_port;
 		udp.val.dst_port &= udp.mask.dst_port;
 	}
+	item++;
+	while (item->type == RTE_FLOW_ITEM_TYPE_VOID)
+		item++;
+	if (!(udp.val.dst_port & udp.mask.dst_port)) {
+		switch ((item)->type) {
+		case RTE_FLOW_ITEM_TYPE_VXLAN:
+			udp.val.dst_port = htons(MLX5_UDP_PORT_VXLAN);
+			udp.mask.dst_port = 0xffff;
+			break;
+		case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
+			udp.val.dst_port = htons(MLX5_UDP_PORT_VXLAN_GPE);
+			udp.mask.dst_port = 0xffff;
+			break;
+		case RTE_FLOW_ITEM_TYPE_MPLS:
+			udp.val.dst_port = htons(MLX5_UDP_PORT_MPLS);
+			udp.mask.dst_port = 0xffff;
+			break;
+		default:
+			break;
+		}
+	}
+
 	flow_verbs_spec_add(&dev_flow->verbs, &udp, size);
 }
 
@@ -1019,6 +1038,8 @@ flow_verbs_translate_action_count(struct mlx5_flow *dev_flow,
  *   Pointer to the list of actions.
  * @param[in] external
  *   This flow rule is created by request external to PMD.
+ * @param[in] hairpin
+ *   Number of hairpin TX actions, 0 means classic flow.
  * @param[out] error
  *   Pointer to the error structure.
  *
@@ -1031,6 +1052,7 @@ flow_verbs_validate(struct rte_eth_dev *dev,
 		    const struct rte_flow_item items[],
 		    const struct rte_flow_action actions[],
 		    bool external __rte_unused,
+		    int hairpin __rte_unused,
 		    struct rte_flow_error *error)
 {
 	int ret;
@@ -1255,6 +1277,18 @@ flow_verbs_validate(struct rte_eth_dev *dev,
 						  "action not supported");
 		}
 	}
+	/*
+	 * Validate the drop action mutual exclusion with other actions.
+	 * Drop action is mutually-exclusive with any other action, except for
+	 * Count action.
+	 */
+	if ((action_flags & MLX5_FLOW_ACTION_DROP) &&
+	    (action_flags & ~(MLX5_FLOW_ACTION_DROP | MLX5_FLOW_ACTION_COUNT)))
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ACTION, NULL,
+					  "Drop action is mutually-exclusive "
+					  "with any other action, except for "
+					  "Count action");
 	if (!(action_flags & MLX5_FLOW_FATE_ACTIONS))
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ACTION, actions,

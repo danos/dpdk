@@ -117,6 +117,14 @@
 #define BNXT_NUM_ASYNC_CPR(bp) 1
 #endif
 
+/* In FreeBSD OS, nic_uio driver does not support interrupts */
+#ifdef RTE_EXEC_ENV_FREEBSD
+#ifdef BNXT_NUM_ASYNC_CPR
+#undef BNXT_NUM_ASYNC_CPR
+#endif
+#define BNXT_NUM_ASYNC_CPR(bp)	0
+#endif
+
 #define BNXT_MISC_VEC_ID               RTE_INTR_VEC_ZERO_OFFSET
 #define BNXT_RX_VEC_START              RTE_INTR_VEC_RXTX_OFFSET
 
@@ -231,9 +239,10 @@ struct bnxt_pf_info {
 	uint8_t			evb_mode;
 };
 
-/* Max wait time is 10 * 100ms = 1s */
-#define BNXT_LINK_WAIT_CNT	10
-#define BNXT_LINK_WAIT_INTERVAL	100
+/* Max wait time for link up is 10s and link down is 500ms */
+#define BNXT_LINK_UP_WAIT_CNT	200
+#define BNXT_LINK_DOWN_WAIT_CNT	10
+#define BNXT_LINK_WAIT_INTERVAL	50
 struct bnxt_link_info {
 	uint32_t		phy_flags;
 	uint8_t			mac_type;
@@ -461,6 +470,11 @@ struct bnxt_error_recovery_info {
 	uint32_t        last_reset_counter;
 };
 
+/* Frequency for the FUNC_DRV_IF_CHANGE retry in milliseconds */
+#define BNXT_IF_CHANGE_RETRY_INTERVAL	50
+/* Maximum retry count for FUNC_DRV_IF_CHANGE */
+#define BNXT_IF_CHANGE_RETRY_COUNT	40
+
 /* address space location of register */
 #define BNXT_FW_STATUS_REG_TYPE_MASK	3
 /* register is located in PCIe config space */
@@ -485,7 +499,6 @@ struct bnxt {
 	void				*bar0;
 
 	struct rte_eth_dev		*eth_dev;
-	struct rte_eth_rss_conf		rss_conf;
 	struct rte_pci_device		*pdev;
 	void				*doorbell_base;
 
@@ -507,19 +520,17 @@ struct bnxt {
 #define BNXT_FLAG_STINGRAY		BIT(14)
 #define BNXT_FLAG_FW_RESET		BIT(15)
 #define BNXT_FLAG_FATAL_ERROR		BIT(16)
-#define BNXT_FLAG_FW_CAP_IF_CHANGE		BIT(17)
-#define BNXT_FLAG_IF_CHANGE_HOT_FW_RESET_DONE	BIT(18)
-#define BNXT_FLAG_FW_CAP_ERROR_RECOVERY		BIT(19)
-#define BNXT_FLAG_FW_HEALTH_CHECK_SCHEDULED	BIT(20)
-#define BNXT_FLAG_FW_CAP_ERR_RECOVER_RELOAD	BIT(21)
-#define BNXT_FLAG_EXT_STATS_SUPPORTED		BIT(22)
-#define BNXT_FLAG_NEW_RM			BIT(23)
-#define BNXT_FLAG_INIT_DONE			BIT(24)
-#define BNXT_FLAG_FW_CAP_ONE_STEP_TX_TS		BIT(25)
-#define BNXT_FLAG_ADV_FLOW_MGMT			BIT(26)
+#define BNXT_FLAG_IF_CHANGE_HOT_FW_RESET_DONE	BIT(17)
+#define BNXT_FLAG_FW_HEALTH_CHECK_SCHEDULED	BIT(18)
+#define BNXT_FLAG_EXT_STATS_SUPPORTED		BIT(19)
+#define BNXT_FLAG_NEW_RM			BIT(20)
+#define BNXT_FLAG_FW_CAP_ONE_STEP_TX_TS		BIT(22)
+#define BNXT_FLAG_ADV_FLOW_MGMT			BIT(23)
+#define BNXT_FLAG_NPAR_PF                      BIT(24)
+#define BNXT_FLAG_DFLT_MAC_SET			BIT(26)
 #define BNXT_PF(bp)		(!((bp)->flags & BNXT_FLAG_VF))
 #define BNXT_VF(bp)		((bp)->flags & BNXT_FLAG_VF)
-#define BNXT_NPAR(bp)		((bp)->port_partition_type)
+#define BNXT_NPAR(bp)		((bp)->flags & BNXT_FLAG_NPAR_PF)
 #define BNXT_MH(bp)             ((bp)->flags & BNXT_FLAG_MULTI_HOST)
 #define BNXT_SINGLE_PF(bp)      (BNXT_PF(bp) && !BNXT_NPAR(bp) && !BNXT_MH(bp))
 #define BNXT_USE_CHIMP_MB	0 //For non-CFA commands, everything uses Chimp.
@@ -529,6 +540,13 @@ struct bnxt {
 #define BNXT_STINGRAY(bp)	((bp)->flags & BNXT_FLAG_STINGRAY)
 #define BNXT_HAS_NQ(bp)		BNXT_CHIP_THOR(bp)
 #define BNXT_HAS_RING_GRPS(bp)	(!BNXT_CHIP_THOR(bp))
+#define BNXT_HAS_DFLT_MAC_SET(bp)      ((bp)->flags & BNXT_FLAG_DFLT_MAC_SET)
+
+	uint32_t		fw_cap;
+#define BNXT_FW_CAP_HOT_RESET		BIT(0)
+#define BNXT_FW_CAP_IF_CHANGE		BIT(1)
+#define BNXT_FW_CAP_ERROR_RECOVERY	BIT(2)
+#define BNXT_FW_CAP_ERR_RECOVER_RELOAD	BIT(3)
 
 	uint32_t		flow_flags;
 #define BNXT_FLOW_FLAG_L2_HDR_SRC_FILTER_EN	BIT(0)
@@ -588,8 +606,10 @@ struct bnxt {
 	uint16_t			max_resp_len;
 	uint16_t                        hwrm_max_ext_req_len;
 
-	 /* default command timeout value of 50ms */
-#define HWRM_CMD_TIMEOUT		50000
+	 /* default command timeout value of 500ms */
+#define DFLT_HWRM_CMD_TIMEOUT		500000
+	 /* short command timeout value of 50ms */
+#define SHORT_HWRM_CMD_TIMEOUT		50000
 	/* default HWRM request timeout value */
 	uint32_t			hwrm_cmd_timeout;
 
@@ -603,18 +623,24 @@ struct bnxt {
 	uint8_t                 max_q;
 
 	uint16_t		fw_fid;
-	uint8_t			dflt_mac_addr[RTE_ETHER_ADDR_LEN];
 	uint16_t		max_rsscos_ctx;
 	uint16_t		max_cp_rings;
 	uint16_t		max_tx_rings;
 	uint16_t		max_rx_rings;
 #define MAX_STINGRAY_RINGS		128U
-#define BNXT_MAX_RINGS(bp) \
-	(BNXT_STINGRAY(bp) ? RTE_MIN(RTE_MIN(bp->max_rx_rings, \
+/* For sake of symmetry, max Tx rings == max Rx rings, one stat ctx for each */
+#define BNXT_MAX_RX_RINGS(bp) \
+	(BNXT_STINGRAY(bp) ? RTE_MIN(RTE_MIN(bp->max_rx_rings / 2U, \
 					     MAX_STINGRAY_RINGS), \
-				     bp->max_stat_ctx) : \
-				RTE_MIN(bp->max_rx_rings, bp->max_stat_ctx))
+				     bp->max_stat_ctx / 2U) : \
+				RTE_MIN(bp->max_rx_rings / 2U, \
+					bp->max_stat_ctx / 2U))
+#define BNXT_MAX_TX_RINGS(bp) \
+	(RTE_MIN((bp)->max_tx_rings, BNXT_MAX_RX_RINGS(bp)))
 
+#define BNXT_MAX_RINGS(bp) \
+	(RTE_MIN((((bp)->max_cp_rings - BNXT_NUM_ASYNC_CPR(bp)) / 2U), \
+		 BNXT_MAX_TX_RINGS(bp)))
 	uint16_t		max_nq_rings;
 	uint16_t		max_l2_ctx;
 	uint16_t		max_rx_em_flows;
@@ -628,8 +654,6 @@ struct bnxt {
 #define BNXT_OUTER_TPID_BD_SHFT	16
 	uint32_t		outer_tpid_bd;
 	struct bnxt_pf_info	pf;
-	uint8_t			port_partition_type;
-	uint8_t			dev_stopped;
 	uint8_t			vxlan_port_cnt;
 	uint8_t			geneve_port_cnt;
 	uint16_t		vxlan_port;
@@ -653,7 +677,8 @@ struct bnxt {
 };
 
 int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu);
-int bnxt_link_update_op(struct rte_eth_dev *eth_dev, int wait_to_complete);
+int bnxt_link_update(struct rte_eth_dev *eth_dev, int wait_to_complete,
+		     bool exp_link_status);
 int bnxt_rcv_msg_from_vf(struct bnxt *bp, uint16_t vf_id, void *msg);
 int is_bnxt_in_error(struct bnxt *bp);
 uint16_t bnxt_rss_ctxts(const struct bnxt *bp);
@@ -671,11 +696,23 @@ extern const struct rte_flow_ops bnxt_flow_ops;
 #define bnxt_release_flow_lock(bp) \
 	pthread_mutex_unlock(&(bp)->flow_lock)
 
+#define BNXT_VALID_VNIC_OR_RET(bp, vnic_id) do { \
+	if ((vnic_id) >= (bp)->max_vnics) { \
+		rte_flow_error_set(error, \
+				EINVAL, \
+				RTE_FLOW_ERROR_TYPE_ATTR_GROUP, \
+				NULL, \
+				"Group id is invalid!"); \
+		rc = -rte_errno; \
+		goto ret; \
+	} \
+} while (0)
+
 extern int bnxt_logtype_driver;
 #define PMD_DRV_LOG_RAW(level, fmt, args...) \
 	rte_log(RTE_LOG_ ## level, bnxt_logtype_driver, "%s(): " fmt, \
 		__func__, ## args)
 
 #define PMD_DRV_LOG(level, fmt, args...) \
-	PMD_DRV_LOG_RAW(level, fmt, ## args)
+	  PMD_DRV_LOG_RAW(level, fmt, ## args)
 #endif

@@ -94,7 +94,7 @@ static void cmd_help_brief_parsed(__attribute__((unused)) void *parsed_result,
 		"    help ports                      : Configuring ports.\n"
 		"    help registers                  : Reading and setting port registers.\n"
 		"    help filters                    : Filters configuration help.\n"
-		"    help traffic_management         : Traffic Management commmands.\n"
+		"    help traffic_management         : Traffic Management commands.\n"
 		"    help devices                    : Device related cmds.\n"
 		"    help all                        : All of the above sections.\n\n"
 	);
@@ -1437,7 +1437,7 @@ cmdline_parse_inst_t cmd_set_port_setup_on = {
 struct cmd_operate_attach_port_result {
 	cmdline_fixed_string_t port;
 	cmdline_fixed_string_t keyword;
-	cmdline_fixed_string_t identifier;
+	cmdline_multi_string_t identifier;
 };
 
 static void cmd_operate_attach_port_parsed(void *parsed_result,
@@ -1460,7 +1460,7 @@ cmdline_parse_token_string_t cmd_operate_attach_port_keyword =
 			keyword, "attach");
 cmdline_parse_token_string_t cmd_operate_attach_port_identifier =
 	TOKEN_STRING_INITIALIZER(struct cmd_operate_attach_port_result,
-			identifier, NULL);
+			identifier, TOKEN_STRING_MULTI);
 
 cmdline_parse_inst_t cmd_operate_attach_port = {
 	.f = cmd_operate_attach_port_parsed,
@@ -1488,10 +1488,12 @@ static void cmd_operate_detach_port_parsed(void *parsed_result,
 {
 	struct cmd_operate_detach_port_result *res = parsed_result;
 
-	if (!strcmp(res->keyword, "detach"))
+	if (!strcmp(res->keyword, "detach")) {
+		RTE_ETH_VALID_PORTID_OR_RET(res->port_id);
 		detach_port_device(res->port_id);
-	else
+	} else {
 		printf("Unknown parameter\n");
+	}
 }
 
 cmdline_parse_token_string_t cmd_operate_detach_port_port =
@@ -1530,7 +1532,7 @@ static void cmd_operate_detach_device_parsed(void *parsed_result,
 	struct cmd_operate_detach_device_result *res = parsed_result;
 
 	if (!strcmp(res->keyword, "detach"))
-		detach_device(res->identifier);
+		detach_devargs(res->identifier);
 	else
 		printf("Unknown parameter\n");
 }
@@ -5120,7 +5122,7 @@ cmd_gso_size_parsed(void *parsed_result,
 
 	if (test_done == 0) {
 		printf("Before setting GSO segsz, please first"
-				" stop fowarding\n");
+				" stop forwarding\n");
 		return;
 	}
 
@@ -7078,9 +7080,10 @@ cmd_priority_flow_ctrl_set_parsed(void *parsed_result,
 	 * the RTE_FC_RX_PAUSE, Respond to the pause frame at the Tx side.
 	 */
 	static enum rte_eth_fc_mode rx_tx_onoff_2_pfc_mode[2][2] = {
-			{RTE_FC_NONE, RTE_FC_RX_PAUSE}, {RTE_FC_TX_PAUSE, RTE_FC_FULL}
+		{RTE_FC_NONE, RTE_FC_TX_PAUSE}, {RTE_FC_RX_PAUSE, RTE_FC_FULL}
 	};
 
+	memset(&pfc_conf, 0, sizeof(struct rte_eth_pfc_conf));
 	rx_fc_enable = (!strncmp(res->rx_pfc_mode, "on",2)) ? 1 : 0;
 	tx_fc_enable = (!strncmp(res->tx_pfc_mode, "on",2)) ? 1 : 0;
 	pfc_conf.fc.mode       = rx_tx_onoff_2_pfc_mode[rx_fc_enable][tx_fc_enable];
@@ -16802,8 +16805,10 @@ cmd_ddp_get_list_parsed(
 #ifdef RTE_LIBRTE_I40E_PMD
 	size = PROFILE_INFO_SIZE * MAX_PROFILE_NUM + 4;
 	p_list = (struct rte_pmd_i40e_profile_list *)malloc(size);
-	if (!p_list)
+	if (!p_list) {
 		printf("%s: Failed to malloc buffer\n", __func__);
+		return;
+	}
 
 	if (ret == -ENOTSUP)
 		ret = rte_pmd_i40e_get_ddp_list(res->port_id,

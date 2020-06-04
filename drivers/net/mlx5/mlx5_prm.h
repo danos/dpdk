@@ -18,6 +18,8 @@
 #pragma GCC diagnostic error "-Wpedantic"
 #endif
 
+#include <unistd.h>
+
 #include <rte_vect.h>
 #include "mlx5_autoconf.h"
 
@@ -100,7 +102,7 @@
  */
 #define MLX5_EMPW_MAX_PACKETS MLX5_TX_COMP_THRESH
 #define MLX5_MPW_MAX_PACKETS 6
-#define MLX5_MPW_INLINE_MAX_PACKETS 2
+#define MLX5_MPW_INLINE_MAX_PACKETS 6
 
 /*
  * Default packet length threshold to be inlined with
@@ -251,7 +253,7 @@
 #define MLX5_MAX_LOG_RQ_SEGS 5u
 
 /* The alignment needed for WQ buffer. */
-#define MLX5_WQE_BUF_ALIGNMENT 512
+#define MLX5_WQE_BUF_ALIGNMENT sysconf(_SC_PAGESIZE)
 
 /* Completion mode. */
 enum mlx5_completion_mode {
@@ -1196,7 +1198,9 @@ struct mlx5_ifc_qos_cap_bits {
 	u8 reserved_at_8[0x8];
 	u8 log_max_flow_meter[0x8];
 	u8 flow_meter_reg_id[0x8];
-	u8 reserved_at_25[0x20];
+	u8 reserved_at_25[0x8];
+	u8 flow_meter_reg_share[0x1];
+	u8 reserved_at_2e[0x17];
 	u8 packet_pacing_max_rate[0x20];
 	u8 packet_pacing_min_rate[0x20];
 	u8 reserved_at_80[0x10];
@@ -1815,6 +1819,9 @@ enum {
 #define MLX5_SRTCM_CBS_MAX (0xFF * (1ULL << 0x1F))
 #define MLX5_SRTCM_CIR_MAX (8 * (1ULL << 30) * 0xFF)
 #define MLX5_SRTCM_EBS_MAX 0
+
+/* The bits meter color use. */
+#define MLX5_MTR_COLOR_BITS 8
 
 /**
  * Convert a user mark to flow mark.

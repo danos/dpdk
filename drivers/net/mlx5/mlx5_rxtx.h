@@ -114,9 +114,9 @@ struct mlx5_rxq_data {
 	unsigned int strd_sz_n:4; /* Log 2 of stride size. */
 	unsigned int strd_shift_en:1; /* Enable 2bytes shift on a stride. */
 	unsigned int err_state:2; /* enum mlx5_rxq_err_state. */
-	unsigned int strd_headroom_en:1; /* Enable mbuf headroom in MPRQ. */
+	unsigned int strd_scatter_en:1; /* Scattered packets from a stride. */
 	unsigned int lro:1; /* Enable LRO. */
-	unsigned int :1; /* Remaining bits. */
+	unsigned int dynf_meta:1; /* Dynamic metadata is configured. */
 	volatile uint32_t *rq_db;
 	volatile uint32_t *cq_db;
 	uint16_t port_id;
@@ -154,6 +154,8 @@ struct mlx5_rxq_data {
 	/* CQ (UAR) access lock required for 32bit implementations */
 #endif
 	uint32_t tunnel; /* Tunnel information. */
+	uint64_t flow_meta_mask;
+	int32_t flow_meta_offset;
 } __rte_cache_aligned;
 
 enum mlx5_rxq_obj_type {
@@ -273,9 +275,7 @@ struct mlx5_txq_data {
 	uint16_t wqe_thres; /* WQE threshold to request completion in CQ. */
 	/* WQ related fields. */
 	uint16_t cq_ci; /* Consumer index for completion queue. */
-#ifndef NDEBUG
-	uint16_t cq_pi; /* Counter of issued CQE "always" requests. */
-#endif
+	uint16_t cq_pi; /* Production index for completion queue. */
 	uint16_t cqe_s; /* Number of CQ elements. */
 	uint16_t cqe_m; /* Mask for CQ indices. */
 	/* CQ related fields. */
@@ -297,6 +297,11 @@ struct mlx5_txq_data {
 	struct mlx5_mr_ctrl mr_ctrl; /* MR control descriptor. */
 	struct mlx5_wqe *wqes; /* Work queue. */
 	struct mlx5_wqe *wqes_end; /* Work queue array limit. */
+#ifdef NDEBUG
+	uint16_t *fcqs; /* Free completion queue. */
+#else
+	uint32_t *fcqs; /* Free completion queue (debug extended). */
+#endif
 	volatile struct mlx5_cqe *cqes; /* Completion queue. */
 	volatile uint32_t *qp_db; /* Work queue doorbell. */
 	volatile uint32_t *cq_db; /* Completion queue doorbell. */
@@ -440,6 +445,7 @@ int mlx5_txq_release(struct rte_eth_dev *dev, uint16_t idx);
 int mlx5_txq_releasable(struct rte_eth_dev *dev, uint16_t idx);
 int mlx5_txq_verify(struct rte_eth_dev *dev);
 void txq_alloc_elts(struct mlx5_txq_ctrl *txq_ctrl);
+void txq_free_elts(struct mlx5_txq_ctrl *txq_ctrl);
 uint64_t mlx5_get_tx_port_offloads(struct rte_eth_dev *dev);
 
 /* mlx5_rxtx.c */
@@ -451,9 +457,6 @@ extern uint8_t mlx5_swp_types_table[];
 void mlx5_set_ptype_table(void);
 void mlx5_set_cksum_table(void);
 void mlx5_set_swp_types_table(void);
-__rte_noinline int mlx5_tx_error_cqe_handle
-				(struct mlx5_txq_data *restrict txq,
-				 volatile struct mlx5_err_cqe *err_cqe);
 uint16_t mlx5_rx_burst(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n);
 void mlx5_rxq_initialize(struct mlx5_rxq_data *rxq);
 __rte_noinline int mlx5_rx_err_handle(struct mlx5_rxq_data *rxq, uint8_t vec);

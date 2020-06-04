@@ -41,6 +41,7 @@ enum HNS3_MBX_OPCODE {
 	HNS3_MBX_GET_QID_IN_PF,         /* (VF -> PF) get queue id in pf */
 
 	HNS3_MBX_HANDLE_VF_TBL = 38,    /* (VF -> PF) store/clear hw cfg tbl */
+	HNS3_MBX_GET_RING_VECTOR_MAP,   /* (VF -> PF) get ring-to-vector map */
 };
 
 /* below are per-VF mac-vlan subcodes */
@@ -102,6 +103,19 @@ struct hns3_mbx_pf_to_vf_cmd {
 	uint8_t msg_len;
 	uint8_t rsv1[3];
 	uint16_t msg[8];
+};
+
+struct hns3_ring_chain_param {
+	uint8_t ring_type;
+	uint8_t tqp_index;
+	uint8_t int_gl_index;
+};
+
+#define HNS3_MBX_MAX_RING_CHAIN_PARAM_NUM	4
+struct hns3_vf_bind_vector_msg {
+	uint8_t vector_id;
+	uint8_t ring_num;
+	struct hns3_ring_chain_param param[HNS3_MBX_MAX_RING_CHAIN_PARAM_NUM];
 };
 
 struct hns3_vf_rst_cmd {

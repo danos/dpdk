@@ -24,6 +24,8 @@
 
 int otx2_cpt_logtype;
 
+uint8_t otx2_cryptodev_driver_id;
+
 static struct rte_pci_id pci_id_cpt_table[] = {
 	{
 		RTE_PCI_DEVICE(PCI_VENDOR_ID_CAVIUM,
@@ -145,6 +147,7 @@ static struct cryptodev_driver otx2_cryptodev_drv;
 RTE_INIT(otx2_cpt_init_log);
 RTE_PMD_REGISTER_PCI(CRYPTODEV_NAME_OCTEONTX2_PMD, otx2_cryptodev_pmd);
 RTE_PMD_REGISTER_PCI_TABLE(CRYPTODEV_NAME_OCTEONTX2_PMD, pci_id_cpt_table);
+RTE_PMD_REGISTER_KMOD_DEP(CRYPTODEV_NAME_OCTEONTX2_PMD, "vfio-pci");
 RTE_PMD_REGISTER_CRYPTO_DRIVER(otx2_cryptodev_drv, otx2_cryptodev_pmd.driver,
 		otx2_cryptodev_driver_id);
 

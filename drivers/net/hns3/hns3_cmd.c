@@ -215,12 +215,12 @@ hns3_cmd_csq_clean(struct hns3_hw *hw)
 	head = hns3_read_dev(hw, HNS3_CMDQ_TX_HEAD_REG);
 
 	if (!is_valid_csq_clean_head(csq, head)) {
-		struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
 		hns3_err(hw, "wrong cmd head (%u, %u-%u)", head,
 			    csq->next_to_use, csq->next_to_clean);
-		rte_atomic16_set(&hw->reset.disable_cmd, 1);
-
-		hns3_schedule_delayed_reset(hns);
+		if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
+			rte_atomic16_set(&hw->reset.disable_cmd, 1);
+			hns3_schedule_delayed_reset(HNS3_DEV_HW_TO_ADAPTER(hw));
+		}
 
 		return -EIO;
 	}
@@ -289,7 +289,7 @@ hns3_cmd_convert_err_code(uint16_t desc_ret)
 	case HNS3_CMD_INVALID:
 		return -EBADR;
 	default:
-		return -EIO;
+		return -EREMOTEIO;
 	}
 }
 
@@ -349,11 +349,23 @@ static int hns3_cmd_poll_reply(struct hns3_hw *hw)
 
 /*
  * hns3_cmd_send - send command to command queue
- * @hw: pointer to the hw struct
- * @desc: prefilled descriptor for describing the command
- * @num : the number of descriptors to be sent
  *
- * This is the main send command for command queue, it
+ * @param hw
+ *   pointer to the hw struct
+ * @param desc
+ *   prefilled descriptor for describing the command
+ * @param num
+ *   the number of descriptors to be sent
+ * @return
+ *   - -EBUSY if detect device is in resetting
+ *   - -EIO   if detect cmd csq corrupted (due to reset) or
+ *            there is reset pending
+ *   - -ENOMEM/-ETIME/...(Non-Zero) if other error case
+ *   - Zero   if operation completed successfully
+ *
+ * Note -BUSY/-EIO only used in reset case
+ *
+ * Note this is the main send command for command queue, it
  * sends the queue, cleans the queue, etc
  */
 int
@@ -517,7 +529,7 @@ hns3_cmd_init(struct hns3_hw *hw)
 	return 0;
 
 err_cmd_init:
-	hns3_cmd_uninit(hw);
+	rte_atomic16_set(&hw->reset.disable_cmd, 1);
 	return ret;
 }
 

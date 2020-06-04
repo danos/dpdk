@@ -14,6 +14,8 @@
 
 #include "aesni_mb_pmd_private.h"
 
+int aesni_mb_logtype_driver;
+
 #define AES_CCM_DIGEST_MIN_LEN 4
 #define AES_CCM_DIGEST_MAX_LEN 16
 #define HMAC_MAX_BLOCK_SIZE 128
@@ -729,10 +731,10 @@ get_session(struct aesni_mb_qp *qp, struct rte_crypto_op *op)
 					op->sym->session,
 					cryptodev_driver_id);
 	} else {
-		void *_sess = NULL;
+		void *_sess = rte_cryptodev_sym_session_create(qp->sess_mp);
 		void *_sess_private_data = NULL;
 
-		if (rte_mempool_get(qp->sess_mp, (void **)&_sess))
+		if (_sess == NULL)
 			return NULL;
 
 		if (rte_mempool_get(qp->sess_mp_priv,

@@ -466,7 +466,7 @@ virtio_init_queue(struct rte_eth_dev *dev, uint16_t vtpci_queue_idx)
 	}
 
 	if (!vtpci_packed_queue(hw) && !rte_is_power_of_2(vq_size)) {
-		PMD_INIT_LOG(ERR, "split virtqueue size is not powerof 2");
+		PMD_INIT_LOG(ERR, "split virtqueue size is not power of 2");
 		return -EINVAL;
 	}
 
@@ -588,8 +588,8 @@ virtio_init_queue(struct rte_eth_dev *dev, uint16_t vtpci_queue_idx)
 		hw->cvq = cvq;
 	}
 
-	/* For virtio_user case (that is when hw->dev is NULL), we use
-	 * virtual address. And we need properly set _offset_, please see
+	/* For virtio_user case (that is when hw->virtio_user_dev is not NULL),
+	 * we use virtual address. And we need properly set _offset_, please see
 	 * VIRTIO_MBUF_DATA_DMA_ADDR in virtqueue.h for more information.
 	 */
 	if (!hw->virtio_user_dev)
@@ -1913,6 +1913,8 @@ eth_virtio_dev_init(struct rte_eth_dev *eth_dev)
 			goto err_vtpci_init;
 	}
 
+	rte_spinlock_init(&hw->state_lock);
+
 	/* reset device and negotiate default features */
 	ret = virtio_init_device(eth_dev, VIRTIO_PMD_DEFAULT_GUEST_FEATURES);
 	if (ret < 0)
@@ -2154,8 +2156,6 @@ virtio_dev_configure(struct rte_eth_dev *dev)
 			PMD_DRV_LOG(ERR, "failed to set config vector");
 			return -EBUSY;
 		}
-
-	rte_spinlock_init(&hw->state_lock);
 
 	hw->use_simple_rx = 1;
 

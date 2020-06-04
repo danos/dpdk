@@ -701,7 +701,7 @@ struct ipn3ke_rpst_hw_port_stats *hw_stats)
 		&tmp,
 		IPN3KE_25G_TX_STATISTICS_STATUS,
 		port_id,
-		1);
+		0);
 	if (tmp & IPN3KE_25G_TX_STATISTICS_STATUS_SHADOW_REQUEST_MASK) {
 		tmp = 0x00000000;
 		(*hw->f_mac_read)(hw,
@@ -2598,7 +2598,8 @@ ipn3ke_rpst_scan_check(void)
 	int ret;
 
 	if (ipn3ke_rpst_scan_num == 1) {
-		ret = pthread_create(&ipn3ke_rpst_scan_thread,
+		ret = rte_ctrl_thread_create(&ipn3ke_rpst_scan_thread,
+			"ipn3ke scanner",
 			NULL,
 			ipn3ke_rpst_scan_handle_request, NULL);
 		if (ret) {

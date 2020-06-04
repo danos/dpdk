@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2001-2019
+ * Copyright(c) 2001-2020 Intel Corporation
  */
 
 #include "ice_common.h"
@@ -548,28 +548,46 @@ ice_flow_proc_seg_hdrs(struct ice_flow_prof_params *params)
 				(const ice_bitmap_t *)ice_ptypes_ipv4_il;
 			ice_and_bitmap(params->ptypes, params->ptypes, src,
 				       ICE_FLOW_PTYPE_MAX);
+			if (hdrs & ICE_FLOW_SEG_HDR_UDP) {
+				src = (const ice_bitmap_t *)ice_ptypes_udp_il;
+				ice_and_bitmap(params->ptypes,
+						params->ptypes, src,
+					       ICE_FLOW_PTYPE_MAX);
+			} else if (hdrs & ICE_FLOW_SEG_HDR_TCP) {
+				ice_and_bitmap(params->ptypes, params->ptypes,
+					       (const ice_bitmap_t *)
+					       ice_ptypes_tcp_il,
+					       ICE_FLOW_PTYPE_MAX);
+			} else if (hdrs & ICE_FLOW_SEG_HDR_SCTP) {
+				src = (const ice_bitmap_t *)ice_ptypes_sctp_il;
+				ice_and_bitmap(params->ptypes, params->ptypes,
+					       src, ICE_FLOW_PTYPE_MAX);
+			}
 		} else if (hdrs & ICE_FLOW_SEG_HDR_IPV6) {
 			src = !i ? (const ice_bitmap_t *)ice_ptypes_ipv6_ofos :
 				(const ice_bitmap_t *)ice_ptypes_ipv6_il;
 			ice_and_bitmap(params->ptypes, params->ptypes, src,
 				       ICE_FLOW_PTYPE_MAX);
+			if (hdrs & ICE_FLOW_SEG_HDR_UDP) {
+				src = (const ice_bitmap_t *)ice_ptypes_udp_il;
+				ice_and_bitmap(params->ptypes,
+						params->ptypes, src,
+					       ICE_FLOW_PTYPE_MAX);
+			} else if (hdrs & ICE_FLOW_SEG_HDR_TCP) {
+				ice_and_bitmap(params->ptypes, params->ptypes,
+					       (const ice_bitmap_t *)
+					       ice_ptypes_tcp_il,
+					       ICE_FLOW_PTYPE_MAX);
+			} else if (hdrs & ICE_FLOW_SEG_HDR_SCTP) {
+				src = (const ice_bitmap_t *)ice_ptypes_sctp_il;
+				ice_and_bitmap(params->ptypes, params->ptypes,
+					       src, ICE_FLOW_PTYPE_MAX);
+			}
 		}
 
 		if (hdrs & ICE_FLOW_SEG_HDR_ICMP) {
 			src = !i ? (const ice_bitmap_t *)ice_ptypes_icmp_of :
 				(const ice_bitmap_t *)ice_ptypes_icmp_il;
-			ice_and_bitmap(params->ptypes, params->ptypes, src,
-				       ICE_FLOW_PTYPE_MAX);
-		} else if (hdrs & ICE_FLOW_SEG_HDR_UDP) {
-			src = (const ice_bitmap_t *)ice_ptypes_udp_il;
-			ice_and_bitmap(params->ptypes, params->ptypes, src,
-				       ICE_FLOW_PTYPE_MAX);
-		} else if (hdrs & ICE_FLOW_SEG_HDR_TCP) {
-			ice_and_bitmap(params->ptypes, params->ptypes,
-				       (const ice_bitmap_t *)ice_ptypes_tcp_il,
-				       ICE_FLOW_PTYPE_MAX);
-		} else if (hdrs & ICE_FLOW_SEG_HDR_SCTP) {
-			src = (const ice_bitmap_t *)ice_ptypes_sctp_il;
 			ice_and_bitmap(params->ptypes, params->ptypes, src,
 				       ICE_FLOW_PTYPE_MAX);
 		} else if (hdrs & ICE_FLOW_SEG_HDR_GRE) {
@@ -586,10 +604,6 @@ ice_flow_proc_seg_hdrs(struct ice_flow_prof_params *params)
 			src = (const ice_bitmap_t *)ice_ptypes_gtpc_tid;
 			ice_and_bitmap(params->ptypes, params->ptypes,
 				       src, ICE_FLOW_PTYPE_MAX);
-		} else if (hdrs & ICE_FLOW_SEG_HDR_GTPU) {
-			src = (const ice_bitmap_t *)ice_ptypes_gtpu;
-			ice_and_bitmap(params->ptypes, params->ptypes,
-				       src, ICE_FLOW_PTYPE_MAX);
 		} else if (hdrs & ICE_FLOW_SEG_HDR_GTPU_EH) {
 			src = (const ice_bitmap_t *)ice_ptypes_gtpu;
 			ice_and_bitmap(params->ptypes, params->ptypes,
@@ -598,6 +612,10 @@ ice_flow_proc_seg_hdrs(struct ice_flow_prof_params *params)
 			/* Attributes for GTP packet with Extension Header */
 			params->attr = ice_attr_gtpu_eh;
 			params->attr_cnt = ARRAY_SIZE(ice_attr_gtpu_eh);
+		} else if (hdrs & ICE_FLOW_SEG_HDR_GTPU_IP) {
+			src = (const ice_bitmap_t *)ice_ptypes_gtpu;
+			ice_and_bitmap(params->ptypes, params->ptypes,
+				       src, ICE_FLOW_PTYPE_MAX);
 		}
 	}
 
@@ -1162,7 +1180,7 @@ ice_flow_add_prof_sync(struct ice_hw *hw, enum ice_block blk,
 		       struct ice_flow_prof **prof)
 {
 	struct ice_flow_prof_params params;
-	enum ice_status status = ICE_SUCCESS;
+	enum ice_status status;
 	u8 i;
 
 	if (!prof || (acts_cnt && !acts))
@@ -1835,14 +1853,11 @@ void ice_rem_vsi_rss_list(struct ice_hw *hw, u16 vsi_handle)
 	ice_acquire_lock(&hw->rss_locks);
 	LIST_FOR_EACH_ENTRY_SAFE(r, tmp, &hw->rss_list_head,
 				 ice_rss_cfg, l_entry) {
-		if (ice_is_bit_set(r->vsis, vsi_handle)) {
-			ice_clear_bit(vsi_handle, r->vsis);
-
+		if (ice_test_and_clear_bit(vsi_handle, r->vsis))
 			if (!ice_is_any_bit_set(r->vsis, ICE_MAX_VSI)) {
 				LIST_DEL(&r->l_entry);
 				ice_free(hw, r);
 			}
-		}
 	}
 	ice_release_lock(&hw->rss_locks);
 }

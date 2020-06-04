@@ -57,6 +57,7 @@
 #define HINIC_DEFAULT_BURST_SIZE	32
 #define HINIC_DEFAULT_NB_QUEUES		1
 #define HINIC_DEFAULT_RING_SIZE		1024
+#define HINIC_MAX_LRO_SIZE		65536
 
 /*
  * vlan_id is a 12 bit number.
@@ -439,7 +440,7 @@ static int hinic_rx_queue_setup(struct rte_eth_dev *dev, uint16_t queue_idx,
 	nic_dev->rxqs[queue_idx] = rxq;
 
 	/* alloc rx sq hw wqepage*/
-	rc = hinic_create_rq(hwdev, queue_idx, rq_depth);
+	rc = hinic_create_rq(hwdev, queue_idx, rq_depth, socket_id);
 	if (rc) {
 		PMD_DRV_LOG(ERR, "Create rxq[%d] failed, dev_name: %s, rq_depth: %d",
 			    queue_idx, dev->data->name, rq_depth);
@@ -466,6 +467,7 @@ static int hinic_rx_queue_setup(struct rte_eth_dev *dev, uint16_t queue_idx,
 	rxq->q_depth = rq_depth;
 	rxq->buf_len = (u16)buf_size;
 	rxq->rx_free_thresh = rx_free_thresh;
+	rxq->socket_id = socket_id;
 
 	/* the last point cant do mbuf rearm in bulk */
 	rxq->rxinfo_align_end = rxq->q_depth - rxq->rx_free_thresh;
@@ -593,7 +595,7 @@ static int hinic_tx_queue_setup(struct rte_eth_dev *dev, uint16_t queue_idx,
 	nic_dev->txqs[queue_idx] = txq;
 
 	/* alloc tx sq hw wqepage */
-	rc = hinic_create_sq(hwdev, queue_idx, sq_depth);
+	rc = hinic_create_sq(hwdev, queue_idx, sq_depth, socket_id);
 	if (rc) {
 		PMD_DRV_LOG(ERR, "Create txq[%d] failed, dev_name: %s, sq_depth: %d",
 			    queue_idx, dev->data->name, sq_depth);
@@ -612,6 +614,7 @@ static int hinic_tx_queue_setup(struct rte_eth_dev *dev, uint16_t queue_idx,
 	txq->sq_bot_sge_addr = HINIC_GET_WQ_TAIL(txq) -
 					sizeof(struct hinic_sq_bufdesc);
 	txq->cos = nic_dev->default_cos;
+	txq->socket_id = socket_id;
 
 	/* alloc software txinfo */
 	rc = hinic_setup_tx_resources(txq);
@@ -733,6 +736,7 @@ hinic_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *info)
 	info->max_mac_addrs  = HINIC_MAX_UC_MAC_ADDRS;
 	info->min_mtu = HINIC_MIN_MTU_SIZE;
 	info->max_mtu = HINIC_MAX_MTU_SIZE;
+	info->max_lro_pkt_size = HINIC_MAX_LRO_SIZE;
 
 	hinic_get_speed_capa(dev, &info->speed_capa);
 	info->rx_queue_offload_capa = 0;
@@ -808,12 +812,10 @@ static int hinic_config_rx_mode(struct hinic_nic_dev *nic_dev, u32 rx_mode_ctrl)
 	return 0;
 }
 
-
 static int hinic_rxtx_configure(struct rte_eth_dev *dev)
 {
-	int err;
 	struct hinic_nic_dev *nic_dev = HINIC_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	bool lro_en;
+	int err;
 
 	/* rx configure, if rss enable, need to init default configuration */
 	err = hinic_rx_configure(dev);
@@ -827,18 +829,6 @@ static int hinic_rxtx_configure(struct rte_eth_dev *dev)
 	if (err) {
 		PMD_DRV_LOG(ERR, "Configure rx_mode:0x%x failed",
 			HINIC_DEFAULT_RX_MODE);
-		goto set_rx_mode_fail;
-	}
-
-	/* config lro */
-	lro_en = dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_TCP_LRO ?
-			true : false;
-
-	err = hinic_set_rx_lro(nic_dev->hwdev, lro_en, lro_en,
-				HINIC_LRO_WQE_NUM_DEFAULT);
-	if (err) {
-		PMD_DRV_LOG(ERR, "%s lro failed, err: %d",
-			lro_en ? "Enable" : "Disable", err);
 		goto set_rx_mode_fail;
 	}
 

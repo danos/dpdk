@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2013 - 2015 Intel Corporation
+ * Copyright(c) 2001-2020 Intel Corporation
  */
 
 #include "iavf_status.h"
@@ -84,6 +84,7 @@ enum iavf_status_code iavf_alloc_adminq_arq_ring(struct iavf_hw *hw)
  **/
 void iavf_free_adminq_asq(struct iavf_hw *hw)
 {
+	iavf_free_virt_mem(hw, &hw->aq.asq.cmd_buf);
 	iavf_free_dma_mem(hw, &hw->aq.asq.desc_buf);
 }
 
@@ -367,7 +368,7 @@ enum iavf_status_code iavf_init_asq(struct iavf_hw *hw)
 	/* initialize base registers */
 	ret_code = iavf_config_asq_regs(hw);
 	if (ret_code != IAVF_SUCCESS)
-		goto init_adminq_free_rings;
+		goto init_config_regs;
 
 	/* success! */
 	hw->aq.asq.count = hw->aq.num_asq_entries;
@@ -375,6 +376,10 @@ enum iavf_status_code iavf_init_asq(struct iavf_hw *hw)
 
 init_adminq_free_rings:
 	iavf_free_adminq_asq(hw);
+	return ret_code;
+
+init_config_regs:
+	iavf_free_asq_bufs(hw);
 
 init_adminq_exit:
 	return ret_code;
@@ -817,6 +822,8 @@ enum iavf_status_code iavf_asq_send_command(struct iavf_hw *hw,
 		cmd_completed = true;
 		if ((enum iavf_admin_queue_err)retval == IAVF_AQ_RC_OK)
 			status = IAVF_SUCCESS;
+		else if ((enum iavf_admin_queue_err)retval == IAVF_AQ_RC_EBUSY)
+			status = IAVF_ERR_NOT_READY;
 		else
 			status = IAVF_ERR_ADMIN_QUEUE_ERROR;
 		hw->aq.asq_last_status = (enum iavf_admin_queue_err)retval;

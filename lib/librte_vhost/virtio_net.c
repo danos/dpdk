@@ -43,6 +43,36 @@ is_valid_virt_queue_idx(uint32_t idx, int is_tx, uint32_t nr_vring)
 	return (is_tx ^ (idx & 1)) == 0 && idx < nr_vring;
 }
 
+static inline void
+do_data_copy_enqueue(struct virtio_net *dev, struct vhost_virtqueue *vq)
+{
+	struct batch_copy_elem *elem = vq->batch_copy_elems;
+	uint16_t count = vq->batch_copy_nb_elems;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		rte_memcpy(elem[i].dst, elem[i].src, elem[i].len);
+		vhost_log_cache_write_iova(dev, vq, elem[i].log_addr,
+					   elem[i].len);
+		PRINT_PACKET(dev, (uintptr_t)elem[i].dst, elem[i].len, 0);
+	}
+
+	vq->batch_copy_nb_elems = 0;
+}
+
+static inline void
+do_data_copy_dequeue(struct vhost_virtqueue *vq)
+{
+	struct batch_copy_elem *elem = vq->batch_copy_elems;
+	uint16_t count = vq->batch_copy_nb_elems;
+	int i;
+
+	for (i = 0; i < count; i++)
+		rte_memcpy(elem[i].dst, elem[i].src, elem[i].len);
+
+	vq->batch_copy_nb_elems = 0;
+}
+
 static __rte_always_inline void
 do_flush_shadow_used_ring_split(struct virtio_net *dev,
 			struct vhost_virtqueue *vq,
@@ -186,6 +216,11 @@ vhost_flush_enqueue_batch_packed(struct virtio_net *dev,
 	uint16_t i;
 	uint16_t flags;
 
+	if (vq->shadow_used_idx) {
+		do_data_copy_enqueue(dev, vq);
+		vhost_flush_enqueue_shadow_packed(dev, vq);
+	}
+
 	flags = PACKED_DESC_ENQUEUE_USED_FLAG(vq->used_wrap_counter);
 
 	vhost_for_each_try_unroll(i, 0, PACKED_BATCH_SIZE) {
@@ -325,36 +360,6 @@ vhost_shadow_dequeue_single_packed_inorder(struct vhost_virtqueue *vq,
 	vq_inc_last_used_packed(vq, count);
 }
 
-static inline void
-do_data_copy_enqueue(struct virtio_net *dev, struct vhost_virtqueue *vq)
-{
-	struct batch_copy_elem *elem = vq->batch_copy_elems;
-	uint16_t count = vq->batch_copy_nb_elems;
-	int i;
-
-	for (i = 0; i < count; i++) {
-		rte_memcpy(elem[i].dst, elem[i].src, elem[i].len);
-		vhost_log_cache_write_iova(dev, vq, elem[i].log_addr,
-					   elem[i].len);
-		PRINT_PACKET(dev, (uintptr_t)elem[i].dst, elem[i].len, 0);
-	}
-
-	vq->batch_copy_nb_elems = 0;
-}
-
-static inline void
-do_data_copy_dequeue(struct vhost_virtqueue *vq)
-{
-	struct batch_copy_elem *elem = vq->batch_copy_elems;
-	uint16_t count = vq->batch_copy_nb_elems;
-	int i;
-
-	for (i = 0; i < count; i++)
-		rte_memcpy(elem[i].dst, elem[i].src, elem[i].len);
-
-	vq->batch_copy_nb_elems = 0;
-}
-
 static __rte_always_inline void
 vhost_shadow_enqueue_single_packed(struct virtio_net *dev,
 				   struct vhost_virtqueue *vq,
@@ -379,25 +384,6 @@ vhost_shadow_enqueue_single_packed(struct virtio_net *dev,
 	if (vq->shadow_aligned_idx >= PACKED_BATCH_SIZE) {
 		do_data_copy_enqueue(dev, vq);
 		vhost_flush_enqueue_shadow_packed(dev, vq);
-	}
-}
-
-static __rte_always_inline void
-vhost_flush_dequeue_packed(struct virtio_net *dev,
-			   struct vhost_virtqueue *vq)
-{
-	int shadow_count;
-	if (!vq->shadow_used_idx)
-		return;
-
-	shadow_count = vq->last_used_idx - vq->shadow_last_used_idx;
-	if (shadow_count <= 0)
-		shadow_count += vq->size;
-
-	if ((uint32_t)shadow_count >= (vq->size - MAX_PKT_BURST)) {
-		do_data_copy_dequeue(vq);
-		vhost_flush_dequeue_shadow_packed(dev, vq);
-		vhost_vring_call_packed(dev, vq);
 	}
 }
 
@@ -1086,6 +1072,8 @@ virtio_dev_rx_batch_packed(struct virtio_net *dev,
 						  VHOST_ACCESS_RW);
 
 	vhost_for_each_try_unroll(i, 0, PACKED_BATCH_SIZE) {
+		if (unlikely(!desc_addrs[i]))
+			return -1;
 		if (unlikely(lens[i] != descs[avail_idx + i].len))
 			return -1;
 	}
@@ -1688,6 +1676,8 @@ virtio_dev_tx_split(struct virtio_net *dev, struct vhost_virtqueue *vq,
 {
 	uint16_t i;
 	uint16_t free_entries;
+	uint16_t dropped = 0;
+	static bool allocerr_warned;
 
 	if (unlikely(dev->dequeue_zero_copy)) {
 		struct zcopy_mbuf *zmbuf, *next;
@@ -1751,13 +1741,35 @@ virtio_dev_tx_split(struct virtio_net *dev, struct vhost_virtqueue *vq,
 			update_shadow_used_ring_split(vq, head_idx, 0);
 
 		pkts[i] = virtio_dev_pktmbuf_alloc(dev, mbuf_pool, buf_len);
-		if (unlikely(pkts[i] == NULL))
+		if (unlikely(pkts[i] == NULL)) {
+			/*
+			 * mbuf allocation fails for jumbo packets when external
+			 * buffer allocation is not allowed and linear buffer
+			 * is required. Drop this packet.
+			 */
+			if (!allocerr_warned) {
+				RTE_LOG(ERR, VHOST_DATA,
+					"Failed mbuf alloc of size %d from %s on %s.\n",
+					buf_len, mbuf_pool->name, dev->ifname);
+				allocerr_warned = true;
+			}
+			dropped += 1;
+			i++;
 			break;
+		}
 
 		err = copy_desc_to_mbuf(dev, vq, buf_vec, nr_vec, pkts[i],
 				mbuf_pool);
 		if (unlikely(err)) {
 			rte_pktmbuf_free(pkts[i]);
+			if (!allocerr_warned) {
+				RTE_LOG(ERR, VHOST_DATA,
+					"Failed to copy desc to mbuf on %s.\n",
+					dev->ifname);
+				allocerr_warned = true;
+			}
+			dropped += 1;
+			i++;
 			break;
 		}
 
@@ -1767,6 +1779,8 @@ virtio_dev_tx_split(struct virtio_net *dev, struct vhost_virtqueue *vq,
 			zmbuf = get_zmbuf(vq);
 			if (!zmbuf) {
 				rte_pktmbuf_free(pkts[i]);
+				dropped += 1;
+				i++;
 				break;
 			}
 			zmbuf->mbuf = pkts[i];
@@ -1796,7 +1810,7 @@ virtio_dev_tx_split(struct virtio_net *dev, struct vhost_virtqueue *vq,
 		}
 	}
 
-	return i;
+	return (i - dropped);
 }
 
 static __rte_always_inline int
@@ -1841,6 +1855,8 @@ vhost_reserve_avail_batch_packed(struct virtio_net *dev,
 	}
 
 	vhost_for_each_try_unroll(i, 0, PACKED_BATCH_SIZE) {
+		if (unlikely(!desc_addrs[i]))
+			return -1;
 		if (unlikely((lens[i] != descs[avail_idx + i].len)))
 			return -1;
 	}
@@ -1928,6 +1944,7 @@ vhost_dequeue_single_packed(struct virtio_net *dev,
 	uint32_t buf_len;
 	uint16_t nr_vec = 0;
 	int err;
+	static bool allocerr_warned;
 
 	if (unlikely(fill_vec_buf_packed(dev, vq,
 					 vq->last_avail_idx, desc_count,
@@ -1938,14 +1955,24 @@ vhost_dequeue_single_packed(struct virtio_net *dev,
 
 	*pkts = virtio_dev_pktmbuf_alloc(dev, mbuf_pool, buf_len);
 	if (unlikely(*pkts == NULL)) {
-		RTE_LOG(ERR, VHOST_DATA,
-			"Failed to allocate memory for mbuf.\n");
+		if (!allocerr_warned) {
+			RTE_LOG(ERR, VHOST_DATA,
+				"Failed mbuf alloc of size %d from %s on %s.\n",
+				buf_len, mbuf_pool->name, dev->ifname);
+			allocerr_warned = true;
+		}
 		return -1;
 	}
 
 	err = copy_desc_to_mbuf(dev, vq, buf_vec, nr_vec, *pkts,
 				mbuf_pool);
 	if (unlikely(err)) {
+		if (!allocerr_warned) {
+			RTE_LOG(ERR, VHOST_DATA,
+				"Failed to copy desc to mbuf on %s.\n",
+				dev->ifname);
+			allocerr_warned = true;
+		}
 		rte_pktmbuf_free(*pkts);
 		return -1;
 	}
@@ -1960,21 +1987,24 @@ virtio_dev_tx_single_packed(struct virtio_net *dev,
 			    struct rte_mbuf **pkts)
 {
 
-	uint16_t buf_id, desc_count;
+	uint16_t buf_id, desc_count = 0;
+	int ret;
 
-	if (vhost_dequeue_single_packed(dev, vq, mbuf_pool, pkts, &buf_id,
-					&desc_count))
-		return -1;
+	ret = vhost_dequeue_single_packed(dev, vq, mbuf_pool, pkts, &buf_id,
+					&desc_count);
 
-	if (virtio_net_is_inorder(dev))
-		vhost_shadow_dequeue_single_packed_inorder(vq, buf_id,
-							   desc_count);
-	else
-		vhost_shadow_dequeue_single_packed(vq, buf_id, desc_count);
+	if (likely(desc_count > 0)) {
+		if (virtio_net_is_inorder(dev))
+			vhost_shadow_dequeue_single_packed_inorder(vq, buf_id,
+								   desc_count);
+		else
+			vhost_shadow_dequeue_single_packed(vq, buf_id,
+					desc_count);
 
-	vq_inc_last_avail_packed(vq, desc_count);
+		vq_inc_last_avail_packed(vq, desc_count);
+	}
 
-	return 0;
+	return ret;
 }
 
 static __rte_always_inline int
@@ -2004,7 +2034,7 @@ virtio_dev_tx_batch_packed_zmbuf(struct virtio_net *dev,
 
 	vhost_for_each_try_unroll(i, 0, PACKED_BATCH_SIZE) {
 		zmbufs[i]->mbuf = pkts[i];
-		zmbufs[i]->desc_idx = avail_idx + i;
+		zmbufs[i]->desc_idx = ids[i];
 		zmbufs[i]->desc_count = 1;
 	}
 
@@ -2045,7 +2075,7 @@ virtio_dev_tx_single_packed_zmbuf(struct virtio_net *dev,
 		return -1;
 	}
 	zmbuf->mbuf = *pkts;
-	zmbuf->desc_idx = vq->last_avail_idx;
+	zmbuf->desc_idx = buf_id;
 	zmbuf->desc_count = desc_count;
 
 	rte_mbuf_refcnt_update(*pkts, 1);
@@ -2149,7 +2179,6 @@ virtio_dev_tx_packed(struct virtio_net *dev,
 		if (remained >= PACKED_BATCH_SIZE) {
 			if (!virtio_dev_tx_batch_packed(dev, vq, mbuf_pool,
 							&pkts[pkt_idx])) {
-				vhost_flush_dequeue_packed(dev, vq);
 				pkt_idx += PACKED_BATCH_SIZE;
 				remained -= PACKED_BATCH_SIZE;
 				continue;
@@ -2159,14 +2188,17 @@ virtio_dev_tx_packed(struct virtio_net *dev,
 		if (virtio_dev_tx_single_packed(dev, vq, mbuf_pool,
 						&pkts[pkt_idx]))
 			break;
-		vhost_flush_dequeue_packed(dev, vq);
 		pkt_idx++;
 		remained--;
 
 	} while (remained);
 
-	if (vq->shadow_used_idx)
+	if (vq->shadow_used_idx) {
 		do_data_copy_dequeue(vq);
+
+		vhost_flush_dequeue_shadow_packed(dev, vq);
+		vhost_vring_call_packed(dev, vq);
+	}
 
 	return pkt_idx;
 }

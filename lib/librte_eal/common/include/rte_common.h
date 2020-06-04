@@ -347,7 +347,7 @@ typedef uint64_t rte_iova_t;
  *    The combined value.
  */
 static inline uint32_t
-rte_combine32ms1b(register uint32_t x)
+rte_combine32ms1b(uint32_t x)
 {
 	x |= x >> 1;
 	x |= x >> 2;
@@ -369,7 +369,7 @@ rte_combine32ms1b(register uint32_t x)
  *    The combined value.
  */
 static inline uint64_t
-rte_combine64ms1b(register uint64_t v)
+rte_combine64ms1b(uint64_t v)
 {
 	v |= v >> 1;
 	v |= v >> 2;
@@ -538,6 +538,9 @@ rte_bsf32_safe(uint64_t v, uint32_t *pos)
 /**
  * Return the rounded-up log2 of a integer.
  *
+ * @note Contrary to the logarithm mathematical operation,
+ * rte_log2_u32(0) == 0 and not -inf.
+ *
  * @param v
  *     The input parameter.
  * @return
@@ -631,6 +634,9 @@ rte_fls_u64(uint64_t x)
 
 /**
  * Return the rounded-up log2 of a 64-bit integer.
+ *
+ * @note Contrary to the logarithm mathematical operation,
+ * rte_log2_u64(0) == 0 and not -inf.
  *
  * @param v
  *     The input parameter.

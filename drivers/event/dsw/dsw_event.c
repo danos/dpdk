@@ -658,6 +658,9 @@ dsw_port_consider_migration(struct dsw_evdev *dsw,
 	if (dsw->num_ports == 1)
 		return;
 
+	if (seen_events_len < DSW_MAX_EVENTS_RECORDED)
+		return;
+
 	DSW_LOG_DP_PORT(DEBUG, source_port->id, "Considering migration.\n");
 
 	/* Randomize interval to avoid having all threads considering
@@ -930,11 +933,6 @@ dsw_port_ctl_process(struct dsw_evdev *dsw, struct dsw_port *port)
 {
 	struct dsw_ctl_msg msg;
 
-	/* So any table loads happens before the ring dequeue, in the
-	 * case of a 'paus' message.
-	 */
-	rte_smp_rmb();
-
 	if (dsw_port_ctl_dequeue(port, &msg) == 0) {
 		switch (msg.type) {
 		case DSW_CTL_PAUS_REQ:
@@ -1018,12 +1016,12 @@ dsw_event_enqueue(void *port, const struct rte_event *ev)
 }
 
 static __rte_always_inline uint16_t
-dsw_event_enqueue_burst_generic(void *port, const struct rte_event events[],
+dsw_event_enqueue_burst_generic(struct dsw_port *source_port,
+				const struct rte_event events[],
 				uint16_t events_len, bool op_types_known,
 				uint16_t num_new, uint16_t num_release,
 				uint16_t num_non_release)
 {
-	struct dsw_port *source_port = port;
 	struct dsw_evdev *dsw = source_port->dsw;
 	bool enough_credits;
 	uint16_t i;
@@ -1047,11 +1045,9 @@ dsw_event_enqueue_burst_generic(void *port, const struct rte_event events[],
 	 */
 	if (unlikely(events_len == 0)) {
 		dsw_port_note_op(source_port, DSW_MAX_PORT_OPS_PER_BG_TASK);
+		dsw_port_flush_out_buffers(dsw, source_port);
 		return 0;
 	}
-
-	if (unlikely(events_len > source_port->enqueue_depth))
-		events_len = source_port->enqueue_depth;
 
 	dsw_port_note_op(source_port, events_len);
 
@@ -1101,31 +1097,48 @@ dsw_event_enqueue_burst_generic(void *port, const struct rte_event events[],
 	DSW_LOG_DP_PORT(DEBUG, source_port->id, "%d non-release events "
 			"accepted.\n", num_non_release);
 
-	return num_non_release;
+	return (num_non_release + num_release);
 }
 
 uint16_t
 dsw_event_enqueue_burst(void *port, const struct rte_event events[],
 			uint16_t events_len)
 {
-	return dsw_event_enqueue_burst_generic(port, events, events_len, false,
-					       0, 0, 0);
+	struct dsw_port *source_port = port;
+
+	if (unlikely(events_len > source_port->enqueue_depth))
+		events_len = source_port->enqueue_depth;
+
+	return dsw_event_enqueue_burst_generic(source_port, events,
+					       events_len, false, 0, 0, 0);
 }
 
 uint16_t
 dsw_event_enqueue_new_burst(void *port, const struct rte_event events[],
 			    uint16_t events_len)
 {
-	return dsw_event_enqueue_burst_generic(port, events, events_len, true,
-					       events_len, 0, events_len);
+	struct dsw_port *source_port = port;
+
+	if (unlikely(events_len > source_port->enqueue_depth))
+		events_len = source_port->enqueue_depth;
+
+	return dsw_event_enqueue_burst_generic(source_port, events,
+					       events_len, true, events_len,
+					       0, events_len);
 }
 
 uint16_t
 dsw_event_enqueue_forward_burst(void *port, const struct rte_event events[],
 				uint16_t events_len)
 {
-	return dsw_event_enqueue_burst_generic(port, events, events_len, true,
-					       0, 0, events_len);
+	struct dsw_port *source_port = port;
+
+	if (unlikely(events_len > source_port->enqueue_depth))
+		events_len = source_port->enqueue_depth;
+
+	return dsw_event_enqueue_burst_generic(source_port, events,
+					       events_len, true, 0, 0,
+					       events_len);
 }
 
 uint16_t
@@ -1179,11 +1192,6 @@ static uint16_t
 dsw_port_dequeue_burst(struct dsw_port *port, struct rte_event *events,
 		       uint16_t num)
 {
-	struct dsw_port *source_port = port;
-	struct dsw_evdev *dsw = source_port->dsw;
-
-	dsw_port_ctl_process(dsw, source_port);
-
 	if (unlikely(port->in_buffer_len > 0)) {
 		uint16_t dequeued = RTE_MIN(num, port->in_buffer_len);
 

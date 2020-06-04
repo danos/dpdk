@@ -148,12 +148,15 @@ struct mlx5_xstats_ctrl {
 	/* Index in the device counters table. */
 	uint16_t dev_table_idx[MLX5_MAX_XSTATS];
 	uint64_t base[MLX5_MAX_XSTATS];
+	uint64_t xstats[MLX5_MAX_XSTATS];
+	uint64_t hw_stats[MLX5_MAX_XSTATS];
 	struct mlx5_counter_ctrl info[MLX5_MAX_XSTATS];
 };
 
 struct mlx5_stats_ctrl {
 	/* Base for imissed counter. */
 	uint64_t imissed_base;
+	uint64_t imissed;
 };
 
 /* devX creation object */
@@ -173,6 +176,8 @@ struct mlx5_devx_mkey_attr {
 struct mlx5_hca_qos_attr {
 	uint32_t sup:1;	/* Whether QOS is supported. */
 	uint32_t srtcm_sup:1; /* Whether srTCM mode is supported. */
+	uint32_t flow_meter_reg_share:1;
+	/* Whether reg_c share is supported. */
 	uint8_t log_max_flow_meter;
 	/* Power of the maximum supported meters. */
 	uint8_t flow_meter_reg_c_ids;
@@ -262,6 +267,7 @@ struct mlx5_dev_config {
 	struct {
 		unsigned int enabled:1; /* Whether MPRQ is enabled. */
 		unsigned int stride_num_n; /* Number of strides. */
+		unsigned int stride_size_n; /* Size of a stride. */
 		unsigned int min_stride_size_n; /* Min size of a stride. */
 		unsigned int max_stride_size_n; /* Max size of a stride. */
 		unsigned int max_memcpy_len;
@@ -364,7 +370,7 @@ struct mlx5_devx_tir_attr {
 	uint32_t rx_hash_fn:4;
 	uint32_t self_lb_block:2;
 	uint32_t transport_domain:24;
-	uint32_t rx_hash_toeplitz_key[10];
+	uint8_t rx_hash_toeplitz_key[MLX5_RSS_HASH_KEY_LEN];
 	struct mlx5_rx_hash_field_select rx_hash_field_selector_outer;
 	struct mlx5_rx_hash_field_select rx_hash_field_selector_inner;
 };
@@ -626,6 +632,7 @@ struct mlx5_flow_id_pool {
 	/**< The next index that can be used without any free elements. */
 	uint32_t *curr; /**< Pointer to the index to pop. */
 	uint32_t *last; /**< Pointer to the last element in the empty arrray. */
+	uint32_t max_id; /**< Maximum id can be allocated from the pool. */
 };
 
 /*
@@ -660,14 +667,8 @@ struct mlx5_ibv_shared {
 	uint32_t dv_regc0_mask; /* available bits of metatada reg_c[0]. */
 	uint32_t dv_refcnt; /* DV/DR data reference counter. */
 	void *fdb_domain; /* FDB Direct Rules name space handle. */
-	struct mlx5_flow_tbl_resource *fdb_mtr_sfx_tbl;
-	/* FDB meter suffix rules table. */
 	void *rx_domain; /* RX Direct Rules name space handle. */
-	struct mlx5_flow_tbl_resource *rx_mtr_sfx_tbl;
-	/* RX meter suffix rules table. */
 	void *tx_domain; /* TX Direct Rules name space handle. */
-	struct mlx5_flow_tbl_resource *tx_mtr_sfx_tbl;
-	/* TX meter suffix rules table. */
 	struct mlx5_hlist *flow_tbls;
 	/* Direct Rules tables for FDB, NIC TX+RX */
 	void *esw_drop_action; /* Pointer to DR E-Switch drop action. */
@@ -727,6 +728,7 @@ struct mlx5_priv {
 	unsigned int dr_shared:1; /* DV/DR data is shared. */
 	unsigned int counter_fallback:1; /* Use counter fallback management. */
 	unsigned int mtr_en:1; /* Whether support meter. */
+	unsigned int mtr_reg_share:1; /* Whether support meter REG_C share. */
 	uint16_t domain_id; /* Switch domain identifier. */
 	uint16_t vport_id; /* Associated VF vport index (if any). */
 	uint32_t vport_meta_tag; /* Used for vport index match ove VF LAG. */
@@ -784,6 +786,7 @@ struct mlx5_priv {
 	/* UAR same-page access control required in 32bit implementations. */
 #endif
 	uint8_t skip_default_rss_reta; /* Skip configuration of default reta. */
+	uint8_t fdb_def_rule; /* Whether fdb jump to table 1 is configured. */
 };
 
 #define PORT_ID(priv) ((priv)->dev_data->port_id)
@@ -972,6 +975,7 @@ struct mlx5_flow_counter *mlx5_counter_alloc(struct rte_eth_dev *dev);
 void mlx5_counter_free(struct rte_eth_dev *dev, struct mlx5_flow_counter *cnt);
 int mlx5_counter_query(struct rte_eth_dev *dev, struct mlx5_flow_counter *cnt,
 		       bool clear, uint64_t *pkts, uint64_t *bytes);
+void mlx5_flow_rxq_dynf_metadata_set(struct rte_eth_dev *dev);
 
 /* mlx5_mp.c */
 void mlx5_mp_req_start_rxtx(struct rte_eth_dev *dev);

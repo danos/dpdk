@@ -15,16 +15,6 @@
 
 #include "mlx5_defs.h"
 
-/*
- * Compilation workaround for PPC64 when AltiVec is fully enabled, e.g. std=c11.
- * Otherwise there would be a type conflict between stdbool and altivec.
- */
-#if defined(__PPC64__) && !defined(__APPLE_ALTIVEC__)
-#undef bool
-/* redefine as in stdbool.h */
-#define bool _Bool
-#endif
-
 /* Bit-field manipulation. */
 #define BITFIELD_DECLARE(bf, type, size) \
 	type bf[(((size_t)(size) / (sizeof(type) * CHAR_BIT)) + \
@@ -146,9 +136,10 @@ extern int mlx5_logtype;
 
 /* Allocate a buffer on the stack and fill it with a printf format string. */
 #define MKSTR(name, ...) \
-	char name[snprintf(NULL, 0, __VA_ARGS__) + 1]; \
+	int mkstr_size_##name = snprintf(NULL, 0, "" __VA_ARGS__); \
+	char name[mkstr_size_##name + 1]; \
 	\
-	snprintf(name, sizeof(name), __VA_ARGS__)
+	snprintf(name, sizeof(name), "" __VA_ARGS__)
 
 /**
  * Return logarithm of the nearest power of two above input value.

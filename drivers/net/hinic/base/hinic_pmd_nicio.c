@@ -533,6 +533,15 @@ int hinic_init_qp_ctxts(struct hinic_hwdev *hwdev)
 		return err;
 	}
 
+	if (hwdev->cmdqs->status & HINIC_CMDQ_SET_FAIL) {
+		err = hinic_reinit_cmdq_ctxts(hwdev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Reinit cmdq context failed when dev start, err: %d",
+				err);
+			return err;
+		}
+	}
+
 	err = init_qp_ctxts(nic_io);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init QP ctxts failed, rc: %d", err);
@@ -728,9 +737,10 @@ void hinic_update_rq_local_ci(struct hinic_hwdev *hwdev, u16 q_id, int wqe_cnt)
 
 static int hinic_alloc_nicio(struct hinic_hwdev *hwdev)
 {
-	int err;
-	u16 max_qps, num_qp;
 	struct hinic_nic_io *nic_io = hwdev->nic_io;
+	struct rte_pci_device *pdev = hwdev->pcidev_hdl;
+	u16 max_qps, num_qp;
+	int err;
 
 	max_qps = hinic_func_max_qnum(hwdev);
 	if ((max_qps & (max_qps - 1))) {
@@ -751,10 +761,10 @@ static int hinic_alloc_nicio(struct hinic_hwdev *hwdev)
 		goto alloc_qps_err;
 	}
 
-	nic_io->ci_vaddr_base =
-		dma_zalloc_coherent(hwdev,
+	nic_io->ci_vaddr_base = dma_zalloc_coherent(hwdev,
 				    CI_TABLE_SIZE(num_qp, HINIC_PAGE_SIZE),
-				    &nic_io->ci_dma_base, GFP_KERNEL);
+				    &nic_io->ci_dma_base,
+				    pdev->device.numa_node);
 	if (!nic_io->ci_vaddr_base) {
 		PMD_DRV_LOG(ERR, "Failed to allocate ci area");
 		err = -ENOMEM;

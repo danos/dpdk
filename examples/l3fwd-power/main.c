@@ -880,9 +880,6 @@ sleep_until_rx_interrupt(int num)
 		port_id = ((uintptr_t)data) >> CHAR_BIT;
 		queue_id = ((uintptr_t)data) &
 			RTE_LEN2MASK(CHAR_BIT, uint8_t);
-		rte_spinlock_lock(&(locks[port_id]));
-		rte_eth_dev_rx_intr_disable(port_id, queue_id);
-		rte_spinlock_unlock(&(locks[port_id]));
 		RTE_LOG(INFO, L3FWD_POWER,
 			"lcore %u is waked up from rx interrupt on"
 			" port %d queue %d\n",
@@ -892,7 +889,7 @@ sleep_until_rx_interrupt(int num)
 	return 0;
 }
 
-static void turn_on_intr(struct lcore_conf *qconf)
+static void turn_on_off_intr(struct lcore_conf *qconf, bool on)
 {
 	int i;
 	struct lcore_rx_queue *rx_queue;
@@ -905,7 +902,10 @@ static void turn_on_intr(struct lcore_conf *qconf)
 		queue_id = rx_queue->queue_id;
 
 		rte_spinlock_lock(&(locks[port_id]));
-		rte_eth_dev_rx_intr_enable(port_id, queue_id);
+		if (on)
+			rte_eth_dev_rx_intr_enable(port_id, queue_id);
+		else
+			rte_eth_dev_rx_intr_disable(port_id, queue_id);
 		rte_spinlock_unlock(&(locks[port_id]));
 	}
 }
@@ -1338,11 +1338,12 @@ start_rx:
 				 */
 				rte_delay_us(lcore_idle_hint);
 			else {
-				/* suspend until rx interrupt trigges */
+				/* suspend until rx interrupt triggers */
 				if (intr_en) {
-					turn_on_intr(qconf);
+					turn_on_off_intr(qconf, 1);
 					sleep_until_rx_interrupt(
 						qconf->n_rx_queue);
+					turn_on_off_intr(qconf, 0);
 					/**
 					 * start receiving packets immediately
 					 */
@@ -1997,7 +1998,7 @@ check_all_ports_link_status(uint32_t port_mask)
 						"Mbps - %s\n", (uint8_t)portid,
 						(unsigned)link.link_speed,
 				(link.link_duplex == ETH_LINK_FULL_DUPLEX) ?
-					("full-duplex") : ("half-duplex\n"));
+					("full-duplex") : ("half-duplex"));
 				else
 					printf("Port %d Link Down\n",
 						(uint8_t)portid);

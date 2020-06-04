@@ -151,7 +151,7 @@ static uint8_t multiple_core_capture;
 static void
 pdump_usage(const char *prgname)
 {
-	printf("usage: %s [EAL options]"
+	printf("usage: %s [EAL options] --"
 			" --["CMD_LINE_OPT_MULTI"]\n"
 			" --"CMD_LINE_OPT_PDUMP" "
 			"'(port=<port id> | device_id=<pci id or vdev name>),"
@@ -595,7 +595,7 @@ configure_vdev(uint16_t port_id)
 	if (ret != 0)
 		rte_exit(EXIT_FAILURE, "dev config failed\n");
 
-	 for (q = 0; q < txRings; q++) {
+	for (q = 0; q < txRings; q++) {
 		ret = rte_eth_tx_queue_setup(port_id, q, TX_DESC_PER_QUEUE,
 				rte_eth_dev_socket_id(port_id), NULL);
 		if (ret < 0)

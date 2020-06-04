@@ -206,7 +206,7 @@ vhost_backend_cleanup(struct virtio_net *dev)
 			dev->inflight_info->addr = NULL;
 		}
 
-		if (dev->inflight_info->fd > 0) {
+		if (dev->inflight_info->fd >= 0) {
 			close(dev->inflight_info->fd);
 			dev->inflight_info->fd = -1;
 		}
@@ -656,13 +656,11 @@ ring_addr_to_vva(struct virtio_net *dev, struct vhost_virtqueue *vq,
 {
 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM)) {
 		uint64_t vva;
-		uint64_t req_size = *size;
 
-		vva = vhost_user_iotlb_cache_find(vq, ra,
+		vhost_user_iotlb_rd_lock(vq);
+		vva = vhost_iova_to_vva(dev, vq, ra,
 					size, VHOST_ACCESS_RW);
-		if (req_size != *size)
-			vhost_user_iotlb_miss(dev, (ra + *size),
-					      VHOST_ACCESS_RW);
+		vhost_user_iotlb_rd_unlock(vq);
 
 		return vva;
 	}
@@ -670,37 +668,16 @@ ring_addr_to_vva(struct virtio_net *dev, struct vhost_virtqueue *vq,
 	return qva_to_vva(dev, ra, size);
 }
 
-/*
- * Converts vring log address to GPA
- * If IOMMU is enabled, the log address is IOVA
- * If IOMMU not enabled, the log address is already GPA
- */
 static uint64_t
-translate_log_addr(struct virtio_net *dev, struct vhost_virtqueue *vq,
-		uint64_t log_addr)
+log_addr_to_gpa(struct virtio_net *dev, struct vhost_virtqueue *vq)
 {
-	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM)) {
-		const uint64_t exp_size = sizeof(struct vring_used) +
-			sizeof(struct vring_used_elem) * vq->size;
-		uint64_t hva, gpa;
-		uint64_t size = exp_size;
+	uint64_t log_gpa;
 
-		hva = vhost_iova_to_vva(dev, vq, log_addr,
-					&size, VHOST_ACCESS_RW);
-		if (size != exp_size)
-			return 0;
+	vhost_user_iotlb_rd_lock(vq);
+	log_gpa = translate_log_addr(dev, vq, vq->ring_addrs.log_guest_addr);
+	vhost_user_iotlb_rd_unlock(vq);
 
-		gpa = hva_to_gpa(dev, hva, exp_size);
-		if (!gpa) {
-			RTE_LOG(ERR, VHOST_CONFIG,
-				"VQ: Failed to find GPA for log_addr: 0x%" PRIx64 " hva: 0x%" PRIx64 "\n",
-				log_addr, hva);
-			return 0;
-		}
-		return gpa;
-
-	} else
-		return log_addr;
+	return log_gpa;
 }
 
 static struct virtio_net *
@@ -712,7 +689,7 @@ translate_ring_addresses(struct virtio_net *dev, int vq_index)
 
 	if (addr->flags & (1 << VHOST_VRING_F_LOG)) {
 		vq->log_guest_addr =
-			translate_log_addr(dev, vq, addr->log_guest_addr);
+			log_addr_to_gpa(dev, vq);
 		if (vq->log_guest_addr == 0) {
 			RTE_LOG(DEBUG, VHOST_CONFIG,
 				"(%d) failed to map log_guest_addr.\n",
@@ -1145,6 +1122,21 @@ vhost_user_set_mem_table(struct virtio_net **pdev, struct VhostUserMsg *msg,
 			goto err_mmap;
 		}
 		mmap_size = RTE_ALIGN_CEIL(mmap_size, alignment);
+		if (mmap_size == 0) {
+			/*
+			 * It could happen if initial mmap_size + alignment
+			 * overflows the sizeof uint64, which could happen if
+			 * either mmap_size or alignment value is wrong.
+			 *
+			 * mmap() kernel implementation would return an error,
+			 * but better catch it before and provide useful info
+			 * in the logs.
+			 */
+			RTE_LOG(ERR, VHOST_CONFIG, "mmap size (0x%" PRIx64 ") "
+					"or alignment (0x%" PRIx64 ") is invalid\n",
+					reg->size + mmap_offset, alignment);
+			goto err_mmap;
+		}
 
 		populate = (dev->dequeue_zero_copy) ? MAP_POPULATE : 0;
 		mmap_addr = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE,
@@ -1298,7 +1290,8 @@ vq_is_ready(struct virtio_net *dev, struct vhost_virtqueue *vq)
 		return false;
 
 	if (vq_is_packed(dev))
-		rings_ok = !!vq->desc_packed;
+		rings_ok = vq->desc_packed && vq->driver_event &&
+			vq->device_event;
 	else
 		rings_ok = vq->desc && vq->avail && vq->used;
 
@@ -1415,6 +1408,7 @@ vhost_user_get_inflight_fd(struct virtio_net **pdev,
 				"failed to alloc dev inflight area\n");
 			return RTE_VHOST_MSG_RESULT_ERR;
 		}
+		dev->inflight_info->fd = -1;
 	}
 
 	num_queues = msg->payload.inflight.num_queues;
@@ -1439,6 +1433,16 @@ vhost_user_get_inflight_fd(struct virtio_net **pdev,
 		return RTE_VHOST_MSG_RESULT_ERR;
 	}
 	memset(addr, 0, mmap_size);
+
+	if (dev->inflight_info->addr) {
+		munmap(dev->inflight_info->addr, dev->inflight_info->size);
+		dev->inflight_info->addr = NULL;
+	}
+
+	if (dev->inflight_info->fd >= 0) {
+		close(dev->inflight_info->fd);
+		dev->inflight_info->fd = -1;
+	}
 
 	dev->inflight_info->addr = addr;
 	dev->inflight_info->size = msg->payload.inflight.mmap_size = mmap_size;
@@ -1522,10 +1526,13 @@ vhost_user_set_inflight_fd(struct virtio_net **pdev, VhostUserMsg *msg,
 				"failed to alloc dev inflight area\n");
 			return RTE_VHOST_MSG_RESULT_ERR;
 		}
+		dev->inflight_info->fd = -1;
 	}
 
-	if (dev->inflight_info->addr)
+	if (dev->inflight_info->addr) {
 		munmap(dev->inflight_info->addr, dev->inflight_info->size);
+		dev->inflight_info->addr = NULL;
+	}
 
 	addr = mmap(0, mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED,
 		    fd, mmap_offset);
@@ -1534,8 +1541,10 @@ vhost_user_set_inflight_fd(struct virtio_net **pdev, VhostUserMsg *msg,
 		return RTE_VHOST_MSG_RESULT_ERR;
 	}
 
-	if (dev->inflight_info->fd)
+	if (dev->inflight_info->fd >= 0) {
 		close(dev->inflight_info->fd);
+		dev->inflight_info->fd = -1;
+	}
 
 	dev->inflight_info->fd = fd;
 	dev->inflight_info->addr = addr;
@@ -1629,8 +1638,11 @@ vhost_check_queue_inflights_split(struct virtio_net *dev,
 	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)))
 		return RTE_VHOST_MSG_RESULT_OK;
 
+	/* The frontend may still not support the inflight feature
+	 * although we negotiate the protocol feature.
+	 */
 	if ((!vq->inflight_split))
-		return RTE_VHOST_MSG_RESULT_ERR;
+		return RTE_VHOST_MSG_RESULT_OK;
 
 	if (!vq->inflight_split->version) {
 		vq->inflight_split->version = INFLIGHT_VERSION;
@@ -1710,8 +1722,11 @@ vhost_check_queue_inflights_packed(struct virtio_net *dev,
 	    (1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)))
 		return RTE_VHOST_MSG_RESULT_OK;
 
+	/* The frontend may still not support the inflight feature
+	 * although we negotiate the protocol feature.
+	 */
 	if ((!vq->inflight_packed))
-		return RTE_VHOST_MSG_RESULT_ERR;
+		return RTE_VHOST_MSG_RESULT_OK;
 
 	if (!vq->inflight_packed->version) {
 		vq->inflight_packed->version = INFLIGHT_VERSION;
@@ -2060,10 +2075,10 @@ vhost_user_set_log_base(struct virtio_net **pdev, struct VhostUserMsg *msg,
 	size = msg->payload.log.mmap_size;
 	off  = msg->payload.log.mmap_offset;
 
-	/* Don't allow mmap_offset to point outside the mmap region */
-	if (off > size) {
+	/* Check for mmap size and offset overflow. */
+	if (off >= -size) {
 		RTE_LOG(ERR, VHOST_CONFIG,
-			"log offset %#"PRIx64" exceeds log size %#"PRIx64"\n",
+			"log offset %#"PRIx64" and log size %#"PRIx64" overflow\n",
 			off, size);
 		return RTE_VHOST_MSG_RESULT_ERR;
 	}
@@ -2229,6 +2244,13 @@ is_vring_iotlb_split(struct vhost_virtqueue *vq, struct vhost_iotlb_msg *imsg)
 	if (ra->used_user_addr < end && (ra->used_user_addr + len) > start)
 		return 1;
 
+	if (ra->flags & (1 << VHOST_VRING_F_LOG)) {
+		len = sizeof(uint64_t);
+		if (ra->log_guest_addr < end &&
+		    (ra->log_guest_addr + len) > start)
+			return 1;
+	}
+
 	return 0;
 }
 
@@ -2253,6 +2275,13 @@ is_vring_iotlb_packed(struct vhost_virtqueue *vq, struct vhost_iotlb_msg *imsg)
 	len = sizeof(struct vring_packed_desc_event);
 	if (ra->used_user_addr < end && (ra->used_user_addr + len) > start)
 		return 1;
+
+	if (ra->flags & (1 << VHOST_VRING_F_LOG)) {
+		len = sizeof(uint64_t);
+		if (ra->log_guest_addr < end &&
+		    (ra->log_guest_addr + len) > start)
+			return 1;
+	}
 
 	return 0;
 }
@@ -2440,8 +2469,13 @@ read_vhost_message(int sockfd, struct VhostUserMsg *msg)
 
 	ret = read_fd_message(sockfd, (char *)msg, VHOST_USER_HDR_SIZE,
 		msg->fds, VHOST_MEMORY_MAX_NREGIONS, &msg->fd_num);
-	if (ret <= 0)
+	if (ret <= 0) {
 		return ret;
+	} else if (ret != VHOST_USER_HDR_SIZE) {
+		RTE_LOG(ERR, VHOST_CONFIG, "Unexpected header size read\n");
+		close_msg_fds(msg);
+		return -1;
+	}
 
 	if (msg->size) {
 		if (msg->size > sizeof(msg->payload)) {
@@ -2508,7 +2542,7 @@ static int
 vhost_user_check_and_alloc_queue_pair(struct virtio_net *dev,
 			struct VhostUserMsg *msg)
 {
-	uint16_t vring_idx;
+	uint32_t vring_idx;
 
 	switch (msg->request.master) {
 	case VHOST_USER_SET_VRING_KICK:
@@ -2794,11 +2828,19 @@ static int process_slave_message_reply(struct virtio_net *dev,
 	if ((msg->flags & VHOST_USER_NEED_REPLY) == 0)
 		return 0;
 
-	if (read_vhost_message(dev->slave_req_fd, &msg_reply) < 0) {
+	ret = read_vhost_message(dev->slave_req_fd, &msg_reply);
+	if (ret <= 0) {
+		if (ret < 0)
+			RTE_LOG(ERR, VHOST_CONFIG,
+				"vhost read slave message reply failed\n");
+		else
+			RTE_LOG(INFO, VHOST_CONFIG,
+				"vhost peer closed\n");
 		ret = -1;
 		goto out;
 	}
 
+	ret = 0;
 	if (msg_reply.request.slave != msg->request.slave) {
 		RTE_LOG(ERR, VHOST_CONFIG,
 			"Received unexpected msg type (%u), expected %u\n",

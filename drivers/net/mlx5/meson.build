@@ -9,11 +9,12 @@ if not is_linux
 endif
 build = true
 
-pmd_dlopen = (get_option('ibverbs_link') == 'dlopen')
+static_ibverbs = (get_option('ibverbs_link') == 'static')
+dlopen_ibverbs = (get_option('ibverbs_link') == 'dlopen')
 LIB_GLUE_BASE = 'librte_pmd_mlx5_glue.so'
 LIB_GLUE_VERSION = '19.08.0'
 LIB_GLUE = LIB_GLUE_BASE + '.' + LIB_GLUE_VERSION
-if pmd_dlopen
+if dlopen_ibverbs
 	dpdk_conf.set('RTE_IBVERBS_LINK_DLOPEN', 1)
 	cflags += [
 		'-DMLX5_GLUE="@0@"'.format(LIB_GLUE),
@@ -24,12 +25,15 @@ endif
 libnames = [ 'mlx5', 'ibverbs' ]
 libs = []
 foreach libname:libnames
-	lib = dependency('lib' + libname, required:false)
-	if not lib.found()
+	lib = dependency('lib' + libname, static:static_ibverbs, required:false)
+	if not lib.found() and not static_ibverbs
 		lib = cc.find_library(libname, required:false)
 	endif
 	if lib.found()
 		libs += [ lib ]
+		if not static_ibverbs
+			ext_deps += lib
+		endif
 	else
 		build = false
 		reason = 'missing dependency, "' + libname + '"'
@@ -37,9 +41,18 @@ foreach libname:libnames
 endforeach
 
 if build
+	if static_ibverbs or dlopen_ibverbs
+		# Build without adding shared libs to Requires.private
+		ibv_cflags = run_command(pkgconf, '--cflags', 'libibverbs').stdout()
+		ext_deps += declare_dependency(compile_args: ibv_cflags.split())
+	endif
+	if static_ibverbs
+		# Add static deps ldflags to internal apps and Libs.private
+		ibv_ldflags = run_command(ldflags_ibverbs_static, check:true).stdout()
+		ext_deps += declare_dependency(link_args:ibv_ldflags.split())
+	endif
 	allow_experimental_apis = true
 	deps += ['hash']
-	ext_deps += libs
 	sources = files(
 		'mlx5.c',
 		'mlx5_ethdev.c',
@@ -67,7 +80,7 @@ if build
 		or dpdk_conf.has('RTE_ARCH_PPC_64'))
 		sources += files('mlx5_rxtx_vec.c')
 	endif
-	if not pmd_dlopen
+	if not dlopen_ibverbs
 		sources += files('mlx5_glue.c')
 	endif
 	cflags_options = [
@@ -130,6 +143,8 @@ if build
 		'MLX5DV_FLOW_ACTION_COUNTERS_DEVX' ],
 		[ 'HAVE_IBV_DEVX_ASYNC', 'infiniband/mlx5dv.h',
 		'mlx5dv_devx_obj_query_async' ],
+		[ 'HAVE_IBV_DEVX_QP', 'infiniband/mlx5dv.h',
+		'mlx5dv_devx_qp_query' ],
 		[ 'HAVE_MLX5DV_DR_ACTION_DEST_DEVX_TIR', 'infiniband/mlx5dv.h',
 		'mlx5dv_dr_action_create_dest_devx_tir' ],
 		[ 'HAVE_MLX5_DR_CREATE_ACTION_FLOW_METER', 'infiniband/mlx5dv.h',
@@ -200,7 +215,7 @@ if build
 	configure_file(output : 'mlx5_autoconf.h', configuration : config)
 endif
 # Build Glue Library
-if pmd_dlopen and build
+if dlopen_ibverbs and build
 	dlopen_name = 'mlx5_glue'
 	dlopen_lib_name = driver_name_fmt.format(dlopen_name)
 	dlopen_so_version = LIB_GLUE_VERSION

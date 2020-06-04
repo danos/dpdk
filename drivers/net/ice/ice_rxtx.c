@@ -236,17 +236,12 @@ _ice_rx_queue_release_mbufs(struct ice_rx_queue *rxq)
 			rxq->sw_ring[i].mbuf = NULL;
 		}
 	}
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
-		if (rxq->rx_nb_avail == 0)
-			return;
-		for (i = 0; i < rxq->rx_nb_avail; i++) {
-			struct rte_mbuf *mbuf;
+	if (rxq->rx_nb_avail == 0)
+		return;
+	for (i = 0; i < rxq->rx_nb_avail; i++)
+		rte_pktmbuf_free_seg(rxq->rx_stage[rxq->rx_next_avail + i]);
 
-			mbuf = rxq->rx_stage[rxq->rx_next_avail + i];
-			rte_pktmbuf_free_seg(mbuf);
-		}
-		rxq->rx_nb_avail = 0;
-#endif /* RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC */
+	rxq->rx_nb_avail = 0;
 }
 
 static void
@@ -309,16 +304,10 @@ ice_switch_rx_queue(struct ice_hw *hw, uint16_t q_idx, bool on)
 }
 
 static inline int
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
 ice_check_rx_burst_bulk_alloc_preconditions(struct ice_rx_queue *rxq)
-#else
-ice_check_rx_burst_bulk_alloc_preconditions
-	(__rte_unused struct ice_rx_queue *rxq)
-#endif
 {
 	int ret = 0;
 
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
 	if (!(rxq->rx_free_thresh >= ICE_RX_MAX_BURST)) {
 		PMD_INIT_LOG(DEBUG, "Rx Burst Bulk Alloc Preconditions: "
 			     "rxq->rx_free_thresh=%d, "
@@ -338,9 +327,6 @@ ice_check_rx_burst_bulk_alloc_preconditions
 			     rxq->nb_rx_desc, rxq->rx_free_thresh);
 		ret = -EINVAL;
 	}
-#else
-	ret = -EINVAL;
-#endif
 
 	return ret;
 }
@@ -357,17 +343,11 @@ ice_reset_rx_queue(struct ice_rx_queue *rxq)
 		return;
 	}
 
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
-	if (ice_check_rx_burst_bulk_alloc_preconditions(rxq) == 0)
-		len = (uint16_t)(rxq->nb_rx_desc + ICE_RX_MAX_BURST);
-	else
-#endif /* RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC */
-		len = rxq->nb_rx_desc;
+	len = (uint16_t)(rxq->nb_rx_desc + ICE_RX_MAX_BURST);
 
 	for (i = 0; i < len * sizeof(union ice_rx_flex_desc); i++)
 		((volatile char *)rxq->rx_ring)[i] = 0;
 
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
 	memset(&rxq->fake_mbuf, 0x0, sizeof(rxq->fake_mbuf));
 	for (i = 0; i < ICE_RX_MAX_BURST; ++i)
 		rxq->sw_ring[rxq->nb_rx_desc + i].mbuf = &rxq->fake_mbuf;
@@ -375,7 +355,6 @@ ice_reset_rx_queue(struct ice_rx_queue *rxq)
 	rxq->rx_nb_avail = 0;
 	rxq->rx_next_avail = 0;
 	rxq->rx_free_trigger = (uint16_t)(rxq->rx_free_thresh - 1);
-#endif /* RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC */
 
 	rxq->rx_tail = 0;
 	rxq->nb_rx_hold = 0;
@@ -926,13 +905,11 @@ ice_rx_queue_setup(struct rte_eth_dev *dev,
 	/* Allocate the maximun number of RX ring hardware descriptor. */
 	len = ICE_MAX_RING_DESC;
 
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
 	/**
 	 * Allocating a little more memory because vectorized/bulk_alloc Rx
 	 * functions doesn't check boundaries each time.
 	 */
 	len += ICE_RX_MAX_BURST;
-#endif
 
 	/* Allocate the maximum number of RX ring hardware descriptor. */
 	ring_size = sizeof(union ice_rx_flex_desc) * len;
@@ -952,11 +929,8 @@ ice_rx_queue_setup(struct rte_eth_dev *dev,
 	rxq->rx_ring_dma = rz->iova;
 	rxq->rx_ring = rz->addr;
 
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
+	/* always reserve more for bulk alloc */
 	len = (uint16_t)(nb_desc + ICE_RX_MAX_BURST);
-#else
-	len = nb_desc;
-#endif
 
 	/* Allocate the software ring. */
 	rxq->sw_ring = rte_zmalloc_socket(NULL,
@@ -977,17 +951,14 @@ ice_rx_queue_setup(struct rte_eth_dev *dev,
 	use_def_burst_func = ice_check_rx_burst_bulk_alloc_preconditions(rxq);
 
 	if (!use_def_burst_func) {
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
 		PMD_INIT_LOG(DEBUG, "Rx Burst Bulk Alloc Preconditions are "
 			     "satisfied. Rx Burst Bulk Alloc function will be "
 			     "used on port=%d, queue=%d.",
 			     rxq->port_id, rxq->queue_id);
-#endif /* RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC */
 	} else {
 		PMD_INIT_LOG(DEBUG, "Rx Burst Bulk Alloc Preconditions are "
-			     "not satisfied, Scattered Rx is requested, "
-			     "or RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC is "
-			     "not enabled on port=%d, queue=%d.",
+			     "not satisfied, Scattered Rx is requested. "
+			     "on port=%d, queue=%d.",
 			     rxq->port_id, rxq->queue_id);
 		ad->rx_bulk_alloc_allowed = false;
 	}
@@ -1399,7 +1370,6 @@ ice_rxd_to_pkt_fields(struct rte_mbuf *mb,
 #endif
 }
 
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
 #define ICE_LOOK_AHEAD 8
 #if (ICE_LOOK_AHEAD != 8)
 #error "PMD ICE: ICE_LOOK_AHEAD must be 8\n"
@@ -1620,15 +1590,6 @@ ice_recv_pkts_bulk_alloc(void *rx_queue,
 
 	return nb_rx;
 }
-#else
-static uint16_t
-ice_recv_pkts_bulk_alloc(void __rte_unused *rx_queue,
-			 struct rte_mbuf __rte_unused **rx_pkts,
-			 uint16_t __rte_unused nb_pkts)
-{
-	return 0;
-}
-#endif /* RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC */
 
 static uint16_t
 ice_recv_scattered_pkts(void *rx_queue,
@@ -1872,9 +1833,7 @@ ice_dev_supported_ptypes_get(struct rte_eth_dev *dev)
 		ptypes = ptypes_os;
 
 	if (dev->rx_pkt_burst == ice_recv_pkts ||
-#ifdef RTE_LIBRTE_ICE_RX_ALLOW_BULK_ALLOC
 	    dev->rx_pkt_burst == ice_recv_pkts_bulk_alloc ||
-#endif
 	    dev->rx_pkt_burst == ice_recv_scattered_pkts)
 		return ptypes;
 
@@ -2421,6 +2380,24 @@ ice_set_tso_ctx(struct rte_mbuf *mbuf, union ice_tx_offload tx_offload)
 	return ctx_desc;
 }
 
+/* HW requires that TX buffer size ranges from 1B up to (16K-1)B. */
+#define ICE_MAX_DATA_PER_TXD \
+	(ICE_TXD_QW1_TX_BUF_SZ_M >> ICE_TXD_QW1_TX_BUF_SZ_S)
+/* Calculate the number of TX descriptors needed for each pkt */
+static inline uint16_t
+ice_calc_pkt_desc(struct rte_mbuf *tx_pkt)
+{
+	struct rte_mbuf *txd = tx_pkt;
+	uint16_t count = 0;
+
+	while (txd != NULL) {
+		count += DIV_ROUND_UP(txd->data_len, ICE_MAX_DATA_PER_TXD);
+		txd = txd->next;
+	}
+
+	return count;
+}
+
 uint16_t
 ice_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 {
@@ -2440,6 +2417,7 @@ ice_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 	uint32_t td_offset = 0;
 	uint32_t td_tag = 0;
 	uint16_t tx_last;
+	uint16_t slen;
 	uint64_t buf_dma_addr;
 	uint64_t ol_flags;
 	union ice_tx_offload tx_offload = {0};
@@ -2452,7 +2430,7 @@ ice_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 
 	/* Check if the descriptor ring needs to be cleaned. */
 	if (txq->nb_tx_free < txq->tx_free_thresh)
-		ice_xmit_cleanup(txq);
+		(void)ice_xmit_cleanup(txq);
 
 	for (nb_tx = 0; nb_tx < nb_pkts; nb_tx++) {
 		tx_pkt = *tx_pkts++;
@@ -2471,8 +2449,15 @@ ice_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		/* The number of descriptors that must be allocated for
 		 * a packet equals to the number of the segments of that
 		 * packet plus the number of context descriptor if needed.
+		 * Recalculate the needed tx descs when TSO enabled in case
+		 * the mbuf data size exceeds max data size that hw allows
+		 * per tx desc.
 		 */
-		nb_used = (uint16_t)(tx_pkt->nb_segs + nb_ctx);
+		if (ol_flags & PKT_TX_TCP_SEG)
+			nb_used = (uint16_t)(ice_calc_pkt_desc(tx_pkt) +
+					     nb_ctx);
+		else
+			nb_used = (uint16_t)(tx_pkt->nb_segs + nb_ctx);
 		tx_last = (uint16_t)(tx_id + nb_used - 1);
 
 		/* Circular ring */
@@ -2562,15 +2547,37 @@ ice_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 			txe->mbuf = m_seg;
 
 			/* Setup TX Descriptor */
+			slen = m_seg->data_len;
 			buf_dma_addr = rte_mbuf_data_iova(m_seg);
+
+			while ((ol_flags & PKT_TX_TCP_SEG) &&
+				unlikely(slen > ICE_MAX_DATA_PER_TXD)) {
+				txd->buf_addr = rte_cpu_to_le_64(buf_dma_addr);
+				txd->cmd_type_offset_bsz =
+				rte_cpu_to_le_64(ICE_TX_DESC_DTYPE_DATA |
+				((uint64_t)td_cmd << ICE_TXD_QW1_CMD_S) |
+				((uint64_t)td_offset << ICE_TXD_QW1_OFFSET_S) |
+				((uint64_t)ICE_MAX_DATA_PER_TXD <<
+				 ICE_TXD_QW1_TX_BUF_SZ_S) |
+				((uint64_t)td_tag << ICE_TXD_QW1_L2TAG1_S));
+
+				buf_dma_addr += ICE_MAX_DATA_PER_TXD;
+				slen -= ICE_MAX_DATA_PER_TXD;
+
+				txe->last_id = tx_last;
+				tx_id = txe->next_id;
+				txe = txn;
+				txd = &tx_ring[tx_id];
+				txn = &sw_ring[txe->next_id];
+			}
+
 			txd->buf_addr = rte_cpu_to_le_64(buf_dma_addr);
 			txd->cmd_type_offset_bsz =
 				rte_cpu_to_le_64(ICE_TX_DESC_DTYPE_DATA |
-				((uint64_t)td_cmd  << ICE_TXD_QW1_CMD_S) |
+				((uint64_t)td_cmd << ICE_TXD_QW1_CMD_S) |
 				((uint64_t)td_offset << ICE_TXD_QW1_OFFSET_S) |
-				((uint64_t)m_seg->data_len  <<
-				 ICE_TXD_QW1_TX_BUF_SZ_S) |
-				((uint64_t)td_tag  << ICE_TXD_QW1_L2TAG1_S));
+				((uint64_t)slen << ICE_TXD_QW1_TX_BUF_SZ_S) |
+				((uint64_t)td_tag << ICE_TXD_QW1_L2TAG1_S));
 
 			txe->last_id = tx_last;
 			tx_id = txe->next_id;
@@ -3268,7 +3275,7 @@ ice_get_default_pkt_type(uint16_t ptype)
 		       RTE_PTYPE_L4_TCP,
 		[93] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT_UNKNOWN |
 		       RTE_PTYPE_L4_SCTP,
-		[94] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT_UNKNOWN |
+		[94] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT_UNKNOWN |
 		       RTE_PTYPE_L4_ICMP,
 
 		/* IPv6 --> IPv4 */

@@ -154,6 +154,12 @@ struct hns3_mac {
 	uint32_t link_speed;      /* ETH_SPEED_NUM_ */
 };
 
+struct hns3_fake_queue_data {
+	void **rx_queues; /* Array of pointers to fake RX queues. */
+	void **tx_queues; /* Array of pointers to fake TX queues. */
+	uint16_t nb_fake_rx_queues; /* Number of fake RX queues. */
+	uint16_t nb_fake_tx_queues; /* Number of fake TX queues. */
+};
 
 /* Primary process maintains driver state in main thread.
  *
@@ -348,6 +354,7 @@ struct hns3_hw {
 	uint16_t num_msi;
 	uint16_t total_tqps_num;    /* total task queue pairs of this PF */
 	uint16_t tqps_num;          /* num task queue pairs of this function */
+	uint16_t intr_tqps_num;     /* num queue pairs mapping interrupt */
 	uint16_t rss_size_max;      /* HW defined max RSS task queue */
 	uint16_t rx_buf_len;
 	uint16_t num_tx_desc;       /* desc num of per tx queue */
@@ -358,6 +365,7 @@ struct hns3_hw {
 
 	/* The configuration info of RSS */
 	struct hns3_rss_conf rss_info;
+	bool rss_dis_flag; /* disable rss flag. true: disable, false: enable */
 
 	uint8_t num_tc;             /* Total number of enabled TCs */
 	uint8_t hw_tc_map;
@@ -366,8 +374,14 @@ struct hns3_hw {
 	struct hns3_dcb_info dcb_info;
 	enum hns3_fc_status current_fc_status; /* current flow control status */
 	struct hns3_tc_queue_info tc_queue[HNS3_MAX_TC_NUM];
-	uint16_t alloc_tqps;
-	uint16_t alloc_rss_size;    /* Queue number per TC */
+	uint16_t used_rx_queues;
+	uint16_t used_tx_queues;
+
+	/* Config max queue numbers between rx and tx queues from user */
+	uint16_t cfg_max_queues;
+	struct hns3_fake_queue_data fkq_data;     /* fake queue data */
+	uint16_t alloc_rss_size;    /* RX queue number per TC */
+	uint16_t tx_qnum_per_tc;    /* TX queue number per TC */
 
 	uint32_t flag;
 	/*
@@ -453,6 +467,7 @@ struct hns3_mp_param {
 struct hns3_pf {
 	struct hns3_adapter *adapter;
 	bool is_main_pf;
+	uint16_t func_num; /* num functions of this pf, include pf and vfs */
 
 	uint32_t pkt_buf_size; /* Total pf buf size for tx/rx */
 	uint32_t tx_buf_size; /* Tx buffer size for each TC */

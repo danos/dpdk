@@ -678,10 +678,11 @@ uint16_t bnxt_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 
 	/* Attempt to alloc Rx buf in case of a previous allocation failure. */
 	if (rc == -ENOMEM) {
-		int i;
+		int i = RING_NEXT(rxr->rx_ring_struct, prod);
+		int cnt = nb_rx_pkts;
 
-		for (i = prod; i <= nb_rx_pkts;
-			i = RING_NEXT(rxr->rx_ring_struct, i)) {
+		for (; cnt;
+			i = RING_NEXT(rxr->rx_ring_struct, i), cnt--) {
 			struct bnxt_sw_rx_bd *rx_buf = &rxr->rx_buf_ring[i];
 
 			/* Buffer already allocated for this index. */
@@ -852,11 +853,13 @@ int bnxt_init_one_rx_ring(struct bnxt_rx_queue *rxq)
 
 	prod = rxr->rx_prod;
 	for (i = 0; i < ring->ring_size; i++) {
-		if (bnxt_alloc_rx_data(rxq, rxr, prod) != 0) {
-			PMD_DRV_LOG(WARNING,
-				"init'ed rx ring %d with %d/%d mbufs only\n",
-				rxq->queue_id, i, ring->ring_size);
-			break;
+		if (unlikely(!rxr->rx_buf_ring[i].mbuf)) {
+			if (bnxt_alloc_rx_data(rxq, rxr, prod) != 0) {
+				PMD_DRV_LOG(WARNING,
+					    "init'ed rx ring %d with %d/%d mbufs only\n",
+					    rxq->queue_id, i, ring->ring_size);
+				break;
+			}
 		}
 		rxr->rx_prod = prod;
 		prod = RING_NEXT(rxr->rx_ring_struct, prod);
@@ -868,11 +871,13 @@ int bnxt_init_one_rx_ring(struct bnxt_rx_queue *rxq)
 	prod = rxr->ag_prod;
 
 	for (i = 0; i < ring->ring_size; i++) {
-		if (bnxt_alloc_ag_data(rxq, rxr, prod) != 0) {
-			PMD_DRV_LOG(WARNING,
-			"init'ed AG ring %d with %d/%d mbufs only\n",
-			rxq->queue_id, i, ring->ring_size);
-			break;
+		if (unlikely(!rxr->ag_buf_ring[i].mbuf)) {
+			if (bnxt_alloc_ag_data(rxq, rxr, prod) != 0) {
+				PMD_DRV_LOG(WARNING,
+					    "init'ed AG ring %d with %d/%d mbufs only\n",
+					    rxq->queue_id, i, ring->ring_size);
+				break;
+			}
 		}
 		rxr->ag_prod = prod;
 		prod = RING_NEXT(rxr->ag_ring_struct, prod);
@@ -883,11 +888,13 @@ int bnxt_init_one_rx_ring(struct bnxt_rx_queue *rxq)
 		unsigned int max_aggs = BNXT_TPA_MAX_AGGS(rxq->bp);
 
 		for (i = 0; i < max_aggs; i++) {
-			rxr->tpa_info[i].mbuf =
-				__bnxt_alloc_rx_data(rxq->mb_pool);
-			if (!rxr->tpa_info[i].mbuf) {
-				rte_atomic64_inc(&rxq->rx_mbuf_alloc_fail);
-				return -ENOMEM;
+			if (unlikely(!rxr->tpa_info[i].mbuf)) {
+				rxr->tpa_info[i].mbuf =
+					__bnxt_alloc_rx_data(rxq->mb_pool);
+				if (!rxr->tpa_info[i].mbuf) {
+					rte_atomic64_inc(&rxq->rx_mbuf_alloc_fail);
+					return -ENOMEM;
+				}
 			}
 		}
 	}

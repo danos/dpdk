@@ -68,6 +68,10 @@ extern "C" {
 #define VHOST_USER_PROTOCOL_F_PAGEFAULT 8
 #endif
 
+#ifndef VHOST_USER_PROTOCOL_F_CONFIG
+#define VHOST_USER_PROTOCOL_F_CONFIG 9
+#endif
+
 #ifndef VHOST_USER_PROTOCOL_F_SLAVE_SEND_FD
 #define VHOST_USER_PROTOCOL_F_SLAVE_SEND_FD 10
 #endif
@@ -84,6 +88,7 @@ extern "C" {
 #ifndef VHOST_USER_F_PROTOCOL_FEATURES
 #define VHOST_USER_F_PROTOCOL_FEATURES	30
 #endif
+
 
 /**
  * Information relating to memory regions including offsets to
@@ -253,7 +258,7 @@ struct vhost_device_ops {
 
 	/**
 	 * This callback gets called each time a guest gets notified
-	 * about waiting packets. This is the interrupt handling trough
+	 * about waiting packets. This is the interrupt handling through
 	 * the eventfd_write(callfd), which can be used for counting these
 	 * "slow" syscalls.
 	 */
