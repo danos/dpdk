@@ -1,3 +1,10 @@
+dpdk (18.11.6-1vyatta8.5) unstable; urgency=medium
+
+  * net/bonding: allow application to select LSC interrupts (Bugfix:
+    VRVDR-48438)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 11 Jun 2020 14:37:27 -0400
+
 dpdk (18.11.6-1vyatta8.4) unstable; urgency=medium
 
   * vhost: backport security fixes (Bugfix: VRVDR-51054)
