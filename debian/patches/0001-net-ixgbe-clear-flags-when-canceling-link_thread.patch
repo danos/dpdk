@@ -1,0 +1,49 @@
+From ef2360dff6b7356e7d285dcf3cb69b70acc3e843 Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Thu, 18 Jun 2020 12:43:49 -0400
+Subject: [PATCH] net/ixgbe: clear flags when canceling link_thread
+
+If the ixgbe-link-handler thread canceled before having run, then the
+IXGBE_FLAG_NEED_LINK_CONFIG flag could potentially remain set. If this
+flag isn't clear, then ixgbe_dev_link_update_share will always short
+circuit to rte_eth_linkstatus_set and never get a chance to schedule
+the ixgbe-link-handler again.
+
+Signed-off-by: Chas Williams <chas3@att.com>
+---
+ drivers/net/ixgbe/ixgbe_ethdev.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+--- a/drivers/net/ixgbe/ixgbe_ethdev.c
++++ b/drivers/net/ixgbe/ixgbe_ethdev.c
+@@ -2866,10 +2866,13 @@ ixgbe_dev_stop(struct rte_eth_dev *dev)
+ 	int vf;
+ 	struct ixgbe_tm_conf *tm_conf =
+ 		IXGBE_DEV_PRIVATE_TO_TM_CONF(dev->data->dev_private);
++	struct ixgbe_interrupt *intr =
++		IXGBE_DEV_PRIVATE_TO_INTR(dev->data->dev_private);
+ 
+ 	PMD_INIT_FUNC_TRACE();
+ 
+ 	rte_eal_alarm_cancel(ixgbe_dev_setup_link_alarm_handler, dev);
++	intr->flags &= ~IXGBE_FLAG_NEED_LINK_CONFIG;
+ 
+ 	/* disable interrupts */
+ 	ixgbe_disable_intr(hw);
+@@ -5145,6 +5148,8 @@ ixgbevf_dev_start(struct rte_eth_dev *de
+ 	uint32_t intr_vector = 0;
+ 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+ 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
++	struct ixgbe_interrupt *intr =
++		IXGBE_DEV_PRIVATE_TO_INTR(dev->data->dev_private);
+ 
+ 	int err, mask = 0;
+ 
+@@ -5152,6 +5157,7 @@ ixgbevf_dev_start(struct rte_eth_dev *de
+ 
+ 	/* Stop the link setup handler before resetting the HW. */
+ 	rte_eal_alarm_cancel(ixgbe_dev_setup_link_alarm_handler, dev);
++	intr->flags &= ~IXGBE_FLAG_NEED_LINK_CONFIG;
+ 
+ 	err = hw->mac.ops.reset_hw(hw);
+ 	if (err) {
