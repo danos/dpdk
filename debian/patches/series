@@ -1,4 +1,5 @@
 # Patches for DPDK
+0001-net-ixgbe-clear-flags-when-canceling-link_thread.patch
 0001-net-bonding-allow-application-to-select-LSC-interrup.patch
 0001-ixgbe-stop-delayed-interrupt-handler-when-starting.patch
 0001-net-bonding-advertise-rx-vlan-filter-capability.patch
