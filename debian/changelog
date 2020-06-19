@@ -1,3 +1,12 @@
+dpdk (19.11.3-1) unstable; urgency=medium
+
+  * New upstream release 19.11.3; for a full list of changes see:
+    https://doc.dpdk.org/guides-19.11/rel_notes/release_19_11.html#release-notes
+    (Closes: #957146)
+  * Depend on pci.ids | hwdata instead of hwdata (Closes: #953298)
+
+ -- Luca Boccassi <bluca@debian.org>  Fri, 19 Jun 2020 16:56:03 +0100
+
 dpdk (19.11.3~rc1-1) experimental; urgency=medium
 
   * New upstream release candidate 19.11.3~rc1
