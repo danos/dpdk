@@ -1,3 +1,16 @@
+dpdk (19.11.2-0vyatta2) unstable; urgency=medium
+
+  * net/mlx5: fix out-of-bound write in xstats (Bugfix: VRVDR-46357)
+  * Update symbols to match release version
+  * Remove fuzz from local patch
+  * net/mlx5: fix out-of-bound write in xstats (Bugfix: VRVDR-46357)
+  * net/bonding: allow application to select LSC interrupts (Bugfix:
+    VRVDR-48438)
+  * net/ixgbe: clear flags when canceling link_thread (Bugfix:
+    VRVDR-51518)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 25 Jun 2020 10:39:54 -0400
+
 dpdk (19.11.2-0vyatta1) unstable; urgency=medium
 
   [ Maxime Coquelin ]
