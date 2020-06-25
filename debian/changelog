@@ -1,3 +1,10 @@
+dpdk (18.11.6-1vyatta8.6) unstable; urgency=medium
+
+  * net/ixgbe: clear flags when canceling link_thread (Bugfix:
+    VRVDR-51518)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 25 Jun 2020 10:40:55 -0400
+
 dpdk (18.11.6-1vyatta8.5) unstable; urgency=medium
 
   * net/bonding: allow application to select LSC interrupts (Bugfix:
