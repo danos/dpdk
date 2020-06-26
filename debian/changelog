@@ -1,3 +1,952 @@
+dpdk (19.11.3-0vyatta1) unstable; urgency=medium
+
+  [ Timothy Redaelli ]
+  * crypto/octeontx2: fix build with gcc 10
+  * test: fix build with gcc 10
+  * app/pipeline: fix build with gcc 10
+  * examples/vhost_blk: fix build with gcc 10
+  * examples/eventdev: fix build with gcc 10
+  * examples/qos_sched: fix build with gcc 10
+
+  [ Hemant Agrawal ]
+  * drivers: add crypto as dependency for event drivers
+
+  [ Thomas Monjalon ]
+  * drivers/crypto: fix build with make 4.3
+
+  [ Sunil Kumar Kori ]
+  * eal: fix log message print for regex
+
+  [ Haifeng Lin ]
+  * eal/arm64: fix precise TSC
+
+  [ David Marchand ]
+  * mem: mark pages as not accessed when reserving VA
+
+  [ Harry van Haaren ]
+  * service: fix crash on exit
+
+  [ Ciara Power ]
+  * telemetry: fix port stats retrieval
+
+  [ Bruce Richardson ]
+  * pci: remove unneeded includes in public header file
+  * pci: fix build on FreeBSD
+
+  [ David Christensen ]
+  * pci: fix build on ppc
+
+  [ Dmitry Kozlyuk ]
+  * build: fix linker warnings with clang on Windows
+
+  [ Ashish Gupta ]
+  * net/octeontx2: fix link information for loopback port
+
+  [ Gavin Hu ]
+  * net/i40e: relax barrier in Tx
+
+  [ Ophir Munk ]
+  * net/mlx5: fix VLAN PCP item calculation
+
+  [ Qiming Yang ]
+  * net/i40e: fix X722 performance
+
+  [ Tao Zhu ]
+  * net/ice: fix hash flow crash
+
+  [ Alex Marginean ]
+  * net/enetc: fix Rx lock-up
+
+  [ Qi Zhang ]
+  * net/ice: remove unnecessary variable
+
+  [ Gaetan Rivet ]
+  * doc: fix number of failsafe sub-devices
+
+  [ Andrew Rybchenko ]
+  * net/sfc: fix reported promiscuous/multicast mode
+
+  [ Eduard Serra ]
+  * net/vmxnet3: fix RSS setting on v4
+
+  [ Igor Romanov ]
+  * net/sfc: fix initialization error path
+  * net/sfc: fix Rx queue start failure path
+
+  [ Qi Zhang ]
+  * net/ice: remove bulk alloc option
+
+  [ Dekel Peled ]
+  * net/mlx5: fix mask used for IPv6 item validation
+
+  [ Dmitry Kozlyuk ]
+  * build: support MinGW-w64 with Meson
+
+  [ Július Milan ]
+  * net/memif: fix init when already connected
+
+  [ Kevin Traynor ]
+  * net/hinic: fix snprintf length of cable info
+  * net/hinic: fix repeating cable log and length check
+
+  [ Chengchang Tang ]
+  * net/hns3: fix promiscuous mode for PF
+
+  [ Stephen Hemminger ]
+  * ethdev: fix spelling
+
+  [ Igor Romanov ]
+  * net/sfc: fix promiscuous and allmulticast toggles errors
+  * net/sfc: set priority of created filters to manual
+  * net/sfc/base: reduce filter priorities to implemented only
+  * net/sfc/base: reject automatic filter creation by users
+  * net/sfc/base: refactor filter lookup loop in EF10
+  * net/sfc/base: handle manual and auto filter clashes in EF10
+
+  [ Wisam Jaddo ]
+  * net/mlx5: fix zero metadata action
+
+  [ Xiaoyun Wang ]
+  * net/hinic: allocate IO memory with socket id
+
+  [ Dekel Peled ]
+  * net/mlx5: fix CVLAN tag set in IP item translation
+
+  [ Alexander Kozyrev ]
+  * net/mlx5: reduce Tx completion index memory loads
+
+  [ Jim Harris ]
+  * contigmem: cleanup properly when load fails
+
+  [ Nithin Dabilpuram ]
+  * devtools: fix symbol map change check
+
+  [ David Marchand ]
+  * test: load drivers when required
+
+  [ Ruifeng Wang ]
+  * test: skip some subtests in no-huge mode
+
+  [ Mit Matelske ]
+  * eal/freebsd: fix queuing duplicate alarm callbacks
+
+  [ Anatoly Burakov ]
+  * mem: preallocate VA space in no-huge mode
+
+  [ Olivier Matz ]
+  * test/kvargs: fix to consider empty elements as valid
+  * test/kvargs: fix invalid cases check
+
+  [ Yunjian Wang ]
+  * kvargs: fix buffer overflow when parsing list
+
+  [ Somnath Kotur ]
+  * bus/pci: fix devargs on probing again
+
+  [ Juraj Linkeš ]
+  * ci: fix telemetry dependency in Travis
+
+  [ Asim Jamshed ]
+  * fib: fix headers for C++ support
+
+  [ Adam Dybkowski ]
+  * cryptodev: fix missing device id range checking
+  * common/qat: fix GEN3 marketing name
+
+  [ Ruifeng Wang ]
+  * test/ipsec: fix crash in session destroy
+
+  [ Nicolas Chautru ]
+  * baseband/turbo_sw: fix exposed LLR decimals assumption
+
+  [ Nagadheeraj Rottela ]
+  * crypto/nitrox: fix CSR register address generation
+  * crypto/nitrox: fix oversized device name
+
+  [ Mattias Rönnblom ]
+  * event/dsw: remove redundant control ring poll
+  * event/dsw: remove unnecessary read barrier
+
+  [ Thomas Monjalon ]
+  * doc: fix sphinx compatibility
+
+  [ Akhil Goyal ]
+  * ipsec: fix build dependency on hash lib
+
+  [ Thomas Monjalon ]
+  * log: fix level picked with globbing on type register
+  * doc: fix matrix CSS for recent sphinx
+
+  [ Tonghao Zhang ]
+  * eal: fix PRNG init with HPET enabled
+
+  [ Michael Haeuptle ]
+  * vfio: fix race condition with sysfs
+
+  [ Wei Hu (Xavier) ]
+  * vfio: fix use after free with multiprocess
+
+  [ Bruce Richardson ]
+  * drivers: fix log type variables for -fno-common
+
+  [ Pablo de Lara ]
+  * cryptodev: add asymmetric session-less feature name
+
+  [ Lukasz Wojciechowski ]
+  * drivers/crypto: fix log type variables for -fno-common
+
+  [ Pablo de Lara ]
+  * test/crypto: fix flag check
+  * crypto/openssl: fix out-of-place encryption
+
+  [ Lukasz Wojciechowski ]
+  * security: fix verification of parameters
+  * security: fix return types in documentation
+  * security: fix session counter
+  * test: remove redundant macro
+
+  [ Chengwen Feng ]
+  * net/hns3: fix packets offload features flags in Rx
+  * net/hns3: fix default error code of command interface
+  * net/hns3: fix crash when flushing RSS flow rules with FLR
+
+  [ Min Hu (Connor) ]
+  * net/hns3: fix configuring illegal VLAN PVID
+
+  [ Wei Hu (Xavier) ]
+  * net/hns3: fix status after repeated resets
+
+  [ Xiaoyun Wang ]
+  * net/hinic: fix LRO
+  * net/hinic/base: fix port start during FW hot update
+
+  [ Andy Pei ]
+  * net/ipn3ke: use control thread to check link status
+
+  [ Lijun Ou ]
+  * net/hns3: fix configuring RSS hash when rules are flushed
+
+  [ Min Hu (Connor) ]
+  * net/hns3: fix mailbox opcode data type
+
+  [ Chengwen Feng ]
+  * net/hns3: fix return value of setting VLAN offload
+
+  [ Qi Zhang ]
+  * net/ice/base: fix uninitialized stack variables
+  * net/ice/base: read PSM clock frequency from register
+  * net/ice/base: minor fixes
+  * net/ice/base: fix MAC write command
+
+  [ Tao Zhu ]
+  * net/ixgbe: fix link status inconsistencies
+
+  [ Raslan Darawsheh ]
+  * net/mlx5: fix validation of VXLAN/VXLAN-GPE specs
+
+  [ Viacheslav Ovsiienko ]
+  * net/mlx5: fix metadata for compressed Rx CQEs
+
+  [ Dekel Peled ]
+  * net/mlx5: update VLAN and encap actions validation
+
+  [ Asaf Penso ]
+  * net/mlx5: fix call to modify action without init item
+
+  [ Wisam Jaddo ]
+  * net/mlx5: fix zero value validation for metadata
+
+  [ Junyu Jiang ]
+  * examples/vmdq: fix output of pools/queues
+
+  [ Stephen Hemminger ]
+  * net/mvneta: do not use PMD log type
+  * net/virtio: do not use PMD log type
+  * net/tap: do not use PMD log type
+  * net/pfe: do not use PMD log type
+  * net/bnxt: do not use PMD log type
+  * net/dpaa: use dynamic log type
+  * net/thunderx: use dynamic log type
+
+  [ Jiawei Wang ]
+  * net/mlx5: fix imissed counter overflow
+
+  [ Qi Zhang ]
+  * net/ice/base: fix binary order for GTPU filter
+
+  [ Haiyue Wang ]
+  * net/ice/base: check memory pointer before copying
+
+  [ Yunjian Wang ]
+  * net/tap: remove unused assert
+
+  [ Amit Gupta ]
+  * net/octeontx: fix meson build for disabled drivers
+
+  [ Pavan Nikhilesh ]
+  * net/octeontx2: fix device configuration sequence
+
+  [ Wei Zhao ]
+  * net/ice: change default tunnel type
+  * net/ice: add action number check for switch
+  * net/ice: fix input set of VLAN item
+
+  [ Stephen Hemminger ]
+  * net/netvsc: propagate descriptor limits from VF
+  * net/netvsc: handle Rx packets during multi-channel setup
+  * net/netvsc: split send buffers from Tx descriptors
+  * net/netvsc: fix memory free on device close
+  * net/netvsc: remove process event optimization
+  * net/netvsc: handle Tx completions based on burst size
+  * net/netvsc: avoid possible live lock
+
+  [ Vadim Podovinnikov ]
+  * net/memif: fix resource leak
+
+  [ Eugeny Parshutin ]
+  * ethdev: fix build when vtune profiling is on
+
+  [ Junyu Jiang ]
+  * examples/vmdq: fix RSS configuration
+
+  [ Ferruh Yigit ]
+  * net/nfp: fix log format specifiers
+
+  [ Yunjian Wang ]
+  * net/nfp: fix dangling pointer on probe failure
+
+  [ Junyu Jiang ]
+  * net/ice: fix RSS advanced rule
+
+  [ Qi Zhang ]
+  * net/ice/base: remove unused code in switch rule
+
+  [ Igor Chauskin ]
+  * net/ena/base: make allocation macros thread-safe
+  * net/ena/base: prevent allocation of zero sized memory
+
+  [ Michal Krawczyk ]
+  * net/ena/base: fix documentation of functions
+  * net/ena/base: fix indentation in CQ polling
+  * net/ena/base: fix indentation of multiple defines
+  * net/ena: set IO ring size to valid value
+
+  [ Suanming Mou ]
+  * net/mlx5: fix counter container usage
+
+  [ Xiao Zhang ]
+  * app/testpmd: fix PPPoE flow command
+
+  [ Yunjian Wang ]
+  * net/pfe: fix double free of MAC address
+
+  [ Ferruh Yigit ]
+  * net/null: fix secondary burst function selection
+  * net/null: remove redundant check
+
+  [ Xiaoyun Wang ]
+  * net/hinic/base: fix PF firmware hot-active problem
+
+  [ Fan Zhang ]
+  * vhost/crypto: add missing user protocol flag
+
+  [ Marvin Liu ]
+  * vhost: fix packed ring zero-copy
+
+  [ Itsuro Oda ]
+  * net/vhost: fix potential memory leak on close
+
+  [ Xiaolong Ye ]
+  * net/virtio: fix outdated comment
+  * vhost: remove unused variable
+
+  [ Itsuro Oda ]
+  * vhost: make IOTLB cache name unique among processes
+
+  [ Chengwen Feng ]
+  * net/hns3: clear residual flow rules on init
+
+  [ Lijun Ou ]
+  * net/hns3: add RSS hash offload to capabilities
+  * net/hns3: fix RSS key length
+
+  [ Chengchang Tang ]
+  * net/hns3: fix default VLAN filter configuration for PF
+  * net/hns3: fix VLAN filter when setting promisucous mode
+
+  [ Thomas Monjalon ]
+  * common/mlx5: fix build with -fno-common
+  * net/mlx4: fix build with -fno-common
+
+  [ Mohsin Shaikh ]
+  * net/mlx5: use open/read/close for ib stats query
+
+  [ Vamsi Attunuru ]
+  * net/octeontx2: enable error and RAS interrupt in configure
+
+  [ Nithin Dabilpuram ]
+  * net/octeontx2: disable unnecessary error interrupts
+
+  [ Gavin Hu ]
+  * net/i40e: relax barrier in Tx for NEON
+
+  [ Alexander Kozyrev ]
+  * net/mlx5: add device parameter for MPRQ stride size
+  * net/mlx5: enable MPRQ multi-stride operations
+  * net/mlx5: add multi-segment packets in MPRQ mode
+
+  [ Suanming Mou ]
+  * net/mlx5: fix meter suffix table leak
+  * net/mlx5: fix jump table leak
+
+  [ Hyong Youb Kim ]
+  * net/enic: fix flow action reordering
+
+  [ Xiaoyu Min ]
+  * net/mlx5: fix push VLAN action to use item info
+  * net/mlx5: fix validation of push VLAN without full mask
+
+  [ Yunjian Wang ]
+  * net/tap: fix mbuf double free when writev fails
+  * net/tap: fix mbuf and mem leak during queue release
+  * net/tap: fix check for mbuf number of segment
+  * net/tap: fix file close on remove
+  * net/tap: fix fd leak on creation failure
+  * net/tap: fix unexpected link handler
+
+  [ Marvin Liu ]
+  * vhost: fix shadow update
+  * vhost: fix shadowed descriptors not flushed
+
+  [ Ivan Dyukov ]
+  * net/virtio-user: fix devargs parsing
+
+  [ Yunjian Wang ]
+  * net/tap: fix queues fd check before close
+
+  [ Bernard Iremonger ]
+  * net/i40e: fix flow director initialisation
+
+  [ Thomas Monjalon ]
+  * common/mlx5: fix build with rdma-core 21
+
+  [ Tonghao Zhang ]
+  * net/mlx5: fix crash when releasing meter table
+
+  [ Bing Zhao ]
+  * net/mlx5: fix header modify action validation
+
+  [ Alexander Kozyrev ]
+  * net/mlx5: set dynamic flow metadata in Rx queues
+  * net/mlx5: improve logging of MPRQ selection
+
+  [ Tao Zhu ]
+  * net/ixgbe: fix resource leak after thread exits normally
+
+  [ Shougang Wang ]
+  * net/ixgbe: fix link status after port reset
+
+  [ Cheng Peng ]
+  * net/iavf: fix stats query error code
+
+  [ Kalesh AP ]
+  * net/bnxt: fix HWRM command during FW reset
+  * net/bnxt: use true/false for bool types
+  * net/bnxt: fix port start failure handling
+  * net/bnxt: fix VLAN add when port is stopped
+
+  [ Konstantin Ananyev ]
+  * security: fix crash at accessing non-implemented ops
+
+  [ Fady Bader ]
+  * mempool: remove inline functions from export list
+
+  [ Alex Kiselev ]
+  * lpm6: fix size of tbl8 group
+
+  [ Stephen Hemminger ]
+  * lpm6: fix comments spelling
+  * eal: fix comments spelling
+
+  [ Honnappa Nagarahalli ]
+  * timer: protect initialization with lock
+
+  [ Luca Boccassi ]
+  * fix various typos found by Lintian
+
+  [ Thomas Monjalon ]
+  * app: fix usage help of options separated by dashes
+
+  [ Luca Boccassi ]
+  * usertools: check for pci.ids in /usr/share/misc
+
+  [ Vijaya Mohan Guvva ]
+  * bus/pci: fix UIO resource access from secondary process
+
+  [ Rahul Gupta ]
+  * net/bnxt: fix memory leak during queue restart
+
+  [ Kalesh AP ]
+  * net/bnxt: fix VNIC Rx queue count on VNIC free
+
+  [ Raslan Darawsheh ]
+  * app/testpmd: add parsing for QinQ VLAN headers
+
+  [ Xiaolong Ye ]
+  * doc: fix log level example in Linux guide
+
+  [ David Marchand ]
+  * eal: fix typo in endian conversion macros
+
+  [ Kevin Traynor ]
+  * net/avp: fix gcc 10 maybe-uninitialized warning
+  * examples/ipsec-gw: fix gcc 10 maybe-uninitialized warning
+  * eal/x86: ignore gcc 10 stringop-overflow warnings
+
+  [ Olivier Matz ]
+  * kvargs: fix invalid token parsing on FreeBSD
+
+  [ David Christensen ]
+  * eal/ppc: fix build with gcc 9.3
+
+  [ Somnath Kotur ]
+  * net/bnxt: fix max ring count
+
+  [ Wei Zhao ]
+  * net/i40e: fix flow director for ARP packets
+  * doc: add i40e limitation for flow director
+  * net/i40e: fix flush of flow director filter
+
+  [ Asaf Penso ]
+  * net/mlx5: fix assert in doorbell lookup
+
+  [ Roland Qi ]
+  * vhost: fix peer close check
+
+  [ Xuan Ding ]
+  * vhost: prevent zero-copy with incompatible client mode
+
+  [ Alexander Kozyrev ]
+  * net/mlx5: fix assert in dynamic metadata handling
+
+  [ Bing Zhao ]
+  * net/mlx5: fix actions validation on root table
+
+  [ Andrew Rybchenko ]
+  * net/sfc/base: use simpler EF10 family conditional check
+  * net/sfc/base: use simpler EF10 family run-time checks
+  * net/sfc/base: fix build when EVB is enabled
+
+  [ Jasvinder Singh ]
+  * net/softnic: fix memory leak for thread
+  * net/softnic: fix resource leak for pipeline
+
+  [ Min Hu (Connor) ]
+  * net/hns3: fix VLAN PVID when configuring device
+
+  [ Wei Hu (Xavier) ]
+  * net/hns3: fix return value when clearing statistics
+
+  [ Yunjian Wang ]
+  * net/octeontx: fix dangling pointer on init failure
+
+  [ Xiaoyu Min ]
+  * net/mlx5: fix RSS enablement
+
+  [ Bing Zhao ]
+  * net/mlx5: fix assert in modify converting
+
+  [ Wisam Jaddo ]
+  * net/mlx5: fix VLAN ID check
+
+  [ Kevin Traynor ]
+  * net/mlx5: fix gcc 10 enum-conversion warning
+
+  [ Lukasz Bartosik ]
+  * event/octeontx2: fix queue removal from Rx adapter
+
+  [ Pavan Nikhilesh ]
+  * eventdev: fix probe and remove for secondary process
+
+  [ Mattias Rönnblom ]
+  * event/dsw: avoid reusing previously recorded events
+
+  [ Pavan Nikhilesh ]
+  * common/octeontx: fix gcc 9.1 ABI break
+
+  [ Bing Zhao ]
+  * mk: fix static linkage of mlx dependency
+
+  [ Honnappa Nagarahalli ]
+  * service: fix race condition for MT unsafe service
+  * service: fix identification of service running on other lcore
+
+  [ Phil Yang ]
+  * service: remove rte prefix from static functions
+
+  [ David Marchand ]
+  * remove references to private PCI probe function
+
+  [ Louise Kilheeney ]
+  * examples/l2fwd-keepalive: fix mbuf pool size
+
+  [ Bing Zhao ]
+  * mem: fix overflow on allocation
+
+  [ Harry van Haaren ]
+  * examples/eventdev: fix crash on exit
+
+  [ Ferruh Yigit ]
+  * mempool/octeontx2: fix build for gcc O1 optimization
+  * net/ena: fix build for O1 optimization
+  * event/octeontx2: fix build for O1 optimization
+
+  [ Harry van Haaren ]
+  * test/flow_classify: enable multi-sockets system
+
+  [ Nicolas Chautru ]
+  * bbdev: fix doxygen comments
+
+  [ Yunjian Wang ]
+  * crypto/ccp: fix fd leak on probe failure
+
+  [ Adam Dybkowski ]
+  * app/crypto-perf: fix display of sample test vector
+
+  [ Arek Kusztal ]
+  * crypto/qat: fix cipher descriptor for ZUC and SNOW
+
+  [ Kevin Traynor ]
+  * crypto/kasumi: fix extern declaration
+
+  [ Archana Muniganti ]
+  * examples/fips_validation: fix parsing of algorithms
+
+  [ Kevin Traynor ]
+  * drivers/crypto: disable gcc 10 no-common errors
+
+  [ Vladimir Medvedkin ]
+  * ipsec: check SAD lookup error
+
+  [ Yunjian Wang ]
+  * net/failsafe: fix fd leak
+
+  [ Wei Hu (Xavier) ]
+  * app/testpmd: fix statistics after reset
+
+  [ Stephen Hemminger ]
+  * net/netvsc: fix comment spelling
+  * bus/vmbus: fix comment spelling
+  * net/netvsc: do RSS across Rx queue only
+  * net/netvsc: do not configure RSS if disabled
+
+  [ Linsi Yuan ]
+  * net/bnxt: fix possible stack smashing
+
+  [ Alvin Zhang ]
+  * net/iavf: fix link speed
+
+  [ Zhihong Peng ]
+  * net/ixgbe: fix link status synchronization on BSD
+
+  [ Simei Su ]
+  * net/ice: support mark only action for flow director
+
+  [ Junyu Jiang ]
+  * net/ice: fix crash in switch filter
+
+  [ Stephen Hemminger ]
+  * net/tap: fix crash in flow destroy
+
+  [ Kalesh AP ]
+  * net/bnxt: fix number of TQM ring
+  * net/bnxt: fix TQM ring context memory size
+
+  [ Marvin Liu ]
+  * net/virtio: fix crash when device reconnecting
+
+  [ Ajit Khaparde ]
+  * net/bnxt: fix FW version query
+
+  [ Kalesh AP ]
+  * app/testpmd: fix memory failure handling for i40e DDP
+
+  [ Apeksha Gupta ]
+  * bus/fslmc: fix dereferencing null pointer
+
+  [ Rohit Raj ]
+  * net/dpaa2: fix 10G port negotiation
+
+  [ Jun Yang ]
+  * net/dpaa2: fix congestion ID for multiple traffic classes
+
+  [ Hemant Agrawal ]
+  * bus/fslmc: fix size of qman fq descriptor
+
+  [ Phil Yang ]
+  * net/ixgbe: fix link state timing on fiber ports
+
+  [ Luca Boccassi ]
+  * Revert "net/bnxt: fix TQM ring context memory size"
+  * Revert "net/bnxt: fix number of TQM ring"
+
+  [ Qi Zhang ]
+  * net/ice: fix variable initialization
+
+  [ Gaetan Rivet ]
+  * net/ring: fix device pointer on allocation
+
+  [ Dekel Peled ]
+  * net/mlx5: fix match on empty VLAN item in DV mode
+
+  [ Raslan Darawsheh ]
+  * net/mlx5: fix matching for UDP tunnels with Verbs
+
+  [ Michael Baum ]
+  * net/mlx5: fix meter color register consideration
+  * net/mlx4: fix drop queue error handling
+
+  [ Alexander Kozyrev ]
+  * net/mlx5: fix Tx queue release debug log timing
+
+  [ Ivan Dyukov ]
+  * app: remove extra new line after link duplex
+  * examples: remove extra new line after link duplex
+
+  [ Adam Dybkowski ]
+  * crypto/qat: support plain SHA1..SHA512 hashes
+
+  [ Yuri Chipchev ]
+  * event/dsw: fix enqueue burst return value
+
+  [ Pavan Nikhilesh ]
+  * app/eventdev: check Tx adapter service ID
+
+  [ Yunjian Wang ]
+  * crypto/caam_jr: fix check of file descriptors
+  * crypto/caam_jr: fix IRQ functions return type
+
+  [ Kevin Traynor ]
+  * build: disable gcc 10 zero-length-bounds warning
+
+  [ Matteo Croce ]
+  * doc: fix LTO config option
+
+  [ Ray Kinsella ]
+  * doc: fix default symbol binding in ABI guide
+
+  [ Stephen Hemminger ]
+  * eal: fix C++17 compilation
+
+  [ Raslan Darawsheh ]
+  * doc: fix build issue in ABI guide
+
+  [ Alvin Zhang ]
+  * net/e1000: fix port hotplug for multi-process
+
+  [ Qiming Yang ]
+  * doc: fix multicast filter feature announcement
+
+  [ Dekel Peled ]
+  * common/mlx5: fix umem buffer alignment
+
+  [ Guinan Sun ]
+  * net/ixgbe: fix statistics in flow control mode
+
+  [ Rasesh Mody ]
+  * net/qede: fix link state configuration
+
+  [ Dekel Peled ]
+  * net/mlx5: fix VLAN flow action with wildcard VLAN item
+
+  [ Stephen Hemminger ]
+  * net/vmxnet3: handle bad host framing
+
+  [ Xiaoyun Wang ]
+  * net/hinic: fix queues resource free
+  * net/hinic: fix Tx mbuf length while copying
+
+  [ Sivaprasad Tummala ]
+  * vhost: handle mbuf allocation failure
+
+  [ Marvin Liu ]
+  * net/virtio: fix unexpected event after reconnect
+
+  [ Rasesh Mody ]
+  * net/qede: fix port reconfiguration
+
+  [ Ajit Khaparde ]
+  * net/bnxt: fix error log for command timeout
+  * net/bnxt: fix using RSS config struct
+
+  [ Kalesh AP ]
+  * net/bnxt: fix storing MAC address twice
+
+  [ Shougang Wang ]
+  * net/i40e: fix queue region in RSS flow
+
+  [ Bing Zhao ]
+  * net/mlx5: fix doorbell bitmap management offsets
+
+  [ Viacheslav Ovsiienko ]
+  * common/mlx5: fix netlink buffer allocation from stack
+
+  [ Ting Xu ]
+  * app/testpmd: fix DCB set
+
+  [ Xiaoyun Li ]
+  * net/ixgbe/base: update copyright
+  * net/i40e/base: update copyright
+  * common/iavf: update copyright
+  * net/ice/base: update copyright
+
+  [ Darek Stojaczyk ]
+  * pci: accept 32-bit domain numbers
+
+  [ Gaetan Rivet ]
+  * pci: reject negative values in PCI id
+  * doc: fix typos in ABI policy
+  * kvargs: fix strcmp helper documentation
+
+  [ Hemant Agrawal ]
+  * mempool/dpaa2: install missing header with meson
+
+  [ Muhammad Bilal ]
+  * fix same typo in multiple places
+
+  [ Rasesh Mody ]
+  * examples/kni: fix MTU change to setup Tx queue
+
+  [ Wei Zhao ]
+  * net/i40e: fix wild pointer
+
+  [ Qi Zhang ]
+  * net/ice: fix RSS for GTPU
+
+  [ Qiming Yang ]
+  * net/i40e: fix queue related exception handling
+
+  [ Xuan Ding ]
+  * vhost: fix zero-copy server mode
+
+  [ Thomas Monjalon ]
+  * net/mvpp2: fix build with gcc 10
+  * examples/vm_power: fix build with -fno-common
+  * examples/vm_power: drop Unix path limit redefinition
+  * doc: fix build with doxygen 1.8.18
+
+  [ Adam Dybkowski ]
+  * cryptodev: fix SHA-1 digest enum comment
+
+  [ Rahul Gupta ]
+  * net/bnxt: fix Rx ring producer index
+
+  [ Ankur Dwivedi ]
+  * net/octeontx2: fix buffer size assignment
+
+  [ Xiaoyun Wang ]
+  * net/hinic: fix TSO
+
+  [ Igor Romanov ]
+  * net/sfc/base: fix manual filter delete in EF10
+
+  [ Jeff Guo ]
+  * net/i40e: fix setting L2TAG
+  * net/iavf: fix setting L2TAG
+  * net/ice: fix setting L2TAG
+
+  [ Wei Zhao ]
+  * net/i40e: fix flow director enabling
+
+  [ Guinan Sun ]
+  * net/ixgbe: check driver type in MACsec API
+
+  [ Ferruh Yigit ]
+  * examples/kni: fix crash during MTU set
+
+  [ Jasvinder Singh ]
+  * examples/ip_pipeline: remove check of null response
+
+  [ Sarosh Arif ]
+  * doc: fix typo in contributors guide
+
+  [ Muhammad Bilal ]
+  * doc: fix typo in contributors guide
+
+  [ David Marchand ]
+  * doc: prefer https when pointing to dpdk.org
+
+  [ Thomas Monjalon ]
+  * doc: fix API index
+
+  [ Pablo de Lara ]
+  * doc: add NASM installation steps
+
+  [ Hao Chen ]
+  * net/hns3: support Rx interrupt
+
+  [ Wei Hu (Xavier) ]
+  * net/hns3: support different numbers of Rx and Tx queues
+
+  [ Lijun Ou ]
+  * net/hns3: fix RSS indirection table configuration
+
+  [ Wei Hu (Xavier) ]
+  * net/hns3: fix Tx interrupt when enabling Rx interrupt
+
+  [ Chengwen Feng ]
+  * net/hns3: fix Rx interrupt after reset
+
+  [ Wei Hu (Xavier) ]
+  * net/hns3: fix MSI-X interrupt during initialization
+
+  [ Michal Krawczyk ]
+  * net/ena/base: fix testing for supported hash function
+
+  [ Dekel Peled ]
+  * net/mlx5: fix RSS key copy to TIR context
+
+  [ Wei Hu (Xavier) ]
+  * net/hns3: remove unnecessary assignments in Tx
+
+  [ Yisen Zhuang ]
+  * net/hns3: reduce judgements of free Tx ring space
+
+  [ Wei Hu (Xavier) ]
+  * net/hns3: remove one IO barrier in Rx
+  * net/hns3: add free threshold in Rx
+
+  [ Chengwen Feng ]
+  * net/hns3: replace memory barrier with data dependency order
+
+  [ Ori Kam ]
+  * eal/ppc: fix bool type after altivec include
+
+  [ Apeksha Gupta ]
+  * test/crypto: fix statistics case
+
+  [ Luca Boccassi ]
+  * Revert "common/qat: fix GEN3 marketing name"
+
+  [ Thomas Monjalon ]
+  * doc: fix reference in ABI guide
+  * net/mlx5: fix build with separate glue lib for dlopen
+  * buildtools: get static mlx dependencies for meson
+
+  [ Alexander Kozyrev ]
+  * net/mlx5: fix packet length assert in MPRQ
+
+  [ Li Feng ]
+  * mem: mark pages as not accessed when freeing memory
+
+  [ Luca Boccassi ]
+  * version: 19.11.3
+
+  [ Charles (Chas) Williams ]
+  * Update local patches for 19.11.3 (Bugfix: VRVDR-51821)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 26 Jun 2020 18:35:10 -0400
+
 dpdk (19.11.2-0vyatta2) unstable; urgency=medium
 
   * net/mlx5: fix out-of-bound write in xstats (Bugfix: VRVDR-46357)
