@@ -62,6 +62,9 @@
 /* Device parameter to configure log 2 of the number of strides for MPRQ. */
 #define MLX5_RX_MPRQ_LOG_STRIDE_NUM "mprq_log_stride_num"
 
+/* Device parameter to configure log 2 of the stride size for MPRQ. */
+#define MLX5_RX_MPRQ_LOG_STRIDE_SIZE "mprq_log_stride_size"
+
 /* Device parameter to limit the size of memcpy'd packet for MPRQ. */
 #define MLX5_RX_MPRQ_MAX_MEMCPY_LEN "mprq_max_memcpy_len"
 
@@ -183,6 +186,10 @@ struct mlx5_dev_spawn_data {
 	struct rte_eth_dev *eth_dev; /**< Associated Ethernet device. */
 	struct rte_pci_device *pci_dev; /**< Backend PCI device. */
 };
+
+#ifdef MLX5_GLUE
+const struct mlx5_glue *mlx5_glue;
+#endif
 
 static LIST_HEAD(, mlx5_ibv_shared) mlx5_ibv_list = LIST_HEAD_INITIALIZER();
 static pthread_mutex_t mlx5_ibv_list_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -1499,6 +1506,8 @@ mlx5_args_check(const char *key, const char *val, void *opaque)
 		config->mprq.enabled = !!tmp;
 	} else if (strcmp(MLX5_RX_MPRQ_LOG_STRIDE_NUM, key) == 0) {
 		config->mprq.stride_num_n = tmp;
+	} else if (strcmp(MLX5_RX_MPRQ_LOG_STRIDE_SIZE, key) == 0) {
+		config->mprq.stride_size_n = tmp;
 	} else if (strcmp(MLX5_RX_MPRQ_MAX_MEMCPY_LEN, key) == 0) {
 		config->mprq.max_memcpy_len = tmp;
 	} else if (strcmp(MLX5_RXQS_MIN_MPRQ, key) == 0) {
@@ -1591,6 +1600,7 @@ mlx5_args(struct mlx5_dev_config *config, struct rte_devargs *devargs)
 		MLX5_RXQ_PKT_PAD_EN,
 		MLX5_RX_MPRQ_EN,
 		MLX5_RX_MPRQ_LOG_STRIDE_NUM,
+		MLX5_RX_MPRQ_LOG_STRIDE_SIZE,
 		MLX5_RX_MPRQ_MAX_MEMCPY_LEN,
 		MLX5_RXQS_MIN_MPRQ,
 		MLX5_TXQ_INLINE,
@@ -1940,9 +1950,9 @@ mlx5_get_dbr(struct rte_eth_dev *dev, struct mlx5_devx_dbr_page **dbr_page)
 	     i++)
 		; /* Empty. */
 	/* Find the first clear bit. */
+	assert(i < MLX5_DBR_BITMAP_SIZE);
 	j = rte_bsf64(~page->dbr_bitmap[i]);
-	assert(i < (MLX5_DBR_PER_PAGE / 64));
-	page->dbr_bitmap[i] |= (1 << j);
+	page->dbr_bitmap[i] |= (UINT64_C(1) << j);
 	page->dbr_count++;
 	*dbr_page = page;
 	return (((i * 64) + j) * sizeof(uint64_t));
@@ -1987,7 +1997,7 @@ mlx5_release_dbr(struct rte_eth_dev *dev, uint32_t umem_id, uint64_t offset)
 		int i = offset / 64;
 		int j = offset % 64;
 
-		page->dbr_bitmap[i] &= ~(1 << j);
+		page->dbr_bitmap[i] &= ~(UINT64_C(1) << j);
 	}
 	return ret;
 }
@@ -2245,8 +2255,6 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 			mprq_caps.min_single_wqe_log_num_of_strides;
 		mprq_max_stride_num_n =
 			mprq_caps.max_single_wqe_log_num_of_strides;
-		config.mprq.stride_num_n = RTE_MAX(MLX5_MPRQ_STRIDE_NUM_N,
-						   mprq_min_stride_num_n);
 	}
 #endif
 	if (RTE_CACHE_LINE_SIZE == 128 &&
@@ -2561,16 +2569,31 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 #endif
 	}
 	if (config.mprq.enabled && mprq) {
-		if (config.mprq.stride_num_n > mprq_max_stride_num_n ||
-		    config.mprq.stride_num_n < mprq_min_stride_num_n) {
+		if (config.mprq.stride_num_n &&
+		    (config.mprq.stride_num_n > mprq_max_stride_num_n ||
+		     config.mprq.stride_num_n < mprq_min_stride_num_n)) {
 			config.mprq.stride_num_n =
-				RTE_MAX(MLX5_MPRQ_STRIDE_NUM_N,
-					mprq_min_stride_num_n);
+				RTE_MIN(RTE_MAX(MLX5_MPRQ_STRIDE_NUM_N,
+						mprq_min_stride_num_n),
+					mprq_max_stride_num_n);
 			DRV_LOG(WARNING,
 				"the number of strides"
 				" for Multi-Packet RQ is out of range,"
 				" setting default value (%u)",
 				1 << config.mprq.stride_num_n);
+		}
+		if (config.mprq.stride_size_n &&
+		    (config.mprq.stride_size_n > mprq_max_stride_size_n ||
+		     config.mprq.stride_size_n < mprq_min_stride_size_n)) {
+			config.mprq.stride_size_n =
+				RTE_MIN(RTE_MAX(MLX5_MPRQ_STRIDE_SIZE_N,
+						mprq_min_stride_size_n),
+					mprq_max_stride_size_n);
+			DRV_LOG(WARNING,
+				"the size of a stride"
+				" for Multi-Packet RQ is out of range,"
+				" setting default value (%u)",
+				1 << config.mprq.stride_size_n);
 		}
 		config.mprq.min_stride_size_n = mprq_min_stride_size_n;
 		config.mprq.max_stride_size_n = mprq_max_stride_size_n;
@@ -3090,7 +3113,7 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 		/*
 		 * Single IB device with multiple ports found,
 		 * it may be E-Switch master device and representors.
-		 * We have to perform identification trough the ports.
+		 * We have to perform identification through the ports.
 		 */
 		assert(nl_rdma >= 0);
 		assert(ns == 0);
@@ -3290,7 +3313,8 @@ mlx5_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 		.mr_ext_memseg_en = 1,
 		.mprq = {
 			.enabled = 0, /* Disabled by default. */
-			.stride_num_n = MLX5_MPRQ_STRIDE_NUM_N,
+			.stride_num_n = 0,
+			.stride_size_n = 0,
 			.max_memcpy_len = MLX5_MPRQ_MEMCPY_DEFAULT_LEN,
 			.min_rxqs_num = MLX5_MPRQ_MIN_RXQS,
 		},

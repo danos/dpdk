@@ -871,7 +871,7 @@ ice_switch_inset_get(const struct rte_flow_item pattern[],
 						vlan_spec->inner_type;
 					list[t].m_u.vlan_hdr.type =
 						UINT16_MAX;
-					input_set |= ICE_INSET_VLAN_OUTER;
+					input_set |= ICE_INSET_ETHERTYPE;
 				}
 				t++;
 			} else if (!vlan_spec && !vlan_mask) {
@@ -937,6 +937,8 @@ ice_switch_parse_action(struct ice_pf *pf,
 		switch (action_type) {
 		case RTE_FLOW_ACTION_TYPE_RSS:
 			act_qgrop = action->conf;
+			if (act_qgrop->queue_num <= 1)
+				goto error;
 			rule_info->sw_act.fltr_act =
 				ICE_FWD_TO_QGRP;
 			rule_info->sw_act.fwd_id.q_id =
@@ -998,6 +1000,46 @@ error:
 }
 
 static int
+ice_switch_check_action(const struct rte_flow_action *actions,
+			    struct rte_flow_error *error)
+{
+	const struct rte_flow_action *action;
+	enum rte_flow_action_type action_type;
+	uint16_t actions_num = 0;
+
+	for (action = actions; action->type !=
+				RTE_FLOW_ACTION_TYPE_END; action++) {
+		action_type = action->type;
+		switch (action_type) {
+		case RTE_FLOW_ACTION_TYPE_VF:
+		case RTE_FLOW_ACTION_TYPE_RSS:
+		case RTE_FLOW_ACTION_TYPE_QUEUE:
+		case RTE_FLOW_ACTION_TYPE_DROP:
+			actions_num++;
+			break;
+		case RTE_FLOW_ACTION_TYPE_VOID:
+			continue;
+		default:
+			rte_flow_error_set(error,
+					   EINVAL, RTE_FLOW_ERROR_TYPE_ACTION,
+					   actions,
+					   "Invalid action type");
+			return -rte_errno;
+		}
+	}
+
+	if (actions_num > 1) {
+		rte_flow_error_set(error,
+				   EINVAL, RTE_FLOW_ERROR_TYPE_ACTION,
+				   actions,
+				   "Invalid action number");
+		return -rte_errno;
+	}
+
+	return 0;
+}
+
+static int
 ice_switch_parse_pattern_action(struct ice_adapter *ad,
 		struct ice_pattern_match_item *array,
 		uint32_t array_len,
@@ -1015,7 +1057,8 @@ ice_switch_parse_pattern_action(struct ice_adapter *ad,
 	uint16_t lkups_num = 0;
 	const struct rte_flow_item *item = pattern;
 	uint16_t item_num = 0;
-	enum ice_sw_tunnel_type tun_type = ICE_NON_TUN;
+	enum ice_sw_tunnel_type tun_type =
+		ICE_SW_TUN_AND_NON_TUN;
 	struct ice_pattern_match_item *pattern_match_item = NULL;
 
 	for (; item->type != RTE_FLOW_ITEM_TYPE_END; item++) {
@@ -1051,6 +1094,7 @@ ice_switch_parse_pattern_action(struct ice_adapter *ad,
 		return -rte_errno;
 	}
 
+	memset(&rule_info, 0, sizeof(rule_info));
 	rule_info.tun_type = tun_type;
 
 	sw_meta_ptr =
@@ -1081,6 +1125,14 @@ ice_switch_parse_pattern_action(struct ice_adapter *ad,
 		goto error;
 	}
 
+	ret = ice_switch_check_action(actions, error);
+	if (ret) {
+		rte_flow_error_set(error, EINVAL,
+				   RTE_FLOW_ERROR_TYPE_HANDLE, NULL,
+				   "Invalid input action number");
+		goto error;
+	}
+
 	ret = ice_switch_parse_action(pf, actions, error, &rule_info);
 	if (ret) {
 		rte_flow_error_set(error, EINVAL,
@@ -1088,10 +1140,17 @@ ice_switch_parse_pattern_action(struct ice_adapter *ad,
 				   "Invalid input action");
 		goto error;
 	}
-	*meta = sw_meta_ptr;
-	((struct sw_meta *)*meta)->list = list;
-	((struct sw_meta *)*meta)->lkups_num = lkups_num;
-	((struct sw_meta *)*meta)->rule_info = rule_info;
+
+	if (meta) {
+		*meta = sw_meta_ptr;
+		((struct sw_meta *)*meta)->list = list;
+		((struct sw_meta *)*meta)->lkups_num = lkups_num;
+		((struct sw_meta *)*meta)->rule_info = rule_info;
+	} else {
+		rte_free(list);
+		rte_free(sw_meta_ptr);
+	}
+
 	rte_free(pattern_match_item);
 
 	return 0;

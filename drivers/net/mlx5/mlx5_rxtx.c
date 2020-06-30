@@ -1249,9 +1249,10 @@ rxq_cq_to_mbuf(struct mlx5_rxq_data *rxq, struct rte_mbuf *pkt,
 			pkt->hash.fdir.hi = mlx5_flow_mark_get(mark);
 		}
 	}
-	if (rte_flow_dynf_metadata_avail() && cqe->flow_table_metadata) {
-		pkt->ol_flags |= PKT_RX_DYNF_METADATA;
-		*RTE_FLOW_DYNF_METADATA(pkt) = cqe->flow_table_metadata;
+	if (rxq->dynf_meta && cqe->flow_table_metadata) {
+		pkt->ol_flags |= rxq->flow_meta_mask;
+		*RTE_MBUF_DYNFIELD(pkt, rxq->flow_meta_offset, uint32_t *) =
+			cqe->flow_table_metadata;
 	}
 	if (rxq->csum)
 		pkt->ol_flags |= rxq_cq_to_ol_flags(cqe);
@@ -1570,21 +1571,20 @@ mlx5_rx_burst_mprq(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 	unsigned int i = 0;
 	uint32_t rq_ci = rxq->rq_ci;
 	uint16_t consumed_strd = rxq->consumed_strd;
-	uint16_t headroom_sz = rxq->strd_headroom_en * RTE_PKTMBUF_HEADROOM;
 	struct mlx5_mprq_buf *buf = (*rxq->mprq_bufs)[rq_ci & wq_mask];
 
 	while (i < pkts_n) {
 		struct rte_mbuf *pkt;
 		void *addr;
 		int ret;
-		unsigned int len;
+		uint32_t len;
 		uint16_t strd_cnt;
 		uint16_t strd_idx;
 		uint32_t offset;
 		uint32_t byte_cnt;
+		int32_t hdrm_overlap;
 		volatile struct mlx5_mini_cqe8 *mcqe = NULL;
 		uint32_t rss_hash_res = 0;
-		uint8_t lro_num_seg;
 
 		if (consumed_strd == strd_n) {
 			/* Replace WQE only if the buffer is still in use. */
@@ -1630,18 +1630,6 @@ mlx5_rx_burst_mprq(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 		}
 		assert(strd_idx < strd_n);
 		assert(!((rte_be_to_cpu_16(cqe->wqe_id) ^ rq_ci) & wq_mask));
-		lro_num_seg = cqe->lro_num_seg;
-		/*
-		 * Currently configured to receive a packet per a stride. But if
-		 * MTU is adjusted through kernel interface, device could
-		 * consume multiple strides without raising an error. In this
-		 * case, the packet should be dropped because it is bigger than
-		 * the max_rx_pkt_len.
-		 */
-		if (unlikely(!lro_num_seg && strd_cnt > 1)) {
-			++rxq->stats.idropped;
-			continue;
-		}
 		pkt = rte_pktmbuf_alloc(rxq->mp);
 		if (unlikely(pkt == NULL)) {
 			++rxq->stats.rx_nombuf;
@@ -1653,23 +1641,57 @@ mlx5_rx_burst_mprq(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 			len -= RTE_ETHER_CRC_LEN;
 		offset = strd_idx * strd_sz + strd_shift;
 		addr = RTE_PTR_ADD(mlx5_mprq_buf_addr(buf, strd_n), offset);
+		hdrm_overlap = len + RTE_PKTMBUF_HEADROOM - strd_cnt * strd_sz;
 		/*
 		 * Memcpy packets to the target mbuf if:
 		 * - The size of packet is smaller than mprq_max_memcpy_len.
 		 * - Out of buffer in the Mempool for Multi-Packet RQ.
+		 * - The packet's stride overlaps a headroom and scatter is off.
 		 */
-		if (len <= rxq->mprq_max_memcpy_len || rxq->mprq_repl == NULL) {
-			/*
-			 * When memcpy'ing packet due to out-of-buffer, the
-			 * packet must be smaller than the target mbuf.
-			 */
-			if (unlikely(rte_pktmbuf_tailroom(pkt) < len)) {
+		if (len <= rxq->mprq_max_memcpy_len ||
+		    rxq->mprq_repl == NULL ||
+		    (hdrm_overlap > 0 && !rxq->strd_scatter_en)) {
+			if (likely(rte_pktmbuf_tailroom(pkt) >= len)) {
+				rte_memcpy(rte_pktmbuf_mtod(pkt, void *),
+					   addr, len);
+				DATA_LEN(pkt) = len;
+			} else if (rxq->strd_scatter_en) {
+				struct rte_mbuf *prev = pkt;
+				uint32_t seg_len =
+					RTE_MIN(rte_pktmbuf_tailroom(pkt), len);
+				uint32_t rem_len = len - seg_len;
+
+				rte_memcpy(rte_pktmbuf_mtod(pkt, void *),
+					   addr, seg_len);
+				DATA_LEN(pkt) = seg_len;
+				while (rem_len) {
+					struct rte_mbuf *next =
+						rte_pktmbuf_alloc(rxq->mp);
+
+					if (unlikely(next == NULL)) {
+						rte_pktmbuf_free(pkt);
+						++rxq->stats.rx_nombuf;
+						goto out;
+					}
+					NEXT(prev) = next;
+					SET_DATA_OFF(next, 0);
+					addr = RTE_PTR_ADD(addr, seg_len);
+					seg_len = RTE_MIN
+						(rte_pktmbuf_tailroom(next),
+						 rem_len);
+					rte_memcpy
+						(rte_pktmbuf_mtod(next, void *),
+						 addr, seg_len);
+					DATA_LEN(next) = seg_len;
+					rem_len -= seg_len;
+					prev = next;
+					++NB_SEGS(pkt);
+				}
+			} else {
 				rte_pktmbuf_free_seg(pkt);
 				++rxq->stats.idropped;
 				continue;
 			}
-			rte_memcpy(rte_pktmbuf_mtod(pkt, void *), addr, len);
-			DATA_LEN(pkt) = len;
 		} else {
 			rte_iova_t buf_iova;
 			struct rte_mbuf_ext_shared_info *shinfo;
@@ -1680,7 +1702,7 @@ mlx5_rx_burst_mprq(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 			rte_atomic16_add_return(&buf->refcnt, 1);
 			assert((uint16_t)rte_atomic16_read(&buf->refcnt) <=
 			       strd_n + 1);
-			buf_addr = RTE_PTR_SUB(addr, headroom_sz);
+			buf_addr = RTE_PTR_SUB(addr, RTE_PKTMBUF_HEADROOM);
 			/*
 			 * MLX5 device doesn't use iova but it is necessary in a
 			 * case where the Rx packet is transmitted via a
@@ -1699,43 +1721,42 @@ mlx5_rx_burst_mprq(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 			rte_pktmbuf_attach_extbuf(pkt, buf_addr, buf_iova,
 						  buf_len, shinfo);
 			/* Set mbuf head-room. */
-			pkt->data_off = headroom_sz;
+			SET_DATA_OFF(pkt, RTE_PKTMBUF_HEADROOM);
 			assert(pkt->ol_flags == EXT_ATTACHED_MBUF);
-			/*
-			 * Prevent potential overflow due to MTU change through
-			 * kernel interface.
-			 */
-			if (unlikely(rte_pktmbuf_tailroom(pkt) < len)) {
-				rte_pktmbuf_free_seg(pkt);
-				++rxq->stats.idropped;
-				continue;
-			}
+			assert(rte_pktmbuf_tailroom(pkt) >=
+				len - (hdrm_overlap > 0 ? hdrm_overlap : 0));
 			DATA_LEN(pkt) = len;
 			/*
-			 * LRO packet may consume all the stride memory, in this
-			 * case packet head-room space is not guaranteed so must
-			 * to add an empty mbuf for the head-room.
+			 * Copy the last fragment of a packet (up to headroom
+			 * size bytes) in case there is a stride overlap with
+			 * a next packet's headroom. Allocate a separate mbuf
+			 * to store this fragment and link it. Scatter is on.
 			 */
-			if (!rxq->strd_headroom_en) {
-				struct rte_mbuf *headroom_mbuf =
-						rte_pktmbuf_alloc(rxq->mp);
+			if (hdrm_overlap > 0) {
+				assert(rxq->strd_scatter_en);
+				struct rte_mbuf *seg =
+					rte_pktmbuf_alloc(rxq->mp);
 
-				if (unlikely(headroom_mbuf == NULL)) {
+				if (unlikely(seg == NULL)) {
 					rte_pktmbuf_free_seg(pkt);
 					++rxq->stats.rx_nombuf;
 					break;
 				}
-				PORT(pkt) = rxq->port_id;
-				NEXT(headroom_mbuf) = pkt;
-				pkt = headroom_mbuf;
+				SET_DATA_OFF(seg, 0);
+				rte_memcpy(rte_pktmbuf_mtod(seg, void *),
+					RTE_PTR_ADD(addr, len - hdrm_overlap),
+					hdrm_overlap);
+				DATA_LEN(seg) = hdrm_overlap;
+				DATA_LEN(pkt) = len - hdrm_overlap;
+				NEXT(pkt) = seg;
 				NB_SEGS(pkt) = 2;
 			}
 		}
 		rxq_cq_to_mbuf(rxq, pkt, cqe, rss_hash_res);
-		if (lro_num_seg > 1) {
+		if (cqe->lro_num_seg > 1) {
 			mlx5_lro_update_hdr(addr, cqe, len);
 			pkt->ol_flags |= PKT_RX_LRO;
-			pkt->tso_segsz = strd_sz;
+			pkt->tso_segsz = len / cqe->lro_num_seg;
 		}
 		PKT_LEN(pkt) = len;
 		PORT(pkt) = rxq->port_id;
@@ -1747,6 +1768,7 @@ mlx5_rx_burst_mprq(void *dpdk_rxq, struct rte_mbuf **pkts, uint16_t pkts_n)
 		*(pkts++) = pkt;
 		++i;
 	}
+out:
 	/* Update the consumer indexes. */
 	rxq->consumed_strd = consumed_strd;
 	rte_cio_wmb();
@@ -2071,7 +2093,7 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 {
 	unsigned int count = MLX5_TX_COMP_MAX_CQE;
 	volatile struct mlx5_cqe *last_cqe = NULL;
-	uint16_t ci = txq->cq_ci;
+	bool ring_doorbell = false;
 	int ret;
 
 	static_assert(MLX5_CQE_STATUS_HW_OWN < 0, "Must be negative value");
@@ -2079,8 +2101,8 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 	do {
 		volatile struct mlx5_cqe *cqe;
 
-		cqe = &txq->cqes[ci & txq->cqe_m];
-		ret = check_cqe(cqe, txq->cqe_s, ci);
+		cqe = &txq->cqes[txq->cq_ci & txq->cqe_m];
+		ret = check_cqe(cqe, txq->cqe_s, txq->cq_ci);
 		if (unlikely(ret != MLX5_CQE_STATUS_SW_OWN)) {
 			if (likely(ret != MLX5_CQE_STATUS_ERR)) {
 				/* No new CQEs in completion queue. */
@@ -2094,7 +2116,6 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 			 * here, before we might perform SQ reset.
 			 */
 			rte_wmb();
-			txq->cq_ci = ci;
 			ret = mlx5_tx_error_cqe_handle
 				(txq, (volatile struct mlx5_err_cqe *)cqe);
 			if (unlikely(ret < 0)) {
@@ -2110,15 +2131,18 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 			 * MLX5_CQE_SYNDROME_WR_FLUSH_ERR status.
 			 * The send queue is supposed to be empty.
 			 */
-			++ci;
-			txq->cq_pi = ci;
+			ring_doorbell = true;
+			++txq->cq_ci;
+			txq->cq_pi = txq->cq_ci;
 			last_cqe = NULL;
 			continue;
 		}
 		/* Normal transmit completion. */
-		assert(ci != txq->cq_pi);
-		assert((txq->fcqs[ci & txq->cqe_m] >> 16) == cqe->wqe_counter);
-		++ci;
+		assert(txq->cq_ci != txq->cq_pi);
+		assert((txq->fcqs[txq->cq_ci & txq->cqe_m] >> 16) ==
+			    cqe->wqe_counter);
+		ring_doorbell = true;
+		++txq->cq_ci;
 		last_cqe = cqe;
 		/*
 		 * We have to restrict the amount of processed CQEs
@@ -2131,14 +2155,10 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *restrict txq,
 		if (likely(--count == 0))
 			break;
 	} while (true);
-	if (likely(ci != txq->cq_ci)) {
-		/*
-		 * Update completion queue consuming index
-		 * and ring doorbell to notify hardware.
-		 */
+	if (likely(ring_doorbell)) {
+		/* Ring doorbell to notify hardware. */
 		rte_compiler_barrier();
-		txq->cq_ci = ci;
-		*txq->cq_db = rte_cpu_to_be_32(ci);
+		*txq->cq_db = rte_cpu_to_be_32(txq->cq_ci);
 		mlx5_tx_comp_flush(txq, last_cqe, olx);
 	}
 }
@@ -4654,7 +4674,7 @@ send_loop:
 	/*
 	 * Calculate the number of available resources - elts and WQEs.
 	 * There are two possible different scenarios:
-	 * - no data inlining into WQEs, one WQEBB may contains upto
+	 * - no data inlining into WQEs, one WQEBB may contains up to
 	 *   four packets, in this case elts become scarce resource
 	 * - data inlining into WQEs, one packet may require multiple
 	 *   WQEBBs, the WQEs become the limiting factor.

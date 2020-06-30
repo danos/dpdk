@@ -127,7 +127,7 @@ hns3_set_rss_indir_table(struct hns3_hw *hw, uint8_t *indir, uint16_t size)
 		req->rss_set_bitmap = rte_cpu_to_le_16(HNS3_RSS_SET_BITMAP_MSK);
 		for (j = 0; j < HNS3_RSS_CFG_TBL_SIZE; j++) {
 			num = i * HNS3_RSS_CFG_TBL_SIZE + j;
-			req->rss_result[j] = indir[num] % hw->alloc_rss_size;
+			req->rss_result[j] = indir[num];
 		}
 		ret = hns3_cmd_send(hw, &desc, 1);
 		if (ret) {
@@ -257,6 +257,9 @@ hns3_dev_rss_hash_update(struct rte_eth_dev *dev,
 	uint8_t *key = rss_conf->rss_key;
 	int ret;
 
+	if (hw->rss_dis_flag)
+		return -EINVAL;
+
 	rte_spinlock_lock(&hw->lock);
 	ret = hns3_set_rss_tuple_by_rss_hf(hw, tuple, rss_hf);
 	if (ret)
@@ -319,8 +322,10 @@ hns3_dev_rss_hash_conf_get(struct rte_eth_dev *dev,
 	rss_conf->rss_hf = rss_cfg->conf.types;
 
 	/* Get the RSS Key required by the user */
-	if (rss_conf->rss_key)
+	if (rss_conf->rss_key && rss_conf->rss_key_len >= HNS3_RSS_KEY_SIZE) {
 		memcpy(rss_conf->rss_key, rss_cfg->key, HNS3_RSS_KEY_SIZE);
+		rss_conf->rss_key_len = HNS3_RSS_KEY_SIZE;
+	}
 	rte_spinlock_unlock(&hw->lock);
 
 	return 0;
@@ -417,7 +422,7 @@ hns3_dev_rss_reta_query(struct rte_eth_dev *dev,
 		shift = i % RTE_RETA_GROUP_SIZE;
 		if (reta_conf[idx].mask & (1ULL << shift))
 			reta_conf[idx].reta[shift] =
-			  rss_cfg->rss_indirection_tbl[i] % hw->alloc_rss_size;
+						rss_cfg->rss_indirection_tbl[i];
 	}
 	rte_spinlock_unlock(&hw->lock);
 	return 0;
@@ -524,7 +529,7 @@ hns3_config_rss(struct hns3_adapter *hns)
 
 	enum rte_eth_rx_mq_mode mq_mode = hw->data->dev_conf.rxmode.mq_mode;
 
-	/* When there is no open RSS, redirect the packet queue 0 */
+	/* When RSS is off, redirect the packet queue 0 */
 	if (((uint32_t)mq_mode & ETH_MQ_RX_RSS_FLAG) == 0)
 		hns3_rss_uninit(hns);
 
@@ -538,10 +543,16 @@ hns3_config_rss(struct hns3_adapter *hns)
 	if (ret)
 		return ret;
 
-	ret = hns3_set_rss_indir_table(hw, rss_cfg->rss_indirection_tbl,
-				       HNS3_RSS_IND_TBL_SIZE);
-	if (ret)
-		goto rss_tuple_uninit;
+	/*
+	 * When RSS is off, it doesn't need to configure rss redirection table
+	 * to hardware.
+	 */
+	if (((uint32_t)mq_mode & ETH_MQ_RX_RSS_FLAG)) {
+		ret = hns3_set_rss_indir_table(hw, rss_cfg->rss_indirection_tbl,
+					       HNS3_RSS_IND_TBL_SIZE);
+		if (ret)
+			goto rss_tuple_uninit;
+	}
 
 	ret = hns3_set_rss_tc_mode(hw);
 	if (ret)
@@ -550,9 +561,11 @@ hns3_config_rss(struct hns3_adapter *hns)
 	return ret;
 
 rss_indir_table_uninit:
-	ret1 = hns3_rss_reset_indir_table(hw);
-	if (ret1 != 0)
-		return ret;
+	if (((uint32_t)mq_mode & ETH_MQ_RX_RSS_FLAG)) {
+		ret1 = hns3_rss_reset_indir_table(hw);
+		if (ret1 != 0)
+			return ret;
+	}
 
 rss_tuple_uninit:
 	hns3_rss_tuple_uninit(hw);

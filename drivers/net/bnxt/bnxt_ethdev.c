@@ -833,7 +833,7 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	struct bnxt *bp = eth_dev->data->dev_private;
 	uint64_t rx_offloads = eth_dev->data->dev_conf.rxmode.offloads;
 	int vlan_mask = 0;
-	int rc;
+	int rc, retry_cnt = BNXT_IF_CHANGE_RETRY_COUNT;
 
 	if (!eth_dev->data->nb_tx_queues || !eth_dev->data->nb_rx_queues) {
 		PMD_DRV_LOG(ERR, "Queues are not configured yet!\n");
@@ -846,14 +846,23 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 			bp->rx_cp_nr_rings, RTE_ETHDEV_QUEUE_STAT_CNTRS);
 	}
 
-	rc = bnxt_hwrm_if_change(bp, 1);
-	if (!rc) {
-		if (bp->flags & BNXT_FLAG_IF_CHANGE_HOT_FW_RESET_DONE) {
-			rc = bnxt_handle_if_change_status(bp);
-			if (rc)
-				return rc;
-		}
+	do {
+		rc = bnxt_hwrm_if_change(bp, true);
+		if (rc == 0 || rc != -EAGAIN)
+			break;
+
+		rte_delay_ms(BNXT_IF_CHANGE_RETRY_INTERVAL);
+	} while (retry_cnt--);
+
+	if (rc)
+		return rc;
+
+	if (bp->flags & BNXT_FLAG_IF_CHANGE_HOT_FW_RESET_DONE) {
+		rc = bnxt_handle_if_change_status(bp);
+		if (rc)
+			return rc;
 	}
+
 	bnxt_enable_int(bp);
 
 	rc = bnxt_init_chip(bp);
@@ -882,10 +891,10 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	return 0;
 
 error:
-	bnxt_hwrm_if_change(bp, 0);
 	bnxt_shutdown_nic(bp);
 	bnxt_free_tx_mbufs(bp);
 	bnxt_free_rx_mbufs(bp);
+	bnxt_hwrm_if_change(bp, false);
 	eth_dev->data->dev_started = 0;
 	return rc;
 }
@@ -956,7 +965,7 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 	/* Process any remaining notifications in default completion queue */
 	bnxt_int_handler(eth_dev);
 	bnxt_shutdown_nic(bp);
-	bnxt_hwrm_if_change(bp, 0);
+	bnxt_hwrm_if_change(bp, false);
 	bp->rx_cosq_cnt = 0;
 }
 
@@ -1431,7 +1440,9 @@ static int bnxt_rss_hash_update_op(struct rte_eth_dev *eth_dev,
 	}
 
 	bp->flags |= BNXT_FLAG_UPDATE_HASH;
-	memcpy(&bp->rss_conf, rss_conf, sizeof(*rss_conf));
+	memcpy(&eth_dev->data->dev_conf.rx_adv_conf.rss_conf,
+	       rss_conf,
+	       sizeof(*rss_conf));
 
 	/* Update the default RSS VNIC(s) */
 	vnic = &bp->vnic_info[0];
@@ -1508,7 +1519,7 @@ static int bnxt_rss_hash_conf_get_op(struct rte_eth_dev *eth_dev,
 		}
 		if (hash_types) {
 			PMD_DRV_LOG(ERR,
-				"Unknwon RSS config from firmware (%08x), RSS disabled",
+				"Unknown RSS config from firmware (%08x), RSS disabled",
 				vnic->hash_type);
 			return -ENOTSUP;
 		}
@@ -1840,6 +1851,11 @@ static int bnxt_vlan_filter_set_op(struct rte_eth_dev *eth_dev,
 	if (rc)
 		return rc;
 
+	if (!eth_dev->data->dev_started) {
+		PMD_DRV_LOG(ERR, "port must be started before setting vlan\n");
+		return -EINVAL;
+	}
+
 	/* These operations apply to ALL existing MAC/VLAN filters */
 	if (on)
 		return bnxt_add_vlan_filter(bp, vlan_id);
@@ -1925,6 +1941,8 @@ static int bnxt_free_one_vnic(struct bnxt *bp, uint16_t vnic_id)
 
 	rte_free(vnic->fw_grp_ids);
 	vnic->fw_grp_ids = NULL;
+
+	vnic->rx_queue_cnt = 0;
 
 	return 0;
 }
@@ -2155,10 +2173,11 @@ bnxt_fw_version_get(struct rte_eth_dev *dev, char *fw_version, size_t fw_size)
 	uint8_t fw_major = (bp->fw_ver >> 24) & 0xff;
 	uint8_t fw_minor = (bp->fw_ver >> 16) & 0xff;
 	uint8_t fw_updt = (bp->fw_ver >> 8) & 0xff;
+	uint8_t fw_rsvd = bp->fw_ver & 0xff;
 	int ret;
 
-	ret = snprintf(fw_version, fw_size, "%d.%d.%d",
-			fw_major, fw_minor, fw_updt);
+	ret = snprintf(fw_version, fw_size, "%d.%d.%d.%d",
+			fw_major, fw_minor, fw_updt, fw_rsvd);
 
 	ret += 1; /* add the size of '\0' */
 	if (fw_size < (uint32_t)ret)
@@ -4592,7 +4611,7 @@ static int bnxt_setup_mac_addr(struct rte_eth_dev *eth_dev)
 		return -ENOMEM;
 	}
 
-	if (bnxt_check_zero_bytes(bp->dflt_mac_addr, RTE_ETHER_ADDR_LEN)) {
+	if (!BNXT_HAS_DFLT_MAC_SET(bp)) {
 		if (BNXT_PF(bp))
 			return -EINVAL;
 
@@ -4605,14 +4624,11 @@ static int bnxt_setup_mac_addr(struct rte_eth_dev *eth_dev)
 			    bp->mac_addr[3], bp->mac_addr[4], bp->mac_addr[5]);
 
 		rc = bnxt_hwrm_set_mac(bp);
-		if (!rc)
-			memcpy(&bp->eth_dev->data->mac_addrs[0], bp->mac_addr,
-			       RTE_ETHER_ADDR_LEN);
-		return rc;
+		if (rc)
+			return rc;
 	}
 
 	/* Copy the permanent MAC from the FUNC_QCAPS response */
-	memcpy(bp->mac_addr, bp->dflt_mac_addr, RTE_ETHER_ADDR_LEN);
 	memcpy(&eth_dev->data->mac_addrs[0], bp->mac_addr, RTE_ETHER_ADDR_LEN);
 
 	return rc;
@@ -4623,7 +4639,7 @@ static int bnxt_restore_dflt_mac(struct bnxt *bp)
 	int rc = 0;
 
 	/* MAC is already configured in FW */
-	if (!bnxt_check_zero_bytes(bp->dflt_mac_addr, RTE_ETHER_ADDR_LEN))
+	if (BNXT_HAS_DFLT_MAC_SET(bp))
 		return 0;
 
 	/* Restore the old MAC configured */
