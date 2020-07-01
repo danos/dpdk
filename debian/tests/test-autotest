@@ -10,8 +10,8 @@ ARCH=$(dpkg --print-architecture)
 echo "Check required features on arch: ${ARCH}"
 case "${ARCH}" in
     amd64)
-        if ! grep -q '^flags.*sse3' /proc/cpuinfo; then
-            echo "Missing sse3 on ${ARCH} - not supported, SKIP test"
+        if ! grep -q '^flags.*sse4_2' /proc/cpuinfo; then
+            echo "Missing sse4_2 on ${ARCH} - not supported, SKIP test"
             exit 77
         fi
         ;;
