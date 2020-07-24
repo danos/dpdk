@@ -1,7 +1,6 @@
 # Patches for DPDK
 0001-net-bonding-allow-application-to-select-LSC-interrup.patch
 0001-net-mlx5-fix-out-of-bound-write-in-xstats.patch
-0001-i40e-double-vlan-x722-fix.patch
 0001-ixgbe-stop-delayed-interrupt-handler-when-starting.patch
 0001-net-bonding-advertise-rx-vlan-filter-capability.patch
 
@@ -13,6 +12,7 @@
 # Submitted upstream, not yet merged
 0001-net-bonding-fix-external-state-machine-slave-updates.patch
 0002-net-bonding-preserve-external-state-machine-actor-st.patch
+0001-net-i40e-enable-i40e-outer-vlan-strip-in-qinq.patch
 
 # Qos extensions
 revert-to-older-librte-sched.patch

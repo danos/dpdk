@@ -1,0 +1,107 @@
+This patch enable i40e outer vlan strip on and off in QinQ
+mode with mask bit of DEV_RX_OFFLOAD_QINQ_STRIP, users can
+use "vlan set qinq_strip on 0" to enable or "vlan set
+qinq_strip on 0" to disable i40e outer vlan strip when
+try with testpmd app.
+
+Fixes: 4861cde46116 (i40e: new poll mode driver)
+
+Signed-off-by: Wei Zhao <wei.zhao1@intel.com>
+---
+ drivers/net/i40e/i40e_ethdev.c |   50 ++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 44 insertions(+), 6 deletions(-)
+
+--- a/drivers/net/i40e/i40e_ethdev.c
++++ b/drivers/net/i40e/i40e_ethdev.c
+@@ -47,6 +47,8 @@
+ #define ETH_I40E_VF_MSG_CFG		"vf_msg_cfg"
+ 
+ #define I40E_CLEAR_PXE_WAIT_MS     200
++#define I40E_VSI_TSR_QINQ_STRIP		0x4010
++#define I40E_VSI_TSR(_i)	(0x00050800 + ((_i) * 4))
+ 
+ /* Maximun number of capability elements */
+ #define I40E_MAX_CAP_ELE_NUM       128
+@@ -3862,6 +3864,39 @@ i40e_vlan_tpid_set(struct rte_eth_dev *d
+ 	return ret;
+ }
+ 
++/* Configure outer vlan stripping on or off in QinQ mode */
++static int
++i40e_vsi_config_outer_vlan_stripping(struct i40e_vsi *vsi, bool on)
++{
++	struct i40e_hw *hw = I40E_VSI_TO_HW(vsi);
++	int ret = I40E_SUCCESS;
++	uint32_t reg;
++
++	if (vsi->vsi_id >= I40E_MAX_NUM_VSIS) {
++		PMD_DRV_LOG(ERR, "VSI ID exceeds the maximum");
++		return -EINVAL;
++	}
++
++	/* Configure for outer VLAN RX stripping */
++	reg = I40E_READ_REG(hw, I40E_VSI_TSR(vsi->vsi_id));
++
++	if (on)
++		reg |= I40E_VSI_TSR_QINQ_STRIP;
++	else
++		reg &= ~I40E_VSI_TSR_QINQ_STRIP;
++
++	ret = i40e_aq_debug_write_register(hw,
++						   I40E_VSI_TSR(vsi->vsi_id),
++						   reg, NULL);
++	if (ret < 0) {
++		PMD_DRV_LOG(ERR, "Failed to update VSI_TSR[%d]",
++				    vsi->vsi_id);
++		return I40E_ERR_CONFIG;
++	}
++
++	return ret;
++}
++
+ static int
+ i40e_vlan_offload_set(struct rte_eth_dev *dev, int mask)
+ {
+@@ -3869,11 +3904,6 @@ i40e_vlan_offload_set(struct rte_eth_dev
+ 	struct i40e_vsi *vsi = pf->main_vsi;
+ 	struct rte_eth_rxmode *rxmode;
+ 
+-	if (mask & ETH_QINQ_STRIP_MASK) {
+-		PMD_DRV_LOG(ERR, "Strip qinq is not supported.");
+-		return -ENOTSUP;
+-	}
+-
+ 	rxmode = &dev->data->dev_conf.rxmode;
+ 	if (mask & ETH_VLAN_FILTER_MASK) {
+ 		if (rxmode->offloads & DEV_RX_OFFLOAD_VLAN_FILTER)
+@@ -3903,6 +3933,14 @@ i40e_vlan_offload_set(struct rte_eth_dev
+ 			i40e_vsi_config_double_vlan(vsi, FALSE);
+ 	}
+ 
++	if (mask & ETH_QINQ_STRIP_MASK) {
++		/* Enable or disable outer VLAN stripping */
++		if (rxmode->offloads & DEV_RX_OFFLOAD_QINQ_STRIP)
++			i40e_vsi_config_outer_vlan_stripping(vsi, TRUE);
++		else
++			i40e_vsi_config_outer_vlan_stripping(vsi, FALSE);
++	}
++
+ 	return 0;
+ }
+ 
+@@ -6077,6 +6115,7 @@ i40e_dev_init_vlan(struct rte_eth_dev *d
+ 
+ 	/* Apply vlan offload setting */
+ 	mask = ETH_VLAN_STRIP_MASK |
++	       ETH_QINQ_STRIP_MASK |
+ 	       ETH_VLAN_FILTER_MASK |
+ 	       ETH_VLAN_EXTEND_MASK;
+ 	ret = i40e_vlan_offload_set(dev, mask);
+@@ -10478,7 +10517,6 @@ i40e_configure_registers(struct i40e_hw
+ 	}
+ }
+ 
+-#define I40E_VSI_TSR(_i)            (0x00050800 + ((_i) * 4))
+ #define I40E_VSI_TSR_QINQ_CONFIG    0xc030
+ #define I40E_VSI_L2TAGSTXVALID(_i)  (0x00042800 + ((_i) * 4))
+ #define I40E_VSI_L2TAGSTXVALID_QINQ 0xab
