@@ -1,3 +1,13 @@
+dpdk (19.11.3-0vyatta2) unstable; urgency=medium
+
+  [ Shweta Choudaha ]
+  * net/i40e : Support for outer vlan stripping
+
+  [ Charles (Chas) Williams ]
+  * Update package symbols for release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 27 Jul 2020 09:16:38 -0400
+
 dpdk (19.11.3-0vyatta1) unstable; urgency=medium
 
   [ Timothy Redaelli ]
