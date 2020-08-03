@@ -1,3 +1,10 @@
+dpdk (19.11.3-0vyatta3) unstable; urgency=medium
+
+  [ Charles (Chas) Williams ]
+  * Revert "net/netvsc: split send buffers from Tx descriptors"
+
+ -- Nicholas Brown <nick.brown@att.com>  Mon, 03 Aug 2020 09:34:57 +0000
+
 dpdk (19.11.3-0vyatta2) unstable; urgency=medium
 
   [ Shweta Choudaha ]
