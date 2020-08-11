@@ -88,16 +88,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	}
  }
  
-@@ -1924,7 +1949,7 @@ grinder_credits_update(struct rte_sched_
- #ifndef RTE_SCHED_SUBPORT_TC_OV
- 
- static inline int
--grinder_credits_check(struct rte_sched_port *port, uint32_t pos)
-+grinder_credits_check(struct rte_sched_port *port, uint32_t pos, uint32_t *time)
- {
- 	struct rte_sched_grinder *grinder = port->grinder + pos;
- 	struct rte_sched_subport *subport = grinder->subport;
-@@ -1933,28 +1958,33 @@ grinder_credits_check(struct rte_sched_p
+@@ -1933,19 +1958,19 @@ grinder_credits_check(struct rte_sched_p
  	uint32_t tc_index = grinder->tc_index;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
  	uint32_t subport_tb_credits = subport->tb_credits;
@@ -123,12 +114,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (!enough_credits)
  		return 0;
- 
-+	if (pkt_len > pipe_tc_credits)
-+		*time = pipe_tc_credits;
-+	else
-+		*time = pkt_len;
-+
+@@ -1953,8 +1978,8 @@ grinder_credits_check(struct rte_sched_p
  	/* Update port credits */
  	subport->tb_credits -= pkt_len;
  	subport->tc_credits[tc_index] -= pkt_len;
@@ -138,40 +124,3 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	return 1;
  }
-@@ -1962,7 +1992,7 @@ grinder_credits_check(struct rte_sched_p
- #else
- 
- static inline int
--grinder_credits_check(struct rte_sched_port *port, uint32_t pos)
-+grinder_credits_check(struct rte_sched_port *port, uint32_t pos, uint32_t *time)
- {
- 	struct rte_sched_grinder *grinder = port->grinder + pos;
- 	struct rte_sched_subport *subport = grinder->subport;
-@@ -1992,6 +2022,8 @@ grinder_credits_check(struct rte_sched_p
- 	if (!enough_credits)
- 		return 0;
- 
-+	*time = pkt_len;
-+
- 	/* Update pipe and subport credits */
- 	subport->tb_credits -= pkt_len;
- 	subport->tc_credits[tc_index] -= pkt_len;
-@@ -2012,15 +2044,16 @@ grinder_schedule(struct rte_sched_port *
- 	struct rte_sched_queue *queue = grinder->queue[grinder->qpos];
- 	struct rte_mbuf *pkt = grinder->pkt;
- 	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
-+	uint32_t time;
- 
--	if (!grinder_credits_check(port, pos))
-+	if (!grinder_credits_check(port, pos, &time))
- 		return 0;
- 
- 	if (pkt_len < 0)
- 		pkt_len = 0;
- 
- 	/* Advance port time */
--	port->time += pkt_len;
-+	port->time += time;
- 
- 	/* Send packet */
- 	port->pkts_out[port->n_pkts_out++] = pkt;
