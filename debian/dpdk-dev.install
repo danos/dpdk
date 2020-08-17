@@ -5,6 +5,7 @@ app/test/autotest_runner.py usr/share/dpdk/test/
 app/test/autotest_test_funcs.py usr/share/dpdk/test/
 usr/bin/dpdk-pdump
 usr/bin/dpdk-proc-info
+usr/bin/dpdk-telemetry.py
 usr/bin/dpdk-test-bbdev
 usr/bin/dpdk-test-crypto-perf
 usr/bin/dpdk-test-eventdev
@@ -15,3 +16,7 @@ usr/bin/dpdk-test-acl
 usr/bin/dpdk-test
 usr/bin/dpdk-test-cmdline
 usr/bin/dpdk-test-sad
+usr/bin/dpdk-test-fib
+usr/bin/dpdk-test-regex
+usr/bin/dpdk-test-fib
+usr/bin/dpdk-test-flow-perf

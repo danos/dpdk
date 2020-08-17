@@ -84,6 +84,7 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Breaks: dpdk (<< 18.11-4~),
 Replaces: dpdk (<< 18.11-4),
 Depends: libdpdk-dev (>= ${source:Version}),
+         python3,
          ${misc:Depends},
          ${shlibs:Depends},
 Description: Data Plane Development Kit (dev tools)
