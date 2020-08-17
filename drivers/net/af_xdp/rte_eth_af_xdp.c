@@ -26,7 +26,6 @@
 #include <rte_string_fns.h>
 #include <rte_branch_prediction.h>
 #include <rte_common.h>
-#include <rte_config.h>
 #include <rte_dev.h>
 #include <rte_eal.h>
 #include <rte_ether.h>
@@ -34,6 +33,7 @@
 #include <rte_log.h>
 #include <rte_memory.h>
 #include <rte_memzone.h>
+#include <rte_mempool.h>
 #include <rte_mbuf.h>
 #include <rte_malloc.h>
 #include <rte_ring.h>
@@ -50,7 +50,7 @@
 #define PF_XDP AF_XDP
 #endif
 
-static int af_xdp_logtype;
+RTE_LOG_REGISTER(af_xdp_logtype, pmd.net.af_xdp, NOTICE);
 
 #define AF_XDP_LOG(level, fmt, args...)			\
 	rte_log(RTE_LOG_ ## level, af_xdp_logtype,	\
@@ -58,13 +58,6 @@ static int af_xdp_logtype;
 
 #define ETH_AF_XDP_FRAME_SIZE		2048
 #define ETH_AF_XDP_NUM_BUFFERS		4096
-#ifdef XDP_UMEM_UNALIGNED_CHUNK_FLAG
-#define ETH_AF_XDP_MBUF_OVERHEAD	128 /* sizeof(struct rte_mbuf) */
-#define ETH_AF_XDP_DATA_HEADROOM \
-	(ETH_AF_XDP_MBUF_OVERHEAD + RTE_PKTMBUF_HEADROOM)
-#else
-#define ETH_AF_XDP_DATA_HEADROOM	0
-#endif
 #define ETH_AF_XDP_DFLT_NUM_DESCS	XSK_RING_CONS__DEFAULT_NUM_DESCS
 #define ETH_AF_XDP_DFLT_START_QUEUE_IDX	0
 #define ETH_AF_XDP_DFLT_QUEUE_COUNT	1
@@ -171,7 +164,8 @@ reserve_fill_queue_zc(struct xsk_umem_info *umem, uint16_t reserve_size,
 		uint64_t addr;
 
 		fq_addr = xsk_ring_prod__fill_addr(fq, idx++);
-		addr = (uint64_t)bufs[i] - (uint64_t)umem->buffer;
+		addr = (uint64_t)bufs[i] - (uint64_t)umem->buffer -
+				umem->mb_pool->header_size;
 		*fq_addr = addr;
 	}
 
@@ -270,8 +264,11 @@ af_xdp_rx_zc(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 		addr = xsk_umem__extract_addr(addr);
 
 		bufs[i] = (struct rte_mbuf *)
-				xsk_umem__get_data(umem->buffer, addr);
-		bufs[i]->data_off = offset - sizeof(struct rte_mbuf);
+				xsk_umem__get_data(umem->buffer, addr +
+					umem->mb_pool->header_size);
+		bufs[i]->data_off = offset - sizeof(struct rte_mbuf) -
+			rte_pktmbuf_priv_size(umem->mb_pool) -
+			umem->mb_pool->header_size;
 
 		rte_pktmbuf_pkt_len(bufs[i]) = len;
 		rte_pktmbuf_data_len(bufs[i]) = len;
@@ -384,7 +381,8 @@ pull_umem_cq(struct xsk_umem_info *umem, int size)
 #if defined(XDP_UMEM_UNALIGNED_CHUNK_FLAG)
 		addr = xsk_umem__extract_addr(addr);
 		rte_pktmbuf_free((struct rte_mbuf *)
-					xsk_umem__get_data(umem->buffer, addr));
+					xsk_umem__get_data(umem->buffer,
+					addr + umem->mb_pool->header_size));
 #else
 		rte_ring_enqueue(umem->buf_ring, (void *)addr);
 #endif
@@ -398,6 +396,8 @@ kick_tx(struct pkt_tx_queue *txq)
 {
 	struct xsk_umem_info *umem = txq->umem;
 
+	pull_umem_cq(umem, XSK_RING_CONS__DEFAULT_NUM_DESCS);
+
 #if defined(XDP_USE_NEED_WAKEUP)
 	if (xsk_ring_prod__needs_wakeup(&txq->tx))
 #endif
@@ -409,11 +409,9 @@ kick_tx(struct pkt_tx_queue *txq)
 
 			/* pull from completion queue to leave more space */
 			if (errno == EAGAIN)
-				pull_umem_cq(umem, ETH_AF_XDP_TX_BATCH_SIZE);
+				pull_umem_cq(umem,
+					     XSK_RING_CONS__DEFAULT_NUM_DESCS);
 		}
-#ifndef XDP_UMEM_UNALIGNED_CHUNK_FLAG
-	pull_umem_cq(umem, ETH_AF_XDP_TX_BATCH_SIZE);
-#endif
 }
 
 #if defined(XDP_UMEM_UNALIGNED_CHUNK_FLAG)
@@ -429,8 +427,10 @@ af_xdp_tx_zc(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 	uint16_t count = 0;
 	struct xdp_desc *desc;
 	uint64_t addr, offset;
+	uint32_t free_thresh = umem->cq.size >> 1;
 
-	pull_umem_cq(umem, nb_pkts);
+	if (xsk_cons_nb_avail(&umem->cq, free_thresh) >= free_thresh)
+		pull_umem_cq(umem, XSK_RING_CONS__DEFAULT_NUM_DESCS);
 
 	for (i = 0; i < nb_pkts; i++) {
 		mbuf = bufs[i];
@@ -438,13 +438,17 @@ af_xdp_tx_zc(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 		if (mbuf->pool == umem->mb_pool) {
 			if (!xsk_ring_prod__reserve(&txq->tx, 1, &idx_tx)) {
 				kick_tx(txq);
-				goto out;
+				if (!xsk_ring_prod__reserve(&txq->tx, 1,
+							    &idx_tx))
+					goto out;
 			}
 			desc = xsk_ring_prod__tx_desc(&txq->tx, idx_tx);
 			desc->len = mbuf->pkt_len;
-			addr = (uint64_t)mbuf - (uint64_t)umem->buffer;
+			addr = (uint64_t)mbuf - (uint64_t)umem->buffer -
+					umem->mb_pool->header_size;
 			offset = rte_pktmbuf_mtod(mbuf, uint64_t) -
-					(uint64_t)mbuf;
+					(uint64_t)mbuf +
+					umem->mb_pool->header_size;
 			offset = offset << XSK_UNALIGNED_BUF_OFFSET_SHIFT;
 			desc->addr = addr | offset;
 			count++;
@@ -465,9 +469,11 @@ af_xdp_tx_zc(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 			desc = xsk_ring_prod__tx_desc(&txq->tx, idx_tx);
 			desc->len = mbuf->pkt_len;
 
-			addr = (uint64_t)local_mbuf - (uint64_t)umem->buffer;
+			addr = (uint64_t)local_mbuf - (uint64_t)umem->buffer -
+					umem->mb_pool->header_size;
 			offset = rte_pktmbuf_mtod(local_mbuf, uint64_t) -
-					(uint64_t)local_mbuf;
+					(uint64_t)local_mbuf +
+					umem->mb_pool->header_size;
 			pkt = xsk_umem__get_data(umem->buffer, addr + offset);
 			offset = offset << XSK_UNALIGNED_BUF_OFFSET_SHIFT;
 			desc->addr = addr | offset;
@@ -480,10 +486,7 @@ af_xdp_tx_zc(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 		tx_bytes += mbuf->pkt_len;
 	}
 
-#if defined(XDP_USE_NEED_WAKEUP)
-	if (xsk_ring_prod__needs_wakeup(&txq->tx))
-#endif
-		kick_tx(txq);
+	kick_tx(txq);
 
 out:
 	xsk_ring_prod__submit(&txq->tx, count);
@@ -595,7 +598,14 @@ eth_dev_info(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 	dev_info->max_tx_queues = internals->queue_cnt;
 
 	dev_info->min_mtu = RTE_ETHER_MIN_MTU;
-	dev_info->max_mtu = ETH_AF_XDP_FRAME_SIZE - ETH_AF_XDP_DATA_HEADROOM;
+#if defined(XDP_UMEM_UNALIGNED_CHUNK_FLAG)
+	dev_info->max_mtu = getpagesize() -
+				sizeof(struct rte_mempool_objhdr) -
+				sizeof(struct rte_mbuf) -
+				RTE_PKTMBUF_HEADROOM - XDP_PACKET_HEADROOM;
+#else
+	dev_info->max_mtu = ETH_AF_XDP_FRAME_SIZE - XDP_PACKET_HEADROOM;
+#endif
 
 	dev_info->default_rxportconf.nb_queues = 1;
 	dev_info->default_txportconf.nb_queues = 1;
@@ -678,7 +688,6 @@ static void
 xdp_umem_destroy(struct xsk_umem_info *umem)
 {
 #if defined(XDP_UMEM_UNALIGNED_CHUNK_FLAG)
-	rte_mempool_free(umem->mb_pool);
 	umem->mb_pool = NULL;
 #else
 	rte_memzone_free(umem->mz);
@@ -752,17 +761,19 @@ xsk_umem_info *xdp_umem_configure(struct pmd_internals *internals __rte_unused,
 	struct xsk_umem_info *umem;
 	int ret;
 	struct xsk_umem_config usr_config = {
-		.fill_size = ETH_AF_XDP_DFLT_NUM_DESCS,
+		.fill_size = ETH_AF_XDP_DFLT_NUM_DESCS * 2,
 		.comp_size = ETH_AF_XDP_DFLT_NUM_DESCS,
 		.flags = XDP_UMEM_UNALIGNED_CHUNK_FLAG};
 	void *base_addr = NULL;
 	struct rte_mempool *mb_pool = rxq->mb_pool;
 
-	usr_config.frame_size = rte_pktmbuf_data_room_size(mb_pool) +
-					ETH_AF_XDP_MBUF_OVERHEAD +
-					mb_pool->private_data_size;
-	usr_config.frame_headroom = ETH_AF_XDP_DATA_HEADROOM +
-					mb_pool->private_data_size;
+	usr_config.frame_size = rte_mempool_calc_obj_size(mb_pool->elt_size,
+								mb_pool->flags,
+								NULL);
+	usr_config.frame_headroom = mb_pool->header_size +
+					sizeof(struct rte_mbuf) +
+					rte_pktmbuf_priv_size(mb_pool) +
+					RTE_PKTMBUF_HEADROOM;
 
 	umem = rte_zmalloc_socket("umem", sizeof(*umem), 0, rte_socket_id());
 	if (umem == NULL) {
@@ -795,7 +806,7 @@ xsk_umem_info *xdp_umem_configure(struct pmd_internals *internals,
 		.fill_size = ETH_AF_XDP_DFLT_NUM_DESCS,
 		.comp_size = ETH_AF_XDP_DFLT_NUM_DESCS,
 		.frame_size = ETH_AF_XDP_FRAME_SIZE,
-		.frame_headroom = ETH_AF_XDP_DATA_HEADROOM };
+		.frame_headroom = 0 };
 	char ring_name[RTE_RING_NAMESIZE];
 	char mz_name[RTE_MEMZONE_NAMESIZE];
 	int ret;
@@ -820,8 +831,7 @@ xsk_umem_info *xdp_umem_configure(struct pmd_internals *internals,
 
 	for (i = 0; i < ETH_AF_XDP_NUM_BUFFERS; i++)
 		rte_ring_enqueue(umem->buf_ring,
-				 (void *)(i * ETH_AF_XDP_FRAME_SIZE +
-					  ETH_AF_XDP_DATA_HEADROOM));
+				 (void *)(i * ETH_AF_XDP_FRAME_SIZE));
 
 	snprintf(mz_name, sizeof(mz_name), "af_xdp_umem_%s_%u",
 		       internals->if_name, rxq->xsk_queue_idx);
@@ -860,7 +870,7 @@ xsk_configure(struct pmd_internals *internals, struct pkt_rx_queue *rxq,
 	struct xsk_socket_config cfg;
 	struct pkt_tx_queue *txq = rxq->pair;
 	int ret = 0;
-	int reserve_size = ETH_AF_XDP_DFLT_NUM_DESCS / 2;
+	int reserve_size = ETH_AF_XDP_DFLT_NUM_DESCS;
 	struct rte_mbuf *fq_bufs[reserve_size];
 
 	rxq->umem = xdp_umem_configure(internals, rxq);
@@ -930,7 +940,7 @@ eth_rx_queue_setup(struct rte_eth_dev *dev,
 	/* Now get the space available for data in the mbuf */
 	buf_size = rte_pktmbuf_data_room_size(mb_pool) -
 		RTE_PKTMBUF_HEADROOM;
-	data_size = ETH_AF_XDP_FRAME_SIZE - ETH_AF_XDP_DATA_HEADROOM;
+	data_size = ETH_AF_XDP_FRAME_SIZE;
 
 	if (data_size > buf_size) {
 		AF_XDP_LOG(ERR, "%s: %d bytes will not fit in mbuf (%d bytes)\n",
@@ -1366,10 +1376,3 @@ RTE_PMD_REGISTER_PARAM_STRING(net_af_xdp,
 			      "iface=<string> "
 			      "start_queue=<int> "
 			      "queue_count=<int> ");
-
-RTE_INIT(af_xdp_init_log)
-{
-	af_xdp_logtype = rte_log_register("pmd.net.af_xdp");
-	if (af_xdp_logtype >= 0)
-		rte_log_set_level(af_xdp_logtype, RTE_LOG_NOTICE);
-}

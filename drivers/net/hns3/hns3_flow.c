@@ -224,14 +224,19 @@ hns3_handle_action_queue(struct rte_eth_dev *dev,
 			 struct rte_flow_error *error)
 {
 	struct hns3_adapter *hns = dev->data->dev_private;
-	struct hns3_hw *hw = &hns->hw;
 	const struct rte_flow_action_queue *queue;
+	struct hns3_hw *hw = &hns->hw;
 
 	queue = (const struct rte_flow_action_queue *)action->conf;
-	if (queue->index >= hw->data->nb_rx_queues)
+	if (queue->index >= hw->used_rx_queues) {
+		hns3_err(hw, "queue ID(%d) is greater than number of "
+			  "available queue (%d) in driver.",
+			  queue->index, hw->used_rx_queues);
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ACTION, action,
 					  "Invalid queue ID in PF");
+	}
+
 	rule->queue_id = queue->index;
 	rule->action = HNS3_FD_ACTION_ACCEPT_PACKET;
 	return 0;
@@ -1282,6 +1287,7 @@ hns3_parse_rss_filter(struct rte_eth_dev *dev,
 	case RTE_ETH_HASH_FUNCTION_DEFAULT:
 	case RTE_ETH_HASH_FUNCTION_TOEPLITZ:
 	case RTE_ETH_HASH_FUNCTION_SIMPLE_XOR:
+	case RTE_ETH_HASH_FUNCTION_SYMMETRIC_TOEPLITZ:
 		break;
 	default:
 		return rte_flow_error_set(error, ENOTSUP,
@@ -1328,6 +1334,7 @@ hns3_disable_rss(struct hns3_hw *hw)
 
 	/* Disable RSS */
 	hw->rss_info.conf.types = 0;
+	hw->rss_dis_flag = true;
 
 	return 0;
 }
@@ -1359,6 +1366,9 @@ hns3_parse_rss_algorithm(struct hns3_hw *hw, enum rte_eth_hash_function *func,
 	case RTE_ETH_HASH_FUNCTION_SIMPLE_XOR:
 		*hash_algo = HNS3_RSS_HASH_ALGO_SIMPLE;
 		break;
+	case RTE_ETH_HASH_FUNCTION_SYMMETRIC_TOEPLITZ:
+		*hash_algo = HNS3_RSS_HASH_ALGO_SYMMETRIC_TOEP;
+		break;
 	default:
 		hns3_err(hw, "Invalid RSS algorithm configuration(%u)",
 			 algo_func);
@@ -1372,9 +1382,6 @@ hns3_parse_rss_algorithm(struct hns3_hw *hw, enum rte_eth_hash_function *func,
 static int
 hns3_hw_rss_hash_set(struct hns3_hw *hw, struct rte_flow_action_rss *rss_config)
 {
-	uint8_t hash_algo =
-		(hw->rss_info.conf.func == RTE_ETH_HASH_FUNCTION_TOEPLITZ ?
-		 HNS3_RSS_HASH_ALGO_TOEPLITZ : HNS3_RSS_HASH_ALGO_SIMPLE);
 	struct hns3_rss_tuple_cfg *tuple;
 	int ret;
 
@@ -1382,11 +1389,12 @@ hns3_hw_rss_hash_set(struct hns3_hw *hw, struct rte_flow_action_rss *rss_config)
 	hns3_parse_rss_key(hw, rss_config);
 
 	/* Parse hash algorithm */
-	ret = hns3_parse_rss_algorithm(hw, &rss_config->func, &hash_algo);
+	ret = hns3_parse_rss_algorithm(hw, &rss_config->func,
+				       &hw->rss_info.hash_algo);
 	if (ret)
 		return ret;
 
-	ret = hns3_set_rss_algo_key(hw, hash_algo, rss_config->key);
+	ret = hns3_set_rss_algo_key(hw, rss_config->key);
 	if (ret)
 		return ret;
 
@@ -1469,17 +1477,24 @@ hns3_config_rss_filter(struct rte_eth_dev *dev,
 		return -EINVAL;
 	}
 
+	if (rss_flow_conf.key_len &&
+	    rss_flow_conf.key_len > RTE_DIM(rss_info->key)) {
+		hns3_err(hw,
+			"input hash key(%u) greater than supported len(%zu)",
+			rss_flow_conf.key_len, RTE_DIM(rss_info->key));
+		return -EINVAL;
+	}
+
 	/* Filter the unsupported flow types */
-	flow_types = rss_flow_conf.types & HNS3_ETH_RSS_SUPPORT;
+	flow_types = conf->conf.types ?
+		     rss_flow_conf.types & HNS3_ETH_RSS_SUPPORT :
+		     hw->rss_info.conf.types;
 	if (flow_types != rss_flow_conf.types)
 		hns3_warn(hw, "modified RSS types based on hardware support, "
 			      "requested:%" PRIx64 " configured:%" PRIx64,
 			  rss_flow_conf.types, flow_types);
 	/* Update the useful flow types */
 	rss_flow_conf.types = flow_types;
-
-	if ((rss_flow_conf.types & ETH_RSS_PROTO_MASK) == 0)
-		return hns3_disable_rss(hw);
 
 	rss_info = &hw->rss_info;
 	if (!add) {
@@ -1539,6 +1554,19 @@ hns3_clear_rss_filter(struct rte_eth_dev *dev)
 		return 0;
 
 	return hns3_config_rss_filter(dev, &hw->rss_info, false);
+}
+
+/* Restore the rss filter */
+int
+hns3_restore_rss_filter(struct rte_eth_dev *dev)
+{
+	struct hns3_adapter *hns = dev->data->dev_private;
+	struct hns3_hw *hw = &hns->hw;
+
+	if (hw->rss_info.conf.queue_num == 0)
+		return 0;
+
+	return hns3_config_rss_filter(dev, &hw->rss_info, true);
 }
 
 static int
@@ -1822,8 +1850,11 @@ hns3_flow_flush(struct rte_eth_dev *dev, struct rte_flow_error *error)
 	}
 
 	ret = hns3_clear_rss_filter(dev);
-	if (ret)
+	if (ret) {
+		rte_flow_error_set(error, ret, RTE_FLOW_ERROR_TYPE_HANDLE,
+				   NULL, "Failed to flush rss filter");
 		return ret;
+	}
 
 	hns3_filterlist_flush(dev);
 
@@ -1882,8 +1913,6 @@ hns3_dev_filter_ctrl(struct rte_eth_dev *dev, enum rte_filter_type filter_type,
 	struct hns3_hw *hw;
 	int ret = 0;
 
-	if (dev == NULL)
-		return -EINVAL;
 	hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	switch (filter_type) {
 	case RTE_ETH_FILTER_GENERIC:

@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright(c) 2017 Intel Corporation
 
+if is_windows
+	subdir_done()
+endif
+
 drivers = ['af_packet',
 	'af_xdp',
 	'ark',
@@ -21,7 +25,7 @@ drivers = ['af_packet',
 	'hns3',
 	'iavf',
 	'ice',
-	'ifc',
+	'igc',
 	'ipn3ke',
 	'ixgbe',
 	'kni',

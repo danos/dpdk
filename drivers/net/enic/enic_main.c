@@ -79,7 +79,7 @@ static void enic_free_wq_buf(struct rte_mbuf **buf)
 static void enic_log_q_error(struct enic *enic)
 {
 	unsigned int i;
-	u32 error_status;
+	uint32_t error_status;
 
 	for (i = 0; i < enic->wq_count; i++) {
 		error_status = vnic_wq_error_status(&enic->wq[i]);
@@ -222,13 +222,12 @@ void enic_init_vnic_resources(struct enic *enic)
 			error_interrupt_enable,
 			error_interrupt_offset);
 
-		data_rq = &enic->rq[enic_rte_rq_idx_to_data_idx(index)];
+		data_rq = &enic->rq[enic_rte_rq_idx_to_data_idx(index, enic)];
 		if (data_rq->in_use)
 			vnic_rq_init(data_rq,
 				     cq_idx,
 				     error_interrupt_enable,
 				     error_interrupt_offset);
-
 		vnic_cq_init(&enic->cq[cq_idx],
 			0 /* flow_control_enable */,
 			1 /* color_enable */,
@@ -264,7 +263,7 @@ void enic_init_vnic_resources(struct enic *enic)
 			0 /* cq_entry_enable */,
 			1 /* cq_message_enable */,
 			0 /* interrupt offset */,
-			(u64)enic->wq[index].cqmsg_rz->iova);
+			(uint64_t)enic->wq[index].cqmsg_rz->iova);
 	}
 
 	for (index = 0; index < enic->intr_count; index++) {
@@ -359,7 +358,7 @@ enic_initial_post_rx(struct enic *enic, struct vnic_rq *rq)
 
 void *
 enic_alloc_consistent(void *priv, size_t size,
-	dma_addr_t *dma_handle, u8 *name)
+	dma_addr_t *dma_handle, uint8_t *name)
 {
 	void *vaddr;
 	const struct rte_memzone *rz;
@@ -368,7 +367,7 @@ enic_alloc_consistent(void *priv, size_t size,
 	struct enic_memzone_entry *mze;
 
 	rz = rte_memzone_reserve_aligned((const char *)name, size,
-			SOCKET_ID_ANY, RTE_MEMZONE_IOVA_CONTIG, ENIC_ALIGN);
+			SOCKET_ID_ANY, RTE_MEMZONE_IOVA_CONTIG, ENIC_PAGE_SIZE);
 	if (!rz) {
 		pr_err("%s : Failed to allocate memory requested for %s\n",
 			__func__, name);
@@ -620,7 +619,7 @@ int enic_enable(struct enic *enic)
 			return err;
 		}
 		err = enic_alloc_rx_queue_mbufs(enic,
-			&enic->rq[enic_rte_rq_idx_to_data_idx(index)]);
+			&enic->rq[enic_rte_rq_idx_to_data_idx(index, enic)]);
 		if (err) {
 			/* release the allocated mbufs for the sop rq*/
 			enic_rxmbuf_queue_release(enic,
@@ -808,7 +807,7 @@ int enic_alloc_rq(struct enic *enic, uint16_t queue_idx,
 {
 	int rc;
 	uint16_t sop_queue_idx = enic_rte_rq_idx_to_sop_idx(queue_idx);
-	uint16_t data_queue_idx = enic_rte_rq_idx_to_data_idx(queue_idx);
+	uint16_t data_queue_idx = enic_rte_rq_idx_to_data_idx(queue_idx, enic);
 	struct vnic_rq *rq_sop = &enic->rq[sop_queue_idx];
 	struct vnic_rq *rq_data = &enic->rq[data_queue_idx];
 	unsigned int mbuf_size, mbufs_per_pkt;
@@ -1010,7 +1009,7 @@ int enic_alloc_wq(struct enic *enic, uint16_t queue_idx,
 	int err;
 	struct vnic_wq *wq = &enic->wq[queue_idx];
 	unsigned int cq_index = enic_cq_wq(enic, queue_idx);
-	char name[NAME_MAX];
+	char name[RTE_MEMZONE_NAMESIZE];
 	static int instance;
 
 	wq->socket_id = socket_id;
@@ -1044,7 +1043,7 @@ int enic_alloc_wq(struct enic *enic, uint16_t queue_idx,
 
 	wq->cqmsg_rz = rte_memzone_reserve_aligned((const char *)name,
 			sizeof(uint32_t), SOCKET_ID_ANY,
-			RTE_MEMZONE_IOVA_CONTIG, ENIC_ALIGN);
+			RTE_MEMZONE_IOVA_CONTIG, ENIC_PAGE_SIZE);
 	if (!wq->cqmsg_rz)
 		return -ENOMEM;
 
@@ -1154,10 +1153,10 @@ static int enic_set_rsskey(struct enic *enic, uint8_t *user_key)
 	dma_addr_t rss_key_buf_pa;
 	union vnic_rss_key *rss_key_buf_va = NULL;
 	int err, i;
-	u8 name[NAME_MAX];
+	uint8_t name[RTE_MEMZONE_NAMESIZE];
 
 	RTE_ASSERT(user_key != NULL);
-	snprintf((char *)name, NAME_MAX, "rss_key-%s", enic->bdf_name);
+	snprintf((char *)name, sizeof(name), "rss_key-%s", enic->bdf_name);
 	rss_key_buf_va = enic_alloc_consistent(enic, sizeof(union vnic_rss_key),
 		&rss_key_buf_pa, name);
 	if (!rss_key_buf_va)
@@ -1186,9 +1185,9 @@ int enic_set_rss_reta(struct enic *enic, union vnic_rss_cpu *rss_cpu)
 	dma_addr_t rss_cpu_buf_pa;
 	union vnic_rss_cpu *rss_cpu_buf_va = NULL;
 	int err;
-	u8 name[NAME_MAX];
+	uint8_t name[RTE_MEMZONE_NAMESIZE];
 
-	snprintf((char *)name, NAME_MAX, "rss_cpu-%s", enic->bdf_name);
+	snprintf((char *)name, sizeof(name), "rss_cpu-%s", enic->bdf_name);
 	rss_cpu_buf_va = enic_alloc_consistent(enic, sizeof(union vnic_rss_cpu),
 		&rss_cpu_buf_pa, name);
 	if (!rss_cpu_buf_va)
@@ -1209,10 +1208,11 @@ int enic_set_rss_reta(struct enic *enic, union vnic_rss_cpu *rss_cpu)
 	return err;
 }
 
-static int enic_set_niccfg(struct enic *enic, u8 rss_default_cpu,
-	u8 rss_hash_type, u8 rss_hash_bits, u8 rss_base_cpu, u8 rss_enable)
+static int enic_set_niccfg(struct enic *enic, uint8_t rss_default_cpu,
+	uint8_t rss_hash_type, uint8_t rss_hash_bits, uint8_t rss_base_cpu,
+	uint8_t rss_enable)
 {
-	const u8 tso_ipid_split_en = 0;
+	const uint8_t tso_ipid_split_en = 0;
 	int err;
 
 	err = enic_set_nic_cfg(enic,
@@ -1308,8 +1308,8 @@ int enic_set_rss_conf(struct enic *enic, struct rte_eth_rss_conf *rss_conf)
 {
 	struct rte_eth_dev *eth_dev;
 	uint64_t rss_hf;
-	u8 rss_hash_type;
-	u8 rss_enable;
+	uint8_t rss_hash_type;
+	uint8_t rss_enable;
 	int ret;
 
 	RTE_ASSERT(rss_conf != NULL);
@@ -1474,7 +1474,7 @@ enic_reinit_rq(struct enic *enic, unsigned int rq_idx)
 	int rc = 0;
 
 	sop_rq = &enic->rq[enic_rte_rq_idx_to_sop_idx(rq_idx)];
-	data_rq = &enic->rq[enic_rte_rq_idx_to_data_idx(rq_idx)];
+	data_rq = &enic->rq[enic_rte_rq_idx_to_data_idx(rq_idx, enic)];
 	cq_idx = rq_idx;
 
 	vnic_cq_clean(&enic->cq[cq_idx]);
@@ -1497,8 +1497,8 @@ enic_reinit_rq(struct enic *enic, unsigned int rq_idx)
 	if (data_rq->in_use) {
 		vnic_rq_init_start(data_rq,
 				   enic_cq_rq(enic,
-				   enic_rte_rq_idx_to_data_idx(rq_idx)), 0,
-				   data_rq->ring.desc_count - 1, 1, 0);
+				   enic_rte_rq_idx_to_data_idx(rq_idx, enic)),
+				   0, data_rq->ring.desc_count - 1, 1, 0);
 	}
 
 	rc = enic_alloc_rx_queue_mbufs(enic, sop_rq);

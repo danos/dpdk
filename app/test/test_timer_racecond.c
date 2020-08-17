@@ -1,8 +1,6 @@
-/*-
- *   BSD LICENSE
- *
- *   Copyright(c) 2015 Akamai Technologies.
- *   All rights reserved.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2015 Akamai Technologies.
+ * All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -63,12 +61,7 @@ static volatile unsigned stop_slaves;
 
 static int reload_timer(struct rte_timer *tim);
 
-int timer_logtype_test;
-
-RTE_INIT(test_timer_init_log)
-{
-	timer_logtype_test = rte_log_register("test.timer");
-}
+RTE_LOG_REGISTER(timer_logtype_test, test.timer, INFO);
 
 static void
 timer_cb(struct rte_timer *tim, void *arg __rte_unused)
@@ -108,7 +101,7 @@ reload_timer(struct rte_timer *tim)
 }
 
 static int
-slave_main_loop(__attribute__((unused)) void *arg)
+slave_main_loop(__rte_unused void *arg)
 {
 	unsigned lcore_id = rte_lcore_id();
 	unsigned i;

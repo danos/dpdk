@@ -17,13 +17,12 @@ custom_target('rte_kni',
 		'M=' + meson.current_build_dir(),
 		'src=' + meson.current_source_dir(),
 		'MODULE_CFLAGS=-include ' + meson.source_root() + '/config/rte_config.h' +
-		' -I' + meson.source_root() + '/lib/librte_eal/common/include' +
-		' -I' + meson.source_root() + '/lib/librte_eal/linux/eal/include' +
+		' -I' + meson.source_root() + '/lib/librte_eal/include' +
+		' -I' + meson.source_root() + '/lib/librte_eal/linux/include' +
 		' -I' + meson.build_root() +
 		' -I' + meson.current_source_dir(),
 		'modules'],
 	depends: kni_mkfile,
-	console: true,
 	install: true,
 	install_dir: kernel_dir + '/extra/dpdk',
 	build_by_default: get_option('enable_kmods'))

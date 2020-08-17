@@ -905,6 +905,11 @@ so-called layer 2.5 pattern items such as ``RTE_FLOW_ITEM_TYPE_VLAN``. In
 the latter case, ``type`` refers to that of the outer header, with the inner
 EtherType/TPID provided by the subsequent pattern item. This is the same
 order as on the wire.
+If the ``type`` field contains a TPID value, then only tagged packets with the
+specified TPID will match the pattern.
+Otherwise, only untagged packets will match the pattern.
+If the ``ETH`` item is the only item in the pattern, and the ``type`` field is
+not specified, then both tagged and untagged packets will match the pattern.
 
 - ``dst``: destination MAC.
 - ``src``: source MAC.
@@ -919,6 +924,8 @@ Matches an 802.1Q/ad VLAN tag.
 The corresponding standard outer EtherType (TPID) values are
 ``RTE_ETHER_TYPE_VLAN`` or ``RTE_ETHER_TYPE_QINQ``. It can be overridden by the
 preceding pattern item.
+If a ``VLAN`` item is present in the pattern, then only tagged packets will
+match the pattern.
 
 - ``tci``: tag control information.
 - ``inner_type``: inner EtherType or TPID.
@@ -1336,6 +1343,32 @@ Broadcom switches.
 
 - Default ``mask`` matches classification and vlan.
 
+Item: ``L2TPV3OIP``
+^^^^^^^^^^^^^^^^^^^
+
+Matches a L2TPv3 over IP header.
+
+- ``session_id``: L2TPv3 over IP session identifier.
+- Default ``mask`` matches session_id only.
+
+Item: ``PFCP``
+^^^^^^^^^^^^^^
+
+Matches a PFCP Header.
+
+- ``s_field``: S field.
+- ``msg_type``: message type.
+- ``msg_len``: message length.
+- ``seid``: session endpoint identifier.
+- Default ``mask`` matches s_field and seid.
+
+Item: ``ECPRI``
+^^^^^^^^^^^^^^^
+
+Matches a eCPRI header.
+
+- ``hdr``: eCPRI header definition (``rte_ecpri.h``).
+- Default ``mask`` matches nothing, for all eCPRI messages.
 
 Actions
 ~~~~~~~
@@ -2557,6 +2590,68 @@ the other path depending on HW capability.
    +----------+----------------------------+
    | ``mask`` | bit-mask applies to "data" |
    +----------+----------------------------+
+
+Action: ``SET_IPV4_DSCP``
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Set IPv4 DSCP.
+
+Modify DSCP in IPv4 header.
+
+It must be used with RTE_FLOW_ITEM_TYPE_IPV4 in pattern.
+Otherwise, RTE_FLOW_ERROR_TYPE_ACTION error will be returned.
+
+.. _table_rte_flow_action_set_ipv4_dscp:
+
+.. table:: SET_IPV4_DSCP
+
+   +-----------+---------------------------------+
+   | Field     | Value                           |
+   +===========+=================================+
+   | ``dscp``  | DSCP in low 6 bits, rest ignore |
+   +-----------+---------------------------------+
+
+Action: ``SET_IPV6_DSCP``
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Set IPv6 DSCP.
+
+Modify DSCP in IPv6 header.
+
+It must be used with RTE_FLOW_ITEM_TYPE_IPV6 in pattern.
+Otherwise, RTE_FLOW_ERROR_TYPE_ACTION error will be returned.
+
+.. _table_rte_flow_action_set_ipv6_dscp:
+
+.. table:: SET_IPV6_DSCP
+
+   +-----------+---------------------------------+
+   | Field     | Value                           |
+   +===========+=================================+
+   | ``dscp``  | DSCP in low 6 bits, rest ignore |
+   +-----------+---------------------------------+
+
+Action: ``AGE``
+^^^^^^^^^^^^^^^
+
+Set ageing timeout configuration to a flow.
+
+Event RTE_ETH_EVENT_FLOW_AGED will be reported if
+timeout passed without any matching on the flow.
+
+.. _table_rte_flow_action_age:
+
+.. table:: AGE
+
+   +--------------+---------------------------------+
+   | Field        | Value                           |
+   +==============+=================================+
+   | ``timeout``  | 24 bits timeout value           |
+   +--------------+---------------------------------+
+   | ``reserved`` | 8 bits reserved, must be zero   |
+   +--------------+---------------------------------+
+   | ``context``  | user input flow context         |
+   +--------------+---------------------------------+
 
 Negative types
 ~~~~~~~~~~~~~~

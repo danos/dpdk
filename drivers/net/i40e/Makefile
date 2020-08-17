@@ -11,7 +11,6 @@ LIB = librte_pmd_i40e.a
 CFLAGS += -O3
 CFLAGS += $(WERROR_FLAGS) -DPF_DRIVER -DVF_DRIVER -DINTEGRATED_VF
 CFLAGS += -DX722_A0_SUPPORT
-CFLAGS += -DALLOW_EXPERIMENTAL_API
 
 LDLIBS += -lrte_eal -lrte_mbuf -lrte_mempool -lrte_ring
 LDLIBS += -lrte_ethdev -lrte_net -lrte_kvargs -lrte_hash
@@ -31,7 +30,6 @@ CFLAGS_BASE_DRIVER += -Wno-unused-value
 CFLAGS_BASE_DRIVER += -Wno-unused-parameter
 CFLAGS_BASE_DRIVER += -Wno-strict-aliasing
 CFLAGS_BASE_DRIVER += -Wno-format
-CFLAGS_BASE_DRIVER += -Wno-missing-field-initializers
 CFLAGS_BASE_DRIVER += -Wno-pointer-to-int-cast
 CFLAGS_BASE_DRIVER += -Wno-format-nonliteral
 CFLAGS_BASE_DRIVER += -Wno-unused-variable
@@ -41,7 +39,6 @@ CFLAGS_BASE_DRIVER += -Wno-unused-value
 CFLAGS_BASE_DRIVER += -Wno-unused-parameter
 CFLAGS_BASE_DRIVER += -Wno-strict-aliasing
 CFLAGS_BASE_DRIVER += -Wno-format
-CFLAGS_BASE_DRIVER += -Wno-missing-field-initializers
 CFLAGS_BASE_DRIVER += -Wno-pointer-to-int-cast
 CFLAGS_BASE_DRIVER += -Wno-format-nonliteral
 CFLAGS_BASE_DRIVER += -Wno-format-security
@@ -72,7 +69,7 @@ SRCS-$(CONFIG_RTE_LIBRTE_I40E_PMD) += i40e_dcb.c
 
 SRCS-$(CONFIG_RTE_LIBRTE_I40E_PMD) += i40e_ethdev.c
 SRCS-$(CONFIG_RTE_LIBRTE_I40E_PMD) += i40e_rxtx.c
-ifeq ($(CONFIG_RTE_ARCH_ARM64),y)
+ifneq ($(filter y,$(CONFIG_RTE_ARCH_ARM) $(CONFIG_RTE_ARCH_ARM64)),)
 SRCS-$(CONFIG_RTE_LIBRTE_I40E_INC_VECTOR) += i40e_rxtx_vec_neon.c
 else ifeq ($(CONFIG_RTE_ARCH_PPC_64),y)
 SRCS-$(CONFIG_RTE_LIBRTE_I40E_INC_VECTOR) += i40e_rxtx_vec_altivec.c

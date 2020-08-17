@@ -7,7 +7,7 @@
 #define _ENIC_H_
 
 #include <rte_vxlan.h>
-
+#include <rte_ether.h>
 #include "vnic_enet.h"
 #include "vnic_dev.h"
 #include "vnic_flowman.h"
@@ -64,16 +64,16 @@
 
 struct enic_fdir_node {
 	struct rte_eth_fdir_filter filter;
-	u16 fltr_id;
-	u16 rq_index;
+	uint16_t fltr_id;
+	uint16_t rq_index;
 };
 
 struct enic_fdir {
 	struct rte_eth_fdir_stats stats;
 	struct rte_hash *hash;
 	struct enic_fdir_node *nodes[ENICPMD_FDIR_MAX];
-	u32 modes;
-	u32 types_mask;
+	uint32_t modes;
+	uint32_t types_mask;
 	void (*copy_fltr_fn)(struct filter_v2 *filt,
 			     const struct rte_eth_fdir_input *input,
 			     const struct rte_eth_fdir_masks *masks);
@@ -126,17 +126,17 @@ struct enic {
 	int iommu_group_fd;
 	int iommu_groupid;
 	int eventfd;
-	uint8_t mac_addr[ETH_ALEN];
+	uint8_t mac_addr[RTE_ETHER_ADDR_LEN];
 	pthread_t err_intr_thread;
 	int promisc;
 	int allmulti;
-	u8 ig_vlan_strip_en;
+	uint8_t ig_vlan_strip_en;
 	int link_status;
-	u8 hw_ip_checksum;
-	u16 max_mtu;
-	u8 adv_filters;
-	u32 flow_filter_mode;
-	u8 filter_actions; /* HW supported actions */
+	uint8_t hw_ip_checksum;
+	uint16_t max_mtu;
+	uint8_t adv_filters;
+	uint32_t flow_filter_mode;
+	uint8_t filter_actions; /* HW supported actions */
 	bool vxlan;
 	bool disable_overlay; /* devargs disable_overlay=1 */
 	uint8_t enable_avx2_rx;  /* devargs enable-avx2-rx=1 */
@@ -148,6 +148,7 @@ struct enic {
 	uint8_t ig_vlan_rewrite_mode; /* devargs ig-vlan-rewrite */
 	uint16_t vxlan_port;  /* current vxlan port pushed to NIC */
 	int use_simple_tx_handler;
+	int use_noscatter_vec_rx_handler;
 
 	unsigned int flags;
 	unsigned int priv_flags;
@@ -221,25 +222,26 @@ static inline uint32_t enic_mtu_to_max_rx_pktlen(uint32_t mtu)
 /* Get the CQ index from a Start of Packet(SOP) RQ index */
 static inline unsigned int enic_sop_rq_idx_to_cq_idx(unsigned int sop_idx)
 {
-	return sop_idx / 2;
+	return sop_idx;
 }
 
 /* Get the RTE RQ index from a Start of Packet(SOP) RQ index */
 static inline unsigned int enic_sop_rq_idx_to_rte_idx(unsigned int sop_idx)
 {
-	return sop_idx / 2;
+	return sop_idx;
 }
 
 /* Get the Start of Packet(SOP) RQ index from a RTE RQ index */
 static inline unsigned int enic_rte_rq_idx_to_sop_idx(unsigned int rte_idx)
 {
-	return rte_idx * 2;
+	return rte_idx;
 }
 
 /* Get the Data RQ index from a RTE RQ index */
-static inline unsigned int enic_rte_rq_idx_to_data_idx(unsigned int rte_idx)
+static inline unsigned int enic_rte_rq_idx_to_data_idx(unsigned int rte_idx,
+						       struct enic *enic)
 {
-	return rte_idx * 2 + 1;
+	return enic->rq_count + rte_idx;
 }
 
 static inline unsigned int enic_vnic_rq_count(struct enic *enic)
@@ -253,7 +255,7 @@ static inline unsigned int enic_cq_rq(__rte_unused struct enic *enic, unsigned i
 	 * completion queue, so the completion queue number is no
 	 * longer the same as the rq number.
 	 */
-	return rq / 2;
+	return rq;
 }
 
 static inline unsigned int enic_cq_wq(struct enic *enic, unsigned int wq)
@@ -339,7 +341,7 @@ void enic_clsf_destroy(struct enic *enic);
 int enic_fm_init(struct enic *enic);
 void enic_fm_destroy(struct enic *enic);
 void *enic_alloc_consistent(void *priv, size_t size, dma_addr_t *dma_handle,
-			    u8 *name);
+			    uint8_t *name);
 void enic_free_consistent(void *priv, size_t size, void *vaddr,
 			  dma_addr_t dma_handle);
 uint16_t enic_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,

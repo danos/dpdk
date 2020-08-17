@@ -40,7 +40,11 @@ struct virtio_user_dev {
 	uint64_t	device_features; /* supported features by device */
 	uint64_t	frontend_features; /* enabled frontend features */
 	uint64_t	unsupported_features; /* unsupported features mask */
+	uint64_t	protocol_features; /* negotiated protocol features
+					    * (Vhost-user only)
+					    */
 	uint8_t		status;
+	uint16_t	net_status;
 	uint16_t	port_id;
 	uint8_t		mac_addr[RTE_ETHER_ADDR_LEN];
 	char		path[PATH_MAX];
@@ -49,6 +53,7 @@ struct virtio_user_dev {
 		struct vring_packed	packed_vrings[VIRTIO_MAX_VIRTQUEUES];
 	};
 	struct virtio_user_queue packed_queues[VIRTIO_MAX_VIRTQUEUES];
+	bool		qp_enabled[VIRTIO_MAX_VIRTQUEUE_PAIRS];
 
 	struct virtio_user_backend_ops *ops;
 	pthread_mutex_t	mutex;

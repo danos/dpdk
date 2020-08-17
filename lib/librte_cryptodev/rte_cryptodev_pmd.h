@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2015-2016 Intel Corporation.
+ * Copyright(c) 2015-2020 Intel Corporation.
  */
 
 #ifndef _RTE_CRYPTODEV_PMD_H_
@@ -208,15 +208,6 @@ typedef int (*cryptodev_queue_pair_release_t)(struct rte_cryptodev *dev,
 		uint16_t qp_id);
 
 /**
- * Get number of available queue pairs of a device.
- *
- * @param	dev	Crypto device pointer
- *
- * @return	Returns number of queue pairs on success.
- */
-typedef uint32_t (*cryptodev_queue_pair_count_t)(struct rte_cryptodev *dev);
-
-/**
  * Create a session mempool to allocate sessions from
  *
  * @param	dev		Crypto device pointer
@@ -308,6 +299,23 @@ typedef void (*cryptodev_sym_free_session_t)(struct rte_cryptodev *dev,
  */
 typedef void (*cryptodev_asym_free_session_t)(struct rte_cryptodev *dev,
 		struct rte_cryptodev_asym_session *sess);
+/**
+ * Perform actual crypto processing (encrypt/digest or auth/decrypt)
+ * on user provided data.
+ *
+ * @param	dev	Crypto device pointer
+ * @param	sess	Cryptodev session structure
+ * @param	ofs	Start and stop offsets for auth and cipher operations
+ * @param	vec	Vectorized operation descriptor
+ *
+ * @return
+ *  - Returns number of successfully processed packets.
+ *
+ */
+typedef uint32_t (*cryptodev_sym_cpu_crypto_process_t)
+	(struct rte_cryptodev *dev, struct rte_cryptodev_sym_session *sess,
+	union rte_crypto_sym_ofs ofs, struct rte_crypto_sym_vec *vec);
+
 
 /** Crypto device operations function pointer table */
 struct rte_cryptodev_ops {
@@ -327,8 +335,6 @@ struct rte_cryptodev_ops {
 	/**< Set up a device queue pair. */
 	cryptodev_queue_pair_release_t queue_pair_release;
 	/**< Release a queue pair. */
-	cryptodev_queue_pair_count_t queue_pair_count;
-	/**< Get count of the queue pairs. */
 
 	cryptodev_sym_get_session_private_size_t sym_session_get_size;
 	/**< Return private session. */
@@ -342,6 +348,8 @@ struct rte_cryptodev_ops {
 	/**< Clear a Crypto sessions private data. */
 	cryptodev_asym_free_session_t asym_session_clear;
 	/**< Clear a Crypto sessions private data. */
+	cryptodev_sym_cpu_crypto_process_t sym_cpu_process;
+	/**< process input data synchronously (cpu-crypto). */
 };
 
 

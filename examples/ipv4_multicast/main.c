@@ -155,10 +155,6 @@ static struct mcast_group_params mcast_group_table[] = {
 		{RTE_IPV4(224,0,0,115), 0xF},
 };
 
-#define N_MCAST_GROUPS \
-	(sizeof (mcast_group_table) / sizeof (mcast_group_table[0]))
-
-
 /* Send burst of packets on an output interface */
 static void
 send_burst(struct lcore_queue_conf *qconf, uint16_t port)
@@ -555,7 +551,7 @@ init_mcast_hash(void)
 		return -1;
 	}
 
-	for (i = 0; i < N_MCAST_GROUPS; i ++){
+	for (i = 0; i < RTE_DIM(mcast_group_table); i++) {
 		if (rte_fbk_hash_add_key(mcast_hash,
 			mcast_group_table[i].ip,
 			mcast_group_table[i].port_mask) < 0) {
@@ -600,7 +596,7 @@ check_all_ports_link_status(uint32_t port_mask)
 					"Port%d Link Up. Speed %u Mbps - %s\n",
 					portid, link.link_speed,
 				(link.link_duplex == ETH_LINK_FULL_DUPLEX) ?
-					("full-duplex") : ("half-duplex\n"));
+					("full-duplex") : ("half-duplex"));
 				else
 					printf("Port %d Link Down\n", portid);
 				continue;

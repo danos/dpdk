@@ -27,10 +27,10 @@ In debug mode (CONFIG_RTE_LIBRTE_MEMPOOL_DEBUG is enabled),
 statistics about get from/put in the pool are stored in the mempool structure.
 Statistics are per-lcore to avoid concurrent access to statistics counters.
 
-Memory Alignment Constraints
-----------------------------
+Memory Alignment Constraints on x86 architecture
+------------------------------------------------
 
-Depending on hardware memory configuration, performance can be greatly improved by adding a specific padding between objects.
+Depending on hardware memory configuration on X86 architecture, performance can be greatly improved by adding a specific padding between objects.
 The objective is to ensure that the beginning of each object starts on a different channel and rank in memory so that all channels are equally loaded.
 
 This is particularly true for packet buffers when doing L3 forwarding or flow classification.
@@ -103,7 +103,7 @@ The maximum size of the cache is static and is defined at compilation time (CONF
 Alternatively to the internal default per-lcore local cache, an application can create and manage external caches through the ``rte_mempool_cache_create()``, ``rte_mempool_cache_free()`` and ``rte_mempool_cache_flush()`` calls.
 These user-owned caches can be explicitly passed to ``rte_mempool_generic_put()`` and ``rte_mempool_generic_get()``.
 The ``rte_mempool_default_cache()`` call returns the default internal cache if any.
-In contrast to the default caches, user-owned caches can be used by non-EAL threads too.
+In contrast to the default caches, user-owned caches can be used by unregistered non-EAL threads too.
 
 Mempool Handlers
 ------------------------

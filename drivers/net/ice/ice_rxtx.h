@@ -156,7 +156,6 @@ int ice_fdir_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id);
 int ice_fdir_tx_queue_stop(struct rte_eth_dev *dev, uint16_t tx_queue_id);
 void ice_rx_queue_release(void *rxq);
 void ice_tx_queue_release(void *txq);
-void ice_clear_queues(struct rte_eth_dev *dev);
 void ice_free_queues(struct rte_eth_dev *dev);
 int ice_fdir_setup_tx_resources(struct ice_pf *pf);
 int ice_fdir_setup_rx_resources(struct ice_pf *pf);
@@ -202,4 +201,6 @@ uint16_t ice_recv_scattered_pkts_vec_avx2(void *rx_queue,
 uint16_t ice_xmit_pkts_vec_avx2(void *tx_queue, struct rte_mbuf **tx_pkts,
 				uint16_t nb_pkts);
 int ice_fdir_programming(struct ice_pf *pf, struct ice_fltr_desc *fdir_desc);
+int ice_tx_done_cleanup(void *txq, uint32_t free_cnt);
+
 #endif /* _ICE_RXTX_H_ */

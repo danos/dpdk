@@ -63,6 +63,12 @@ parallel_test_list = [
         "Report":  None,
     },
     {
+        "Name":    "Lcores autotest",
+        "Command": "lcores_autotest",
+        "Func":    default_autotest,
+        "Report":  None,
+    },
+    {
         "Name":    "Logs autotest",
         "Command": "logs_autotest",
         "Func":    logs_autotest,
@@ -405,6 +411,12 @@ parallel_test_list = [
         "Report":  None,
     },
     {
+        "Name":    "Bitops test",
+        "Command": "bitops_autotest",
+        "Func":    default_autotest,
+        "Report":  None,
+    },
+    {
         "Name":    "Hash multiwriter autotest",
         "Command": "hash_multiwriter_autotest",
         "Func":    default_autotest,
@@ -664,14 +676,20 @@ non_parallel_test_list = [
         "Report":  None,
     },
     {
-        "Name":    "Hash read-write concurrency autotest",
-        "Command": "hash_readwrite_autotest",
+        "Name":    "Hash read-write concurrency functional autotest",
+        "Command": "hash_readwrite_func_autotest",
         "Func":    default_autotest,
         "Report":  None,
     },
     {
-        "Name":    "Hash read-write lock-free concurrency autotest",
-        "Command": "hash_readwrite_lf_autotest",
+        "Name":    "Hash read-write concurrency perf autotest",
+        "Command": "hash_readwrite_perf_autotest",
+        "Func":    default_autotest,
+        "Report":  None,
+    },
+    {
+        "Name":    "Hash read-write lock-free concurrency perf autotest",
+        "Command": "hash_readwrite_lf_perf_autotest",
         "Func":    default_autotest,
         "Report":  None,
     },

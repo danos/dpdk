@@ -17,12 +17,24 @@ Features of the HNS3 PMD are:
 - Receive Side Scaling (RSS)
 - Packet type information
 - Checksum offload
+- TSO offload
+- LRO offload
 - Promiscuous mode
 - Multicast mode
 - Port hardware statistics
 - Jumbo frames
 - Link state information
-- VLAN stripping
+- Interrupt mode for RX
+- VLAN stripping and inserting
+- QinQ inserting
+- DCB
+- Scattered and gather for TX and RX
+- Flow director
+- Dump register
+- SR-IOV VF
+- Multi-process
+- MAC/VLAN filter
+- MTU update
 - NUMA support
 
 Prerequisites

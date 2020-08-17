@@ -294,6 +294,8 @@ print_stats(char *prgname)
 		printf("\n");
 		print_total_stats(&delta_ts);
 
+		fflush(stdout);
+
 		ts.total_packets_tx += delta_ts.total_packets_tx;
 		ts.total_packets_rx += delta_ts.total_packets_rx;
 		ts.total_packets_dropped += delta_ts.total_packets_dropped;
@@ -460,7 +462,7 @@ ioat_tx_port(struct rxtx_port_config *tx_config)
 				MAX_PKT_BURST, NULL);
 		}
 
-		if (nb_dq <= 0)
+		if ((int32_t) nb_dq <= 0)
 			return;
 
 		if (copy_mode == COPY_MODE_IOAT_NUM)
@@ -582,7 +584,7 @@ ioat_parse_portmask(const char *portmask)
 	/* Parse hexadecimal string */
 	pm = strtoul(portmask, &end, 16);
 	if ((portmask[0] == '\0') || (end == NULL) || (*end != '\0'))
-		return -1;
+		return 0;
 
 	return pm;
 }
@@ -697,7 +699,7 @@ check_link_status(uint32_t port_mask)
 {
 	uint16_t portid;
 	struct rte_eth_link link;
-	int retval = 0;
+	int ret, link_status = 0;
 
 	printf("\nChecking link status\n");
 	RTE_ETH_FOREACH_DEV(portid) {
@@ -705,7 +707,12 @@ check_link_status(uint32_t port_mask)
 			continue;
 
 		memset(&link, 0, sizeof(link));
-		rte_eth_link_get(portid, &link);
+		ret = rte_eth_link_get(portid, &link);
+		if (ret < 0) {
+			printf("Port %u link get failed: err=%d\n",
+					portid, ret);
+			continue;
+		}
 
 		/* Print link status */
 		if (link.link_status) {
@@ -713,12 +720,12 @@ check_link_status(uint32_t port_mask)
 				"Port %d Link Up. Speed %u Mbps - %s\n",
 				portid, link.link_speed,
 				(link.link_duplex == ETH_LINK_FULL_DUPLEX) ?
-				("full-duplex") : ("half-duplex\n"));
-			retval = 1;
+				("full-duplex") : ("half-duplex"));
+			link_status = 1;
 		} else
 			printf("Port %d Link Down\n", portid);
 	}
-	return retval;
+	return link_status;
 }
 
 static void
@@ -824,7 +831,11 @@ port_init(uint16_t portid, struct rte_mempool *mbuf_pool, uint16_t nb_queues)
 	/* Init port */
 	printf("Initializing port %u... ", portid);
 	fflush(stdout);
-	rte_eth_dev_info_get(portid, &dev_info);
+	ret = rte_eth_dev_info_get(portid, &dev_info);
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot get device info: %s, port=%u\n",
+			rte_strerror(-ret), portid);
+
 	local_port_conf.rx_adv_conf.rss_conf.rss_hf &=
 		dev_info.flow_type_rss_offloads;
 	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)

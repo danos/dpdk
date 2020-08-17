@@ -47,8 +47,7 @@
 
 #include "process.h"
 
-#define launch_proc(ARGV) process_dup(ARGV, \
-		sizeof(ARGV)/(sizeof(ARGV[0])), __func__)
+#define launch_proc(ARGV) process_dup(ARGV, RTE_DIM(ARGV), __func__)
 
 /*
  * This function is called in the primary i.e. main test, to spawn off secondary
@@ -98,6 +97,13 @@ run_secondary_instances(void)
 			(1 << rte_get_master_lcore()));
 
 	ret |= launch_proc(argv1);
+	printf("### Testing rte_mp_disable() reject:\n");
+	if (rte_mp_disable()) {
+		printf("Error: rte_mp_disable() has been accepted\n");
+		ret |= -1;
+	} else {
+		printf("# Checked rte_mp_disable() is refused\n");
+	}
 	ret |= launch_proc(argv2);
 
 	ret |= !(launch_proc(argv3));

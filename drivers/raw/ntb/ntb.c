@@ -23,8 +23,6 @@
 #include "rte_pmd_ntb.h"
 #include "ntb.h"
 
-int ntb_logtype;
-
 static const struct rte_pci_id pci_id_ntb_map[] = {
 	{ RTE_PCI_DEVICE(NTB_INTEL_VENDOR_ID, NTB_INTEL_DEV_ID_B2B_SKX) },
 	{ .vendor_id = 0, /* sentinel */ },
@@ -683,8 +681,8 @@ end_of_tx:
 			   sizeof(struct ntb_used) * nb1);
 		rte_memcpy(txq->tx_used_ring, tx_used + nb1,
 			   sizeof(struct ntb_used) * nb2);
-		*txq->used_cnt = txq->last_used;
 		rte_wmb();
+		*txq->used_cnt = txq->last_used;
 
 		/* update queue stats */
 		hw->ntb_xstats[NTB_TX_BYTES_ID + off] += bytes;
@@ -789,8 +787,8 @@ end_of_rx:
 			   sizeof(struct ntb_desc) * nb1);
 		rte_memcpy(rxq->rx_desc_ring, rx_desc + nb1,
 			   sizeof(struct ntb_desc) * nb2);
-		*rxq->avail_cnt = rxq->last_avail;
 		rte_wmb();
+		*rxq->avail_cnt = rxq->last_avail;
 
 		/* update queue stats */
 		off = NTB_XSTATS_NUM * ((size_t)context + 1);
@@ -1504,10 +1502,4 @@ static struct rte_pci_driver rte_ntb_pmd = {
 RTE_PMD_REGISTER_PCI(raw_ntb, rte_ntb_pmd);
 RTE_PMD_REGISTER_PCI_TABLE(raw_ntb, pci_id_ntb_map);
 RTE_PMD_REGISTER_KMOD_DEP(raw_ntb, "* igb_uio | uio_pci_generic | vfio-pci");
-
-RTE_INIT(ntb_init_log)
-{
-	ntb_logtype = rte_log_register("pmd.raw.ntb");
-	if (ntb_logtype >= 0)
-		rte_log_set_level(ntb_logtype, RTE_LOG_INFO);
-}
+RTE_LOG_REGISTER(ntb_logtype, pmd.raw.ntb, INFO);

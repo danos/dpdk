@@ -49,7 +49,7 @@
 static void
 usage(char* progname)
 {
-	printf("usage: %s "
+	printf("usage: %s [EAL options] -- "
 #ifdef RTE_LIBRTE_CMDLINE
 	       "[--interactive|-i] "
 	       "[--cmdline-file=FILENAME] "
@@ -57,6 +57,7 @@ usage(char* progname)
 	       "[--help|-h] | [--auto-start|-a] | ["
 	       "--tx-first | --stats-period=PERIOD | "
 	       "--coremask=COREMASK --portmask=PORTMASK --numa "
+	       "--portlist=PORTLIST "
 	       "--mbuf-size= | --total-num-mbufs= | "
 	       "--nb-cores= | --nb-ports= | "
 #ifdef RTE_LIBRTE_CMDLINE
@@ -92,6 +93,7 @@ usage(char* progname)
 	       "packet forwarding.\n");
 	printf("  --portmask=PORTMASK: hexadecimal bitmask of ports used "
 	       "by the packet forwarding test.\n");
+	printf("  --portlist=PORTLIST: list of forwarding ports\n");
 	printf("  --numa: enable NUMA-aware allocation of RX/TX rings and of "
 	       "RX memory buffers (mbufs).\n");
 	printf("  --port-numa-config=(port,socket)[,(port,socket)]: "
@@ -145,6 +147,8 @@ usage(char* progname)
 	       "is default).\n");
 	printf("  --forward-mode=N: set forwarding mode (N: %s).\n",
 	       list_pkt_forwarding_modes());
+	printf("  --forward-mode=5tswap: set forwarding mode to "
+			"swap L2,L3,L4 for MAC, IPv4/IPv6 and TCP/UDP only.\n");
 	printf("  --rss-ip: set RSS functions to IPv4/IPv6 only .\n");
 	printf("  --rss-udp: set RSS functions to IPv4/IPv6 + UDP.\n");
 	printf("  --rxq=N: set the number of RX queues per port to N.\n");
@@ -185,9 +189,9 @@ usage(char* progname)
 	printf("  --no-rmv-interrupt: disable device removal interrupt.\n");
 	printf("  --bitrate-stats=N: set the logical core N to perform "
 		"bit-rate calculation.\n");
-	printf("  --print-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|all>: "
+	printf("  --print-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|flow_aged|all>: "
 	       "enable print of designated event or all of them.\n");
-	printf("  --mask-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|all>: "
+	printf("  --mask-event <unknown|intr_lsc|queue_state|intr_reset|vf_mbox|macsec|intr_rmv|flow_aged|all>: "
 	       "disable print of designated event or all of them.\n");
 	printf("  --flow-isolate-all: "
 	       "requests flow API isolated mode on all ports at initialization time.\n");
@@ -210,6 +214,8 @@ usage(char* progname)
 	printf("  --noisy-lkup-num-writes=N: do N random reads and writes per packet\n");
 	printf("  --no-iova-contig: mempool memory can be IOVA non contiguous. "
 	       "valid only with --mp-alloc=anon\n");
+	printf("  --rx-mq-mode=0xX: hexadecimal bitmask of RX mq mode can be "
+	       "enabled\n");
 }
 
 #ifdef RTE_LIBRTE_CMDLINE
@@ -543,6 +549,8 @@ parse_event_printing_config(const char *optarg, int enable)
 		mask = UINT32_C(1) << RTE_ETH_EVENT_NEW;
 	else if (!strcmp(optarg, "dev_released"))
 		mask = UINT32_C(1) << RTE_ETH_EVENT_DESTROY;
+	else if (!strcmp(optarg, "flow_aged"))
+		mask = UINT32_C(1) << RTE_ETH_EVENT_FLOW_AGED;
 	else if (!strcmp(optarg, "all"))
 		mask = ~UINT32_C(0);
 	else {
@@ -587,6 +595,7 @@ launch_args_parse(int argc, char** argv)
 		{ "nb-ports",			1, 0, 0 },
 		{ "coremask",			1, 0, 0 },
 		{ "portmask",			1, 0, 0 },
+		{ "portlist",			1, 0, 0 },
 		{ "numa",			0, 0, 0 },
 		{ "no-numa",			0, 0, 0 },
 		{ "mp-anon",			0, 0, 0 },
@@ -667,6 +676,7 @@ launch_args_parse(int argc, char** argv)
 		{ "noisy-lkup-num-reads",	1, 0, 0 },
 		{ "noisy-lkup-num-reads-writes", 1, 0, 0 },
 		{ "no-iova-contig",             0, 0, 0 },
+		{ "rx-mq-mode",                 1, 0, 0 },
 		{ 0, 0, 0, 0 },
 	};
 
@@ -825,6 +835,8 @@ launch_args_parse(int argc, char** argv)
 				parse_fwd_coremask(optarg);
 			if (!strcmp(lgopts[opt_idx].name, "portmask"))
 				parse_fwd_portmask(optarg);
+			if (!strcmp(lgopts[opt_idx].name, "portlist"))
+				parse_fwd_portlist(optarg);
 			if (!strcmp(lgopts[opt_idx].name, "no-numa"))
 				numa_support = 0;
 			if (!strcmp(lgopts[opt_idx].name, "numa"))
@@ -841,6 +853,8 @@ launch_args_parse(int argc, char** argv)
 					mp_alloc_type = MP_ALLOC_XMEM;
 				else if (!strcmp(optarg, "xmemhuge"))
 					mp_alloc_type = MP_ALLOC_XMEM_HUGE;
+				else if (!strcmp(optarg, "xbuf"))
+					mp_alloc_type = MP_ALLOC_XBUF;
 				else
 					rte_exit(EXIT_FAILURE,
 						"mp-alloc %s invalid - must be: "
@@ -1356,6 +1370,17 @@ launch_args_parse(int argc, char** argv)
 			}
 			if (!strcmp(lgopts[opt_idx].name, "no-iova-contig"))
 				mempool_flags = MEMPOOL_F_NO_IOVA_CONTIG;
+
+			if (!strcmp(lgopts[opt_idx].name, "rx-mq-mode")) {
+				char *end = NULL;
+				n = strtoul(optarg, &end, 16);
+				if (n >= 0 && n <= ETH_MQ_RX_VMDQ_DCB_RSS)
+					rx_mq_mode = (enum rte_eth_rx_mq_mode)n;
+				else
+					rte_exit(EXIT_FAILURE,
+						 "rx-mq-mode must be >= 0 and <= %d\n",
+						 ETH_MQ_RX_VMDQ_DCB_RSS);
+			}
 			break;
 		case 'h':
 			usage(argv[0]);

@@ -21,7 +21,7 @@ void bnxt_wait_for_device_shutdown(struct bnxt *bp)
 	 * the SHUTDOWN bit in health register
 	 */
 	if (!(bp->recovery_info &&
-	      (bp->flags & BNXT_FLAG_FW_CAP_ERR_RECOVER_RELOAD)))
+	      (bp->fw_cap & BNXT_FW_CAP_ERR_RECOVER_RELOAD)))
 		return;
 
 	/* Driver has to wait for fw_reset_max_msecs or shutdown bit which comes
@@ -63,7 +63,7 @@ void bnxt_handle_async_event(struct bnxt *bp,
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CHANGE:
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CFG_CHANGE:
 		/* FALLTHROUGH */
-		bnxt_link_update_op(bp->eth_dev, 0);
+		bnxt_link_update(bp->eth_dev, 0, ETH_LINK_UP);
 		break;
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PF_DRVR_UNLOAD:
 		PMD_DRV_LOG(INFO, "Async event: PF driver unloaded\n");
@@ -76,6 +76,12 @@ void bnxt_handle_async_event(struct bnxt *bp,
 		PMD_DRV_LOG(INFO, "Port conn async event\n");
 		break;
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_RESET_NOTIFY:
+		/* Ignore reset notify async events when stopping the port */
+		if (!bp->eth_dev->data->dev_started) {
+			bp->flags |= BNXT_FLAG_FATAL_ERROR;
+			return;
+		}
+
 		event_data = rte_le_to_cpu_32(async_cmp->event_data1);
 		/* timestamp_lo/hi values are in units of 100ms */
 		bp->fw_reset_max_msecs = async_cmp->timestamp_hi ?
@@ -133,6 +139,11 @@ void bnxt_handle_async_event(struct bnxt *bp,
 
 		bnxt_schedule_fw_health_check(bp);
 		break;
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_DEBUG_NOTIFICATION:
+		PMD_DRV_LOG(INFO, "DNC event: evt_data1 %#x evt_data2 %#x\n",
+			    rte_le_to_cpu_32(async_cmp->event_data1),
+			    rte_le_to_cpu_32(async_cmp->event_data2));
+		break;
 	default:
 		PMD_DRV_LOG(DEBUG, "handle_async_event id = 0x%x\n", event_id);
 		break;
@@ -149,14 +160,14 @@ void bnxt_handle_fwd_req(struct bnxt *bp, struct cmpl_base *cmpl)
 	uint16_t req_len;
 	int rc;
 
-	if (bp->pf.active_vfs <= 0) {
+	if (bp->pf->active_vfs <= 0) {
 		PMD_DRV_LOG(ERR, "Forwarded VF with no active VFs\n");
 		return;
 	}
 
 	/* Qualify the fwd request */
 	fw_vf_id = rte_le_to_cpu_16(fwd_cmpl->source_id);
-	vf_id = fw_vf_id - bp->pf.first_vf_id;
+	vf_id = fw_vf_id - bp->pf->first_vf_id;
 
 	req_len = (rte_le_to_cpu_16(fwd_cmpl->req_len_type) &
 		   HWRM_FWD_REQ_CMPL_REQ_LEN_MASK) >>
@@ -165,15 +176,15 @@ void bnxt_handle_fwd_req(struct bnxt *bp, struct cmpl_base *cmpl)
 		req_len = sizeof(fwreq->encap_request);
 
 	/* Locate VF's forwarded command */
-	fwd_cmd = (struct input *)bp->pf.vf_info[vf_id].req_buf;
+	fwd_cmd = (struct input *)bp->pf->vf_info[vf_id].req_buf;
 
-	if (fw_vf_id < bp->pf.first_vf_id ||
-	    fw_vf_id >= (bp->pf.first_vf_id) + bp->pf.active_vfs) {
+	if (fw_vf_id < bp->pf->first_vf_id ||
+	    fw_vf_id >= bp->pf->first_vf_id + bp->pf->active_vfs) {
 		PMD_DRV_LOG(ERR,
 		"FWD req's source_id 0x%x out of range 0x%x - 0x%x (%d %d)\n",
-			fw_vf_id, bp->pf.first_vf_id,
-			(bp->pf.first_vf_id) + bp->pf.active_vfs - 1,
-			bp->pf.first_vf_id, bp->pf.active_vfs);
+			fw_vf_id, bp->pf->first_vf_id,
+			(bp->pf->first_vf_id) + bp->pf->active_vfs - 1,
+			bp->pf->first_vf_id, bp->pf->active_vfs);
 		goto reject;
 	}
 
@@ -208,7 +219,7 @@ void bnxt_handle_fwd_req(struct bnxt *bp, struct cmpl_base *cmpl)
 		if (rc) {
 			PMD_DRV_LOG(ERR,
 				"Failed to send FWD req VF 0x%x, type 0x%x.\n",
-				fw_vf_id - bp->pf.first_vf_id,
+				fw_vf_id - bp->pf->first_vf_id,
 				rte_le_to_cpu_16(fwd_cmd->req_type));
 		}
 		return;
@@ -219,7 +230,7 @@ reject:
 	if (rc) {
 		PMD_DRV_LOG(ERR,
 			"Failed to send REJECT req VF 0x%x, type 0x%x.\n",
-			fw_vf_id - bp->pf.first_vf_id,
+			fw_vf_id - bp->pf->first_vf_id,
 			rte_le_to_cpu_16(fwd_cmd->req_type));
 	}
 

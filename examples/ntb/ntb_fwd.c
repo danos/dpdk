@@ -19,6 +19,7 @@
 #include <rte_lcore.h>
 #include <rte_cycles.h>
 #include <rte_pmd_ntb.h>
+#include <rte_mbuf_pool_ops.h>
 
 /* Per-port statistics struct */
 struct ntb_port_statistics {
@@ -108,9 +109,9 @@ struct cmd_help_result {
 };
 
 static void
-cmd_help_parsed(__attribute__((unused)) void *parsed_result,
+cmd_help_parsed(__rte_unused void *parsed_result,
 		struct cmdline *cl,
-		__attribute__((unused)) void *data)
+		__rte_unused void *data)
 {
 	cmdline_printf(
 		cl,
@@ -153,9 +154,9 @@ struct cmd_quit_result {
 };
 
 static void
-cmd_quit_parsed(__attribute__((unused)) void *parsed_result,
+cmd_quit_parsed(__rte_unused void *parsed_result,
 		struct cmdline *cl,
-		__attribute__((unused)) void *data)
+		__rte_unused void *data)
 {
 	struct ntb_fwd_lcore_conf *conf;
 	uint32_t lcore_id;
@@ -208,8 +209,8 @@ struct cmd_sendfile_result {
 
 static void
 cmd_sendfile_parsed(void *parsed_result,
-		    __attribute__((unused)) struct cmdline *cl,
-		    __attribute__((unused)) void *data)
+		    __rte_unused struct cmdline *cl,
+		    __rte_unused void *data)
 {
 	struct cmd_sendfile_result *res = parsed_result;
 	struct rte_rawdev_buf *pkts_send[NTB_MAX_PKT_BURST];
@@ -792,9 +793,9 @@ struct cmd_start_result {
 };
 
 static void
-cmd_start_parsed(__attribute__((unused)) void *parsed_result,
-			    __attribute__((unused)) struct cmdline *cl,
-			    __attribute__((unused)) void *data)
+cmd_start_parsed(__rte_unused void *parsed_result,
+			    __rte_unused struct cmdline *cl,
+			    __rte_unused void *data)
 {
 	start_pkt_fwd();
 }
@@ -818,9 +819,9 @@ struct cmd_stop_result {
 };
 
 static void
-cmd_stop_parsed(__attribute__((unused)) void *parsed_result,
-		__attribute__((unused)) struct cmdline *cl,
-		__attribute__((unused)) void *data)
+cmd_stop_parsed(__rte_unused void *parsed_result,
+		__rte_unused struct cmdline *cl,
+		__rte_unused void *data)
 {
 	struct ntb_fwd_lcore_conf *conf;
 	uint32_t lcore_id;
@@ -982,8 +983,8 @@ struct cmd_stats_result {
 
 static void
 cmd_stats_parsed(void *parsed_result,
-		 __attribute__((unused)) struct cmdline *cl,
-		 __attribute__((unused)) void *data)
+		 __rte_unused struct cmdline *cl,
+		 __rte_unused void *data)
 {
 	struct cmd_stats_result *res = parsed_result;
 	if (!strcmp(res->show, "clear"))
@@ -1020,9 +1021,9 @@ struct cmd_set_fwd_mode_result {
 };
 
 static void
-cmd_set_fwd_mode_parsed(__attribute__((unused)) void *parsed_result,
-			__attribute__((unused)) struct cmdline *cl,
-			__attribute__((unused)) void *data)
+cmd_set_fwd_mode_parsed(__rte_unused void *parsed_result,
+			__rte_unused struct cmdline *cl,
+			__rte_unused void *data)
 {
 	struct cmd_set_fwd_mode_result *res = parsed_result;
 	int i;
@@ -1256,6 +1257,11 @@ ntb_mbuf_pool_create(uint16_t mbuf_seg_size, uint32_t nb_mbuf,
 	if (mp == NULL)
 		return NULL;
 
+	if (rte_mempool_set_ops_byname(mp, rte_mbuf_best_mempool_ops(), NULL)) {
+		printf("error setting mempool handler\n");
+		goto fail;
+	}
+
 	memset(&mbp_priv, 0, sizeof(mbp_priv));
 	mbp_priv.mbuf_data_room_size = mbuf_seg_size;
 	mbp_priv.mbuf_priv_size = 0;
@@ -1313,7 +1319,7 @@ ntb_mbuf_pool_create(uint16_t mbuf_seg_size, uint32_t nb_mbuf,
 					mz->len - ntb_info.ntb_hdr_size,
 					ntb_mempool_mz_free,
 					(void *)(uintptr_t)mz);
-		if (ret < 0) {
+		if (ret <= 0) {
 			rte_memzone_free(mz);
 			rte_mempool_free(mp);
 			return NULL;

@@ -14,14 +14,6 @@
 /* Reported driver name. */
 #define MLX5_DRIVER_NAME "net_mlx5"
 
-/* Maximum number of simultaneous unicast MAC addresses. */
-#define MLX5_MAX_UC_MAC_ADDRESSES 128
-/* Maximum number of simultaneous Multicast MAC addresses. */
-#define MLX5_MAX_MC_MAC_ADDRESSES 128
-/* Maximum number of simultaneous MAC addresses. */
-#define MLX5_MAX_MAC_ADDRESSES \
-	(MLX5_MAX_UC_MAC_ADDRESSES + MLX5_MAX_MC_MAC_ADDRESSES)
-
 /* Maximum number of simultaneous VLAN filters. */
 #define MLX5_MAX_VLAN_IDS 128
 
@@ -104,8 +96,13 @@
 /* Number of packets vectorized Rx can simultaneously process in a loop. */
 #define MLX5_VPMD_DESCS_PER_LOOP      4
 
+/* Mask of RSS on source only or destination only. */
+#define MLX5_RSS_SRC_DST_ONLY (ETH_RSS_L3_SRC_ONLY | ETH_RSS_L3_DST_ONLY | \
+			       ETH_RSS_L4_SRC_ONLY | ETH_RSS_L4_DST_ONLY)
+
 /* Supported RSS */
-#define MLX5_RSS_HF_MASK (~(ETH_RSS_IP | ETH_RSS_UDP | ETH_RSS_TCP))
+#define MLX5_RSS_HF_MASK (~(ETH_RSS_IP | ETH_RSS_UDP | ETH_RSS_TCP | \
+			    MLX5_RSS_SRC_DST_ONLY))
 
 /* Timeout in seconds to get a valid link status. */
 #define MLX5_LINK_STATUS_TIMEOUT 10
@@ -146,6 +143,9 @@
 /* Log 2 of the default number of strides per WQE for Multi-Packet RQ. */
 #define MLX5_MPRQ_STRIDE_NUM_N 6U
 
+/* Log 2 of the default size of a stride per WQE for Multi-Packet RQ. */
+#define MLX5_MPRQ_STRIDE_SIZE_N 11U
+
 /* Two-byte shift is disabled for Multi-Packet RQ. */
 #define MLX5_MPRQ_TWO_BYTE_SHIFT 0
 
@@ -171,14 +171,38 @@
 #define MLX5_TXDB_NCACHED 1
 #define MLX5_TXDB_HEURISTIC 2
 
+/* Tx accurate scheduling on timestamps parameters. */
+#define MLX5_TXPP_WAIT_INIT_TS 1000ul /* How long to wait timestamp. */
+#define MLX5_TXPP_CLKQ_SIZE 1
+#define MLX5_TXPP_REARM	((1UL << MLX5_WQ_INDEX_WIDTH) / 4)
+#define MLX5_TXPP_REARM_SQ_SIZE (((1UL << MLX5_CQ_INDEX_WIDTH) / \
+				  MLX5_TXPP_REARM) * 2)
+#define MLX5_TXPP_REARM_CQ_SIZE (MLX5_TXPP_REARM_SQ_SIZE / 2)
+/* The minimal size test packet to put into one WQE, padded by HW. */
+#define MLX5_TXPP_TEST_PKT_SIZE (sizeof(struct rte_ether_hdr) +	\
+				 sizeof(struct rte_ipv4_hdr))
+
 /* Size of the simple hash table for metadata register table. */
 #define MLX5_FLOW_MREG_HTABLE_SZ 4096
 #define MLX5_FLOW_MREG_HNAME "MARK_COPY_TABLE"
 #define MLX5_DEFAULT_COPY_ID UINT32_MAX
 
+/* Hairpin TX/RX queue configuration parameters. */
+#define MLX5_HAIRPIN_QUEUE_STRIDE 6
+#define MLX5_HAIRPIN_JUMBO_LOG_SIZE (14 + 2)
+
 /* Definition of static_assert found in /usr/include/assert.h */
 #ifndef HAVE_STATIC_ASSERT
 #define static_assert _Static_assert
 #endif
+
+/*
+ * Defines the amount of retries to allocate the first UAR in the page.
+ * OFED 5.0.x and Upstream rdma_core before v29 returned the NULL as
+ * UAR base address if UAR was not the first object in the UAR page.
+ * It caused the PMD failure and we should try to get another UAR
+ * till we get the first one with non-NULL base address returned.
+ */
+#define MLX5_ALLOC_UAR_RETRY 32
 
 #endif /* RTE_PMD_MLX5_DEFS_H_ */

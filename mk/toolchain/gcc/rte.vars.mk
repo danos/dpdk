@@ -74,13 +74,16 @@ WERROR_FLAGS += -Wno-lto-type-mismatch
 endif
 endif
 
-# workaround GCC bug with warning "missing initializer" for "= {0}"
-ifeq ($(shell test $(GCC_VERSION) -lt 47 && echo 1), 1)
+# disable warning for non-initialised fields
 WERROR_FLAGS += -Wno-missing-field-initializers
-endif
 # workaround GCC bug with warning "may be used uninitialized"
 ifeq ($(shell test $(GCC_VERSION) -lt 47 && echo 1), 1)
 WERROR_FLAGS += -Wno-uninitialized
+endif
+
+ifeq ($(shell test $(GCC_VERSION) -ge 100 && echo 1), 1)
+# FIXME: Bugzilla 396
+WERROR_FLAGS += -Wno-zero-length-bounds
 endif
 
 HOST_WERROR_FLAGS := $(WERROR_FLAGS)

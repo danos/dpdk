@@ -110,9 +110,7 @@ int bnxt_alloc_rings(struct bnxt *bp, uint16_t qidx,
 	uint64_t rx_offloads = bp->eth_dev->data->dev_conf.rxmode.offloads;
 	const struct rte_memzone *mz = NULL;
 	char mz_name[RTE_MEMZONE_NAMESIZE];
-	rte_iova_t mz_phys_addr_base;
 	rte_iova_t mz_phys_addr;
-	int sz;
 
 	int stats_len = (tx_ring_info || rx_ring_info) ?
 	    RTE_CACHE_LINE_ROUNDUP(sizeof(struct hwrm_stat_ctx_query_output) -
@@ -198,7 +196,7 @@ int bnxt_alloc_rings(struct bnxt *bp, uint16_t qidx,
 	total_alloc_len += tpa_info_len;
 
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE,
-		 "bnxt_%04x:%02x:%02x:%02x-%04x_%s", pdev->addr.domain,
+		 "bnxt_" PCI_PRI_FMT "-%04x_%s", pdev->addr.domain,
 		 pdev->addr.bus, pdev->addr.devid, pdev->addr.function, qidx,
 		 suffix);
 	mz_name[RTE_MEMZONE_NAMESIZE - 1] = 0;
@@ -214,22 +212,7 @@ int bnxt_alloc_rings(struct bnxt *bp, uint16_t qidx,
 			return -ENOMEM;
 	}
 	memset(mz->addr, 0, mz->len);
-	mz_phys_addr_base = mz->iova;
 	mz_phys_addr = mz->iova;
-	if ((unsigned long)mz->addr == mz_phys_addr_base) {
-		PMD_DRV_LOG(DEBUG,
-			    "Memzone physical address same as virtual.\n");
-		PMD_DRV_LOG(DEBUG, "Using rte_mem_virt2iova()\n");
-		for (sz = 0; sz < total_alloc_len; sz += getpagesize())
-			rte_mem_lock_page(((char *)mz->addr) + sz);
-		mz_phys_addr_base = rte_mem_virt2iova(mz->addr);
-		mz_phys_addr = rte_mem_virt2iova(mz->addr);
-		if (mz_phys_addr == RTE_BAD_IOVA) {
-			PMD_DRV_LOG(ERR,
-			"unable to map ring address to physical memory\n");
-			return -ENOMEM;
-		}
-	}
 
 	if (tx_ring_info) {
 		txq->mz = mz;
@@ -615,7 +598,7 @@ int bnxt_alloc_hwrm_rx_ring(struct bnxt *bp, int queue_index)
 
 	if (rxq->rx_started) {
 		if (bnxt_init_one_rx_ring(rxq)) {
-			RTE_LOG(ERR, PMD,
+			PMD_DRV_LOG(ERR,
 				"bnxt_init_one_rx_ring failed!\n");
 			bnxt_rx_queue_release_op(rxq);
 			rc = -ENOMEM;
@@ -625,7 +608,7 @@ int bnxt_alloc_hwrm_rx_ring(struct bnxt *bp, int queue_index)
 		bnxt_db_write(&rxr->ag_db, rxr->ag_prod);
 	}
 	rxq->index = queue_index;
-#ifdef RTE_ARCH_X86
+#if defined(RTE_ARCH_X86) || defined(RTE_ARCH_ARM64)
 	bnxt_rxq_vec_setup(rxq);
 #endif
 
@@ -730,7 +713,7 @@ int bnxt_alloc_hwrm_rings(struct bnxt *bp)
 		bnxt_db_write(&rxr->rx_db, rxr->rx_prod);
 		bnxt_db_write(&rxr->ag_db, rxr->ag_prod);
 		rxq->index = i;
-#ifdef RTE_ARCH_X86
+#if defined(RTE_ARCH_X86) || defined(RTE_ARCH_ARM64)
 		bnxt_rxq_vec_setup(rxq);
 #endif
 	}
