@@ -1,4 +1,4 @@
-librte_compressdev.so.0.200 librte-compressdev20.0 #MINVER#
+librte_compressdev.so.0.200 librte-compressdev0.200 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 19.11
  rte_comp_get_feature_name@EXPERIMENTAL 19.11
  rte_comp_op_alloc@EXPERIMENTAL 19.11

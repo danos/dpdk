@@ -1,4 +1,4 @@
-librte_rib.so.0.200 librte-rib20.0 #MINVER#
+librte_rib.so.0.200 librte-rib0.200 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 19.11
  rte_rib6_create@EXPERIMENTAL 19.11
  rte_rib6_find_existing@EXPERIMENTAL 19.11

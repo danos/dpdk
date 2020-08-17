@@ -1,4 +1,4 @@
-librte_bpf.so.0.200 librte-bpf20.0 #MINVER#
+librte_bpf.so.0.200 librte-bpf0.200 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 19.11
  rte_bpf_destroy@EXPERIMENTAL 19.11
  rte_bpf_elf_load@EXPERIMENTAL 19.11

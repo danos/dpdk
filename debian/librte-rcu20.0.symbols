@@ -1,4 +1,4 @@
-librte_rcu.so.0.200 librte-rcu20.0 #MINVER#
+librte_rcu.so.0.200 librte-rcu0.200 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 19.11
  rte_rcu_log_type@EXPERIMENTAL 19.11
  rte_rcu_qsbr_dump@EXPERIMENTAL 19.11

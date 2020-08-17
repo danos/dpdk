@@ -1,4 +1,4 @@
-librte_fib.so.0.200 librte-fib20.0 #MINVER#
+librte_fib.so.0.200 librte-fib0.200 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 19.11
  rte_fib6_add@EXPERIMENTAL 19.11
  rte_fib6_create@EXPERIMENTAL 19.11
