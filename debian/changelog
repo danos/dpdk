@@ -1,3 +1,13 @@
+dpdk (19.11.3-0vyatta4) unstable; urgency=medium
+
+  [ aroberts ]
+  * This reverts commit bf12bb53ed4defa67a8214fb327ef4163bbf0995
+
+  [ Charles (Chas) Williams ]
+  * Preparse for new symbol version in rte_sched
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 17 Aug 2020 14:57:49 -0400
+
 dpdk (19.11.3-0vyatta3) unstable; urgency=medium
 
   [ Charles (Chas) Williams ]
