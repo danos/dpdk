@@ -12,6 +12,8 @@
  * packet offload flags and some related macros.
  * For majority of DPDK entities, it is not recommended to include
  * this file directly, use include <rte_mbuf.h> instead.
+ *
+ * New fields and flags should fit in the "dynamic space".
  */
 
 #include <stdint.h>
@@ -406,19 +408,6 @@ extern "C" {
 #define	RTE_MBUF_DEFAULT_BUF_SIZE	\
 	(RTE_MBUF_DEFAULT_DATAROOM + RTE_PKTMBUF_HEADROOM)
 
-/*
- * define a set of marker types that can be used to refer to set points in the
- * mbuf.
- */
-__extension__
-typedef void    *MARKER[0];   /**< generic marker for a point in a structure */
-__extension__
-typedef uint8_t  MARKER8[0];  /**< generic marker with 1B alignment */
-
- /** marker that allows us to overwrite 8 bytes with a single assignment */
-__extension__
-typedef uint64_t MARKER64[0];
-
 struct rte_mbuf_sched {
 	uint32_t queue_id;   /**< Queue ID. */
 	uint8_t traffic_class;
@@ -478,7 +467,7 @@ enum {
  * The generic rte_mbuf, containing a packet mbuf.
  */
 struct rte_mbuf {
-	MARKER cacheline0;
+	RTE_MARKER cacheline0;
 
 	void *buf_addr;           /**< Virtual address of segment buffer. */
 	/**
@@ -494,7 +483,7 @@ struct rte_mbuf {
 	} __rte_aligned(sizeof(rte_iova_t));
 
 	/* next 8 bytes are initialised on RX descriptor rearm */
-	MARKER64 rearm_data;
+	RTE_MARKER64 rearm_data;
 	uint16_t data_off;
 
 	/**
@@ -522,7 +511,7 @@ struct rte_mbuf {
 	uint64_t ol_flags;        /**< Offload features. */
 
 	/* remaining bytes are set on RX when pulling packet from descriptor */
-	MARKER rx_descriptor_fields1;
+	RTE_MARKER rx_descriptor_fields1;
 
 	/*
 	 * The packet type, which is the combination of outer/inner L2, L3, L4
@@ -534,11 +523,12 @@ struct rte_mbuf {
 	RTE_STD_C11
 	union {
 		uint32_t packet_type; /**< L2/L3/L4 and tunnel information. */
+		__extension__
 		struct {
-			uint32_t l2_type:4; /**< (Outer) L2 type. */
-			uint32_t l3_type:4; /**< (Outer) L3 type. */
-			uint32_t l4_type:4; /**< (Outer) L4 type. */
-			uint32_t tun_type:4; /**< Tunnel type. */
+			uint8_t l2_type:4;   /**< (Outer) L2 type. */
+			uint8_t l3_type:4;   /**< (Outer) L3 type. */
+			uint8_t l4_type:4;   /**< (Outer) L4 type. */
+			uint8_t tun_type:4;  /**< Tunnel type. */
 			RTE_STD_C11
 			union {
 				uint8_t inner_esp_next_proto;
@@ -554,7 +544,7 @@ struct rte_mbuf {
 					/**< Inner L3 type. */
 				};
 			};
-			uint32_t inner_l4_type:4; /**< Inner L4 type. */
+			uint8_t inner_l4_type:4; /**< Inner L4 type. */
 		};
 	};
 
@@ -610,7 +600,7 @@ struct rte_mbuf {
 	uint64_t timestamp;
 
 	/* second cache line - fields only used in slow path or on TX */
-	MARKER cacheline1 __rte_cache_min_aligned;
+	RTE_MARKER cacheline1 __rte_cache_min_aligned;
 
 	RTE_STD_C11
 	union {
@@ -689,7 +679,11 @@ typedef void (*rte_mbuf_extbuf_free_callback_t)(void *addr, void *opaque);
 struct rte_mbuf_ext_shared_info {
 	rte_mbuf_extbuf_free_callback_t free_cb; /**< Free callback function */
 	void *fcb_opaque;                        /**< Free callback argument */
-	rte_atomic16_t refcnt_atomic;        /**< Atomically accessed refcnt */
+	RTE_STD_C11
+	union {
+		rte_atomic16_t refcnt_atomic; /**< Atomically accessed refcnt */
+		uint16_t refcnt;
+	};
 };
 
 /**< Maximum number of nb_segs allowed. */

@@ -139,6 +139,11 @@ void bnxt_handle_async_event(struct bnxt *bp,
 
 		bnxt_schedule_fw_health_check(bp);
 		break;
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_DEBUG_NOTIFICATION:
+		PMD_DRV_LOG(INFO, "DNC event: evt_data1 %#x evt_data2 %#x\n",
+			    rte_le_to_cpu_32(async_cmp->event_data1),
+			    rte_le_to_cpu_32(async_cmp->event_data2));
+		break;
 	default:
 		PMD_DRV_LOG(DEBUG, "handle_async_event id = 0x%x\n", event_id);
 		break;
@@ -155,14 +160,14 @@ void bnxt_handle_fwd_req(struct bnxt *bp, struct cmpl_base *cmpl)
 	uint16_t req_len;
 	int rc;
 
-	if (bp->pf.active_vfs <= 0) {
+	if (bp->pf->active_vfs <= 0) {
 		PMD_DRV_LOG(ERR, "Forwarded VF with no active VFs\n");
 		return;
 	}
 
 	/* Qualify the fwd request */
 	fw_vf_id = rte_le_to_cpu_16(fwd_cmpl->source_id);
-	vf_id = fw_vf_id - bp->pf.first_vf_id;
+	vf_id = fw_vf_id - bp->pf->first_vf_id;
 
 	req_len = (rte_le_to_cpu_16(fwd_cmpl->req_len_type) &
 		   HWRM_FWD_REQ_CMPL_REQ_LEN_MASK) >>
@@ -171,15 +176,15 @@ void bnxt_handle_fwd_req(struct bnxt *bp, struct cmpl_base *cmpl)
 		req_len = sizeof(fwreq->encap_request);
 
 	/* Locate VF's forwarded command */
-	fwd_cmd = (struct input *)bp->pf.vf_info[vf_id].req_buf;
+	fwd_cmd = (struct input *)bp->pf->vf_info[vf_id].req_buf;
 
-	if (fw_vf_id < bp->pf.first_vf_id ||
-	    fw_vf_id >= (bp->pf.first_vf_id) + bp->pf.active_vfs) {
+	if (fw_vf_id < bp->pf->first_vf_id ||
+	    fw_vf_id >= bp->pf->first_vf_id + bp->pf->active_vfs) {
 		PMD_DRV_LOG(ERR,
 		"FWD req's source_id 0x%x out of range 0x%x - 0x%x (%d %d)\n",
-			fw_vf_id, bp->pf.first_vf_id,
-			(bp->pf.first_vf_id) + bp->pf.active_vfs - 1,
-			bp->pf.first_vf_id, bp->pf.active_vfs);
+			fw_vf_id, bp->pf->first_vf_id,
+			(bp->pf->first_vf_id) + bp->pf->active_vfs - 1,
+			bp->pf->first_vf_id, bp->pf->active_vfs);
 		goto reject;
 	}
 
@@ -214,7 +219,7 @@ void bnxt_handle_fwd_req(struct bnxt *bp, struct cmpl_base *cmpl)
 		if (rc) {
 			PMD_DRV_LOG(ERR,
 				"Failed to send FWD req VF 0x%x, type 0x%x.\n",
-				fw_vf_id - bp->pf.first_vf_id,
+				fw_vf_id - bp->pf->first_vf_id,
 				rte_le_to_cpu_16(fwd_cmd->req_type));
 		}
 		return;
@@ -225,7 +230,7 @@ reject:
 	if (rc) {
 		PMD_DRV_LOG(ERR,
 			"Failed to send REJECT req VF 0x%x, type 0x%x.\n",
-			fw_vf_id - bp->pf.first_vf_id,
+			fw_vf_id - bp->pf->first_vf_id,
 			rte_le_to_cpu_16(fwd_cmd->req_type));
 	}
 

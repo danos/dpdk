@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- * Copyright (c) 2016-2018 Solarflare Communications Inc.
- * All rights reserved.
+ * Copyright(c) 2019-2020 Xilinx, Inc.
+ * Copyright(c) 2016-2019 Solarflare Communications Inc.
  *
  * This software was jointly developed between OKTET Labs (under contract
  * for Solarflare) and Solarflare Communications, Inc.
@@ -393,8 +393,16 @@ sfc_dev_filter_set(struct rte_eth_dev *dev, enum sfc_dev_filter_mode mode,
 		} else if ((sa->state == SFC_ADAPTER_STARTED) &&
 			   ((rc = sfc_set_rx_mode(sa)) != 0)) {
 			*toggle = !(enabled);
-			sfc_warn(sa, "Failed to %s %s mode",
-				 ((enabled) ? "enable" : "disable"), desc);
+			sfc_warn(sa, "Failed to %s %s mode, rc = %d",
+				 ((enabled) ? "enable" : "disable"), desc, rc);
+
+			/*
+			 * For promiscuous and all-multicast filters a
+			 * permission failure should be reported as an
+			 * unsupported filter.
+			 */
+			if (rc == EPERM)
+				rc = ENOTSUP;
 		}
 	}
 
@@ -1022,6 +1030,9 @@ sfc_mac_addr_set(struct rte_eth_dev *dev, struct rte_ether_addr *mac_addr)
 
 	sfc_adapter_lock(sa);
 
+	if (rte_is_same_ether_addr(mac_addr, &port->default_mac_addr))
+		goto unlock;
+
 	/*
 	 * Copy the address to the device private data so that
 	 * it could be recalled in the case of adapter restart.
@@ -1060,12 +1071,12 @@ sfc_mac_addr_set(struct rte_eth_dev *dev, struct rte_ether_addr *mac_addr)
 		 * has no effect on received traffic, therefore
 		 * we also need to update unicast filters
 		 */
-		rc = sfc_set_rx_mode(sa);
+		rc = sfc_set_rx_mode_unchecked(sa);
 		if (rc != 0) {
 			sfc_err(sa, "cannot set filter (rc = %u)", rc);
 			/* Rollback the old address */
 			(void)efx_mac_addr_set(sa->nic, old_addr->addr_bytes);
-			(void)sfc_set_rx_mode(sa);
+			(void)sfc_set_rx_mode_unchecked(sa);
 		}
 	} else {
 		sfc_warn(sa, "cannot set MAC address with filters installed");

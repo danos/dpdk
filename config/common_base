@@ -99,6 +99,7 @@ CONFIG_RTE_MAX_MEMZONE=2560
 CONFIG_RTE_MAX_TAILQ=32
 CONFIG_RTE_ENABLE_ASSERT=n
 CONFIG_RTE_LOG_DP_LEVEL=RTE_LOG_INFO
+CONFIG_RTE_ENABLE_TRACE_FP=n
 CONFIG_RTE_LOG_HISTORY=256
 CONFIG_RTE_BACKTRACE=y
 CONFIG_RTE_LIBEAL_USE_HPET=n
@@ -110,6 +111,11 @@ CONFIG_RTE_MAX_VFIO_CONTAINERS=64
 CONFIG_RTE_MALLOC_DEBUG=n
 CONFIG_RTE_EAL_NUMA_AWARE_HUGEPAGES=n
 CONFIG_RTE_USE_LIBBSD=n
+# Use WFE instructions to implement the rte_wait_for_equal_xxx APIs,
+# calling these APIs put the cores in low power state while waiting
+# for the memory address to become equal to the expected value.
+# This is supported only by aarch64.
+CONFIG_RTE_ARM_USE_WFE=n
 
 #
 # Recognize/ignore the AVX/AVX512 CPU flags for performance/power testing.
@@ -288,6 +294,11 @@ CONFIG_RTE_LIBRTE_HINIC_PMD=n
 CONFIG_RTE_LIBRTE_HNS3_PMD=n
 
 #
+# Compile Pensando IONIC PMD driver
+#
+CONFIG_RTE_LIBRTE_IONIC_PMD=y
+
+#
 # Compile burst-oriented IXGBE PMD driver
 #
 CONFIG_RTE_LIBRTE_IXGBE_PMD=y
@@ -295,7 +306,6 @@ CONFIG_RTE_LIBRTE_IXGBE_DEBUG_RX=n
 CONFIG_RTE_LIBRTE_IXGBE_DEBUG_TX=n
 CONFIG_RTE_LIBRTE_IXGBE_DEBUG_TX_FREE=n
 CONFIG_RTE_LIBRTE_IXGBE_PF_DISABLE_STRIP_CRC=n
-CONFIG_RTE_IXGBE_INC_VECTOR=y
 CONFIG_RTE_LIBRTE_IXGBE_BYPASS=n
 
 #
@@ -344,6 +354,13 @@ CONFIG_RTE_LIBRTE_IAVF_16BYTE_RX_DESC=n
 CONFIG_RTE_LIBRTE_IPN3KE_PMD=n
 
 #
+# Compile burst-oriented IGC PMD drivers
+#
+CONFIG_RTE_LIBRTE_IGC_PMD=y
+CONFIG_RTE_LIBRTE_IGC_DEBUG_RX=n
+CONFIG_RTE_LIBRTE_IGC_DEBUG_TX=n
+
+#
 # Compile burst-oriented Mellanox ConnectX-3 (MLX4) PMD
 #
 CONFIG_RTE_LIBRTE_MLX4_PMD=n
@@ -355,6 +372,16 @@ CONFIG_RTE_LIBRTE_MLX4_DEBUG=n
 #
 CONFIG_RTE_LIBRTE_MLX5_PMD=n
 CONFIG_RTE_LIBRTE_MLX5_DEBUG=n
+
+#
+# Compile regex-oriented Mellanox PMD
+#
+CONFIG_RTE_LIBRTE_MLX5_REGEX_PMD=n
+
+#
+# Compile vdpa-oriented Mellanox ConnectX-6 & BlueField (MLX5) PMD
+#
+CONFIG_RTE_LIBRTE_MLX5_VDPA_PMD=n
 
 # Linking method for mlx4/5 dependency on ibverbs and related libraries
 # Default linking is dynamic by linker.
@@ -563,6 +590,11 @@ CONFIG_RTE_LIBRTE_PMD_BBDEV_TURBO_SW=y
 CONFIG_RTE_LIBRTE_PMD_BBDEV_FPGA_LTE_FEC=y
 
 #
+# Compile PMD for Intel FPGA 5GNR FEC bbdev device
+#
+CONFIG_RTE_LIBRTE_PMD_BBDEV_FPGA_5GNR_FEC=y
+
+#
 # Compile generic crypto device library
 #
 CONFIG_RTE_LIBRTE_CRYPTODEV=y
@@ -572,7 +604,6 @@ CONFIG_RTE_CRYPTO_MAX_DEVS=64
 # Compile PMD for ARMv8 Crypto device
 #
 CONFIG_RTE_LIBRTE_PMD_ARMV8_CRYPTO=n
-CONFIG_RTE_LIBRTE_PMD_ARMV8_CRYPTO_DEBUG=n
 
 #
 # Compile NXP CAAM JR crypto Driver
@@ -709,6 +740,13 @@ CONFIG_RTE_LIBRTE_PMD_ISAL=n
 CONFIG_RTE_LIBRTE_PMD_ZLIB=n
 
 #
+# Compile RegEx device support
+#
+CONFIG_RTE_LIBRTE_REGEXDEV=y
+CONFIG_RTE_LIBRTE_REGEXDEV_DEBUG=n
+CONFIG_RTE_MAX_REGEXDEV_DEVS=32
+
+#
 # Compile generic event device library
 #
 CONFIG_RTE_LIBRTE_EVENTDEV=y
@@ -793,6 +831,11 @@ CONFIG_RTE_LIBRTE_PMD_IOAT_RAWDEV=y
 # Compile PMD for octeontx2 DMA raw device
 #
 CONFIG_RTE_LIBRTE_PMD_OCTEONTX2_DMA_RAWDEV=y
+
+#
+# Compile PMD for octeontx2 EP raw device
+#
+CONFIG_RTE_LIBRTE_PMD_OCTEONTX2_EP_RAWDEV=y
 
 #
 # Compile PMD for NTB raw device
@@ -897,7 +940,7 @@ CONFIG_RTE_LIBRTE_BITRATE=y
 CONFIG_RTE_LIBRTE_LATENCY_STATS=y
 
 #
-# Compile librte_telemetry
+# Compile librte_telemetry legacy support
 #
 CONFIG_RTE_LIBRTE_TELEMETRY=n
 
@@ -1056,6 +1099,18 @@ CONFIG_RTE_LIBRTE_BPF_ELF=n
 CONFIG_RTE_LIBRTE_IPSEC=y
 
 #
+# Compile librte_graph
+#
+CONFIG_RTE_LIBRTE_GRAPH=y
+CONFIG_RTE_GRAPH_BURST_SIZE=256
+CONFIG_RTE_LIBRTE_GRAPH_STATS=y
+
+#
+# Compile librte_node
+#
+CONFIG_RTE_LIBRTE_NODE=y
+
+#
 # Compile the test application
 #
 CONFIG_RTE_APP_TEST=y
@@ -1072,6 +1127,11 @@ CONFIG_RTE_PROC_INFO=n
 CONFIG_RTE_TEST_PMD=y
 CONFIG_RTE_TEST_PMD_RECORD_CORE_CYCLES=n
 CONFIG_RTE_TEST_PMD_RECORD_BURST_STATS=n
+
+#
+# Compile the rte flow perf application
+#
+CONFIG_RTE_TEST_FLOW_PERF=y
 
 #
 # Compile the bbdev test application

@@ -419,19 +419,6 @@ static int ixgbe_wait_for_link_up(struct ixgbe_hw *hw);
 		(r) = (h)->bitmap[idx] >> bit & 1;\
 	} while (0)
 
-int ixgbe_logtype_init;
-int ixgbe_logtype_driver;
-
-#ifdef RTE_LIBRTE_IXGBE_DEBUG_RX
-int ixgbe_logtype_rx;
-#endif
-#ifdef RTE_LIBRTE_IXGBE_DEBUG_TX
-int ixgbe_logtype_tx;
-#endif
-#ifdef RTE_LIBRTE_IXGBE_DEBUG_TX_FREE
-int ixgbe_logtype_tx_free;
-#endif
-
 /*
  * The set of PCI devices this driver supports
  */
@@ -604,6 +591,7 @@ static const struct eth_dev_ops ixgbe_eth_dev_ops = {
 	.udp_tunnel_port_add  = ixgbe_dev_udp_tunnel_port_add,
 	.udp_tunnel_port_del  = ixgbe_dev_udp_tunnel_port_del,
 	.tm_ops_get           = ixgbe_tm_ops_get,
+	.tx_done_cleanup      = ixgbe_dev_tx_done_cleanup,
 };
 
 /*
@@ -652,6 +640,7 @@ static const struct eth_dev_ops ixgbevf_eth_dev_ops = {
 	.reta_query           = ixgbe_dev_rss_reta_query,
 	.rss_hash_update      = ixgbe_dev_rss_hash_update,
 	.rss_hash_conf_get    = ixgbe_dev_rss_hash_conf_get,
+	.tx_done_cleanup      = ixgbe_dev_tx_done_cleanup,
 };
 
 /* store statistics names and its offset in stats structure */
@@ -2583,7 +2572,8 @@ ixgbe_dev_start(struct rte_eth_dev *dev)
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	uint32_t intr_vector = 0;
-	int err, link_up = 0, negotiate = 0;
+	int err;
+	bool link_up = false, negotiate = 0;
 	uint32_t speed = 0;
 	uint32_t allowed_speeds = 0;
 	int mask = 0;
@@ -2935,8 +2925,6 @@ ixgbe_dev_stop(struct rte_eth_dev *dev)
 	tm_conf->committed = false;
 
 	adapter->rss_reta_updated = 0;
-
-	adapter->mac_ctrl_frame_fwd = 0;
 
 	hw->adapter_stopped = true;
 }
@@ -4038,7 +4026,7 @@ ixgbevf_dev_info_get(struct rte_eth_dev *dev,
 
 static int
 ixgbevf_check_link(struct ixgbe_hw *hw, ixgbe_link_speed *speed,
-		   int *link_up, int wait_to_complete)
+		   bool *link_up, int wait_to_complete)
 {
 	struct ixgbe_adapter *adapter = container_of(hw,
 						     struct ixgbe_adapter, hw);
@@ -4203,7 +4191,8 @@ static int
 ixgbe_wait_for_link_up(struct ixgbe_hw *hw)
 {
 #ifdef RTE_EXEC_ENV_FREEBSD
-	int err, i, link_up = 0;
+	int err, i;
+	bool link_up = false;
 	uint32_t speed = 0;
 	const int nb_iter = 25;
 
@@ -4234,7 +4223,7 @@ ixgbe_dev_link_update_share(struct rte_eth_dev *dev,
 	ixgbe_link_speed link_speed = IXGBE_LINK_SPEED_UNKNOWN;
 	struct ixgbe_interrupt *intr =
 		IXGBE_DEV_PRIVATE_TO_INTR(dev->data->dev_private);
-	int link_up;
+	bool link_up;
 	int diag;
 	int wait = 1;
 	u32 esdp_reg;
@@ -4314,6 +4303,10 @@ ixgbe_dev_link_update_share(struct rte_eth_dev *dev,
 			link.link_speed = ETH_SPEED_NUM_10M;
 		else
 			link.link_speed = ETH_SPEED_NUM_100M;
+		break;
+
+	case IXGBE_LINK_SPEED_10_FULL:
+		link.link_speed = ETH_SPEED_NUM_10M;
 		break;
 
 	case IXGBE_LINK_SPEED_100_FULL:
@@ -4750,6 +4743,11 @@ ixgbe_flow_ctrl_get(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
 	 * MFLCN register.
 	 */
 	mflcn_reg = IXGBE_READ_REG(hw, IXGBE_MFLCN);
+	if (mflcn_reg & IXGBE_MFLCN_PMCF)
+		fc_conf->mac_ctrl_frame_fwd = 1;
+	else
+		fc_conf->mac_ctrl_frame_fwd = 0;
+
 	if (mflcn_reg & (IXGBE_MFLCN_RPFCE | IXGBE_MFLCN_RFCE))
 		rx_pause = 1;
 	else
@@ -6285,8 +6283,8 @@ ixgbe_set_queue_rate_limit(struct rte_eth_dev *dev,
 
 static int
 ixgbevf_add_mac_addr(struct rte_eth_dev *dev, struct rte_ether_addr *mac_addr,
-		     __attribute__((unused)) uint32_t index,
-		     __attribute__((unused)) uint32_t pool)
+		     __rte_unused uint32_t index,
+		     __rte_unused uint32_t pool)
 {
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	int diag;
@@ -7088,7 +7086,7 @@ ixgbe_dev_filter_ctrl(struct rte_eth_dev *dev,
 }
 
 static u8 *
-ixgbe_dev_addr_list_itr(__attribute__((unused)) struct ixgbe_hw *hw,
+ixgbe_dev_addr_list_itr(__rte_unused struct ixgbe_hw *hw,
 			u8 **mc_addr_ptr, u32 *vmdq)
 {
 	u8 *mc_addr;
@@ -9113,29 +9111,15 @@ RTE_PMD_REGISTER_KMOD_DEP(net_ixgbe_vf, "* igb_uio | vfio-pci");
 RTE_PMD_REGISTER_PARAM_STRING(net_ixgbe_vf,
 			      IXGBEVF_DEVARG_PFLINK_FULLCHK "=<0|1>");
 
-RTE_INIT(ixgbe_init_log)
-{
-	ixgbe_logtype_init = rte_log_register("pmd.net.ixgbe.init");
-	if (ixgbe_logtype_init >= 0)
-		rte_log_set_level(ixgbe_logtype_init, RTE_LOG_NOTICE);
-	ixgbe_logtype_driver = rte_log_register("pmd.net.ixgbe.driver");
-	if (ixgbe_logtype_driver >= 0)
-		rte_log_set_level(ixgbe_logtype_driver, RTE_LOG_NOTICE);
+RTE_LOG_REGISTER(ixgbe_logtype_init, pmd.net.ixgbe.init, NOTICE);
+RTE_LOG_REGISTER(ixgbe_logtype_driver, pmd.net.ixgbe.driver, NOTICE);
+
 #ifdef RTE_LIBRTE_IXGBE_DEBUG_RX
-	ixgbe_logtype_rx = rte_log_register("pmd.net.ixgbe.rx");
-	if (ixgbe_logtype_rx >= 0)
-		rte_log_set_level(ixgbe_logtype_rx, RTE_LOG_DEBUG);
+RTE_LOG_REGISTER(ixgbe_logtype_rx, pmd.net.ixgbe.rx, DEBUG);
 #endif
-
 #ifdef RTE_LIBRTE_IXGBE_DEBUG_TX
-	ixgbe_logtype_tx = rte_log_register("pmd.net.ixgbe.tx");
-	if (ixgbe_logtype_tx >= 0)
-		rte_log_set_level(ixgbe_logtype_tx, RTE_LOG_DEBUG);
+RTE_LOG_REGISTER(ixgbe_logtype_tx, pmd.net.ixgbe.tx, DEBUG);
 #endif
-
 #ifdef RTE_LIBRTE_IXGBE_DEBUG_TX_FREE
-	ixgbe_logtype_tx_free = rte_log_register("pmd.net.ixgbe.tx_free");
-	if (ixgbe_logtype_tx_free >= 0)
-		rte_log_set_level(ixgbe_logtype_tx_free, RTE_LOG_DEBUG);
+RTE_LOG_REGISTER(ixgbe_logtype_tx_free, pmd.net.ixgbe.tx_free, DEBUG);
 #endif
-}

@@ -270,6 +270,7 @@ struct ixgbe_vf_info {
 	uint8_t api_version;
 	uint16_t switch_domain_id;
 	uint16_t xcast_mode;
+	uint16_t mac_count;
 };
 
 /*
@@ -357,7 +358,7 @@ struct ixgbe_l2_tn_info {
 	struct rte_hash                    *hash_handle;
 	bool e_tag_en; /* e-tag enabled */
 	bool e_tag_fwd_en; /* e-tag based forwarding enabled */
-	bool e_tag_ether_type; /* ether type for e-tag */
+	uint16_t e_tag_ether_type; /* ether type for e-tag */
 };
 
 struct rte_flow {
@@ -696,6 +697,10 @@ int ixgbe_fdir_set_flexbytes_offset(struct rte_eth_dev *dev,
 int ixgbe_fdir_filter_program(struct rte_eth_dev *dev,
 			      struct ixgbe_fdir_rule *rule,
 			      bool del, bool update);
+void ixgbe_fdir_info_get(struct rte_eth_dev *dev,
+			 struct rte_eth_fdir_info *fdir_info);
+void ixgbe_fdir_stats_get(struct rte_eth_dev *dev,
+			  struct rte_eth_fdir_stats *fdir_stats);
 
 void ixgbe_configure_dcb(struct rte_eth_dev *dev);
 

@@ -207,6 +207,9 @@ enum hns3_opcode_type {
 	HNS3_OPC_FD_AD_OP               = 0x1204,
 	HNS3_OPC_FD_COUNTER_OP          = 0x1205,
 
+	/* Clear hardware state command */
+	HNS3_OPC_CLEAR_HW_STATE         = 0x700A,
+
 	/* SFP command */
 	HNS3_OPC_SFP_GET_SPEED          = 0x7104,
 
@@ -253,6 +256,14 @@ struct hns3_rx_priv_buff_cmd {
 	uint8_t rsv[6];
 };
 
+#define HNS3_FW_VERSION_BYTE3_S		24
+#define HNS3_FW_VERSION_BYTE3_M		GENMASK(31, 24)
+#define HNS3_FW_VERSION_BYTE2_S		16
+#define HNS3_FW_VERSION_BYTE2_M		GENMASK(23, 16)
+#define HNS3_FW_VERSION_BYTE1_S		8
+#define HNS3_FW_VERSION_BYTE1_M		GENMASK(15, 8)
+#define HNS3_FW_VERSION_BYTE0_S		0
+#define HNS3_FW_VERSION_BYTE0_M		GENMASK(7, 0)
 struct hns3_query_version_cmd {
 	uint32_t firmware;
 	uint32_t firmware_rsv[5];
@@ -611,6 +622,7 @@ struct hns3_config_mac_mode_cmd {
 #define HNS3_CFG_SPEED_40G		3
 #define HNS3_CFG_SPEED_50G		4
 #define HNS3_CFG_SPEED_100G		5
+#define HNS3_CFG_SPEED_200G		8
 
 #define HNS3_CFG_SPEED_S		0
 #define HNS3_CFG_SPEED_M		GENMASK(5, 0)

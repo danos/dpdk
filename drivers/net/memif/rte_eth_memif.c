@@ -52,6 +52,13 @@ static const char * const valid_arguments[] = {
 	NULL
 };
 
+static const struct rte_eth_link pmd_link = {
+	.link_speed = ETH_SPEED_NUM_10G,
+	.link_duplex = ETH_LINK_FULL_DUPLEX,
+	.link_status = ETH_LINK_DOWN,
+	.link_autoneg = ETH_LINK_AUTONEG
+};
+
 #define MEMIF_MP_SEND_REGION		"memif_mp_send_region"
 
 
@@ -1484,11 +1491,14 @@ memif_create(struct rte_vdev_device *vdev, enum memif_role_t role,
 	pmd->cfg.num_m2s_rings = 0;
 
 	pmd->cfg.pkt_buffer_size = pkt_buffer_size;
+	rte_spinlock_init(&pmd->cc_lock);
 
 	data = eth_dev->data;
 	data->dev_private = pmd;
 	data->numa_node = numa_node;
+	data->dev_link = pmd_link;
 	data->mac_addrs = ether_addr;
+	data->promiscuous = 1;
 
 	eth_dev->dev_ops = &ops;
 	eth_dev->device = &vdev->device;
@@ -1796,11 +1806,4 @@ RTE_PMD_REGISTER_PARAM_STRING(net_memif,
 			      ETH_MEMIF_ZC_ARG "=yes|no"
 			      ETH_MEMIF_SECRET_ARG "=<string>");
 
-int memif_logtype;
-
-RTE_INIT(memif_init_log)
-{
-	memif_logtype = rte_log_register("pmd.net.memif");
-	if (memif_logtype >= 0)
-		rte_log_set_level(memif_logtype, RTE_LOG_NOTICE);
-}
+RTE_LOG_REGISTER(memif_logtype, pmd.net.memif, NOTICE);

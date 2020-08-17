@@ -44,61 +44,64 @@ sso_fastpath_fns_set(struct rte_eventdev *event_dev)
 {
 	struct otx2_sso_evdev *dev = sso_pmd_priv(event_dev);
 	/* Single WS modes */
-	const event_dequeue_t ssogws_deq[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_ ##name,
+	const event_dequeue_t ssogws_deq[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
-	const event_dequeue_burst_t ssogws_deq_burst[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_burst_ ##name,
+	const event_dequeue_burst_t ssogws_deq_burst[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_burst_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
-	const event_dequeue_t ssogws_deq_timeout[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_timeout_ ##name,
+	const event_dequeue_t ssogws_deq_timeout[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_timeout_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
 	const event_dequeue_burst_t
-		ssogws_deq_timeout_burst[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] =				\
+		ssogws_deq_timeout_burst[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
 			otx2_ssogws_deq_timeout_burst_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
-	const event_dequeue_t ssogws_deq_seg[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_seg_ ##name,
-SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
-#undef R
-	};
-
-	const event_dequeue_burst_t ssogws_deq_seg_burst[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_seg_burst_ ##name,
-SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
-#undef R
-	};
-
-	const event_dequeue_t ssogws_deq_seg_timeout[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_seg_timeout_ ##name,
+	const event_dequeue_t ssogws_deq_seg[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] = otx2_ssogws_deq_seg_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
 	const event_dequeue_burst_t
-		ssogws_deq_seg_timeout_burst[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] =				\
+		ssogws_deq_seg_burst[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
+			otx2_ssogws_deq_seg_burst_ ##name,
+SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
+#undef R
+	};
+
+	const event_dequeue_t ssogws_deq_seg_timeout[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
+			otx2_ssogws_deq_seg_timeout_ ##name,
+SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
+#undef R
+	};
+
+	const event_dequeue_burst_t
+		ssogws_deq_seg_timeout_burst[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
 				otx2_ssogws_deq_seg_timeout_burst_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
@@ -106,98 +109,105 @@ SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 
 
 	/* Dual WS modes */
-	const event_dequeue_t ssogws_dual_deq[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_dual_deq_ ##name,
-SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
-#undef R
-	};
-
-	const event_dequeue_burst_t ssogws_dual_deq_burst[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_dual_deq_burst_ ##name,
-SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
-#undef R
-	};
-
-	const event_dequeue_t ssogws_dual_deq_timeout[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_dual_deq_timeout_ ##name,
+	const event_dequeue_t ssogws_dual_deq[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] = otx2_ssogws_dual_deq_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
 	const event_dequeue_burst_t
-		ssogws_dual_deq_timeout_burst[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-	[f5][f4][f3][f2][f1][f0] = otx2_ssogws_dual_deq_timeout_burst_ ##name,
+		ssogws_dual_deq_burst[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
+			otx2_ssogws_dual_deq_burst_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
-	const event_dequeue_t ssogws_dual_deq_seg[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] = otx2_ssogws_dual_deq_seg_ ##name,
-SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
-#undef R
-	};
-
-	const event_dequeue_burst_t
-		ssogws_dual_deq_seg_burst[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] =				\
-				otx2_ssogws_dual_deq_seg_burst_ ##name,
-SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
-#undef R
-	};
-
-	const event_dequeue_t ssogws_dual_deq_seg_timeout[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-		[f5][f4][f3][f2][f1][f0] =				\
-				otx2_ssogws_dual_deq_seg_timeout_ ##name,
+	const event_dequeue_t ssogws_dual_deq_timeout[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
+			otx2_ssogws_dual_deq_timeout_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
 	const event_dequeue_burst_t
-		ssogws_dual_deq_seg_timeout_burst[2][2][2][2][2][2] = {
-#define R(name, f5, f4, f3, f2, f1, f0, flags)				\
-	[f5][f4][f3][f2][f1][f0] =					\
-		otx2_ssogws_dual_deq_seg_timeout_burst_ ##name,
+		ssogws_dual_deq_timeout_burst[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+	[f6][f5][f4][f3][f2][f1][f0] =					\
+			otx2_ssogws_dual_deq_timeout_burst_ ##name,
+SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
+#undef R
+	};
+
+	const event_dequeue_t ssogws_dual_deq_seg[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] = otx2_ssogws_dual_deq_seg_ ##name,
+SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
+#undef R
+	};
+
+	const event_dequeue_burst_t
+		ssogws_dual_deq_seg_burst[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
+			otx2_ssogws_dual_deq_seg_burst_ ##name,
+SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
+#undef R
+	};
+
+	const event_dequeue_t
+		ssogws_dual_deq_seg_timeout[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
+			otx2_ssogws_dual_deq_seg_timeout_ ##name,
+SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
+#undef R
+	};
+
+	const event_dequeue_burst_t
+		ssogws_dual_deq_seg_timeout_burst[2][2][2][2][2][2][2] = {
+#define R(name, f6, f5, f4, f3, f2, f1, f0, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
+			otx2_ssogws_dual_deq_seg_timeout_burst_ ##name,
 SSO_RX_ADPTR_ENQ_FASTPATH_FUNC
 #undef R
 	};
 
 	/* Tx modes */
-	const event_tx_adapter_enqueue ssogws_tx_adptr_enq[2][2][2][2][2][2] = {
-#define T(name, f5, f4, f3, f2, f1, f0, sz, flags)			\
-		[f5][f4][f3][f2][f1][f0] =  otx2_ssogws_tx_adptr_enq_ ## name,
+	const event_tx_adapter_enqueue
+		ssogws_tx_adptr_enq[2][2][2][2][2][2][2] = {
+#define T(name, f6, f5, f4, f3, f2, f1, f0, sz, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
+			otx2_ssogws_tx_adptr_enq_ ## name,
 SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 #undef T
 	};
 
 	const event_tx_adapter_enqueue
-		ssogws_tx_adptr_enq_seg[2][2][2][2][2][2] = {
-#define T(name, f5, f4, f3, f2, f1, f0, sz, flags)			\
-		[f5][f4][f3][f2][f1][f0] =				\
+		ssogws_tx_adptr_enq_seg[2][2][2][2][2][2][2] = {
+#define T(name, f6, f5, f4, f3, f2, f1, f0, sz, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
 			otx2_ssogws_tx_adptr_enq_seg_ ## name,
 SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 #undef T
 	};
 
 	const event_tx_adapter_enqueue
-		ssogws_dual_tx_adptr_enq[2][2][2][2][2][2] = {
-#define T(name, f5, f4, f3, f2, f1, f0, sz, flags)			\
-		[f5][f4][f3][f2][f1][f0] =				\
+		ssogws_dual_tx_adptr_enq[2][2][2][2][2][2][2] = {
+#define T(name, f6, f5, f4, f3, f2, f1, f0, sz, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
 			otx2_ssogws_dual_tx_adptr_enq_ ## name,
 SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 #undef T
 	};
 
 	const event_tx_adapter_enqueue
-		ssogws_dual_tx_adptr_enq_seg[2][2][2][2][2][2] = {
-#define T(name, f5, f4, f3, f2, f1, f0, sz, flags)			\
-		[f5][f4][f3][f2][f1][f0] =				\
+		ssogws_dual_tx_adptr_enq_seg[2][2][2][2][2][2][2] = {
+#define T(name, f6, f5, f4, f3, f2, f1, f0, sz, flags)			\
+		[f6][f5][f4][f3][f2][f1][f0] =				\
 			otx2_ssogws_dual_tx_adptr_enq_seg_ ## name,
 SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 #undef T
@@ -209,6 +219,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 	event_dev->enqueue_forward_burst	= otx2_ssogws_enq_fwd_burst;
 	if (dev->rx_offloads & NIX_RX_MULTI_SEG_F) {
 		event_dev->dequeue		= ssogws_deq_seg
+			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_SECURITY_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_MARK_UPDATE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_VLAN_STRIP_F)]
@@ -216,6 +227,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_PTYPE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_RSS_F)];
 		event_dev->dequeue_burst	= ssogws_deq_seg_burst
+			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_SECURITY_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_MARK_UPDATE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_VLAN_STRIP_F)]
@@ -224,6 +236,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_RSS_F)];
 		if (dev->is_timeout_deq) {
 			event_dev->dequeue	= ssogws_deq_seg_timeout
+			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_SECURITY_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_MARK_UPDATE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_VLAN_STRIP_F)]
@@ -232,6 +245,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_RSS_F)];
 			event_dev->dequeue_burst	=
 				ssogws_deq_seg_timeout_burst
+			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_SECURITY_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_MARK_UPDATE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_VLAN_STRIP_F)]
@@ -241,6 +255,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 		}
 	} else {
 		event_dev->dequeue			= ssogws_deq
+			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_SECURITY_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_MARK_UPDATE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_VLAN_STRIP_F)]
@@ -248,6 +263,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_PTYPE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_RSS_F)];
 		event_dev->dequeue_burst		= ssogws_deq_burst
+			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_SECURITY_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_MARK_UPDATE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_VLAN_STRIP_F)]
@@ -256,6 +272,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_RSS_F)];
 		if (dev->is_timeout_deq) {
 			event_dev->dequeue		= ssogws_deq_timeout
+			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_SECURITY_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_MARK_UPDATE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_VLAN_STRIP_F)]
@@ -264,6 +281,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_RSS_F)];
 			event_dev->dequeue_burst	=
 				ssogws_deq_timeout_burst
+			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_SECURITY_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_MARK_UPDATE_F)]
 			[!!(dev->rx_offloads & NIX_RX_OFFLOAD_VLAN_STRIP_F)]
@@ -274,8 +292,9 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 	}
 
 	if (dev->tx_offloads & NIX_TX_MULTI_SEG_F) {
-		/* [TSMP] [MBUF_NOFF] [VLAN] [OL3_L4_CSUM] [L3_L4_CSUM] */
+		/* [SEC] [TSMP] [MBUF_NOFF] [VLAN] [OL3_L4_CSUM] [L3_L4_CSUM] */
 		event_dev->txa_enqueue = ssogws_tx_adptr_enq_seg
+			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_SECURITY_F)]
 			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_TSO_F)]
 			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_MBUF_NOFF_F)]
@@ -284,6 +303,7 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_L3_L4_CSUM_F)];
 	} else {
 		event_dev->txa_enqueue = ssogws_tx_adptr_enq
+			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_SECURITY_F)]
 			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_TSO_F)]
 			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_TSTAMP_F)]
 			[!!(dev->tx_offloads & NIX_TX_OFFLOAD_MBUF_NOFF_F)]
@@ -303,6 +323,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 		if (dev->rx_offloads & NIX_RX_MULTI_SEG_F) {
 			event_dev->dequeue	= ssogws_dual_deq_seg
 				[!!(dev->rx_offloads &
+						NIX_RX_OFFLOAD_SECURITY_F)]
+				[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_TSTAMP_F)]
 				[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_MARK_UPDATE_F)]
@@ -313,6 +335,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 				[!!(dev->rx_offloads & NIX_RX_OFFLOAD_PTYPE_F)]
 				[!!(dev->rx_offloads & NIX_RX_OFFLOAD_RSS_F)];
 			event_dev->dequeue_burst = ssogws_dual_deq_seg_burst
+				[!!(dev->rx_offloads &
+						NIX_RX_OFFLOAD_SECURITY_F)]
 				[!!(dev->rx_offloads & NIX_RX_OFFLOAD_TSTAMP_F)]
 				[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_MARK_UPDATE_F)]
@@ -325,6 +349,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 			if (dev->is_timeout_deq) {
 				event_dev->dequeue	=
 					ssogws_dual_deq_seg_timeout
+					[!!(dev->rx_offloads &
+						NIX_RX_OFFLOAD_SECURITY_F)]
 					[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_TSTAMP_F)]
 					[!!(dev->rx_offloads &
@@ -339,6 +365,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 							NIX_RX_OFFLOAD_RSS_F)];
 				event_dev->dequeue_burst =
 					ssogws_dual_deq_seg_timeout_burst
+					[!!(dev->rx_offloads &
+						NIX_RX_OFFLOAD_SECURITY_F)]
 					[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_TSTAMP_F)]
 					[!!(dev->rx_offloads &
@@ -355,6 +383,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 		} else {
 			event_dev->dequeue		= ssogws_dual_deq
 				[!!(dev->rx_offloads &
+						NIX_RX_OFFLOAD_SECURITY_F)]
+				[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_TSTAMP_F)]
 				[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_MARK_UPDATE_F)]
@@ -365,6 +395,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 				[!!(dev->rx_offloads & NIX_RX_OFFLOAD_PTYPE_F)]
 				[!!(dev->rx_offloads & NIX_RX_OFFLOAD_RSS_F)];
 			event_dev->dequeue_burst	= ssogws_dual_deq_burst
+				[!!(dev->rx_offloads &
+						NIX_RX_OFFLOAD_SECURITY_F)]
 				[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_TSTAMP_F)]
 				[!!(dev->rx_offloads &
@@ -379,6 +411,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 				event_dev->dequeue	=
 					ssogws_dual_deq_timeout
 					[!!(dev->rx_offloads &
+						NIX_RX_OFFLOAD_SECURITY_F)]
+					[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_TSTAMP_F)]
 					[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_MARK_UPDATE_F)]
@@ -392,6 +426,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 							NIX_RX_OFFLOAD_RSS_F)];
 				event_dev->dequeue_burst =
 					ssogws_dual_deq_timeout_burst
+					[!!(dev->rx_offloads &
+						NIX_RX_OFFLOAD_SECURITY_F)]
 					[!!(dev->rx_offloads &
 						NIX_RX_OFFLOAD_TSTAMP_F)]
 					[!!(dev->rx_offloads &
@@ -408,8 +444,10 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 		}
 
 		if (dev->tx_offloads & NIX_TX_MULTI_SEG_F) {
-		/* [TSMP] [MBUF_NOFF] [VLAN] [OL3_L4_CSUM] [L3_L4_CSUM] */
+		/* [SEC] [TSMP] [MBUF_NOFF] [VLAN] [OL3_L4_CSUM] [L3_L4_CSUM] */
 			event_dev->txa_enqueue = ssogws_dual_tx_adptr_enq_seg
+				[!!(dev->tx_offloads &
+						NIX_TX_OFFLOAD_SECURITY_F)]
 				[!!(dev->tx_offloads & NIX_TX_OFFLOAD_TSO_F)]
 				[!!(dev->tx_offloads & NIX_TX_OFFLOAD_TSTAMP_F)]
 				[!!(dev->tx_offloads &
@@ -422,6 +460,8 @@ SSO_TX_ADPTR_ENQ_FASTPATH_FUNC
 						NIX_TX_OFFLOAD_L3_L4_CSUM_F)];
 		} else {
 			event_dev->txa_enqueue = ssogws_dual_tx_adptr_enq
+				[!!(dev->tx_offloads &
+						NIX_TX_OFFLOAD_SECURITY_F)]
 				[!!(dev->tx_offloads & NIX_TX_OFFLOAD_TSO_F)]
 				[!!(dev->tx_offloads & NIX_TX_OFFLOAD_TSTAMP_F)]
 				[!!(dev->tx_offloads &
@@ -686,6 +726,46 @@ sso_clr_links(const struct rte_eventdev *event_dev)
 }
 
 static void
+sso_restore_links(const struct rte_eventdev *event_dev)
+{
+	struct otx2_sso_evdev *dev = sso_pmd_priv(event_dev);
+	uint16_t *links_map;
+	int i, j;
+
+	for (i = 0; i < dev->nb_event_ports; i++) {
+		links_map = event_dev->data->links_map;
+		/* Point links_map to this port specific area */
+		links_map += (i * RTE_EVENT_MAX_QUEUES_PER_DEV);
+		if (dev->dual_ws) {
+			struct otx2_ssogws_dual *ws;
+
+			ws = event_dev->data->ports[i];
+			for (j = 0; j < dev->nb_event_queues; j++) {
+				if (links_map[j] == 0xdead)
+					continue;
+				sso_port_link_modify((struct otx2_ssogws *)
+						&ws->ws_state[0], j, true);
+				sso_port_link_modify((struct otx2_ssogws *)
+						&ws->ws_state[1], j, true);
+				sso_func_trace("Restoring port %d queue %d "
+						"link", i, j);
+			}
+		} else {
+			struct otx2_ssogws *ws;
+
+			ws = event_dev->data->ports[i];
+			for (j = 0; j < dev->nb_event_queues; j++) {
+				if (links_map[j] == 0xdead)
+					continue;
+				sso_port_link_modify(ws, j, true);
+				sso_func_trace("Restoring port %d queue %d "
+						"link", i, j);
+			}
+		}
+	}
+}
+
+static void
 sso_set_port_ops(struct otx2_ssogws *ws, uintptr_t base)
 {
 	ws->tag_op		= base + SSOW_LF_GWS_TAG;
@@ -725,18 +805,15 @@ sso_configure_dual_ports(const struct rte_eventdev *event_dev)
 		struct otx2_ssogws_dual *ws;
 		uintptr_t base;
 
-		/* Free memory prior to re-allocation if needed */
 		if (event_dev->data->ports[i] != NULL) {
 			ws = event_dev->data->ports[i];
-			rte_free(ws);
-			ws = NULL;
-		}
-
-		/* Allocate event port memory */
-		ws = rte_zmalloc_socket("otx2_sso_ws",
+		} else {
+			/* Allocate event port memory */
+			ws = rte_zmalloc_socket("otx2_sso_ws",
 					sizeof(struct otx2_ssogws_dual),
 					RTE_CACHE_LINE_SIZE,
 					event_dev->data->socket_id);
+		}
 		if (ws == NULL) {
 			otx2_err("Failed to alloc memory for port=%d", i);
 			rc = -ENOMEM;
@@ -1021,8 +1098,11 @@ otx2_sso_configure(const struct rte_eventdev *event_dev)
 		return -EINVAL;
 	}
 
-	if (dev->configured)
+	if (dev->configured) {
 		sso_unregister_irqs(event_dev);
+		/* Clear any prior port-queue mapping. */
+		sso_clr_links(event_dev);
+	}
 
 	if (dev->nb_event_queues) {
 		/* Finit any previous queues. */
@@ -1057,8 +1137,8 @@ otx2_sso_configure(const struct rte_eventdev *event_dev)
 		goto teardown_hwggrp;
 	}
 
-	/* Clear any prior port-queue mapping. */
-	sso_clr_links(event_dev);
+	/* Restore any prior port-queue mapping. */
+	sso_restore_links(event_dev);
 	rc = sso_ggrp_alloc_xaq(dev);
 	if (rc < 0) {
 		otx2_err("Failed to alloc xaq to ggrp %d", rc);
@@ -1619,7 +1699,7 @@ sso_parse_devargs(struct otx2_sso_evdev *dev, struct rte_devargs *devargs)
 			   &single_ws);
 	rte_kvargs_process(kvlist, OTX2_SSO_GGRP_QOS, &parse_sso_kvargs_dict,
 			   dev);
-
+	otx2_parse_common_devargs(kvlist);
 	dev->dual_ws = !single_ws;
 	rte_kvargs_free(kvlist);
 }
@@ -1781,4 +1861,5 @@ RTE_PMD_REGISTER_KMOD_DEP(event_octeontx2, "vfio-pci");
 RTE_PMD_REGISTER_PARAM_STRING(event_octeontx2, OTX2_SSO_XAE_CNT "=<int>"
 			      OTX2_SSO_SINGLE_WS "=1"
 			      OTX2_SSO_GGRP_QOS "=<string>"
-			      OTX2_SSO_SELFTEST "=1");
+			      OTX2_SSO_SELFTEST "=1"
+			      OTX2_NPA_LOCK_MASK "=<1-65535>");

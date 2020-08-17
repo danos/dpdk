@@ -6,6 +6,7 @@ sources= files('otx2_dev.c',
 		'otx2_irq.c',
 		'otx2_mbox.c',
 		'otx2_common.c',
+		'otx2_sec_idev.c',
 	       )
 
 extra_flags = []
@@ -20,6 +21,6 @@ foreach flag: extra_flags
 	endif
 endforeach
 
-deps = ['eal', 'pci', 'ethdev']
+deps = ['eal', 'pci', 'ethdev', 'kvargs']
 includes += include_directories('../../common/octeontx2',
 		'../../mempool/octeontx2', '../../bus/pci')

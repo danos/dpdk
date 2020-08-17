@@ -188,6 +188,7 @@ struct bnxt_sw_rx_bd {
 struct bnxt_rx_ring_info {
 	uint16_t		rx_prod;
 	uint16_t		ag_prod;
+	uint16_t                rx_cons; /* Needed for representor */
 	struct bnxt_db_info     rx_db;
 	struct bnxt_db_info     ag_db;
 
@@ -220,10 +221,25 @@ int bnxt_init_one_rx_ring(struct bnxt_rx_queue *rxq);
 int bnxt_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id);
 int bnxt_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id);
 
-#ifdef RTE_ARCH_X86
+#if defined(RTE_ARCH_X86) || defined(RTE_ARCH_ARM64)
 uint16_t bnxt_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts,
 			    uint16_t nb_pkts);
 int bnxt_rxq_vec_setup(struct bnxt_rx_queue *rxq);
 #endif
+
+void bnxt_set_mark_in_mbuf(struct bnxt *bp,
+			   struct rx_pkt_cmpl_hi *rxcmp1,
+			   struct rte_mbuf *mbuf);
+
+#define BNXT_RX_META_CFA_CODE_SHIFT		19
+#define BNXT_CFA_CODE_META_SHIFT		16
+#define BNXT_RX_META_CFA_CODE_INT_ACT_REC_BIT	0x8000000
+#define BNXT_RX_META_CFA_CODE_EEM_BIT		0x4000000
+#define BNXT_CFA_META_FMT_MASK			0x70
+#define BNXT_CFA_META_FMT_SHFT			4
+#define BNXT_CFA_META_FMT_EM_EEM_SHFT		1
+#define BNXT_CFA_META_FMT_EEM			3
+#define BNXT_CFA_META_EEM_TCAM_SHIFT		31
+#define BNXT_CFA_META_EM_TEST(x) ((x) >> BNXT_CFA_META_EEM_TCAM_SHIFT)
 
 #endif

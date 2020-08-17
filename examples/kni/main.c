@@ -158,6 +158,8 @@ print_stats(void)
 						kni_stats[i].tx_dropped);
 	}
 	printf("======  ==============  ============  ============  ============  ============\n");
+
+	fflush(stdout);
 }
 
 /* Custom handling of signals to handle stats and kni processing */
@@ -176,9 +178,13 @@ signal_handler(int signum)
 		return;
 	}
 
-	/* When we receive a RTMIN or SIGINT signal, stop kni processing */
-	if (signum == SIGRTMIN || signum == SIGINT){
-		printf("\nSIGRTMIN/SIGINT received. KNI processing stopping.\n");
+	/*
+	 * When we receive a RTMIN or SIGINT or SIGTERM signal,
+	 * stop kni processing
+	 */
+	if (signum == SIGRTMIN || signum == SIGINT || signum == SIGTERM) {
+		printf("\nSIGRTMIN/SIGINT/SIGTERM received. "
+			"KNI processing stopping.\n");
 		rte_atomic32_inc(&kni_stop);
 		return;
         }
@@ -1030,6 +1036,7 @@ main(int argc, char** argv)
 	signal(SIGUSR2, signal_handler);
 	signal(SIGRTMIN, signal_handler);
 	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
 
 	/* Initialise EAL */
 	ret = rte_eal_init(argc, argv);

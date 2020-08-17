@@ -22,6 +22,7 @@ poll mode crypto driver support for the following hardware accelerator devices:
 * ``Intel QuickAssist Technology DH895xCC``
 * ``Intel QuickAssist Technology C62x``
 * ``Intel QuickAssist Technology C3xxx``
+* ``Intel QuickAssist Technology 200xx``
 * ``Intel QuickAssist Technology D15xx``
 * ``Intel QuickAssist Technology C4xxx``
 
@@ -75,6 +76,33 @@ Supported AEAD algorithms:
 
 * ``RTE_CRYPTO_AEAD_AES_GCM``
 * ``RTE_CRYPTO_AEAD_AES_CCM``
+* ``RTE_CRYPTO_AEAD_CHACHA20_POLY1305``
+
+Protocol offloads:
+
+* ``RTE_SECURITY_PROTOCOL_DOCSIS``
+
+Supported Chains
+~~~~~~~~~~~~~~~~
+
+All the usual chains are supported and also some mixed chains:
+
+.. table:: Supported hash-cipher chains for wireless digest-encrypted cases
+
+   +------------------+-----------+-------------+----------+----------+
+   | Cipher algorithm | NULL AUTH | SNOW3G UIA2 | ZUC EIA3 | AES CMAC |
+   +==================+===========+=============+==========+==========+
+   | NULL CIPHER      | Y         | 2&3         | 2&3      | Y        |
+   +------------------+-----------+-------------+----------+----------+
+   | SNOW3G UEA2      | 2&3       | Y           | 2&3      | 2&3      |
+   +------------------+-----------+-------------+----------+----------+
+   | ZUC EEA3         | 2&3       | 2&3         | 2&3      | 2&3      |
+   +------------------+-----------+-------------+----------+----------+
+   | AES CTR          | Y         | 2&3         | 2&3      | Y        |
+   +------------------+-----------+-------------+----------+----------+
+
+* The combinations marked as "Y" are supported on all QAT hardware versions.
+* The combinations marked as "2&3" are supported on GEN2/GEN3 QAT hardware only.
 
 
 Limitations
@@ -86,7 +114,10 @@ Limitations
 * No BSD support as BSD QAT kernel driver not available.
 * ZUC EEA3/EIA3 is not supported by dh895xcc devices
 * Maximum additional authenticated data (AAD) for GCM is 240 bytes long and must be passed to the device in a buffer rounded up to the nearest block-size multiple (x16) and padded with zeros.
-* Queue pairs are not thread-safe (that is, within a single queue pair, RX and TX from different lcores is not supported).
+* Queue-pairs are thread-safe on Intel CPUs but Queues are not (that is, within a single
+  queue-pair all enqueues to the TX queue must be done from one thread and all dequeues
+  from the RX queue must be done from one thread, but enqueues and dequeues may be done
+  in different threads.)
 * A GCM limitation exists, but only in the case where there are multiple
   generations of QAT devices on a single platform.
   To optimise performance, the GCM crypto session should be initialised for the
@@ -98,6 +129,14 @@ Limitations
   enqueued to the device and will be marked as failed. The simplest way to
   mitigate this is to use the bdf whitelist to avoid mixing devices of different
   generations in the same process if planning to use for GCM.
+* The mixed algo feature on GEN2 is not supported by all kernel drivers. Check
+  the notes under the Available Kernel Drivers table below for specific details.
+* Out-of-place is not supported for combined Crypto-CRC DOCSIS security
+  protocol.
+* ``RTE_CRYPTO_CIPHER_DES_DOCSISBPI`` is not supported for combined Crypto-CRC
+  DOCSIS security protocol.
+* Multi-segment buffers are not supported for combined Crypto-CRC DOCSIS
+  security protocol.
 
 Extra notes on KASUMI F9
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -138,7 +177,10 @@ Limitations
 ~~~~~~~~~~~
 
 * Big integers longer than 4096 bits are not supported.
-* Queue pairs are not thread-safe (that is, within a single queue pair, RX and TX from different lcores is not supported).
+* Queue-pairs are thread-safe on Intel CPUs but Queues are not (that is, within a single
+  queue-pair all enqueues to the TX queue must be done from one thread and all dequeues
+  from the RX queue must be done from one thread, but enqueues and dequeues may be done
+  in different threads.)
 * RSA-2560, RSA-3584 are not supported
 
 .. _building_qat:
@@ -234,12 +276,38 @@ allocated while for GEN1 devices, 12 buffers are allocated, plus 1472 bytes over
 .. Note::
 
 	If the compressed output of a Deflate operation using Dynamic Huffman
-        Encoding is too big to fit in an intermediate buffer, then the
-	operation will fall back to fixed compression rather than failing the operation.
+	Encoding is too big to fit in an intermediate buffer, then the
+	operation will be split into smaller operations and their results will
+	be merged afterwards.
+	This is not possible if any checksum calculation was requested - in such
+	case the code falls back to fixed compression.
 	To avoid this less performant case, applications should configure
 	the intermediate buffer size to be larger than the expected input data size
 	(compressed output size is usually unknown, so the only option is to make
 	larger than the input size).
+
+
+Running QAT PMD with minimum threshold for burst size
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If only a small number or packets can be enqueued. Each enqueue causes an expensive MMIO write.
+These MMIO write occurrences can be optimised by setting any of the following parameters:
+
+- qat_sym_enq_threshold
+- qat_asym_enq_threshold
+- qat_comp_enq_threshold
+
+When any of these parameters is set rte_cryptodev_enqueue_burst function will
+return 0 (thereby avoiding an MMIO) if the device is congested and number of packets
+possible to enqueue is smaller.
+To use this feature the user must set the parameter on process start as a device additional parameter::
+
+  -w 03:01.1,qat_sym_enq_threshold=32,qat_comp_enq_threshold=16
+
+All parameters can be used with the same device regardless of order. Parameters are separated
+by comma. When the same parameter is used more than once first occurrence of the parameter
+is used.
+Maximum threshold that can be set is 32.
 
 
 Device and driver naming
@@ -326,10 +394,14 @@ to see the full table)
    +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
    | Yes | Yes | Yes | "   | "        | 01.org/4.2.0+ | "             | "          | "      | "    | "      | "      |
    +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
-   | Yes | No  | No  | 2   | D15xx    | p             | qat_d15xx     | d15xx      | 6f54   | 1    | 6f55   | 16     |
+   | Yes | No  | No  | 2   | 200xx    | p             | qat_200xx     | 200xx      | 18ee   | 1    | 18ef   | 16     |
+   +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+   | Yes | No  | No  | 2   | D15xx    | 01.org/4.2.0+ | qat_d15xx     | d15xx      | 6f54   | 1    | 6f55   | 16     |
    +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
    | Yes | No  | No  | 3   | C4xxx    | p             | qat_c4xxx     | c4xxx      | 18a0   | 1    | 18a1   | 128    |
    +-----+-----+-----+-----+----------+---------------+---------------+------------+--------+------+--------+--------+
+
+* Note: Symmetric mixed crypto algorithms feature on Gen 2 works only with 01.org driver version 4.9.0+
 
 The first 3 columns indicate the service:
 
@@ -550,8 +622,8 @@ adjust the unbind command below::
         done; \
     done
 
-For Intel(R) QuickAssist Technology C3xxx or D15xx device
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+For Intel(R) QuickAssist Technology C3xxx or 200xx or D15xx device
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The unbind command below assumes ``BDFs`` of ``01:01.00-01:02.07``, if your
 VFs are different adjust the unbind command below::

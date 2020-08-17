@@ -86,7 +86,7 @@ struct testpmd_offload_info {
 struct simple_gre_hdr {
 	uint16_t flags;
 	uint16_t proto;
-} __attribute__((__packed__));
+} __rte_packed;
 
 static uint16_t
 get_udptcp_checksum(void *l3_hdr, void *l4_hdr, uint16_t ethertype)
@@ -802,11 +802,12 @@ pkt_burst_checksum_forward(struct fwd_stream *fs)
 	/* receive a burst of packet */
 	nb_rx = rte_eth_rx_burst(fs->rx_port, fs->rx_queue, pkts_burst,
 				 nb_pkt_per_burst);
-	if (unlikely(nb_rx == 0))
-		return;
 #ifdef RTE_TEST_PMD_RECORD_BURST_STATS
 	fs->rx_burst_stats.pkt_burst_spread[nb_rx]++;
 #endif
+	if (unlikely(nb_rx == 0))
+		return;
+
 	fs->rx_packets += nb_rx;
 	rx_bad_ip_csum = 0;
 	rx_bad_l4_csum = 0;

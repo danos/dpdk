@@ -336,6 +336,24 @@ In the commit message body the Cc: stable@dpdk.org should be inserted as follows
 For further information on stable contribution you can go to
 :doc:`Stable Contribution Guide <stable>`.
 
+Patch Dependencies
+~~~~~~~~~~~~~~~~~~
+
+Sometimes a patch or patchset can depend on another one.
+To help the maintainers and automation tasks, please document this dependency in commit log or cover letter
+with the following syntax:
+
+``Depends-on: series-NNNNN ("Title of the series")`` or ``Depends-on: patch-NNNNN ("Title of the patch")``
+
+Where ``NNNNN`` is patchwork ID for patch or series::
+
+     doc: fix some parameter description
+
+     Update the docs, fixing description of some parameter.
+
+     Signed-off-by: Alex Smith <alex.smith@example.com>
+     ---
+     Depends-on: series-10000 ("Title of the series")
 
 Creating Patches
 ----------------
@@ -429,23 +447,16 @@ Once the environment variable is set, the script can be run as follows::
 
 The script usage is::
 
-   checkpatches.sh [-h] [-q] [-v] [patch1 [patch2] ...]]"
-
-Where:
-
-* ``-h``: help, usage.
-* ``-q``: quiet. Don't output anything for files without issues.
-* ``-v``: verbose.
-* ``patchX``: path to one or more patches.
+   checkpatches.sh [-h] [-q] [-v] [-nX|-r range|patch1 [patch2] ...]
 
 Then the git logs should be checked using the ``check-git-log.sh`` script.
 
 The script usage is::
 
-   check-git-log.sh [range]
+   check-git-log.sh [-h] [-nX|-r range]
 
-Where the range is a ``git log`` option.
-
+For both of the above scripts, the -n option is used to specify a number of commits from HEAD,
+and the -r option allows the user specify a ``git log`` range.
 
 .. _contrib_check_compilation:
 
@@ -511,6 +522,23 @@ the environment variable ``DPDK_BUILD_TEST_DIR`` can be set to that desired loca
 For example, setting ``DPDK_BUILD_TEST_DIR=__builds`` will put all builds
 in a single subfolder called "__builds" created in the current directory.
 Setting ``DPDK_BUILD_TEST_DIR`` to an absolute directory path e.g. ``/tmp`` is also supported.
+
+
+.. _integrated_abi_check:
+
+Checking ABI compatibility
+--------------------------
+
+By default, ABI compatibility checks are disabled.
+
+To enable them, a reference version must be selected via the environment
+variable ``DPDK_ABI_REF_VERSION``.
+
+The ``devtools/test-build.sh`` and ``devtools/test-meson-builds.sh`` scripts
+then build this reference version in a temporary directory and store the
+results in a subfolder of the current working directory.
+The environment variable ``DPDK_ABI_REF_DIR`` can be set so that the results go
+to a different location.
 
 
 Sending Patches

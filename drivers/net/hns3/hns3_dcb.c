@@ -749,12 +749,10 @@ hns3_dcb_schd_mode_cfg(struct hns3_hw *hw)
 	}
 
 	ret = hns3_dcb_lvl34_schd_mode_cfg(hw);
-	if (ret) {
+	if (ret)
 		hns3_err(hw, "config lvl34_schd_mode failed: %d", ret);
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 static int
@@ -770,13 +768,16 @@ hns3_dcb_pri_tc_base_dwrr_cfg(struct hns3_hw *hw)
 
 		ret = hns3_dcb_pri_weight_cfg(hw, i, dwrr);
 		if (ret) {
-			hns3_err(hw, "fail to send priority weight cmd: %d", i);
+			hns3_err(hw,
+			       "fail to send priority weight cmd: %d, ret = %d",
+			       i, ret);
 			return ret;
 		}
 
 		ret = hns3_dcb_qs_weight_cfg(hw, i, BW_MAX_PERCENT);
 		if (ret) {
-			hns3_err(hw, "fail to send qs_weight cmd: %d", i);
+			hns3_err(hw, "fail to send qs_weight cmd: %d, ret = %d",
+				 i, ret);
 			return ret;
 		}
 	}
@@ -789,6 +790,7 @@ hns3_dcb_pri_dwrr_cfg(struct hns3_hw *hw)
 {
 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
 	struct hns3_pf *pf = &hns->pf;
+	uint32_t version;
 	int ret;
 
 	if (pf->tx_sch_mode != HNS3_FLAG_TC_BASE_SCH_MODE)
@@ -803,8 +805,17 @@ hns3_dcb_pri_dwrr_cfg(struct hns3_hw *hw)
 
 	ret = hns3_dcb_ets_tc_dwrr_cfg(hw);
 	if (ret == -EOPNOTSUPP) {
-		hns3_warn(hw, "fw %08x does't support ets tc weight cmd",
-			  hw->fw_version);
+		version = hw->fw_version;
+		hns3_warn(hw,
+			  "fw %lu.%lu.%lu.%lu doesn't support ets tc weight cmd",
+			  hns3_get_field(version, HNS3_FW_VERSION_BYTE3_M,
+					 HNS3_FW_VERSION_BYTE3_S),
+			  hns3_get_field(version, HNS3_FW_VERSION_BYTE2_M,
+					 HNS3_FW_VERSION_BYTE2_S),
+			  hns3_get_field(version, HNS3_FW_VERSION_BYTE1_M,
+					 HNS3_FW_VERSION_BYTE1_S),
+			  hns3_get_field(version, HNS3_FW_VERSION_BYTE0_M,
+					 HNS3_FW_VERSION_BYTE0_S));
 		ret = 0;
 	}
 
@@ -845,12 +856,10 @@ hns3_dcb_dwrr_cfg(struct hns3_hw *hw)
 	}
 
 	ret = hns3_dcb_pri_dwrr_cfg(hw);
-	if (ret) {
+	if (ret)
 		hns3_err(hw, "config pri_dwrr failed: %d", ret);
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 static int
@@ -932,12 +941,10 @@ hns3_pri_q_qs_cfg(struct hns3_hw *hw)
 
 	/* Cfg q -> qs mapping */
 	ret = hns3_q_to_qs_map(hw);
-	if (ret) {
+	if (ret)
 		hns3_err(hw, "nq_to_qs mapping fail: %d", ret);
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 static int
@@ -1552,12 +1559,10 @@ hns3_update_queue_map_configure(struct hns3_adapter *hns)
 
 	hns3_dcb_update_tc_queue_mapping(hw, nb_rx_q, nb_tx_q);
 	ret = hns3_q_to_qs_map(hw);
-	if (ret) {
+	if (ret)
 		hns3_err(hw, "failed to map nq to qs! ret = %d", ret);
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 int
@@ -1569,10 +1574,8 @@ hns3_dcb_cfg_update(struct hns3_adapter *hns)
 
 	if ((uint32_t)mq_mode & ETH_MQ_RX_DCB_FLAG) {
 		ret = hns3_dcb_configure(hns);
-		if (ret) {
+		if (ret)
 			hns3_err(hw, "Failed to config dcb: %d", ret);
-			return ret;
-		}
 	} else {
 		/*
 		 * Update queue map without PFC configuration,

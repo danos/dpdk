@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- * Copyright (c) 2006-2018 Solarflare Communications Inc.
- * All rights reserved.
+ * Copyright(c) 2019-2020 Xilinx, Inc.
+ * Copyright(c) 2006-2019 Solarflare Communications Inc.
  */
 
 #ifndef	_SYS_EFX_H
@@ -543,6 +543,12 @@ efx_mac_filter_set(
 	__in				boolean_t mulcst,
 	__in				boolean_t all_mulcst,
 	__in				boolean_t brdcst);
+
+extern					void
+efx_mac_filter_get_all_ucast_mcast(
+	__in				efx_nic_t *enp,
+	__out				boolean_t *all_unicst,
+	__out				boolean_t *all_mulcst);
 
 extern	__checkReturn	efx_rc_t
 efx_mac_multicast_list_set(

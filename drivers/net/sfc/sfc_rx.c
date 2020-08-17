@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- * Copyright (c) 2016-2018 Solarflare Communications Inc.
- * All rights reserved.
+ * Copyright(c) 2019-2020 Xilinx, Inc.
+ * Copyright(c) 2016-2019 Solarflare Communications Inc.
  *
  * This software was jointly developed between OKTET Labs (under contract
  * for Solarflare) and Solarflare Communications, Inc.
@@ -720,7 +720,7 @@ retry:
 
 		port->promisc = B_FALSE;
 		sa->eth_dev->data->promiscuous = 0;
-		rc = sfc_set_rx_mode(sa);
+		rc = sfc_set_rx_mode_unchecked(sa);
 		if (rc != 0)
 			return rc;
 
@@ -734,7 +734,7 @@ retry:
 
 		port->allmulti = B_FALSE;
 		sa->eth_dev->data->all_multicast = 0;
-		rc = sfc_set_rx_mode(sa);
+		rc = sfc_set_rx_mode_unchecked(sa);
 		if (rc != 0)
 			return rc;
 
@@ -1560,10 +1560,6 @@ sfc_rx_check_mode(struct sfc_adapter *sa, struct rte_eth_rxmode *rxmode)
 		sfc_warn(sa, "Rx outer IPv4 checksum offload cannot be disabled - always on");
 		rxmode->offloads |= DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM;
 	}
-
-	if ((offloads_supported & DEV_RX_OFFLOAD_RSS_HASH) &&
-	    (rxmode->mq_mode & ETH_MQ_RX_RSS_FLAG))
-		rxmode->offloads |= DEV_RX_OFFLOAD_RSS_HASH;
 
 	return rc;
 }

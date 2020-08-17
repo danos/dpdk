@@ -31,8 +31,9 @@ SRCS-y += otx2_dev.c
 SRCS-y += otx2_irq.c
 SRCS-y += otx2_mbox.c
 SRCS-y += otx2_common.c
+SRCS-y += otx2_sec_idev.c
 
 LDLIBS += -lrte_eal
-LDLIBS += -lrte_ethdev
+LDLIBS += -lrte_ethdev -lrte_kvargs
 
 include $(RTE_SDK)/mk/rte.lib.mk

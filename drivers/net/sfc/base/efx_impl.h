@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- * Copyright (c) 2007-2018 Solarflare Communications Inc.
- * All rights reserved.
+ * Copyright(c) 2019-2020 Xilinx, Inc.
+ * Copyright(c) 2007-2019 Solarflare Communications Inc.
  */
 
 #ifndef	_SYS_EFX_IMPL_H
@@ -307,8 +307,10 @@ typedef struct efx_port_s {
 	uint8_t			ep_mac_addr[6];
 	efx_link_mode_t		ep_link_mode;
 	boolean_t		ep_all_unicst;
+	boolean_t		ep_all_unicst_inserted;
 	boolean_t		ep_mulcst;
 	boolean_t		ep_all_mulcst;
+	boolean_t		ep_all_mulcst_inserted;
 	boolean_t		ep_brdcst;
 	unsigned int		ep_fcntl;
 	boolean_t		ep_fcntl_autoneg;

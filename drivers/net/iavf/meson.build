@@ -3,15 +3,16 @@
 
 cflags += ['-Wno-strict-aliasing']
 
-allow_experimental_apis = true
-
-subdir('base')
-objs = [base_objs]
+includes += include_directories('../../common/iavf')
+deps += ['common_iavf']
 
 sources = files(
 	'iavf_ethdev.c',
 	'iavf_rxtx.c',
 	'iavf_vchnl.c',
+	'iavf_generic_flow.c',
+	'iavf_fdir.c',
+	'iavf_hash.c',
 )
 
 if arch_subdir == 'x86'

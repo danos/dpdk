@@ -36,8 +36,7 @@
 #define memtest1 "memtest1"
 #define memtest2 "memtest2"
 #define SOCKET_MEM_STRLEN (RTE_MAX_NUMA_NODES * 20)
-#define launch_proc(ARGV) process_dup(ARGV, \
-		sizeof(ARGV)/(sizeof(ARGV[0])), __func__)
+#define launch_proc(ARGV) process_dup(ARGV, RTE_DIM(ARGV), __func__)
 
 enum hugepage_action {
 	HUGEPAGE_CHECK_EXISTS = 0,
@@ -268,7 +267,7 @@ test_whitelist_flag(void)
 			pci_whitelist, "08:00.1,type=normal",
 	};
 
-	for (i = 0; i < sizeof(wlinval) / sizeof(wlinval[0]); i++) {
+	for (i = 0; i < RTE_DIM(wlinval); i++) {
 		if (launch_proc(wlinval[i]) == 0) {
 			printf("Error - process did run ok with invalid "
 			    "whitelist parameter\n");
@@ -324,7 +323,7 @@ test_invalid_b_flag(void)
 
 	int i;
 
-	for (i = 0; i != sizeof (blinval) / sizeof (blinval[0]); i++) {
+	for (i = 0; i != RTE_DIM(blinval); i++) {
 		if (launch_proc(blinval[i]) == 0) {
 			printf("Error - process did run ok with invalid "
 			    "blacklist parameter\n");
@@ -425,7 +424,7 @@ test_invalid_r_flag(void)
 
 	int i;
 
-	for (i = 0; i != sizeof (rinval) / sizeof (rinval[0]); i++) {
+	for (i = 0; i != RTE_DIM(rinval); i++) {
 		if (launch_proc(rinval[i]) == 0) {
 			printf("Error - process did run ok with invalid "
 			    "-r (rank) parameter\n");
@@ -528,6 +527,9 @@ test_missing_c_flag(void)
 	const char * const argv29[] = { prgname, prefix, mp_flag,
 				 "--lcores",
 				 "0-1,2@(5-7),(3-5)@(0,2),(0,6),7"};
+	/* check an invalid cpu value >= CPU_SETSIZE */
+	const char * const argv30[] = { prgname, prefix, mp_flag,
+				 "--lcores", "3@" RTE_STR(CPU_SETSIZE) };
 
 	if (launch_proc(argv2) != 0) {
 		printf("Error - "
@@ -577,7 +579,7 @@ test_missing_c_flag(void)
 	    launch_proc(argv22) == 0 || launch_proc(argv23) == 0 ||
 	    launch_proc(argv24) == 0 || launch_proc(argv25) == 0 ||
 	    launch_proc(argv26) == 0 || launch_proc(argv27) == 0 ||
-	    launch_proc(argv28) == 0) {
+	    launch_proc(argv28) == 0 || launch_proc(argv30) == 0) {
 		printf("Error - "
 		       "process ran without error with invalid --lcore flag\n");
 		return -1;

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- * Copyright (c) 2007-2018 Solarflare Communications Inc.
- * All rights reserved.
+ * Copyright(c) 2019-2020 Xilinx, Inc.
+ * Copyright(c) 2007-2019 Solarflare Communications Inc.
  */
 
 #include "efx.h"
@@ -1757,6 +1757,196 @@ fail1:
 
 }
 
+static			void
+ef10_filter_remove_all_existing_filters(
+	__in				efx_nic_t *enp)
+{
+	ef10_filter_table_t *table = enp->en_filter.ef_ef10_filter_table;
+	efx_port_t *epp = &(enp->en_port);
+	unsigned int i;
+
+	for (i = 0; i < table->eft_unicst_filter_count; i++) {
+		ef10_filter_delete_auto(enp,
+				table->eft_unicst_filter_indexes[i]);
+	}
+	table->eft_unicst_filter_count = 0;
+
+	for (i = 0; i < table->eft_mulcst_filter_count; i++) {
+		ef10_filter_delete_auto(enp,
+				table->eft_mulcst_filter_indexes[i]);
+	}
+	table->eft_mulcst_filter_count = 0;
+
+	for (i = 0; i < table->eft_encap_filter_count; i++) {
+		ef10_filter_delete_auto(enp,
+				table->eft_encap_filter_indexes[i]);
+	}
+	table->eft_encap_filter_count = 0;
+
+	epp->ep_all_unicst_inserted = B_FALSE;
+	epp->ep_all_mulcst_inserted = B_FALSE;
+}
+
+static			void
+ef10_filter_mark_old_filters(
+	__in				efx_nic_t *enp)
+{
+	ef10_filter_table_t *table = enp->en_filter.ef_ef10_filter_table;
+	unsigned int i;
+
+	for (i = 0; i < table->eft_unicst_filter_count; i++) {
+		ef10_filter_set_entry_auto_old(table,
+					table->eft_unicst_filter_indexes[i]);
+	}
+	for (i = 0; i < table->eft_mulcst_filter_count; i++) {
+		ef10_filter_set_entry_auto_old(table,
+					table->eft_mulcst_filter_indexes[i]);
+	}
+	for (i = 0; i < table->eft_encap_filter_count; i++) {
+		ef10_filter_set_entry_auto_old(table,
+					table->eft_encap_filter_indexes[i]);
+	}
+}
+
+static	__checkReturn	efx_rc_t
+ef10_filter_insert_renew_unicst_filters(
+	__in				efx_nic_t *enp,
+	__in_ecount(6)			uint8_t const *mac_addr,
+	__in				boolean_t all_unicst,
+	__in				efx_filter_flags_t filter_flags,
+	__out				boolean_t *all_unicst_inserted)
+{
+	ef10_filter_table_t *table = enp->en_filter.ef_ef10_filter_table;
+	efx_port_t *epp = &(enp->en_port);
+	efx_rc_t rc;
+
+	/*
+	 * Firmware does not perform chaining on unicast filters. As traffic is
+	 * therefore only delivered to the first matching filter, we should
+	 * always insert the specific filter for our MAC address, to try and
+	 * ensure we get that traffic.
+	 *
+	 * (If the filter for our MAC address has already been inserted by
+	 * another function, we won't receive traffic sent to us, even if we
+	 * insert a unicast mismatch filter. To prevent traffic stealing, this
+	 * therefore relies on the privilege model only allowing functions to
+	 * insert filters for their own MAC address unless explicitly given
+	 * additional privileges by the user. This also means that, even on a
+	 * privileged function, inserting a unicast mismatch filter may not
+	 * catch all traffic in multi PCI function scenarios.)
+	 */
+	table->eft_unicst_filter_count = 0;
+	rc = ef10_filter_insert_unicast(enp, mac_addr, filter_flags);
+	*all_unicst_inserted = B_FALSE;
+	if (all_unicst || (rc != 0)) {
+		efx_rc_t all_unicst_rc;
+
+		all_unicst_rc = ef10_filter_insert_all_unicast(enp,
+						    filter_flags);
+		if (all_unicst_rc == 0) {
+			*all_unicst_inserted = B_TRUE;
+			epp->ep_all_unicst_inserted = B_TRUE;
+		} else if (rc != 0)
+			goto fail1;
+	}
+
+	return (0);
+
+fail1:
+	EFSYS_PROBE1(fail1, efx_rc_t, rc);
+
+	return (rc);
+}
+
+static	__checkReturn	efx_rc_t
+ef10_filter_insert_renew_mulcst_filters(
+	__in				efx_nic_t *enp,
+	__in				boolean_t mulcst,
+	__in				boolean_t all_mulcst,
+	__in				boolean_t brdcst,
+	__in_ecount(6*count)		uint8_t const *addrs,
+	__in				uint32_t count,
+	__in				efx_filter_flags_t filter_flags,
+	__in				boolean_t all_unicst_inserted,
+	__out				boolean_t *all_mulcst_inserted)
+{
+	ef10_filter_table_t *table = enp->en_filter.ef_ef10_filter_table;
+	efx_nic_cfg_t *encp = &enp->en_nic_cfg;
+	efx_port_t *epp = &(enp->en_port);
+	efx_rc_t rc;
+
+	*all_mulcst_inserted = B_FALSE;
+
+	if (all_mulcst == B_TRUE) {
+		efx_rc_t all_mulcst_rc;
+
+		/*
+		 * Insert the all multicast filter. If that fails, try to insert
+		 * all of our multicast filters (but without rollback on
+		 * failure).
+		 */
+		all_mulcst_rc = ef10_filter_insert_all_multicast(enp,
+							    filter_flags);
+		if (all_mulcst_rc == 0) {
+			epp->ep_all_mulcst_inserted = B_TRUE;
+			*all_mulcst_inserted = B_TRUE;
+		} else {
+			rc = ef10_filter_insert_multicast_list(enp, B_TRUE,
+			    brdcst, addrs, count, filter_flags, B_FALSE);
+			if (rc != 0)
+				goto fail1;
+		}
+	} else {
+		/*
+		 * Insert filters for multicast addresses.
+		 * If any insertion fails, then rollback and try to insert the
+		 * all multicast filter instead.
+		 * If that also fails, try to insert all of the multicast
+		 * filters (but without rollback on failure).
+		 */
+		rc = ef10_filter_insert_multicast_list(enp, mulcst, brdcst,
+			    addrs, count, filter_flags, B_TRUE);
+		if (rc != 0) {
+			if ((table->eft_using_all_mulcst == B_FALSE) &&
+			    (encp->enc_bug26807_workaround == B_TRUE)) {
+				/*
+				 * Multicast filter chaining is on, so remove
+				 * old filters before inserting the multicast
+				 * all filter to avoid duplicate delivery caused
+				 * by packets matching multiple filters.
+				 */
+				ef10_filter_remove_old(enp);
+				if (all_unicst_inserted == B_FALSE)
+					epp->ep_all_unicst_inserted = B_FALSE;
+				if (*all_mulcst_inserted == B_FALSE)
+					epp->ep_all_mulcst_inserted = B_FALSE;
+			}
+
+			rc = ef10_filter_insert_all_multicast(enp,
+							    filter_flags);
+			if (rc == 0) {
+				epp->ep_all_mulcst_inserted = B_TRUE;
+				*all_mulcst_inserted = B_TRUE;
+			} else {
+				rc = ef10_filter_insert_multicast_list(enp,
+				    mulcst, brdcst,
+				    addrs, count, filter_flags, B_FALSE);
+				if (rc != 0)
+					goto fail2;
+			}
+		}
+	}
+
+	return (0);
+
+fail2:
+	EFSYS_PROBE1(fail2, efx_rc_t, rc);
+
+fail1:
+	EFSYS_PROBE1(fail1, efx_rc_t, rc);
+
+	return (rc);
+}
 
 /*
  * Reconfigure all filters.
@@ -1776,11 +1966,12 @@ ef10_filter_reconfigure(
 	__in				uint32_t count)
 {
 	efx_nic_cfg_t *encp = &enp->en_nic_cfg;
+	efx_port_t *epp = &(enp->en_port);
 	ef10_filter_table_t *table = enp->en_filter.ef_ef10_filter_table;
 	efx_filter_flags_t filter_flags;
 	unsigned int i;
-	efx_rc_t all_unicst_rc = 0;
-	efx_rc_t all_mulcst_rc = 0;
+	boolean_t all_unicst_inserted = B_FALSE;
+	boolean_t all_mulcst_inserted = B_FALSE;
 	efx_rc_t rc;
 
 	if (table->eft_default_rxq == NULL) {
@@ -1790,24 +1981,7 @@ ef10_filter_reconfigure(
 		 * filters must be removed (ignore errors in case the MC
 		 * has rebooted, which removes hardware filters).
 		 */
-		for (i = 0; i < table->eft_unicst_filter_count; i++) {
-			ef10_filter_delete_auto(enp,
-					table->eft_unicst_filter_indexes[i]);
-		}
-		table->eft_unicst_filter_count = 0;
-
-		for (i = 0; i < table->eft_mulcst_filter_count; i++) {
-			ef10_filter_delete_auto(enp,
-					table->eft_mulcst_filter_indexes[i]);
-		}
-		table->eft_mulcst_filter_count = 0;
-
-		for (i = 0; i < table->eft_encap_filter_count; i++) {
-			ef10_filter_delete_auto(enp,
-					table->eft_encap_filter_indexes[i]);
-		}
-		table->eft_encap_filter_count = 0;
-
+		ef10_filter_remove_all_existing_filters(enp);
 		return (0);
 	}
 
@@ -1817,44 +1991,14 @@ ef10_filter_reconfigure(
 		filter_flags = 0;
 
 	/* Mark old filters which may need to be removed */
-	for (i = 0; i < table->eft_unicst_filter_count; i++) {
-		ef10_filter_set_entry_auto_old(table,
-					table->eft_unicst_filter_indexes[i]);
-	}
-	for (i = 0; i < table->eft_mulcst_filter_count; i++) {
-		ef10_filter_set_entry_auto_old(table,
-					table->eft_mulcst_filter_indexes[i]);
-	}
-	for (i = 0; i < table->eft_encap_filter_count; i++) {
-		ef10_filter_set_entry_auto_old(table,
-					table->eft_encap_filter_indexes[i]);
-	}
+	ef10_filter_mark_old_filters(enp);
 
-	/*
-	 * Insert or renew unicast filters.
-	 *
-	 * Firmware does not perform chaining on unicast filters. As traffic is
-	 * therefore only delivered to the first matching filter, we should
-	 * always insert the specific filter for our MAC address, to try and
-	 * ensure we get that traffic.
-	 *
-	 * (If the filter for our MAC address has already been inserted by
-	 * another function, we won't receive traffic sent to us, even if we
-	 * insert a unicast mismatch filter. To prevent traffic stealing, this
-	 * therefore relies on the privilege model only allowing functions to
-	 * insert filters for their own MAC address unless explicitly given
-	 * additional privileges by the user. This also means that, even on a
-	 * priviliged function, inserting a unicast mismatch filter may not
-	 * catch all traffic in multi PCI function scenarios.)
-	 */
-	table->eft_unicst_filter_count = 0;
-	rc = ef10_filter_insert_unicast(enp, mac_addr, filter_flags);
-	if (all_unicst || (rc != 0)) {
-		all_unicst_rc = ef10_filter_insert_all_unicast(enp,
-						    filter_flags);
-		if ((rc != 0) && (all_unicst_rc != 0))
-			goto fail1;
-	}
+	/* Insert or renew unicast filters */
+	rc = ef10_filter_insert_renew_unicst_filters(enp, mac_addr, all_unicst,
+						     filter_flags,
+						     &all_unicst_inserted);
+	if (rc != 0)
+		goto fail1;
 
 	/*
 	 * WORKAROUND_BUG26807 controls firmware support for chained multicast
@@ -1895,56 +2039,20 @@ ef10_filter_reconfigure(
 		 * multicast filters.
 		 */
 		ef10_filter_remove_old(enp);
+		if (all_unicst_inserted == B_FALSE)
+			epp->ep_all_unicst_inserted = B_FALSE;
+
+		epp->ep_all_mulcst_inserted = B_FALSE;
 	}
 
 	/* Insert or renew multicast filters */
-	if (all_mulcst == B_TRUE) {
-		/*
-		 * Insert the all multicast filter. If that fails, try to insert
-		 * all of our multicast filters (but without rollback on
-		 * failure).
-		 */
-		all_mulcst_rc = ef10_filter_insert_all_multicast(enp,
-							    filter_flags);
-		if (all_mulcst_rc != 0) {
-			rc = ef10_filter_insert_multicast_list(enp, B_TRUE,
-			    brdcst, addrs, count, filter_flags, B_FALSE);
-			if (rc != 0)
-				goto fail3;
-		}
-	} else {
-		/*
-		 * Insert filters for multicast addresses.
-		 * If any insertion fails, then rollback and try to insert the
-		 * all multicast filter instead.
-		 * If that also fails, try to insert all of the multicast
-		 * filters (but without rollback on failure).
-		 */
-		rc = ef10_filter_insert_multicast_list(enp, mulcst, brdcst,
-			    addrs, count, filter_flags, B_TRUE);
-		if (rc != 0) {
-			if ((table->eft_using_all_mulcst == B_FALSE) &&
-			    (encp->enc_bug26807_workaround == B_TRUE)) {
-				/*
-				 * Multicast filter chaining is on, so remove
-				 * old filters before inserting the multicast
-				 * all filter to avoid duplicate delivery caused
-				 * by packets matching multiple filters.
-				 */
-				ef10_filter_remove_old(enp);
-			}
-
-			rc = ef10_filter_insert_all_multicast(enp,
-							    filter_flags);
-			if (rc != 0) {
-				rc = ef10_filter_insert_multicast_list(enp,
-				    mulcst, brdcst,
-				    addrs, count, filter_flags, B_FALSE);
-				if (rc != 0)
-					goto fail4;
-			}
-		}
-	}
+	rc = ef10_filter_insert_renew_mulcst_filters(enp, mulcst, all_mulcst,
+						     brdcst, addrs, count,
+						     filter_flags,
+						     all_unicst_inserted,
+						     &all_mulcst_inserted);
+	if (rc != 0)
+		goto fail3;
 
 	if (encp->enc_tunnel_encapsulations_supported != 0) {
 		/* Try to insert filters for encapsulated packets. */
@@ -1955,17 +2063,19 @@ ef10_filter_reconfigure(
 
 	/* Remove old filters which were not renewed */
 	ef10_filter_remove_old(enp);
+	if (all_unicst_inserted == B_FALSE)
+		epp->ep_all_unicst_inserted = B_FALSE;
+	if (all_mulcst_inserted == B_FALSE)
+		epp->ep_all_mulcst_inserted = B_FALSE;
 
 	/* report if any optional flags were rejected */
-	if (((all_unicst != B_FALSE) && (all_unicst_rc != 0)) ||
-	    ((all_mulcst != B_FALSE) && (all_mulcst_rc != 0))) {
+	if (((all_unicst != B_FALSE) && (all_unicst_inserted == B_FALSE)) ||
+	    ((all_mulcst != B_FALSE) && (all_mulcst_inserted == B_FALSE))) {
 		rc = ENOTSUP;
 	}
 
 	return (rc);
 
-fail4:
-	EFSYS_PROBE(fail4);
 fail3:
 	EFSYS_PROBE(fail3);
 fail2:

@@ -91,7 +91,8 @@ static int i40evf_vlan_filter_set(struct rte_eth_dev *dev,
 				  uint16_t vlan_id, int on);
 static int i40evf_vlan_offload_set(struct rte_eth_dev *dev, int mask);
 static void i40evf_dev_close(struct rte_eth_dev *dev);
-static int  i40evf_dev_reset(struct rte_eth_dev *dev);
+static int i40evf_dev_reset(struct rte_eth_dev *dev);
+static int i40evf_check_vf_reset_done(struct rte_eth_dev *dev);
 static int i40evf_dev_promiscuous_enable(struct rte_eth_dev *dev);
 static int i40evf_dev_promiscuous_disable(struct rte_eth_dev *dev);
 static int i40evf_dev_allmulticast_enable(struct rte_eth_dev *dev);
@@ -215,6 +216,7 @@ static const struct eth_dev_ops i40evf_eth_dev_ops = {
 	.rss_hash_conf_get    = i40evf_dev_rss_hash_conf_get,
 	.mtu_set              = i40evf_dev_mtu_set,
 	.mac_addr_set         = i40evf_set_default_mac_addr,
+	.tx_done_cleanup      = i40e_tx_done_cleanup,
 };
 
 /*
@@ -518,10 +520,19 @@ i40evf_config_promisc(struct rte_eth_dev *dev,
 
 	err = i40evf_execute_vf_cmd(dev, &args);
 
-	if (err)
+	if (err) {
 		PMD_DRV_LOG(ERR, "fail to execute command "
 			    "CONFIG_PROMISCUOUS_MODE");
-	return err;
+
+		if (err == I40E_NOT_SUPPORTED)
+			return -ENOTSUP;
+
+		return -EAGAIN;
+	}
+
+	vf->promisc_unicast_enabled = enable_unicast;
+	vf->promisc_multicast_enabled = enable_multicast;
+	return 0;
 }
 
 static int
@@ -650,43 +661,68 @@ i40evf_config_irq_map(struct rte_eth_dev *dev)
 {
 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
 	struct vf_cmd_info args;
-	uint8_t cmd_buffer[sizeof(struct virtchnl_irq_map_info) + \
-		sizeof(struct virtchnl_vector_map)];
+	uint8_t *cmd_buffer = NULL;
 	struct virtchnl_irq_map_info *map_info;
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
-	uint32_t vector_id;
-	int i, err;
+	uint32_t vec, cmd_buffer_size, max_vectors, nb_msix, msix_base, i;
+	uint16_t rxq_map[vf->vf_res->max_vectors];
+	int err;
 
+	memset(rxq_map, 0, sizeof(rxq_map));
 	if (dev->data->dev_conf.intr_conf.rxq != 0 &&
-	    rte_intr_allow_others(intr_handle))
-		vector_id = I40E_RX_VEC_START;
-	else
-		vector_id = I40E_MISC_VEC_ID;
+		rte_intr_allow_others(intr_handle)) {
+		msix_base = I40E_RX_VEC_START;
+		/* For interrupt mode, available vector id is from 1. */
+		max_vectors = vf->vf_res->max_vectors - 1;
+		nb_msix = RTE_MIN(max_vectors, intr_handle->nb_efd);
+
+		vec = msix_base;
+		for (i = 0; i < dev->data->nb_rx_queues; i++) {
+			rxq_map[vec] |= 1 << i;
+			intr_handle->intr_vec[i] = vec++;
+			if (vec >= vf->vf_res->max_vectors)
+				vec = msix_base;
+		}
+	} else {
+		msix_base = I40E_MISC_VEC_ID;
+		nb_msix = 1;
+
+		for (i = 0; i < dev->data->nb_rx_queues; i++) {
+			rxq_map[msix_base] |= 1 << i;
+			if (rte_intr_dp_is_en(intr_handle))
+				intr_handle->intr_vec[i] = msix_base;
+		}
+	}
+
+	cmd_buffer_size = sizeof(struct virtchnl_irq_map_info) +
+			sizeof(struct virtchnl_vector_map) * nb_msix;
+	cmd_buffer = rte_zmalloc("i40e", cmd_buffer_size, 0);
+	if (!cmd_buffer) {
+		PMD_DRV_LOG(ERR, "Failed to allocate memory");
+		return I40E_ERR_NO_MEMORY;
+	}
 
 	map_info = (struct virtchnl_irq_map_info *)cmd_buffer;
-	map_info->num_vectors = 1;
-	map_info->vecmap[0].rxitr_idx = I40E_ITR_INDEX_DEFAULT;
-	map_info->vecmap[0].vsi_id = vf->vsi_res->vsi_id;
-	/* Alway use default dynamic MSIX interrupt */
-	map_info->vecmap[0].vector_id = vector_id;
-	/* Don't map any tx queue */
-	map_info->vecmap[0].txq_map = 0;
-	map_info->vecmap[0].rxq_map = 0;
-	for (i = 0; i < dev->data->nb_rx_queues; i++) {
-		map_info->vecmap[0].rxq_map |= 1 << i;
-		if (rte_intr_dp_is_en(intr_handle))
-			intr_handle->intr_vec[i] = vector_id;
+	map_info->num_vectors = nb_msix;
+	for (i = 0; i < nb_msix; i++) {
+		map_info->vecmap[i].rxitr_idx = I40E_ITR_INDEX_DEFAULT;
+		map_info->vecmap[i].vsi_id = vf->vsi_res->vsi_id;
+		map_info->vecmap[i].vector_id = msix_base + i;
+		map_info->vecmap[i].txq_map = 0;
+		map_info->vecmap[i].rxq_map = rxq_map[msix_base + i];
 	}
 
 	args.ops = VIRTCHNL_OP_CONFIG_IRQ_MAP;
 	args.in_args = (u8 *)cmd_buffer;
-	args.in_args_size = sizeof(cmd_buffer);
+	args.in_args_size = cmd_buffer_size;
 	args.out_buffer = vf->aq_resp;
 	args.out_size = I40E_AQ_BUF_SZ;
 	err = i40evf_execute_vf_cmd(dev, &args);
 	if (err)
 		PMD_DRV_LOG(ERR, "fail to execute command OP_ENABLE_QUEUES");
+
+	rte_free(cmd_buffer);
 
 	return err;
 }
@@ -1055,12 +1091,28 @@ i40evf_request_queues(struct rte_eth_dev *dev, uint16_t num)
 	args.out_size = I40E_AQ_BUF_SZ;
 
 	rte_eal_alarm_cancel(i40evf_dev_alarm_handler, dev);
-	err = i40evf_execute_vf_cmd(dev, &args);
-	if (err)
-		PMD_DRV_LOG(ERR, "fail to execute command OP_REQUEST_QUEUES");
 
-	rte_eal_alarm_set(I40EVF_ALARM_INTERVAL,
-			  i40evf_dev_alarm_handler, dev);
+	err = i40evf_execute_vf_cmd(dev, &args);
+
+	rte_eal_alarm_set(I40EVF_ALARM_INTERVAL, i40evf_dev_alarm_handler, dev);
+
+	if (err != I40E_SUCCESS) {
+		PMD_DRV_LOG(ERR, "fail to execute command OP_REQUEST_QUEUES");
+		return err;
+	}
+
+	/* The PF will issue a reset to the VF when change the number of
+	 * queues. The PF will set I40E_VFGEN_RSTAT to COMPLETE first, then
+	 * wait 10ms and set it to ACTIVE. In this duration, vf may not catch
+	 * the moment that COMPLETE is set. So, for vf, we'll try to wait a
+	 * long time.
+	 */
+	rte_delay_ms(100);
+
+	err = i40evf_check_vf_reset_done(dev);
+	if (err)
+		PMD_DRV_LOG(ERR, "VF is still resetting");
+
 	return err;
 }
 
@@ -1281,10 +1333,8 @@ i40evf_init_vf(struct rte_eth_dev *dev)
 	vf->vsi.adapter = I40E_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
 
 	/* Store the MAC address configured by host, or generate random one */
-	if (rte_is_valid_assigned_ether_addr(
+	if (!rte_is_valid_assigned_ether_addr(
 			(struct rte_ether_addr *)hw->mac.addr))
-		vf->flags |= I40E_FLAG_VF_MAC_BY_PF;
-	else
 		rte_eth_random_addr(hw->mac.addr); /* Generate a random one */
 
 	I40E_WRITE_REG(hw, I40E_VFINT_DYN_CTL01,
@@ -1490,7 +1540,7 @@ i40evf_dev_init(struct rte_eth_dev *eth_dev)
 	hw->bus.device = pci_dev->addr.devid;
 	hw->bus.func = pci_dev->addr.function;
 	hw->hw_addr = (void *)pci_dev->mem_resource[0].addr;
-	hw->adapter_stopped = 0;
+	hw->adapter_stopped = 1;
 	hw->adapter_closed = 0;
 
 	/* Pass the information to the rte_eth_dev_close() that it should also
@@ -1586,7 +1636,20 @@ i40evf_dev_configure(struct rte_eth_dev *dev)
 	ad->tx_vec_allowed = true;
 
 	if (num_queue_pairs > vf->vsi_res->num_queue_pairs) {
-		int ret = 0;
+		struct i40e_hw *hw;
+		int ret;
+
+		if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
+			PMD_DRV_LOG(ERR,
+				    "For secondary processes, change queue pairs is not supported!");
+			return -ENOTSUP;
+		}
+
+		hw  = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+		if (!hw->adapter_stopped) {
+			PMD_DRV_LOG(ERR, "Device must be stopped first!");
+			return -EBUSY;
+		}
 
 		PMD_DRV_LOG(INFO, "change queue pairs from %u to %u",
 			    vf->vsi_res->num_queue_pairs, num_queue_pairs);
@@ -2158,76 +2221,32 @@ static int
 i40evf_dev_promiscuous_enable(struct rte_eth_dev *dev)
 {
 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
-	int ret;
 
-	/* If enabled, just return */
-	if (vf->promisc_unicast_enabled)
-		return 0;
-
-	ret = i40evf_config_promisc(dev, 1, vf->promisc_multicast_enabled);
-	if (ret == 0)
-		vf->promisc_unicast_enabled = TRUE;
-	else
-		ret = -EAGAIN;
-
-	return ret;
+	return i40evf_config_promisc(dev, true, vf->promisc_multicast_enabled);
 }
 
 static int
 i40evf_dev_promiscuous_disable(struct rte_eth_dev *dev)
 {
 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
-	int ret;
 
-	/* If disabled, just return */
-	if (!vf->promisc_unicast_enabled)
-		return 0;
-
-	ret = i40evf_config_promisc(dev, 0, vf->promisc_multicast_enabled);
-	if (ret == 0)
-		vf->promisc_unicast_enabled = FALSE;
-	else
-		ret = -EAGAIN;
-
-	return ret;
+	return i40evf_config_promisc(dev, false, vf->promisc_multicast_enabled);
 }
 
 static int
 i40evf_dev_allmulticast_enable(struct rte_eth_dev *dev)
 {
 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
-	int ret;
 
-	/* If enabled, just return */
-	if (vf->promisc_multicast_enabled)
-		return 0;
-
-	ret = i40evf_config_promisc(dev, vf->promisc_unicast_enabled, 1);
-	if (ret == 0)
-		vf->promisc_multicast_enabled = TRUE;
-	else
-		ret = -EAGAIN;
-
-	return ret;
+	return i40evf_config_promisc(dev, vf->promisc_unicast_enabled, true);
 }
 
 static int
 i40evf_dev_allmulticast_disable(struct rte_eth_dev *dev)
 {
 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
-	int ret;
 
-	/* If enabled, just return */
-	if (!vf->promisc_multicast_enabled)
-		return 0;
-
-	ret = i40evf_config_promisc(dev, vf->promisc_unicast_enabled, 0);
-	if (ret == 0)
-		vf->promisc_multicast_enabled = FALSE;
-	else
-		ret = -EAGAIN;
-
-	return ret;
+	return i40evf_config_promisc(dev, vf->promisc_unicast_enabled, false);
 }
 
 static int
@@ -2349,8 +2368,9 @@ i40evf_dev_close(struct rte_eth_dev *dev)
 	 * it is a workaround solution when work with kernel driver
 	 * and it is not the normal way
 	 */
-	i40evf_dev_promiscuous_disable(dev);
-	i40evf_dev_allmulticast_disable(dev);
+	if (vf->promisc_unicast_enabled || vf->promisc_multicast_enabled)
+		i40evf_config_promisc(dev, false, false);
+
 	rte_eal_alarm_cancel(i40evf_dev_alarm_handler, dev);
 
 	i40evf_reset_vf(dev);
@@ -2760,16 +2780,12 @@ static int
 i40evf_set_default_mac_addr(struct rte_eth_dev *dev,
 			    struct rte_ether_addr *mac_addr)
 {
-	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 
 	if (!rte_is_valid_assigned_ether_addr(mac_addr)) {
 		PMD_DRV_LOG(ERR, "Tried to set invalid MAC address.");
 		return -EINVAL;
 	}
-
-	if (vf->flags & I40E_FLAG_VF_MAC_BY_PF)
-		return -EPERM;
 
 	i40evf_del_mac_addr_by_addr(dev, (struct rte_ether_addr *)hw->mac.addr);
 

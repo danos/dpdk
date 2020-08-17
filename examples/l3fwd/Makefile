@@ -5,7 +5,8 @@
 APP = l3fwd
 
 # all source are stored in SRCS-y
-SRCS-y := main.c l3fwd_lpm.c l3fwd_em.c
+SRCS-y := main.c l3fwd_lpm.c l3fwd_em.c l3fwd_event.c
+SRCS-y += l3fwd_event_generic.c l3fwd_event_internal_port.c
 
 # Build using pkg-config variables if possible
 ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
@@ -22,7 +23,7 @@ PKGCONF ?= pkg-config
 PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
 CFLAGS += -O3 $(shell $(PKGCONF) --cflags libdpdk)
 LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
-LDFLAGS_STATIC = -Wl,-Bstatic $(shell $(PKGCONF) --static --libs libdpdk)
+LDFLAGS_STATIC = $(shell $(PKGCONF) --static --libs libdpdk)
 
 build/$(APP)-shared: $(SRCS-y) Makefile $(PC_FILE) | build
 	$(CC) $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
@@ -52,6 +53,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 CFLAGS += -I$(SRCDIR)
 CFLAGS += -O3 $(USER_FLAGS)
 CFLAGS += $(WERROR_FLAGS)
+CFLAGS += -DALLOW_EXPERIMENTAL_API
 
 include $(RTE_SDK)/mk/rte.extapp.mk
 endif

@@ -1377,9 +1377,9 @@ nfp_net_dev_link_status_print(struct rte_eth_dev *dev)
 		PMD_DRV_LOG(INFO, " Port %d: Link Down",
 			    dev->data->port_id);
 
-	PMD_DRV_LOG(INFO, "PCI Address: %04d:%02d:%02d:%d",
-		pci_dev->addr.domain, pci_dev->addr.bus,
-		pci_dev->addr.devid, pci_dev->addr.function);
+	PMD_DRV_LOG(INFO, "PCI Address: " PCI_PRI_FMT,
+		    pci_dev->addr.domain, pci_dev->addr.bus,
+		    pci_dev->addr.devid, pci_dev->addr.function);
 }
 
 /* Interrupt configuration and handling */
@@ -2353,11 +2353,6 @@ nfp_net_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 	hw = NFP_NET_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	new_ctrl = 0;
 
-	if ((mask & ETH_VLAN_FILTER_OFFLOAD) ||
-	    (mask & ETH_VLAN_EXTEND_OFFLOAD))
-		PMD_DRV_LOG(INFO, "No support for ETH_VLAN_FILTER_OFFLOAD or"
-			" ETH_VLAN_EXTEND_OFFLOAD");
-
 	/* Enable vlan strip if it is not configured yet */
 	if ((mask & ETH_VLAN_STRIP_OFFLOAD) &&
 	    !(hw->ctrl & NFP_NET_CFG_CTRL_RXVLAN))
@@ -2625,6 +2620,9 @@ nfp_net_rss_hash_conf_get(struct rte_eth_dev *dev,
 
 	if (cfg_rss_ctrl & NFP_NET_CFG_RSS_IPV6)
 		rss_hf |= ETH_RSS_NONFRAG_IPV4_UDP | ETH_RSS_NONFRAG_IPV6_UDP;
+
+	/* Propagate current RSS hash functions to caller */
+	rss_conf->rss_hf = rss_hf;
 
 	/* Reading the key size */
 	rss_conf->rss_key_len = nn_cfg_readl(hw, NFP_NET_CFG_RSS_KEY_SZ);
@@ -3683,9 +3681,6 @@ error:
 	return ret;
 }
 
-int nfp_logtype_init;
-int nfp_logtype_driver;
-
 static const struct rte_pci_id pci_id_nfp_pf_net_map[] = {
 	{
 		RTE_PCI_DEVICE(PCI_VENDOR_ID_NETRONOME,
@@ -3769,16 +3764,8 @@ RTE_PMD_REGISTER_PCI_TABLE(net_nfp_pf, pci_id_nfp_pf_net_map);
 RTE_PMD_REGISTER_PCI_TABLE(net_nfp_vf, pci_id_nfp_vf_net_map);
 RTE_PMD_REGISTER_KMOD_DEP(net_nfp_pf, "* igb_uio | uio_pci_generic | vfio");
 RTE_PMD_REGISTER_KMOD_DEP(net_nfp_vf, "* igb_uio | uio_pci_generic | vfio");
-
-RTE_INIT(nfp_init_log)
-{
-	nfp_logtype_init = rte_log_register("pmd.net.nfp.init");
-	if (nfp_logtype_init >= 0)
-		rte_log_set_level(nfp_logtype_init, RTE_LOG_NOTICE);
-	nfp_logtype_driver = rte_log_register("pmd.net.nfp.driver");
-	if (nfp_logtype_driver >= 0)
-		rte_log_set_level(nfp_logtype_driver, RTE_LOG_NOTICE);
-}
+RTE_LOG_REGISTER(nfp_logtype_init, pmd.net.nfp.init, NOTICE);
+RTE_LOG_REGISTER(nfp_logtype_driver, pmd.net.nfp.driver, NOTICE);
 /*
  * Local variables:
  * c-file-style: "Linux"

@@ -33,6 +33,29 @@ otx2_nix_rss_tbl_init(struct otx2_eth_dev *dev,
 		req->qidx = (group * rss->rss_size) + idx;
 		req->ctype = NIX_AQ_CTYPE_RSS;
 		req->op = NIX_AQ_INSTOP_INIT;
+
+		if (!dev->lock_rx_ctx)
+			continue;
+
+		req = otx2_mbox_alloc_msg_nix_aq_enq(mbox);
+		if (!req) {
+			/* The shared memory buffer can be full.
+			 * Flush it and retry
+			 */
+			otx2_mbox_msg_send(mbox, 0);
+			rc = otx2_mbox_wait_for_rsp(mbox, 0);
+			if (rc < 0)
+				return rc;
+
+			req = otx2_mbox_alloc_msg_nix_aq_enq(mbox);
+			if (!req)
+				return -ENOMEM;
+		}
+		req->rss.rq = ind_tbl[idx];
+		/* Fill AQ info */
+		req->qidx = (group * rss->rss_size) + idx;
+		req->ctype = NIX_AQ_CTYPE_RSS;
+		req->op = NIX_AQ_INSTOP_LOCK;
 	}
 
 	otx2_mbox_msg_send(mbox, 0);
@@ -209,6 +232,23 @@ otx2_rss_ethdev_to_nix(struct otx2_eth_dev *dev, uint64_t ethdev_rss,
 	uint32_t flowkey_cfg = 0;
 
 	dev->rss_info.nix_rss = ethdev_rss;
+
+	if (ethdev_rss & ETH_RSS_L2_PAYLOAD &&
+	    dev->npc_flow.switch_header_type == OTX2_PRIV_FLAGS_LEN_90B) {
+		flowkey_cfg |= FLOW_KEY_TYPE_CH_LEN_90B;
+	}
+
+	if (ethdev_rss & ETH_RSS_L3_SRC_ONLY)
+		flowkey_cfg |= FLOW_KEY_TYPE_L3_SRC;
+
+	if (ethdev_rss & ETH_RSS_L3_DST_ONLY)
+		flowkey_cfg |= FLOW_KEY_TYPE_L3_DST;
+
+	if (ethdev_rss & ETH_RSS_L4_SRC_ONLY)
+		flowkey_cfg |= FLOW_KEY_TYPE_L4_SRC;
+
+	if (ethdev_rss & ETH_RSS_L4_DST_ONLY)
+		flowkey_cfg |= FLOW_KEY_TYPE_L4_DST;
 
 	if (ethdev_rss & RSS_IPV4_ENABLE)
 		flowkey_cfg |= flow_key_type[rss_level][RSS_IPV4_INDEX];
