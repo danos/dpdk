@@ -6,9 +6,9 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 include /usr/share/dpkg/default.mk
 
 # Upstream now defines a single ABI across all libs that we will use
-DPDK_ABI := $(shell cat ABI_VERSION)
+DPDK_ABI := $(shell cat ABI_VERSION | cut -d. -f1-2)
 # Experimental libs will have 0.200 on actual ABI 20.0
-DPDK_EXP_ABI := "0.$(shell cat ABI_VERSION | tr -d ".")"
+DPDK_EXP_ABI := "0.$(shell cat ABI_VERSION | cut -d. -f1-2 | tr -d ".")"
 
 ifeq (,$(findstring terse,$(DEB_BUILD_OPTIONS)))
 	export DH_VERBOSE=1
