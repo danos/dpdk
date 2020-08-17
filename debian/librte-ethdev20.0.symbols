@@ -1,6 +1,15 @@
 librte_ethdev.so.20.0 librte-ethdev20.0 #MINVER#
  DPDK_20.0@DPDK_20.0 19.11
  EXPERIMENTAL@EXPERIMENTAL 17.11
+ INTERNAL@INTERNAL 20.08
+ __rte_ethdev_trace_close@EXPERIMENTAL 20.08
+ __rte_ethdev_trace_configure@EXPERIMENTAL 20.08
+ __rte_ethdev_trace_rx_burst@EXPERIMENTAL 20.08
+ __rte_ethdev_trace_rxq_setup@EXPERIMENTAL 20.08
+ __rte_ethdev_trace_start@EXPERIMENTAL 20.08
+ __rte_ethdev_trace_stop@EXPERIMENTAL 20.08
+ __rte_ethdev_trace_tx_burst@EXPERIMENTAL 20.08
+ __rte_ethdev_trace_txq_setup@EXPERIMENTAL 20.08
  _rte_eth_dev_callback_process@DPDK_20.0 19.11
  _rte_eth_dev_reset@DPDK_20.0 19.11
  rte_eth_add_first_rx_callback@DPDK_20.0 19.11
@@ -95,6 +104,7 @@ librte_ethdev.so.20.0 librte-ethdev20.0 #MINVER#
  rte_eth_dev_vlan_filter@DPDK_20.0 19.11
  rte_eth_devargs_parse@EXPERIMENTAL 18.05
  rte_eth_devices@DPDK_20.0 19.11
+ rte_eth_dma_zone_free@INTERNAL 20.08
  rte_eth_dma_zone_reserve@DPDK_20.0 19.11
  rte_eth_find_next@DPDK_20.0 19.11
  rte_eth_find_next_of@EXPERIMENTAL 19.08
@@ -152,12 +162,14 @@ librte_ethdev.so.20.0 librte-ethdev20.0 #MINVER#
  rte_flow_copy@DPDK_20.0 19.11
  rte_flow_create@DPDK_20.0 19.11
  rte_flow_destroy@DPDK_20.0 19.11
+ rte_flow_dev_dump@EXPERIMENTAL 20.08
  rte_flow_dynf_metadata_mask@EXPERIMENTAL 19.11
  rte_flow_dynf_metadata_offs@EXPERIMENTAL 19.11
  rte_flow_dynf_metadata_register@EXPERIMENTAL 19.11
  rte_flow_error_set@DPDK_20.0 19.11
  rte_flow_expand_rss@EXPERIMENTAL 18.08
  rte_flow_flush@DPDK_20.0 19.11
+ rte_flow_get_aged_flows@EXPERIMENTAL 20.08
  rte_flow_isolate@DPDK_20.0 19.11
  rte_flow_query@DPDK_20.0 19.11
  rte_flow_validate@DPDK_20.0 19.11

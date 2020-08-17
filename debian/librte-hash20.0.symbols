@@ -23,6 +23,9 @@ librte_hash.so.20.0 librte-hash20.0 #MINVER#
  rte_hash_lookup_bulk_data@DPDK_20.0 19.11
  rte_hash_lookup_data@DPDK_20.0 19.11
  rte_hash_lookup_with_hash@DPDK_20.0 19.11
+ rte_hash_lookup_with_hash_bulk@EXPERIMENTAL 20.08
+ rte_hash_lookup_with_hash_bulk_data@EXPERIMENTAL 20.08
  rte_hash_lookup_with_hash_data@DPDK_20.0 19.11
+ rte_hash_max_key_id@EXPERIMENTAL 20.08
  rte_hash_reset@DPDK_20.0 19.11
  rte_hash_set_cmp_func@DPDK_20.0 19.11

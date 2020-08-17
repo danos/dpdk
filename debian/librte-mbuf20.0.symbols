@@ -36,4 +36,5 @@ librte_mbuf.so.20.0 librte-mbuf20.0 #MINVER#
  rte_pktmbuf_init@DPDK_20.0 19.11
  rte_pktmbuf_pool_create@DPDK_20.0 19.11
  rte_pktmbuf_pool_create_by_ops@DPDK_20.0 19.11
+ rte_pktmbuf_pool_create_extbuf@EXPERIMENTAL 20.08
  rte_pktmbuf_pool_init@DPDK_20.0 19.11

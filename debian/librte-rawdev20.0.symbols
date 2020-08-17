@@ -4,6 +4,7 @@ librte_rawdev.so.20.0 librte-rawdev20.0 #MINVER#
  rte_rawdev_configure@DPDK_20.0 19.11
  rte_rawdev_count@DPDK_20.0 19.11
  rte_rawdev_dequeue_buffers@DPDK_20.0 19.11
+ rte_rawdev_dump@DPDK_20.0 20.08
  rte_rawdev_enqueue_buffers@DPDK_20.0 19.11
  rte_rawdev_firmware_load@DPDK_20.0 19.11
  rte_rawdev_firmware_status_get@DPDK_20.0 19.11

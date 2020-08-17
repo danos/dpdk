@@ -1,4 +1,4 @@
-librte_ipsec.so.0.200 librte-ipsec0.200 #MINVER#
+librte_ipsec.so.20.0 librte-ipsec20.0 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 19.11
  rte_ipsec_sa_fini@EXPERIMENTAL 19.11
  rte_ipsec_sa_init@EXPERIMENTAL 19.11

@@ -1,5 +1,42 @@
 librte_eventdev.so.20.0 librte-eventdev20.0 #MINVER#
  DPDK_20.0@DPDK_20.0 19.11
+ EXPERIMENTAL@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_close@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_configure@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_crypto_adapter_create@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_crypto_adapter_free@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_crypto_adapter_queue_pair_add@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_crypto_adapter_queue_pair_del@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_crypto_adapter_start@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_crypto_adapter_stop@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_deq_burst@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_enq_burst@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_rx_adapter_create@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_rx_adapter_free@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_rx_adapter_queue_add@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_rx_adapter_queue_del@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_rx_adapter_start@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_rx_adapter_stop@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_tx_adapter_create@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_tx_adapter_enqueue@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_tx_adapter_free@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_tx_adapter_queue_add@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_tx_adapter_queue_del@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_tx_adapter_start@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_eth_tx_adapter_stop@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_port_link@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_port_setup@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_port_unlink@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_queue_setup@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_start@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_stop@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_timer_adapter_create@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_timer_adapter_free@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_timer_adapter_start@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_timer_adapter_stop@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_timer_arm_burst@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_timer_arm_tmo_tick_burst@EXPERIMENTAL 20.08
+ __rte_eventdev_trace_timer_cancel_burst@EXPERIMENTAL 20.08
  rte_event_crypto_adapter_caps_get@DPDK_20.0 19.11
  rte_event_crypto_adapter_create@DPDK_20.0 19.11
  rte_event_crypto_adapter_create_ext@DPDK_20.0 19.11

@@ -1,6 +1,9 @@
 librte_pmd_dpaa_sec.so.20.0 librte-pmd-dpaa-sec20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- dpaa_sec_eventq_attach@DPDK_20.0 19.11
- dpaa_sec_eventq_detach@DPDK_20.0 19.11
+#MISSING: 20.08# DPDK_20.0@DPDK_20.0 19.11
+ INTERNAL@INTERNAL 20.08
+#MISSING: 20.08# dpaa_sec_eventq_attach@DPDK_20.0 19.11
+ dpaa_sec_eventq_attach@INTERNAL 20.08
+#MISSING: 20.08# dpaa_sec_eventq_detach@DPDK_20.0 19.11
+ dpaa_sec_eventq_detach@INTERNAL 20.08
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.

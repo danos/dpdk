@@ -10,6 +10,7 @@ librte_timer.so.20.0 librte-timer20.0 #MINVER#
  rte_timer_dump_stats@DPDK_20.0 19.11
  rte_timer_init@DPDK_20.0 19.11
  rte_timer_manage@DPDK_20.0 19.11
+ rte_timer_next_ticks@EXPERIMENTAL 20.08
  rte_timer_pending@DPDK_20.0 19.11
  rte_timer_reset@DPDK_20.0 19.11
  rte_timer_reset_sync@DPDK_20.0 19.11

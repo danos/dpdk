@@ -10,6 +10,8 @@ librte_pmd_ixgbe.so.20.0 librte-pmd-ixgbe20.0 #MINVER#
  rte_pmd_ixgbe_bypass_wd_reset@DPDK_20.0 19.11
  rte_pmd_ixgbe_bypass_wd_timeout_show@DPDK_20.0 19.11
  rte_pmd_ixgbe_bypass_wd_timeout_store@DPDK_20.0 19.11
+ rte_pmd_ixgbe_get_fdir_info@EXPERIMENTAL 20.08
+ rte_pmd_ixgbe_get_fdir_stats@EXPERIMENTAL 20.08
  rte_pmd_ixgbe_macsec_config_rxsc@DPDK_20.0 19.11
  rte_pmd_ixgbe_macsec_config_txsc@DPDK_20.0 19.11
  rte_pmd_ixgbe_macsec_disable@DPDK_20.0 19.11
