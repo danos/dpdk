@@ -1,3 +1,12 @@
+dpdk (18.11.5-1vyatta14) unstable; urgency=medium
+
+  [ aroberts ]
+  * VRVDR-52401
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 18 Aug 2020 09:49:01 -0400
+
 dpdk (18.11.5-1vyatta13) unstable; urgency=medium
 
   * net/ixgbe: clear flags when canceling link_thread (Bugfix:
