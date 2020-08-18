@@ -1,3 +1,12 @@
+dpdk (18.11.6-1vyatta8.7) unstable; urgency=medium
+
+  [ aroberts ]
+  * This reverts commit bf12bb53ed4defa67a8214fb327ef4163bbf0995
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 18 Aug 2020 09:51:54 -0400
+
 dpdk (18.11.6-1vyatta8.6) unstable; urgency=medium
 
   * net/ixgbe: clear flags when canceling link_thread (Bugfix:
