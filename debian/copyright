@@ -29,9 +29,8 @@ License: GPL-2
 
 Files:
  kernel/Makefile
- lib/librte_eal/common/include/rte_pci_dev_feature_defs.h
- lib/librte_eal/common/include/rte_pci_dev_features.h
- lib/librte_eal/linux/eal/include/rte_kni_common.h
+ lib/librte_eal/include/rte_pci_dev_feature_defs.h
+ lib/librte_eal/include/rte_pci_dev_features.h
  drivers/bus/dpaa/base/fman/fman.c
  drivers/bus/dpaa/base/fman/netcfg_layer.c
  drivers/bus/dpaa/base/qbman/bman.c
@@ -68,7 +67,7 @@ License: BSD-3-clause or GPL-2
 Files:
  drivers/net/avp/rte_avp_common.h
  drivers/net/avp/rte_avp_fifo.h
- lib/librte_eal/linux/eal/include/rte_kni_common.h
+ lib/librte_eal/linux/include/rte_kni_common.h
 Copyright: 2007-2020 Intel Corporation.
            2013-2017 Wind River Systems, Inc.
 License: BSD-3-clause or LGPL-2.1
