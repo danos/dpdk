@@ -2,5 +2,5 @@
 dpdk: script-with-language-extension usr/bin/dpdk-devbind.py
 dpdk: script-with-language-extension usr/bin/dpdk-pmdinfo.py
 # those admin only helper tools only come with internal -h documentation
-dpdk: binary-without-manpage usr/bin/dpdk-devbind.py
-dpdk: binary-without-manpage usr/bin/dpdk-pmdinfo.py
+dpdk: no-manual-page usr/bin/dpdk-devbind.py
+dpdk: no-manual-page usr/bin/dpdk-pmdinfo.py

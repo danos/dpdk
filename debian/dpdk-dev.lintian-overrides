@@ -1,13 +1,13 @@
 # admin only test tools, documentation only maintained on the web (if at all) by upstream
-dpdk-dev: binary-without-manpage usr/bin/dpdk-pdump
-dpdk-dev: binary-without-manpage usr/bin/dpdk-proc-info
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-acl
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-bbdev
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-cmdline
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-compress-perf
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-crypto-perf
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-eventdev
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-pipeline
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-sad
-dpdk-dev: binary-without-manpage usr/bin/dpdk-testpmd
+dpdk-dev: no-manual-page usr/bin/dpdk-pdump
+dpdk-dev: no-manual-page usr/bin/dpdk-proc-info
+dpdk-dev: no-manual-page usr/bin/dpdk-test
+dpdk-dev: no-manual-page usr/bin/dpdk-test-acl
+dpdk-dev: no-manual-page usr/bin/dpdk-test-bbdev
+dpdk-dev: no-manual-page usr/bin/dpdk-test-cmdline
+dpdk-dev: no-manual-page usr/bin/dpdk-test-compress-perf
+dpdk-dev: no-manual-page usr/bin/dpdk-test-crypto-perf
+dpdk-dev: no-manual-page usr/bin/dpdk-test-eventdev
+dpdk-dev: no-manual-page usr/bin/dpdk-test-pipeline
+dpdk-dev: no-manual-page usr/bin/dpdk-test-sad
+dpdk-dev: no-manual-page usr/bin/dpdk-testpmd
