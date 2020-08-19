@@ -1,3 +1,23 @@
+dpdk (20.08-1) experimental; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * d/t/test-autotest: bump sse feature check
+
+  [ Luca Boccassi ]
+  * Remove 19.11 restriction to watch file
+  * Merge tag 'upstream/20.08' into experimental
+  * Truncate minor ABI revision from package names
+  * Rename packages that were declared stable
+  * Add packages for new libraries and PMDs
+  * Add new executables to dpdk-dev package
+  * Update symbols files
+  * Adjust dpdk-doc install path for guides
+  * Rename Lintian override no-manual-page
+  * Adjust paths in d/copyright for new layout
+  * Fix typo in d/control
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 19 Aug 2020 10:12:27 +0100
+
 dpdk (19.11.3-1) unstable; urgency=medium
 
   * New upstream release 19.11.3; for a full list of changes see:
