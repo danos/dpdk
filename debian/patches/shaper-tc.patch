@@ -124,3 +124,24 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	return 1;
  }
+--- a/lib/librte_sched/rte_sched.h
++++ b/lib/librte_sched/rte_sched.h
+@@ -127,14 +127,14 @@ extern "C" {
+  */
+ struct rte_sched_subport_params {
+ 	/* Subport token bucket */
+-	uint32_t tb_rate;                /**< Rate (measured in bytes per second) */
+-	uint32_t tb_size;                /**< Size (measured in credits) */
+-
++	uint64_t tb_rate;                /**< Rate (measured in bytes per second) */
+ 	/* Subport traffic classes */
+-	uint32_t tc_rate[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	uint64_t tc_rate[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+ 	/**< Traffic class rates (measured in bytes per second) */
+ 	uint32_t tc_period;
+ 	/**< Enforcement period for rates (measured in milliseconds) */
++	/* Subport token bucket burst size */
++	uint32_t tb_size;                /**< Size (measured in credits) */
+ };
+ 
+ /** Subport statistics */
