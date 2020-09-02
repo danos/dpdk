@@ -1,0 +1,49 @@
+From 5216a46a67a2410826f2230b2b1568edea761d89 Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Wed, 2 Sep 2020 06:36:15 -0400
+Subject: [PATCH] net/i40e: disable source pruning
+
+By default, the i40e does source pruning so it doesn't see its own
+packets. That is desireable for some configurations. For other
+protocols, like LAG and VRRP, this may become an issue if you add
+additional MAC addresses that are shared with other network devices.
+When this happens, the device needs to see its "own" packets coming
+from the network.
+
+Fixes: 4861cde46116 ("i40e: new poll mode driver")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chas Williams <chas3@att.com>
+---
+ drivers/net/i40e/i40e_ethdev.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/net/i40e/i40e_ethdev.c b/drivers/net/i40e/i40e_ethdev.c
+index 05d5f2861..428383a24 100644
+--- a/drivers/net/i40e/i40e_ethdev.c
++++ b/drivers/net/i40e/i40e_ethdev.c
+@@ -5870,6 +5870,21 @@ i40e_vsi_setup(struct i40e_pf *pf,
+ 			goto fail_msix_alloc;
+ 		}
+ 
++		/* Disable source pruning. */
++		memset(&ctxt, 0, sizeof(ctxt));
++		ctxt.seid = vsi->seid;
++		ctxt.pf_num = hw->pf_id;
++		ctxt.vf_num = 0;
++		ctxt.info.valid_sections |=
++			cpu_to_le16(I40E_AQ_VSI_PROP_SWITCH_VALID);
++		ctxt.info.switch_id =
++			cpu_to_le16(I40E_AQ_VSI_SW_ID_FLAG_LOCAL_LB);
++		ret = i40e_aq_update_vsi_params(hw, &ctxt, NULL);
++		if (ret != I40E_SUCCESS) {
++			PMD_DRV_LOG(ERR, "Failed to disable source pruning");
++			goto fail_msix_alloc;
++		}
++
+ 		/* TC, queue mapping */
+ 		memset(&ctxt, 0, sizeof(ctxt));
+ 		vsi->info.valid_sections |=
+-- 
+2.11.0
+
