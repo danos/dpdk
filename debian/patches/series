@@ -1,3 +1,6 @@
+# Patches that should be submitted upstream
+0001-net-i40e-disable-source-pruning.patch
+
 # Patches for DPDK
 0001-net-ixgbe-clear-flags-when-canceling-link_thread.patch
 0001-net-bonding-allow-application-to-select-LSC-interrup.patch
