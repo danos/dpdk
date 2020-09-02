@@ -1,3 +1,9 @@
+dpdk (18.11.6-1vyatta8.8) unstable; urgency=medium
+
+  * net/i40e: disable source pruning (Bugfix: VRVDR-52611)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 02 Sep 2020 17:44:19 -0400
+
 dpdk (18.11.6-1vyatta8.7) unstable; urgency=medium
 
   [ aroberts ]
