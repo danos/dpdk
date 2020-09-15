@@ -1,0 +1,34 @@
+From d98b0fc1af6c3c752304f3910da1d97a57ddd53b Mon Sep 17 00:00:00 2001
+From: Chas Williams <3chas3@gmail.com>
+Date: Thu, 1 Oct 2020 06:22:44 -0400
+Subject: [PATCH] net: check segment pointer in raw checksum processing
+
+If the overall pkt_len and segment lengths are out of agreement,
+it is possible for the seg to be NULL after the loop. Add assert
+to check this condition in debug builds. Otherwise, return failure.
+
+Fixes: c442fed81bb9 ("net: add function to calculate checksum in mbuf")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chas Williams <3chas3@gmail.com>
+---
+ lib/librte_net/rte_ip.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/lib/librte_net/rte_ip.h b/lib/librte_net/rte_ip.h
+index bb55ebb6f..8382d0fac 100644
+--- a/lib/librte_net/rte_ip.h
++++ b/lib/librte_net/rte_ip.h
+@@ -225,6 +225,9 @@ rte_raw_cksum_mbuf(const struct rte_mbuf *m, uint32_t off, uint32_t len,
+ 			break;
+ 		off -= seglen;
+ 	}
++	RTE_ASSERT(seg != NULL);
++	if (seg == NULL)
++		return -1;
+ 	seglen -= off;
+ 	buf = rte_pktmbuf_mtod_offset(seg, const char *, off);
+ 	if (seglen >= len) {
+-- 
+2.11.0
+
