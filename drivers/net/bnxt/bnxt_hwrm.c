@@ -2483,17 +2483,32 @@ int bnxt_alloc_hwrm_resources(struct bnxt *bp)
 	return 0;
 }
 
+int
+bnxt_clear_one_vnic_filter(struct bnxt *bp, struct bnxt_filter_info *filter)
+{
+	int rc = 0;
+
+	if (filter->filter_type == HWRM_CFA_EM_FILTER) {
+		rc = bnxt_hwrm_clear_em_filter(bp, filter);
+		if (rc)
+			return rc;
+	} else if (filter->filter_type == HWRM_CFA_NTUPLE_FILTER) {
+		rc = bnxt_hwrm_clear_ntuple_filter(bp, filter);
+		if (rc)
+			return rc;
+	}
+
+	rc = bnxt_hwrm_clear_l2_filter(bp, filter);
+	return rc;
+}
+
 int bnxt_clear_hwrm_vnic_filters(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 {
 	struct bnxt_filter_info *filter;
 	int rc = 0;
 
 	STAILQ_FOREACH(filter, &vnic->filter, next) {
-		if (filter->filter_type == HWRM_CFA_EM_FILTER)
-			rc = bnxt_hwrm_clear_em_filter(bp, filter);
-		else if (filter->filter_type == HWRM_CFA_NTUPLE_FILTER)
-			rc = bnxt_hwrm_clear_ntuple_filter(bp, filter);
-		rc = bnxt_hwrm_clear_l2_filter(bp, filter);
+		rc = bnxt_clear_one_vnic_filter(bp, filter);
 		STAILQ_REMOVE(&vnic->filter, filter, bnxt_filter_info, next);
 		bnxt_free_filter(bp, filter);
 	}
@@ -2511,11 +2526,7 @@ bnxt_clear_hwrm_vnic_flows(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 		flow = STAILQ_FIRST(&vnic->flow_list);
 		filter = flow->filter;
 		PMD_DRV_LOG(DEBUG, "filter type %d\n", filter->filter_type);
-		if (filter->filter_type == HWRM_CFA_EM_FILTER)
-			rc = bnxt_hwrm_clear_em_filter(bp, filter);
-		else if (filter->filter_type == HWRM_CFA_NTUPLE_FILTER)
-			rc = bnxt_hwrm_clear_ntuple_filter(bp, filter);
-		rc = bnxt_hwrm_clear_l2_filter(bp, filter);
+		rc = bnxt_clear_one_vnic_filter(bp, filter);
 
 		STAILQ_REMOVE(&vnic->flow_list, flow, rte_flow, next);
 		rte_free(flow);
@@ -5065,38 +5076,6 @@ int bnxt_hwrm_port_ts_query(struct bnxt *bp, uint8_t path, uint64_t *timestamp)
 			(uint64_t)(rte_le_to_cpu_32(resp->ptp_msg_ts[1])) << 32;
 	}
 	HWRM_UNLOCK();
-
-	return rc;
-}
-
-int bnxt_hwrm_cfa_adv_flow_mgmt_qcaps(struct bnxt *bp)
-{
-	struct hwrm_cfa_adv_flow_mgnt_qcaps_output *resp =
-					bp->hwrm_cmd_resp_addr;
-	struct hwrm_cfa_adv_flow_mgnt_qcaps_input req = {0};
-	uint32_t flags = 0;
-	int rc = 0;
-
-	if (!(bp->flags & BNXT_FLAG_ADV_FLOW_MGMT))
-		return rc;
-
-	if (!(BNXT_PF(bp) || BNXT_VF_IS_TRUSTED(bp))) {
-		PMD_DRV_LOG(DEBUG,
-			    "Not a PF or trusted VF. Command not supported\n");
-		return 0;
-	}
-
-	HWRM_PREP(req, CFA_ADV_FLOW_MGNT_QCAPS, BNXT_USE_KONG(bp));
-	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req), BNXT_USE_KONG(bp));
-
-	HWRM_CHECK_RESULT();
-	flags = rte_le_to_cpu_32(resp->flags);
-	HWRM_UNLOCK();
-
-	if (flags & HWRM_CFA_ADV_FLOW_MGNT_QCAPS_L2_HDR_SRC_FILTER_EN) {
-		bp->flow_flags |= BNXT_FLOW_FLAG_L2_HDR_SRC_FILTER_EN;
-		PMD_DRV_LOG(INFO, "Source L2 header filtering enabled\n");
-	}
 
 	return rc;
 }

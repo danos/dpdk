@@ -486,7 +486,8 @@ struct mlx5_flow_counter {
 	uint32_t shared:1; /**< Share counter ID with other flow rules. */
 	uint32_t batch: 1;
 	/**< Whether the counter was allocated by batch command. */
-	uint32_t ref_cnt:30; /**< Reference counter. */
+	uint32_t ref_cnt:29; /**< Reference counter. */
+	uint32_t skipped:1; /* This counter is skipped or not. */
 	uint32_t id; /**< Counter ID. */
 	union {  /**< Holds the counters for the rule. */
 #if defined(HAVE_IBV_DEVICE_COUNTERS_SET_V42)
@@ -518,6 +519,7 @@ struct mlx5_flow_counter_pool {
 	/* The devx object of the minimum counter ID. */
 	rte_atomic64_t query_gen;
 	uint32_t n_counters: 16; /* Number of devx allocated counters. */
+	uint32_t skip_cnt:1; /* Pool contains skipped counter. */
 	rte_spinlock_t sl; /* The pool lock. */
 	struct mlx5_counter_stats_raw *raw;
 	struct mlx5_counter_stats_raw *raw_hw; /* The raw on HW working. */
@@ -610,10 +612,12 @@ struct mlx5_flow_tbl_resource {
 #define MLX5_MAX_TABLES_EXTERNAL (MLX5_MAX_TABLES - 3)
 #define MLX5_MAX_TABLES_FDB UINT16_MAX
 
-#define MLX5_DBR_PAGE_SIZE 4096 /* Must be >= 512. */
-#define MLX5_DBR_SIZE 8
-#define MLX5_DBR_PER_PAGE (MLX5_DBR_PAGE_SIZE / MLX5_DBR_SIZE)
-#define MLX5_DBR_BITMAP_SIZE (MLX5_DBR_PER_PAGE / 64)
+#define MLX5_DBR_SIZE RTE_CACHE_LINE_SIZE
+#define MLX5_DBR_PER_PAGE 64
+/* Must be >= CHAR_BIT * sizeof(uint64_t) */
+#define MLX5_DBR_PAGE_SIZE (MLX5_DBR_PER_PAGE * MLX5_DBR_SIZE)
+/* Page size must be >= 512. */
+#define MLX5_DBR_BITMAP_SIZE (MLX5_DBR_PER_PAGE / (CHAR_BIT * sizeof(uint64_t)))
 
 struct mlx5_devx_dbr_page {
 	/* Door-bell records, must be first member in structure. */
@@ -669,6 +673,11 @@ struct mlx5_ibv_shared {
 	void *fdb_domain; /* FDB Direct Rules name space handle. */
 	void *rx_domain; /* RX Direct Rules name space handle. */
 	void *tx_domain; /* TX Direct Rules name space handle. */
+#ifndef RTE_ARCH_64
+	rte_spinlock_t uar_lock_cq; /* CQs share a common distinct UAR */
+	rte_spinlock_t uar_lock[MLX5_UAR_PAGE_NUM_MAX];
+	/* UAR same-page access control required in 32bit implementations. */
+#endif
 	struct mlx5_hlist *flow_tbls;
 	/* Direct Rules tables for FDB, NIC TX+RX */
 	void *esw_drop_action; /* Pointer to DR E-Switch drop action. */
@@ -682,10 +691,7 @@ struct mlx5_ibv_shared {
 		push_vlan_action_list; /* List of push VLAN actions. */
 	struct mlx5_flow_counter_mng cmng; /* Counters management structure. */
 	/* Shared interrupt handler section. */
-	pthread_mutex_t intr_mutex; /* Interrupt config mutex. */
-	uint32_t intr_cnt; /* Interrupt handler reference counter. */
 	struct rte_intr_handle intr_handle; /* Interrupt handler for device. */
-	uint32_t devx_intr_cnt; /* Devx interrupt handler reference counter. */
 	struct rte_intr_handle intr_handle_devx; /* DEVX interrupt handler. */
 	struct mlx5dv_devx_cmd_comp *devx_comp; /* DEVX async comp obj. */
 	struct mlx5_devx_obj *tis; /* TIS object. */
@@ -780,11 +786,6 @@ struct mlx5_priv {
 	uint8_t mtr_color_reg; /* Meter color match REG_C. */
 	struct mlx5_mtr_profiles flow_meter_profiles; /* MTR profile list. */
 	struct mlx5_flow_meters flow_meters; /* MTR list. */
-#ifndef RTE_ARCH_64
-	rte_spinlock_t uar_lock_cq; /* CQs share a common distinct UAR */
-	rte_spinlock_t uar_lock[MLX5_UAR_PAGE_NUM_MAX];
-	/* UAR same-page access control required in 32bit implementations. */
-#endif
 	uint8_t skip_default_rss_reta; /* Skip configuration of default reta. */
 	uint8_t fdb_def_rule; /* Whether fdb jump to table 1 is configured. */
 };
@@ -838,8 +839,6 @@ void mlx5_dev_interrupt_handler(void *arg);
 void mlx5_dev_interrupt_handler_devx(void *arg);
 void mlx5_dev_interrupt_handler_uninstall(struct rte_eth_dev *dev);
 void mlx5_dev_interrupt_handler_install(struct rte_eth_dev *dev);
-void mlx5_dev_interrupt_handler_devx_uninstall(struct rte_eth_dev *dev);
-void mlx5_dev_interrupt_handler_devx_install(struct rte_eth_dev *dev);
 int mlx5_set_link_down(struct rte_eth_dev *dev);
 int mlx5_set_link_up(struct rte_eth_dev *dev);
 int mlx5_is_removed(struct rte_eth_dev *dev);

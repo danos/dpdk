@@ -144,6 +144,15 @@ if numa_dep.found() and cc.has_header('numaif.h')
 	dpdk_extra_ldflags += '-lnuma'
 endif
 
+has_libfdt = 0
+fdt_dep = cc.find_library('libfdt', required: false)
+if fdt_dep.found() and cc.has_header('fdt.h')
+	dpdk_conf.set10('RTE_HAS_LIBFDT', true)
+	has_libfdt = 1
+	add_project_link_arguments('-lfdt', language: 'c')
+	dpdk_extra_ldflags += '-lfdt'
+endif
+
 # check for libbsd
 libbsd = dependency('libbsd', required: false)
 if libbsd.found()
@@ -214,6 +223,11 @@ dpdk_conf.set('RTE_LIBEAL_USE_HPET', get_option('use_hpet'))
 dpdk_conf.set('RTE_MAX_VFIO_GROUPS', 64)
 dpdk_conf.set('RTE_DRIVER_MEMPOOL_BUCKET_SIZE_KB', 64)
 dpdk_conf.set('RTE_LIBRTE_DPAA2_USE_PHYS_IOVA', true)
+if dpdk_conf.get('RTE_ARCH_64')
+	dpdk_conf.set('RTE_MAX_MEM_MB', 524288)
+else # for 32-bit we need smaller reserved memory areas
+	dpdk_conf.set('RTE_MAX_MEM_MB', 2048)
+endif
 
 
 compile_time_cpuflags = []

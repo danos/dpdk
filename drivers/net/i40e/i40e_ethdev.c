@@ -47,6 +47,8 @@
 #define ETH_I40E_VF_MSG_CFG		"vf_msg_cfg"
 
 #define I40E_CLEAR_PXE_WAIT_MS     200
+#define I40E_VSI_TSR_QINQ_STRIP		0x4010
+#define I40E_VSI_TSR(_i)	(0x00050800 + ((_i) * 4))
 
 /* Maximun number of capability elements */
 #define I40E_MAX_CAP_ELE_NUM       128
@@ -2005,7 +2007,7 @@ __vsi_queues_bind_intr(struct i40e_vsi *vsi, uint16_t msix_vect,
 	I40E_WRITE_FLUSH(hw);
 }
 
-void
+int
 i40e_vsi_queues_bind_intr(struct i40e_vsi *vsi, uint16_t itr_idx)
 {
 	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
@@ -2025,10 +2027,14 @@ i40e_vsi_queues_bind_intr(struct i40e_vsi *vsi, uint16_t itr_idx)
 
 	/* VF bind interrupt */
 	if (vsi->type == I40E_VSI_SRIOV) {
+		if (vsi->nb_msix == 0) {
+			PMD_DRV_LOG(ERR, "No msix resource");
+			return -EINVAL;
+		}
 		__vsi_queues_bind_intr(vsi, msix_vect,
 				       vsi->base_queue, vsi->nb_qps,
 				       itr_idx);
-		return;
+		return 0;
 	}
 
 	/* PF & VMDq bind interrupt */
@@ -2045,7 +2051,10 @@ i40e_vsi_queues_bind_intr(struct i40e_vsi *vsi, uint16_t itr_idx)
 	}
 
 	for (i = 0; i < vsi->nb_used_qps; i++) {
-		if (nb_msix <= 1) {
+		if (vsi->nb_msix == 0) {
+			PMD_DRV_LOG(ERR, "No msix resource");
+			return -EINVAL;
+		} else if (nb_msix <= 1) {
 			if (!rte_intr_allow_others(intr_handle))
 				/* allow to share MISC_VEC_ID */
 				msix_vect = I40E_MISC_VEC_ID;
@@ -2070,9 +2079,11 @@ i40e_vsi_queues_bind_intr(struct i40e_vsi *vsi, uint16_t itr_idx)
 		msix_vect++;
 		nb_msix--;
 	}
+
+	return 0;
 }
 
-static void
+void
 i40e_vsi_enable_queues_intr(struct i40e_vsi *vsi)
 {
 	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
@@ -2099,7 +2110,7 @@ i40e_vsi_enable_queues_intr(struct i40e_vsi *vsi)
 	I40E_WRITE_FLUSH(hw);
 }
 
-static void
+void
 i40e_vsi_disable_queues_intr(struct i40e_vsi *vsi)
 {
 	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
@@ -2310,22 +2321,19 @@ i40e_dev_start(struct rte_eth_dev *dev)
 	/* Map queues with MSIX interrupt */
 	main_vsi->nb_used_qps = dev->data->nb_rx_queues -
 		pf->nb_cfg_vmdq_vsi * RTE_LIBRTE_I40E_QUEUE_NUM_PER_VM;
-	i40e_vsi_queues_bind_intr(main_vsi, I40E_ITR_INDEX_DEFAULT);
+	ret = i40e_vsi_queues_bind_intr(main_vsi, I40E_ITR_INDEX_DEFAULT);
+	if (ret < 0)
+		return ret;
 	i40e_vsi_enable_queues_intr(main_vsi);
 
 	/* Map VMDQ VSI queues with MSIX interrupt */
 	for (i = 0; i < pf->nb_cfg_vmdq_vsi; i++) {
 		pf->vmdq[i].vsi->nb_used_qps = RTE_LIBRTE_I40E_QUEUE_NUM_PER_VM;
-		i40e_vsi_queues_bind_intr(pf->vmdq[i].vsi,
-					  I40E_ITR_INDEX_DEFAULT);
+		ret = i40e_vsi_queues_bind_intr(pf->vmdq[i].vsi,
+						I40E_ITR_INDEX_DEFAULT);
+		if (ret < 0)
+			return ret;
 		i40e_vsi_enable_queues_intr(pf->vmdq[i].vsi);
-	}
-
-	/* enable FDIR MSIX interrupt */
-	if (pf->fdir.fdir_vsi) {
-		i40e_vsi_queues_bind_intr(pf->fdir.fdir_vsi,
-					  I40E_ITR_INDEX_NONE);
-		i40e_vsi_enable_queues_intr(pf->fdir.fdir_vsi);
 	}
 
 	/* Enable all queues which have been configured */
@@ -2463,10 +2471,6 @@ i40e_dev_stop(struct rte_eth_dev *dev)
 		i40e_vsi_queues_unbind_intr(pf->vmdq[i].vsi);
 	}
 
-	if (pf->fdir.fdir_vsi) {
-		i40e_vsi_queues_unbind_intr(pf->fdir.fdir_vsi);
-		i40e_vsi_disable_queues_intr(pf->fdir.fdir_vsi);
-	}
 	/* Clear all queues and release memory */
 	i40e_dev_clear_queues(dev);
 
@@ -3862,17 +3866,45 @@ i40e_vlan_tpid_set(struct rte_eth_dev *dev,
 	return ret;
 }
 
+/* Configure outer vlan stripping on or off in QinQ mode */
+static int
+i40e_vsi_config_outer_vlan_stripping(struct i40e_vsi *vsi, bool on)
+{
+	struct i40e_hw *hw = I40E_VSI_TO_HW(vsi);
+	int ret = I40E_SUCCESS;
+	uint32_t reg;
+
+	if (vsi->vsi_id >= I40E_MAX_NUM_VSIS) {
+		PMD_DRV_LOG(ERR, "VSI ID exceeds the maximum");
+		return -EINVAL;
+	}
+
+	/* Configure for outer VLAN RX stripping */
+	reg = I40E_READ_REG(hw, I40E_VSI_TSR(vsi->vsi_id));
+
+	if (on)
+		reg |= I40E_VSI_TSR_QINQ_STRIP;
+	else
+		reg &= ~I40E_VSI_TSR_QINQ_STRIP;
+
+	ret = i40e_aq_debug_write_register(hw,
+						   I40E_VSI_TSR(vsi->vsi_id),
+						   reg, NULL);
+	if (ret < 0) {
+		PMD_DRV_LOG(ERR, "Failed to update VSI_TSR[%d]",
+				    vsi->vsi_id);
+		return I40E_ERR_CONFIG;
+	}
+
+	return ret;
+}
+
 static int
 i40e_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 {
 	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
 	struct i40e_vsi *vsi = pf->main_vsi;
 	struct rte_eth_rxmode *rxmode;
-
-	if (mask & ETH_QINQ_STRIP_MASK) {
-		PMD_DRV_LOG(ERR, "Strip qinq is not supported.");
-		return -ENOTSUP;
-	}
 
 	rxmode = &dev->data->dev_conf.rxmode;
 	if (mask & ETH_VLAN_FILTER_MASK) {
@@ -3901,6 +3933,14 @@ i40e_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 		}
 		else
 			i40e_vsi_config_double_vlan(vsi, FALSE);
+	}
+
+	if (mask & ETH_QINQ_STRIP_MASK) {
+		/* Enable or disable outer VLAN stripping */
+		if (rxmode->offloads & DEV_RX_OFFLOAD_QINQ_STRIP)
+			i40e_vsi_config_outer_vlan_stripping(vsi, TRUE);
+		else
+			i40e_vsi_config_outer_vlan_stripping(vsi, FALSE);
 	}
 
 	return 0;
@@ -5725,10 +5765,14 @@ i40e_vsi_setup(struct i40e_pf *pf,
 		ret = i40e_res_pool_alloc(&pf->msix_pool, 1);
 		if (ret < 0) {
 			PMD_DRV_LOG(ERR, "VSI %d get heap failed %d", vsi->seid, ret);
-			goto fail_queue_alloc;
+			if (type != I40E_VSI_FDIR)
+				goto fail_queue_alloc;
+			vsi->msix_intr = 0;
+			vsi->nb_msix = 0;
+		} else {
+			vsi->msix_intr = ret;
+			vsi->nb_msix = 1;
 		}
-		vsi->msix_intr = ret;
-		vsi->nb_msix = 1;
 	} else {
 		vsi->msix_intr = 0;
 		vsi->nb_msix = 0;
@@ -6077,6 +6121,7 @@ i40e_dev_init_vlan(struct rte_eth_dev *dev)
 
 	/* Apply vlan offload setting */
 	mask = ETH_VLAN_STRIP_MASK |
+	       ETH_QINQ_STRIP_MASK |
 	       ETH_VLAN_FILTER_MASK |
 	       ETH_VLAN_EXTEND_MASK;
 	ret = i40e_vlan_offload_set(dev, mask);
@@ -10478,7 +10523,6 @@ i40e_configure_registers(struct i40e_hw *hw)
 	}
 }
 
-#define I40E_VSI_TSR(_i)            (0x00050800 + ((_i) * 4))
 #define I40E_VSI_TSR_QINQ_CONFIG    0xc030
 #define I40E_VSI_L2TAGSTXVALID(_i)  (0x00042800 + ((_i) * 4))
 #define I40E_VSI_L2TAGSTXVALID_QINQ 0xab
@@ -11980,7 +12024,7 @@ static int i40e_get_module_eeprom(struct rte_eth_dev *dev,
 		}
 		status = i40e_aq_get_phy_register(hw,
 				I40E_AQ_PHY_REG_ACCESS_EXTERNAL_MODULE,
-				addr, offset, 1, &value, NULL);
+				addr, 1, offset, &value, NULL);
 		if (status)
 			return -EIO;
 		data[i] = (uint8_t)value;

@@ -279,7 +279,7 @@ end:
 
 error:
 	if (ret == -ENOTSUP)
-		RTE_LOG(ERR, EAL, "Bus %s does not support iterating.\n",
+		RTE_ETHDEV_LOG(ERR, "Bus %s does not support iterating.\n",
 				iter->bus->name);
 	free(devargs.args);
 	free(bus_str);
@@ -1814,7 +1814,7 @@ rte_eth_rx_queue_setup(uint16_t port_id, uint16_t rx_queue_id,
 	}
 	mbp_buf_size = rte_pktmbuf_data_room_size(mp);
 
-	if ((mbp_buf_size - RTE_PKTMBUF_HEADROOM) < dev_info.min_rx_bufsize) {
+	if (mbp_buf_size < dev_info.min_rx_bufsize + RTE_PKTMBUF_HEADROOM) {
 		RTE_ETHDEV_LOG(ERR,
 			"%s mbuf_data_room_size %d < %d (RTE_PKTMBUF_HEADROOM=%d + min_rx_bufsize(dev)=%d)\n",
 			mp->name, (int)mbp_buf_size,
@@ -3249,12 +3249,14 @@ rte_eth_dev_set_vlan_ether_type(uint16_t port_id,
 int
 rte_eth_dev_set_vlan_offload(uint16_t port_id, int offload_mask)
 {
+	struct rte_eth_dev_info dev_info;
 	struct rte_eth_dev *dev;
 	int ret = 0;
 	int mask = 0;
 	int cur, org = 0;
 	uint64_t orig_offloads;
 	uint64_t dev_offloads;
+	uint64_t new_offloads;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
 	dev = &rte_eth_devices[port_id];
@@ -3307,6 +3309,22 @@ rte_eth_dev_set_vlan_offload(uint16_t port_id, int offload_mask)
 	/*no change*/
 	if (mask == 0)
 		return ret;
+
+	ret = rte_eth_dev_info_get(port_id, &dev_info);
+	if (ret != 0)
+		return ret;
+
+	/* Rx VLAN offloading must be within its device capabilities */
+	if ((dev_offloads & dev_info.rx_offload_capa) != dev_offloads) {
+		new_offloads = dev_offloads & ~orig_offloads;
+		RTE_ETHDEV_LOG(ERR,
+			"Ethdev port_id=%u requested new added VLAN offloads "
+			"0x%" PRIx64 " must be within Rx offloads capabilities "
+			"0x%" PRIx64 " in %s()\n",
+			port_id, new_offloads, dev_info.rx_offload_capa,
+			__func__);
+		return -EINVAL;
+	}
 
 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->vlan_offload_set, -ENOTSUP);
 	dev->data->dev_conf.rxmode.offloads = dev_offloads;
@@ -4221,7 +4239,8 @@ rte_eth_dev_create(struct rte_device *device, const char *name,
 				device->numa_node);
 
 			if (!ethdev->data->dev_private) {
-				RTE_LOG(ERR, EAL, "failed to allocate private data");
+				RTE_ETHDEV_LOG(ERR,
+					"failed to allocate private data\n");
 				retval = -ENOMEM;
 				goto probe_failed;
 			}
@@ -4229,8 +4248,8 @@ rte_eth_dev_create(struct rte_device *device, const char *name,
 	} else {
 		ethdev = rte_eth_dev_attach_secondary(name);
 		if (!ethdev) {
-			RTE_LOG(ERR, EAL, "secondary process attach failed, "
-				"ethdev doesn't exist");
+			RTE_ETHDEV_LOG(ERR,
+				"secondary process attach failed, ethdev doesn't exist\n");
 			return  -ENODEV;
 		}
 	}
@@ -4240,15 +4259,15 @@ rte_eth_dev_create(struct rte_device *device, const char *name,
 	if (ethdev_bus_specific_init) {
 		retval = ethdev_bus_specific_init(ethdev, bus_init_params);
 		if (retval) {
-			RTE_LOG(ERR, EAL,
-				"ethdev bus specific initialisation failed");
+			RTE_ETHDEV_LOG(ERR,
+				"ethdev bus specific initialisation failed\n");
 			goto probe_failed;
 		}
 	}
 
 	retval = ethdev_init(ethdev, init_params);
 	if (retval) {
-		RTE_LOG(ERR, EAL, "ethdev initialisation failed");
+		RTE_ETHDEV_LOG(ERR, "ethdev initialisation failed\n");
 		goto probe_failed;
 	}
 

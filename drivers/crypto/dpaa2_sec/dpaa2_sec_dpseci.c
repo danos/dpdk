@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
  *   Copyright (c) 2016 Freescale Semiconductor, Inc. All rights reserved.
- *   Copyright 2016-2019 NXP
+ *   Copyright 2016-2020 NXP
  *
  */
 
@@ -168,7 +168,8 @@ build_proto_compound_sg_fd(dpaa2_sec_session *sess,
 	 * mbuf priv after sym_op.
 	 */
 	if (sess->ctxt_type == DPAA2_SEC_PDCP && sess->pdcp.hfn_ovd) {
-		uint32_t hfn_ovd = *((uint8_t *)op + sess->pdcp.hfn_ovd_offset);
+		uint32_t hfn_ovd = *(uint32_t *)((uint8_t *)op +
+					sess->pdcp.hfn_ovd_offset);
 		/*enable HFN override override */
 		DPAA2_SET_FLE_INTERNAL_JD(ip_fle, hfn_ovd);
 		DPAA2_SET_FLE_INTERNAL_JD(op_fle, hfn_ovd);
@@ -243,7 +244,8 @@ build_proto_compound_fd(dpaa2_sec_session *sess,
 	 * mbuf priv after sym_op.
 	 */
 	if (sess->ctxt_type == DPAA2_SEC_PDCP && sess->pdcp.hfn_ovd) {
-		uint32_t hfn_ovd = *((uint8_t *)op + sess->pdcp.hfn_ovd_offset);
+		uint32_t hfn_ovd = *(uint32_t *)((uint8_t *)op +
+					sess->pdcp.hfn_ovd_offset);
 		/*enable HFN override override */
 		DPAA2_SET_FLE_INTERNAL_JD(ip_fle, hfn_ovd);
 		DPAA2_SET_FLE_INTERNAL_JD(op_fle, hfn_ovd);
@@ -2192,7 +2194,7 @@ dpaa2_sec_aead_init(struct rte_cryptodev *dev,
 
 	priv->flc_desc[0].desc[0] = aeaddata.keylen;
 	err = rta_inline_query(IPSEC_AUTH_VAR_AES_DEC_BASE_DESC_LEN,
-			       MIN_JOB_DESC_SIZE,
+			       DESC_JOB_IO_LEN,
 			       (unsigned int *)priv->flc_desc[0].desc,
 			       &priv->flc_desc[0].desc[1], 1);
 
@@ -2410,7 +2412,7 @@ dpaa2_sec_aead_chain_init(struct rte_cryptodev *dev,
 	priv->flc_desc[0].desc[0] = cipherdata.keylen;
 	priv->flc_desc[0].desc[1] = authdata.keylen;
 	err = rta_inline_query(IPSEC_AUTH_VAR_AES_DEC_BASE_DESC_LEN,
-			       MIN_JOB_DESC_SIZE,
+			       DESC_JOB_IO_LEN,
 			       (unsigned int *)priv->flc_desc[0].desc,
 			       &priv->flc_desc[0].desc[2], 2);
 
@@ -3143,6 +3145,14 @@ dpaa2_sec_set_pdcp_session(struct rte_cryptodev *dev,
 	} else if (pdcp_xform->domain == RTE_SECURITY_PDCP_MODE_CONTROL) {
 		DPAA2_SEC_ERR("Crypto: Integrity must for c-plane");
 		goto out;
+	}
+
+	if (rta_inline_pdcp_query(authdata.algtype,
+				cipherdata.algtype,
+				session->pdcp.sn_size,
+				session->pdcp.hfn_ovd)) {
+		cipherdata.key = DPAA2_VADDR_TO_IOVA(cipherdata.key);
+		cipherdata.key_type = RTA_DATA_PTR;
 	}
 
 	if (pdcp_xform->domain == RTE_SECURITY_PDCP_MODE_CONTROL) {

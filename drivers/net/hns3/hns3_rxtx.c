@@ -884,7 +884,7 @@ hns3_fake_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx,
 	nb_rx_q = dev->data->nb_rx_queues;
 	rxq->io_base = (void *)((char *)hw->io_base + HNS3_TQP_REG_OFFSET +
 				(nb_rx_q + idx) * HNS3_TQP_REG_SIZE);
-	rxq->rx_buf_len = hw->rx_buf_len;
+	rxq->rx_buf_len = HNS3_MIN_BD_BUF_SIZE;
 
 	rte_spinlock_lock(&hw->lock);
 	hw->fkq_data.rx_queues[idx] = rxq;
@@ -1160,6 +1160,48 @@ hns3_dev_release_mbufs(struct hns3_adapter *hns)
 		}
 }
 
+static int
+hns3_rx_buf_len_calc(struct rte_mempool *mp, uint16_t *rx_buf_len)
+{
+	uint16_t vld_buf_size;
+	uint16_t num_hw_specs;
+	uint16_t i;
+
+	/*
+	 * hns3 network engine only support to set 4 typical specification, and
+	 * different buffer size will affect the max packet_len and the max
+	 * number of segmentation when hw gro is turned on in receive side. The
+	 * relationship between them is as follows:
+	 *      rx_buf_size     |  max_gro_pkt_len  |  max_gro_nb_seg
+	 * ---------------------|-------------------|----------------
+	 * HNS3_4K_BD_BUF_SIZE  |        60KB       |       15
+	 * HNS3_2K_BD_BUF_SIZE  |        62KB       |       31
+	 * HNS3_1K_BD_BUF_SIZE  |        63KB       |       63
+	 * HNS3_512_BD_BUF_SIZE |      31.5KB       |       63
+	 */
+	static const uint16_t hw_rx_buf_size[] = {
+		HNS3_4K_BD_BUF_SIZE,
+		HNS3_2K_BD_BUF_SIZE,
+		HNS3_1K_BD_BUF_SIZE,
+		HNS3_512_BD_BUF_SIZE
+	};
+
+	vld_buf_size = (uint16_t)(rte_pktmbuf_data_room_size(mp) -
+			RTE_PKTMBUF_HEADROOM);
+
+	if (vld_buf_size < HNS3_MIN_BD_BUF_SIZE)
+		return -EINVAL;
+
+	num_hw_specs = RTE_DIM(hw_rx_buf_size);
+	for (i = 0; i < num_hw_specs; i++) {
+		if (vld_buf_size >= hw_rx_buf_size[i]) {
+			*rx_buf_len = hw_rx_buf_size[i];
+			break;
+		}
+	}
+	return 0;
+}
+
 int
 hns3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t nb_desc,
 		    unsigned int socket_id, const struct rte_eth_rxconf *conf,
@@ -1169,6 +1211,7 @@ hns3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t nb_desc,
 	struct hns3_hw *hw = &hns->hw;
 	struct hns3_queue_info q_info;
 	struct hns3_rx_queue *rxq;
+	uint16_t rx_buf_size;
 	int rx_entry_len;
 
 	if (dev->data->dev_started) {
@@ -1193,6 +1236,15 @@ hns3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t nb_desc,
 	q_info.nb_desc = nb_desc;
 	q_info.type = "hns3 RX queue";
 	q_info.ring_name = "rx_ring";
+
+	if (hns3_rx_buf_len_calc(mp, &rx_buf_size)) {
+		hns3_err(hw, "rxq mbufs' data room size:%u is not enough! "
+				"minimal data room size:%u.",
+				rte_pktmbuf_data_room_size(mp),
+				HNS3_MIN_BD_BUF_SIZE + RTE_PKTMBUF_HEADROOM);
+		return -EINVAL;
+	}
+
 	rxq = hns3_alloc_rxq_and_dma_zone(dev, &q_info);
 	if (rxq == NULL) {
 		hns3_err(hw,
@@ -1226,7 +1278,7 @@ hns3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t nb_desc,
 	rxq->configured = true;
 	rxq->io_base = (void *)((char *)hw->io_base + HNS3_TQP_REG_OFFSET +
 				idx * HNS3_TQP_REG_SIZE);
-	rxq->rx_buf_len = hw->rx_buf_len;
+	rxq->rx_buf_len = rx_buf_size;
 	rxq->l2_errors = 0;
 	rxq->pkt_len_errors = 0;
 	rxq->l3_csum_erros = 0;
@@ -1255,9 +1307,9 @@ rxd_pkt_info_to_pkt_type(uint32_t pkt_info, uint32_t ol_info)
 
 	static const uint32_t l2table[HNS3_L2TBL_NUM] = {
 		RTE_PTYPE_L2_ETHER,
-		RTE_PTYPE_L2_ETHER_VLAN,
 		RTE_PTYPE_L2_ETHER_QINQ,
-		0
+		RTE_PTYPE_L2_ETHER_VLAN,
+		RTE_PTYPE_L2_ETHER_VLAN
 	};
 
 	static const uint32_t l3table[HNS3_L3TBL_NUM] = {
@@ -1450,6 +1502,58 @@ hns3_rx_set_cksum_flag(struct rte_mbuf *rxm, uint64_t packet_type,
 	}
 }
 
+static inline void
+hns3_rxd_to_vlan_tci(struct rte_eth_dev *dev, struct rte_mbuf *mb,
+		     uint32_t l234_info, const struct hns3_desc *rxd)
+{
+#define HNS3_STRP_STATUS_NUM		0x4
+
+#define HNS3_NO_STRP_VLAN_VLD		0x0
+#define HNS3_INNER_STRP_VLAN_VLD	0x1
+#define HNS3_OUTER_STRP_VLAN_VLD	0x2
+	struct hns3_adapter *hns = dev->data->dev_private;
+	struct hns3_hw *hw = &hns->hw;
+	uint32_t strip_status;
+	uint32_t report_mode;
+
+	/*
+	 * Since HW limitation, the vlan tag will always be inserted into RX
+	 * descriptor when strip the tag from packet, driver needs to determine
+	 * reporting which tag to mbuf according to the PVID configuration
+	 * and vlan striped status.
+	 */
+	static const uint32_t report_type[][HNS3_STRP_STATUS_NUM] = {
+		{
+			HNS3_NO_STRP_VLAN_VLD,
+			HNS3_OUTER_STRP_VLAN_VLD,
+			HNS3_INNER_STRP_VLAN_VLD,
+			HNS3_OUTER_STRP_VLAN_VLD
+		},
+		{
+			HNS3_NO_STRP_VLAN_VLD,
+			HNS3_NO_STRP_VLAN_VLD,
+			HNS3_NO_STRP_VLAN_VLD,
+			HNS3_INNER_STRP_VLAN_VLD
+		}
+	};
+	strip_status = hns3_get_field(l234_info, HNS3_RXD_STRP_TAGP_M,
+				      HNS3_RXD_STRP_TAGP_S);
+	report_mode = report_type[hw->port_base_vlan_cfg.state][strip_status];
+	switch (report_mode) {
+	case HNS3_NO_STRP_VLAN_VLD:
+		mb->vlan_tci = 0;
+		return;
+	case HNS3_INNER_STRP_VLAN_VLD:
+		mb->ol_flags |= PKT_RX_VLAN | PKT_RX_VLAN_STRIPPED;
+		mb->vlan_tci = rte_le_to_cpu_16(rxd->rx.vlan_tag);
+		return;
+	case HNS3_OUTER_STRP_VLAN_VLD:
+		mb->ol_flags |= PKT_RX_VLAN | PKT_RX_VLAN_STRIPPED;
+		mb->vlan_tci = rte_le_to_cpu_16(rxd->rx.ot_vlan_tag);
+		return;
+	}
+}
+
 uint16_t
 hns3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 {
@@ -1625,10 +1729,8 @@ hns3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 			hns3_rx_set_cksum_flag(first_seg,
 					       first_seg->packet_type,
 					       cksum_err);
+		hns3_rxd_to_vlan_tci(dev, first_seg, l234_info, &rxd);
 
-		first_seg->vlan_tci = rte_le_to_cpu_16(rxd.rx.vlan_tag);
-		first_seg->vlan_tci_outer =
-			rte_le_to_cpu_16(rxd.rx.ot_vlan_tag);
 		rx_pkts[nb_rx++] = first_seg;
 		first_seg = NULL;
 		continue;
@@ -2103,12 +2205,6 @@ hns3_prep_pkts(__rte_unused void *tx_queue, struct rte_mbuf **tx_pkts,
 
 	for (i = 0; i < nb_pkts; i++) {
 		m = tx_pkts[i];
-
-		/* check the size of packet */
-		if (m->pkt_len < HNS3_MIN_FRAME_LEN) {
-			rte_errno = EINVAL;
-			return i;
-		}
 
 #ifdef RTE_LIBRTE_ETHDEV_DEBUG
 		ret = rte_validate_tx_offload(m);

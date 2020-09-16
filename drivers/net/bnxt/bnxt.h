@@ -178,13 +178,6 @@ struct bnxt_led_cfg {
 #define BNXT_LED_DFLT_ENABLES(x)                        \
 	rte_cpu_to_le_32(BNXT_LED_DFLT_ENA << (BNXT_LED_DFLT_ENA_SHIFT * (x)))
 
-enum bnxt_hw_context {
-	HW_CONTEXT_NONE     = 0,
-	HW_CONTEXT_IS_RSS   = 1,
-	HW_CONTEXT_IS_COS   = 2,
-	HW_CONTEXT_IS_LB    = 3,
-};
-
 struct bnxt_vlan_table_entry {
 	uint16_t		tpid;
 	uint16_t		vid;
@@ -548,8 +541,6 @@ struct bnxt {
 #define BNXT_FW_CAP_ERROR_RECOVERY	BIT(2)
 #define BNXT_FW_CAP_ERR_RECOVER_RELOAD	BIT(3)
 
-	uint32_t		flow_flags;
-#define BNXT_FLOW_FLAG_L2_HDR_SRC_FILTER_EN	BIT(0)
 	pthread_mutex_t         flow_lock;
 
 	uint32_t		vnic_cap_flags;

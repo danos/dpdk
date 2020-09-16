@@ -112,7 +112,7 @@ struct hn_data {
 	struct rte_mem_resource *rxbuf_res;	/* UIO resource for Rx */
 	struct hn_rx_bufinfo *rxbuf_info;
 	uint32_t	rxbuf_section_cnt;	/* # of Rx sections */
-	volatile uint32_t rxbuf_outstanding;
+	rte_atomic32_t	rxbuf_outstanding;
 	uint16_t	max_queues;		/* Max available queues */
 	uint16_t	num_queues;
 	uint64_t	rss_offloads;
@@ -140,7 +140,6 @@ struct hn_data {
 	uint16_t	rss_ind[128];
 
 	struct rte_eth_dev_owner owner;
-	struct rte_intr_handle vf_intr;
 
 	struct vmbus_channel *channels[HN_MAX_CHANNELS];
 };
@@ -222,8 +221,6 @@ int	hn_vf_mc_addr_list(struct rte_eth_dev *dev,
 			   struct rte_ether_addr *mc_addr_set,
 			   uint32_t nb_mc_addr);
 
-int	hn_vf_link_update(struct rte_eth_dev *dev,
-			  int wait_to_complete);
 int	hn_vf_tx_queue_setup(struct rte_eth_dev *dev,
 			     uint16_t queue_idx, uint16_t nb_desc,
 			     unsigned int socket_id,

@@ -128,6 +128,7 @@ F: meson.build
 F: lib/librte_eal/freebsd/BSDmakefile.meson
 F: meson_options.txt
 F: config/rte_config.h
+F: buildtools/call-sphinx-build.py
 F: buildtools/gen-pmdinfo-cfile.sh
 F: buildtools/map_to_def.py
 F: buildtools/symlink-drivers-solibs.sh
@@ -456,8 +457,8 @@ F: lib/librte_eventdev/*crypto_adapter*
 F: app/test/test_event_crypto_adapter.c
 F: doc/guides/prog_guide/event_crypto_adapter.rst
 
-Raw device API - EXPERIMENTAL
-M: Shreyansh Jain <shreyansh.jain@nxp.com>
+Raw device API
+M: Nipun Gupta <nipun.gupta@nxp.com>
 M: Hemant Agrawal <hemant.agrawal@nxp.com>
 F: lib/librte_rawdev/
 F: drivers/raw/skeleton/

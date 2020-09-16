@@ -2230,11 +2230,12 @@ mlx5_flow_validate_item_mpls(struct rte_eth_dev *dev __rte_unused,
 	if (ret < 0)
 		return ret;
 	return 0;
-#endif
+#else
 	return rte_flow_error_set(error, ENOTSUP,
 				  RTE_FLOW_ERROR_TYPE_ITEM, item,
 				  "MPLS is not supported by Verbs, please"
 				  " update.");
+#endif
 }
 
 /**
@@ -2798,10 +2799,10 @@ flow_check_meter_action(const struct rte_flow_action actions[], uint32_t *mtr)
 }
 
 /**
- * Check if the flow should be splited due to hairpin.
+ * Check if the flow should be split due to hairpin.
  * The reason for the split is that in current HW we can't
- * support encap on Rx, so if a flow have encap we move it
- * to Tx.
+ * support encap and push-vlan on Rx, so if a flow contains
+ * these actions we move it to Tx.
  *
  * @param dev
  *   Pointer to Ethernet device.
@@ -2821,7 +2822,7 @@ flow_check_hairpin_split(struct rte_eth_dev *dev,
 {
 	int queue_action = 0;
 	int action_n = 0;
-	int encap = 0;
+	int split = 0;
 	const struct rte_flow_action_queue *queue;
 	const struct rte_flow_action_rss *rss;
 	const struct rte_flow_action_raw_encap *raw_encap;
@@ -2852,7 +2853,10 @@ flow_check_hairpin_split(struct rte_eth_dev *dev,
 			break;
 		case RTE_FLOW_ACTION_TYPE_VXLAN_ENCAP:
 		case RTE_FLOW_ACTION_TYPE_NVGRE_ENCAP:
-			encap = 1;
+		case RTE_FLOW_ACTION_TYPE_OF_PUSH_VLAN:
+		case RTE_FLOW_ACTION_TYPE_OF_SET_VLAN_VID:
+		case RTE_FLOW_ACTION_TYPE_OF_SET_VLAN_PCP:
+			split++;
 			action_n++;
 			break;
 		case RTE_FLOW_ACTION_TYPE_RAW_ENCAP:
@@ -2860,7 +2864,7 @@ flow_check_hairpin_split(struct rte_eth_dev *dev,
 			if (raw_encap->size >
 			    (sizeof(struct rte_flow_item_eth) +
 			     sizeof(struct rte_flow_item_ipv4)))
-				encap = 1;
+				split++;
 			action_n++;
 			break;
 		default:
@@ -2868,7 +2872,7 @@ flow_check_hairpin_split(struct rte_eth_dev *dev,
 			break;
 		}
 	}
-	if (encap == 1 && queue_action)
+	if (split && queue_action)
 		return action_n;
 	return 0;
 }
@@ -2930,7 +2934,7 @@ flow_mreg_add_copy_action(struct rte_eth_dev *dev, uint32_t mark_id,
 	};
 	struct mlx5_flow_action_copy_mreg cp_mreg = {
 		.dst = REG_B,
-		.src = 0,
+		.src = REG_NONE,
 	};
 	struct rte_flow_action_jump jump = {
 		.group = MLX5_FLOW_MREG_ACT_TABLE_GROUP,
@@ -3275,7 +3279,8 @@ flow_mreg_update_copy_table(struct rte_eth_dev *dev,
 
 /**
  * Split the hairpin flow.
- * Since HW can't support encap on Rx we move the encap to Tx.
+ * Since HW can't support encap and push-vlan on Rx, we move these
+ * actions to Tx.
  * If the count action is after the encap then we also
  * move the count action. in this case the count will also measure
  * the outer bytes.
@@ -3319,6 +3324,9 @@ flow_hairpin_split(struct rte_eth_dev *dev,
 		switch (actions->type) {
 		case RTE_FLOW_ACTION_TYPE_VXLAN_ENCAP:
 		case RTE_FLOW_ACTION_TYPE_NVGRE_ENCAP:
+		case RTE_FLOW_ACTION_TYPE_OF_PUSH_VLAN:
+		case RTE_FLOW_ACTION_TYPE_OF_SET_VLAN_VID:
+		case RTE_FLOW_ACTION_TYPE_OF_SET_VLAN_PCP:
 			rte_memcpy(actions_tx, actions,
 			       sizeof(struct rte_flow_action));
 			actions_tx++;
@@ -3398,7 +3406,6 @@ flow_hairpin_split(struct rte_eth_dev *dev,
 	tag_item->data = UINT32_MAX;
 	tag_item->id = UINT16_MAX;
 	item->mask = tag_item;
-	addr += sizeof(struct mlx5_rte_flow_item_tag);
 	item->last = NULL;
 	item++;
 	item->type = RTE_FLOW_ITEM_TYPE_END;
@@ -3937,7 +3944,7 @@ flow_create_split_metadata(struct rte_eth_dev *dev,
 		/* Internal PMD action to set register. */
 		struct mlx5_rte_flow_item_tag q_tag_spec = {
 			.data = qrss_id,
-			.id = 0,
+			.id = REG_NONE,
 		};
 		struct rte_flow_item q_items[] = {
 			{
@@ -5587,6 +5594,11 @@ next_container:
 		goto set_alarm;
 	dcs = (struct mlx5_devx_obj *)(uintptr_t)rte_atomic64_read
 							      (&pool->a64_dcs);
+	if (dcs->id & (MLX5_CNT_BATCH_QUERY_ID_ALIGNMENT - 1)) {
+		/* Pool without valid counter. */
+		pool->raw_hw = NULL;
+		goto next_pool;
+	}
 	offset = batch ? 0 : dcs->id % MLX5_COUNTERS_PER_POOL;
 	ret = mlx5_devx_cmd_flow_counter_query(dcs, 0, MLX5_COUNTERS_PER_POOL -
 					       offset, NULL, NULL,
@@ -5604,6 +5616,7 @@ next_container:
 	pool->raw_hw->min_dcs_id = dcs->id;
 	LIST_REMOVE(pool->raw_hw, next);
 	sh->cmng.pending_queries++;
+next_pool:
 	pool_index++;
 	if (pool_index >= rte_atomic16_read(&cont->n_valid)) {
 		batch ^= 0x1;

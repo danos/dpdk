@@ -2936,8 +2936,6 @@ ixgbe_dev_stop(struct rte_eth_dev *dev)
 
 	adapter->rss_reta_updated = 0;
 
-	adapter->mac_ctrl_frame_fwd = 0;
-
 	hw->adapter_stopped = true;
 }
 
@@ -4316,6 +4314,10 @@ ixgbe_dev_link_update_share(struct rte_eth_dev *dev,
 			link.link_speed = ETH_SPEED_NUM_100M;
 		break;
 
+	case IXGBE_LINK_SPEED_10_FULL:
+		link.link_speed = ETH_SPEED_NUM_10M;
+		break;
+
 	case IXGBE_LINK_SPEED_100_FULL:
 		link.link_speed = ETH_SPEED_NUM_100M;
 		break;
@@ -4750,6 +4752,11 @@ ixgbe_flow_ctrl_get(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
 	 * MFLCN register.
 	 */
 	mflcn_reg = IXGBE_READ_REG(hw, IXGBE_MFLCN);
+	if (mflcn_reg & IXGBE_MFLCN_PMCF)
+		fc_conf->mac_ctrl_frame_fwd = 1;
+	else
+		fc_conf->mac_ctrl_frame_fwd = 0;
+
 	if (mflcn_reg & (IXGBE_MFLCN_RPFCE | IXGBE_MFLCN_RFCE))
 		rx_pause = 1;
 	else

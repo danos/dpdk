@@ -2288,9 +2288,10 @@ ice_release_vsi(struct ice_vsi *vsi)
 	struct ice_hw *hw;
 	struct ice_vsi_ctx vsi_ctx;
 	enum ice_status ret;
+	int error = 0;
 
 	if (!vsi)
-		return 0;
+		return error;
 
 	hw = ICE_VSI_TO_HW(vsi);
 
@@ -2303,12 +2304,13 @@ ice_release_vsi(struct ice_vsi *vsi)
 	ret = ice_free_vsi(hw, vsi->idx, &vsi_ctx, false, NULL);
 	if (ret != ICE_SUCCESS) {
 		PMD_INIT_LOG(ERR, "Failed to free vsi by aq, %u", vsi->vsi_id);
-		rte_free(vsi);
-		return -1;
+		error = -1;
 	}
 
+	rte_free(vsi->rss_lut);
+	rte_free(vsi->rss_key);
 	rte_free(vsi);
-	return 0;
+	return error;
 }
 
 void
@@ -2462,13 +2464,24 @@ static int ice_init_rss(struct ice_pf *pf)
 		return 0;
 	}
 
-	if (!vsi->rss_key)
+	if (!vsi->rss_key) {
 		vsi->rss_key = rte_zmalloc(NULL,
 					   vsi->rss_key_size, 0);
-	if (!vsi->rss_lut)
+		if (vsi->rss_key == NULL) {
+			PMD_DRV_LOG(ERR, "Failed to allocate memory for rss_key");
+			return -ENOMEM;
+		}
+	}
+	if (!vsi->rss_lut) {
 		vsi->rss_lut = rte_zmalloc(NULL,
 					   vsi->rss_lut_size, 0);
-
+		if (vsi->rss_lut == NULL) {
+			PMD_DRV_LOG(ERR, "Failed to allocate memory for rss_key");
+			rte_free(vsi->rss_key);
+			vsi->rss_key = NULL;
+			return -ENOMEM;
+		}
+	}
 	/* configure RSS key */
 	if (!rss_conf->rss_key) {
 		/* Calculate the default hash key */
@@ -2482,7 +2495,7 @@ static int ice_init_rss(struct ice_pf *pf)
 	rte_memcpy(key.standard_rss_key, vsi->rss_key, vsi->rss_key_size);
 	ret = ice_aq_set_rss_key(hw, vsi->idx, &key);
 	if (ret)
-		return -EINVAL;
+		goto out;
 
 	/* init RSS LUT table */
 	for (i = 0; i < vsi->rss_lut_size; i++)
@@ -2492,7 +2505,7 @@ static int ice_init_rss(struct ice_pf *pf)
 				 ICE_AQC_GSET_RSS_LUT_TABLE_TYPE_PF,
 				 vsi->rss_lut, vsi->rss_lut_size);
 	if (ret)
-		return -EINVAL;
+		goto out;
 
 	/* Enable registers for symmetric_toeplitz function. */
 	reg = ICE_READ_REG(hw, VSIQF_HASH_CTL(vsi->vsi_id));
@@ -2568,6 +2581,12 @@ static int ice_init_rss(struct ice_pf *pf)
 				__func__, ret);
 
 	return 0;
+out:
+	rte_free(vsi->rss_key);
+	vsi->rss_key = NULL;
+	rte_free(vsi->rss_lut);
+	vsi->rss_lut = NULL;
+	return -EINVAL;
 }
 
 static int
@@ -4061,6 +4080,13 @@ ice_update_vsi_stats(struct ice_vsi *vsi)
 	ice_stat_update_40(hw, GLV_BPRCH(idx), GLV_BPRCL(idx),
 			   vsi->offset_loaded, &oes->rx_broadcast,
 			   &nes->rx_broadcast);
+	/* enlarge the limitation when rx_bytes overflowed */
+	if (vsi->offset_loaded) {
+		if (ICE_RXTX_BYTES_LOW(vsi->old_rx_bytes) > nes->rx_bytes)
+			nes->rx_bytes += (uint64_t)1 << ICE_40_BIT_WIDTH;
+		nes->rx_bytes += ICE_RXTX_BYTES_HIGH(vsi->old_rx_bytes);
+	}
+	vsi->old_rx_bytes = nes->rx_bytes;
 	/* exclude CRC bytes */
 	nes->rx_bytes -= (nes->rx_unicast + nes->rx_multicast +
 			  nes->rx_broadcast) * RTE_ETHER_CRC_LEN;
@@ -4087,6 +4113,13 @@ ice_update_vsi_stats(struct ice_vsi *vsi)
 	/* GLV_TDPC not supported */
 	ice_stat_update_32(hw, GLV_TEPC(idx), vsi->offset_loaded,
 			   &oes->tx_errors, &nes->tx_errors);
+	/* enlarge the limitation when tx_bytes overflowed */
+	if (vsi->offset_loaded) {
+		if (ICE_RXTX_BYTES_LOW(vsi->old_tx_bytes) > nes->tx_bytes)
+			nes->tx_bytes += (uint64_t)1 << ICE_40_BIT_WIDTH;
+		nes->tx_bytes += ICE_RXTX_BYTES_HIGH(vsi->old_tx_bytes);
+	}
+	vsi->old_tx_bytes = nes->tx_bytes;
 	vsi->offset_loaded = true;
 
 	PMD_DRV_LOG(DEBUG, "************** VSI[%u] stats start **************",
@@ -4134,6 +4167,13 @@ ice_read_stats_registers(struct ice_pf *pf, struct ice_hw *hw)
 	ice_stat_update_32(hw, PRTRPB_RDPC,
 			   pf->offset_loaded, &os->eth.rx_discards,
 			   &ns->eth.rx_discards);
+	/* enlarge the limitation when rx_bytes overflowed */
+	if (pf->offset_loaded) {
+		if (ICE_RXTX_BYTES_LOW(pf->old_rx_bytes) > ns->eth.rx_bytes)
+			ns->eth.rx_bytes += (uint64_t)1 << ICE_40_BIT_WIDTH;
+		ns->eth.rx_bytes += ICE_RXTX_BYTES_HIGH(pf->old_rx_bytes);
+	}
+	pf->old_rx_bytes = ns->eth.rx_bytes;
 
 	/* Workaround: CRC size should not be included in byte statistics,
 	 * so subtract RTE_ETHER_CRC_LEN from the byte counter for each rx
@@ -4164,6 +4204,13 @@ ice_read_stats_registers(struct ice_pf *pf, struct ice_hw *hw)
 			   GLPRT_BPTCL(hw->port_info->lport),
 			   pf->offset_loaded, &os->eth.tx_broadcast,
 			   &ns->eth.tx_broadcast);
+	/* enlarge the limitation when tx_bytes overflowed */
+	if (pf->offset_loaded) {
+		if (ICE_RXTX_BYTES_LOW(pf->old_tx_bytes) > ns->eth.tx_bytes)
+			ns->eth.tx_bytes += (uint64_t)1 << ICE_40_BIT_WIDTH;
+		ns->eth.tx_bytes += ICE_RXTX_BYTES_HIGH(pf->old_tx_bytes);
+	}
+	pf->old_tx_bytes = ns->eth.tx_bytes;
 	ns->eth.tx_bytes -= (ns->eth.tx_unicast + ns->eth.tx_multicast +
 			     ns->eth.tx_broadcast) * RTE_ETHER_CRC_LEN;
 

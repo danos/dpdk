@@ -206,11 +206,13 @@ hn_chim_uninit(struct rte_eth_dev *dev)
 static uint32_t hn_chim_alloc(struct hn_data *hv)
 {
 	uint32_t index = NVS_CHIM_IDX_INVALID;
-	uint64_t slab;
+	uint64_t slab = 0;
 
 	rte_spinlock_lock(&hv->chim_lock);
-	if (rte_bitmap_scan(hv->chim_bmap, &index, &slab))
+	if (rte_bitmap_scan(hv->chim_bmap, &index, &slab)) {
+		index += rte_bsf64(slab);
 		rte_bitmap_clear(hv->chim_bmap, index);
+	}
 	rte_spinlock_unlock(&hv->chim_lock);
 
 	return index;
@@ -488,24 +490,13 @@ next:
 	return 0;
 }
 
-/*
- * Ack the consumed RXBUF associated w/ this channel packet,
- * so that this RXBUF can be recycled by the hypervisor.
- */
-static void hn_rx_buf_release(struct hn_rx_bufinfo *rxb)
-{
-	struct rte_mbuf_ext_shared_info *shinfo = &rxb->shinfo;
-	struct hn_data *hv = rxb->hv;
-
-	if (rte_mbuf_ext_refcnt_update(shinfo, -1) == 0) {
-		hn_nvs_ack_rxbuf(rxb->chan, rxb->xactid);
-		--hv->rxbuf_outstanding;
-	}
-}
-
 static void hn_rx_buf_free_cb(void *buf __rte_unused, void *opaque)
 {
-	hn_rx_buf_release(opaque);
+	struct hn_rx_bufinfo *rxb = opaque;
+	struct hn_data *hv = rxb->hv;
+
+	rte_atomic32_dec(&hv->rxbuf_outstanding);
+	hn_nvs_ack_rxbuf(rxb->chan, rxb->xactid);
 }
 
 static struct hn_rx_bufinfo *hn_rx_buf_init(const struct hn_rx_queue *rxq,
@@ -545,7 +536,8 @@ static void hn_rxpkt(struct hn_rx_queue *rxq, struct hn_rx_bufinfo *rxb,
 	 * some space available in receive area for later packets.
 	 */
 	if (dlen >= HN_RXCOPY_THRESHOLD &&
-	    hv->rxbuf_outstanding < hv->rxbuf_section_cnt / 2) {
+	    (uint32_t)rte_atomic32_read(&hv->rxbuf_outstanding) <
+			hv->rxbuf_section_cnt / 2) {
 		struct rte_mbuf_ext_shared_info *shinfo;
 		const void *rxbuf;
 		rte_iova_t iova;
@@ -559,8 +551,9 @@ static void hn_rxpkt(struct hn_rx_queue *rxq, struct hn_rx_bufinfo *rxb,
 		iova = rte_mem_virt2iova(rxbuf) + RTE_PTR_DIFF(data, rxbuf);
 		shinfo = &rxb->shinfo;
 
-		if (rte_mbuf_ext_refcnt_update(shinfo, 1) == 1)
-			++hv->rxbuf_outstanding;
+		/* shinfo is already set to 1 by the caller */
+		if (rte_mbuf_ext_refcnt_update(shinfo, 1) == 2)
+			rte_atomic32_inc(&hv->rxbuf_outstanding);
 
 		rte_pktmbuf_attach_extbuf(m, data, iova,
 					  dlen + headroom, shinfo);
@@ -800,7 +793,8 @@ hn_nvs_handle_rxbuf(struct rte_eth_dev *dev,
 	}
 
 	/* Send ACK now if external mbuf not used */
-	hn_rx_buf_release(rxb);
+	if (rte_mbuf_ext_refcnt_update(&rxb->shinfo, -1) == 0)
+		hn_nvs_ack_rxbuf(rxb->chan, rxb->xactid);
 }
 
 /*
@@ -1340,11 +1334,12 @@ static int hn_xmit_sg(struct hn_tx_queue *txq,
 	hn_rndis_dump(txd->rndis_pkt);
 
 	/* pass IOVA of rndis header in first segment */
-	addr = rte_malloc_virt2iova(txd->rndis_pkt);
+	addr = rte_malloc_virt2iova(txq->tx_rndis);
 	if (unlikely(addr == RTE_BAD_IOVA)) {
 		PMD_DRV_LOG(ERR, "RNDIS transmit can not get iova");
 		return -EINVAL;
 	}
+	addr = addr + ((char *)txd->rndis_pkt - (char *)txq->tx_rndis);
 
 	sg[0].page = addr / PAGE_SIZE;
 	sg[0].ofs = addr & PAGE_MASK;

@@ -161,6 +161,13 @@ struct hns3_fake_queue_data {
 	uint16_t nb_fake_tx_queues; /* Number of fake TX queues. */
 };
 
+#define HNS3_PORT_BASE_VLAN_DISABLE	0
+#define HNS3_PORT_BASE_VLAN_ENABLE	1
+struct hns3_port_base_vlan_config {
+	uint16_t state;
+	uint16_t pvid;
+};
+
 /* Primary process maintains driver state in main thread.
  *
  * +---------------+
@@ -356,7 +363,6 @@ struct hns3_hw {
 	uint16_t tqps_num;          /* num task queue pairs of this function */
 	uint16_t intr_tqps_num;     /* num queue pairs mapping interrupt */
 	uint16_t rss_size_max;      /* HW defined max RSS task queue */
-	uint16_t rx_buf_len;
 	uint16_t num_tx_desc;       /* desc num of per tx queue */
 	uint16_t num_rx_desc;       /* desc num of per rx queue */
 
@@ -384,6 +390,8 @@ struct hns3_hw {
 	uint16_t tx_qnum_per_tc;    /* TX queue number per TC */
 
 	uint32_t flag;
+
+	struct hns3_port_base_vlan_config port_base_vlan_cfg;
 	/*
 	 * PMD setup and configuration is not thread safe. Since it is not
 	 * performance sensitive, it is better to guarantee thread-safety
@@ -411,11 +419,6 @@ struct hns3_user_vlan_table {
 	LIST_ENTRY(hns3_user_vlan_table) next;
 	bool hd_tbl_status;
 	uint16_t vlan_id;
-};
-
-struct hns3_port_base_vlan_config {
-	uint16_t state;
-	uint16_t pvid;
 };
 
 /* Vlan tag configuration for RX direction */
@@ -493,7 +496,6 @@ struct hns3_pf {
 	bool support_sfp_query;
 
 	struct hns3_vtag_cfg vtag_config;
-	struct hns3_port_base_vlan_config port_base_vlan_cfg;
 	LIST_HEAD(vlan_tbl, hns3_user_vlan_table) vlan_list;
 
 	struct hns3_fdir_info fdir; /* flow director info */
@@ -646,6 +648,7 @@ int hns3_dev_filter_ctrl(struct rte_eth_dev *dev,
 			 enum rte_filter_op filter_op, void *arg);
 bool hns3_is_reset_pending(struct hns3_adapter *hns);
 bool hns3vf_is_reset_pending(struct hns3_adapter *hns);
+void hns3_update_link_status(struct hns3_hw *hw);
 
 static inline bool
 is_reset_pending(struct hns3_adapter *hns)

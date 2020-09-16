@@ -3950,7 +3950,7 @@ static int bnxt_restore_mac_filters(struct bnxt *bp)
 	uint16_t i;
 	int rc;
 
-	if (BNXT_VF(bp) & !BNXT_VF_IS_TRUSTED(bp))
+	if (BNXT_VF(bp) && !BNXT_VF_IS_TRUSTED(bp))
 		return 0;
 
 	rc = bnxt_dev_info_get_op(dev, &dev_info);
@@ -4720,10 +4720,6 @@ static int bnxt_init_fw(struct bnxt *bp)
 		return rc;
 
 	rc = bnxt_hwrm_func_qcfg(bp, &mtu);
-	if (rc)
-		return rc;
-
-	rc = bnxt_hwrm_cfa_adv_flow_mgmt_qcaps(bp);
 	if (rc)
 		return rc;
 
