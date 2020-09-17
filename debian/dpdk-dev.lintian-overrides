@@ -1,5 +1,6 @@
 # admin only test tools, documentation only maintained on the web (if at all) by upstream
 dpdk-dev: binary-or-shlib-defines-rpath usr/bin/dpdk-test-crypto-perf XXXXXXXXXXXXXXXXXXXXXXXXXX
+dpdk-dev: binary-or-shlib-defines-rpath usr/bin/dpdk-test X
 dpdk-dev: binary-without-manpage usr/bin/cpu_layout.py
 dpdk-dev: binary-without-manpage usr/bin/dpdk-l3fwd
 dpdk-dev: binary-without-manpage usr/bin/dpdk-pdump

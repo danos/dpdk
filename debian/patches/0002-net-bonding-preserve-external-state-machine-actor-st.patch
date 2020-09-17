@@ -19,8 +19,8 @@ Signed-off-by: Chas Williams <chas3@att.com>
 
 --- a/drivers/net/bonding/rte_eth_bond_8023ad.c
 +++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
-@@ -1022,7 +1022,8 @@ bond_mode_8023ad_activate_slave(struct r
- 	memcpy(&port->partner, &initial, sizeof(struct port_params));
+@@ -1036,7 +1036,8 @@ bond_mode_8023ad_activate_slave(struct r
+ 	memcpy(&port->partner_admin, &initial, sizeof(struct port_params));
  
  	/* default states */
 -	port->actor_state = STATE_AGGREGATION | STATE_LACP_ACTIVE | STATE_DEFAULTED;
@@ -29,7 +29,7 @@ Signed-off-by: Chas Williams <chas3@att.com>
  	port->partner_state = STATE_LACP_ACTIVE | STATE_AGGREGATION;
  	port->sm_flags = SM_FLAGS_BEGIN;
  
-@@ -1543,10 +1544,13 @@ rte_eth_bond_8023ad_ext_collect(uint16_t
+@@ -1557,10 +1558,13 @@ rte_eth_bond_8023ad_ext_collect(uint16_t
  
  	port = &bond_mode_8023ad_ports[slave_id];
  
@@ -45,7 +45,7 @@ Signed-off-by: Chas Williams <chas3@att.com>
  
  	return 0;
  }
-@@ -1564,10 +1568,13 @@ rte_eth_bond_8023ad_ext_distrib(uint16_t
+@@ -1578,10 +1582,13 @@ rte_eth_bond_8023ad_ext_distrib(uint16_t
  
  	port = &bond_mode_8023ad_ports[slave_id];
  
@@ -63,7 +63,7 @@ Signed-off-by: Chas Williams <chas3@att.com>
  }
 --- a/drivers/net/bonding/eth_bond_8023ad_private.h
 +++ b/drivers/net/bonding/eth_bond_8023ad_private.h
-@@ -76,7 +76,9 @@
+@@ -77,7 +77,9 @@
  
  #define ACTOR_STATE(_p, _f) (!!CHECK_FLAGS((_p)->actor_state, STATE_ ## _f))
  #define ACTOR_STATE_SET(_p, _f) SET_FLAGS((_p)->actor_state, STATE_ ## _f)
@@ -73,7 +73,7 @@ Signed-off-by: Chas Williams <chas3@att.com>
  
  #define PARTNER_STATE(_p, _f) (!!CHECK_FLAGS((_p)->partner_state, STATE_ ## _f))
  #define PARTNER_STATE_SET(_p, _f) SET_FLAGS((_p)->partner_state, STATE_ ## _f)
-@@ -89,6 +91,7 @@ struct port {
+@@ -90,6 +92,7 @@ struct port {
  	 * of port states.
  	 */
  	uint8_t actor_state;

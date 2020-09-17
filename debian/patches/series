@@ -1,6 +1,5 @@
 # Patches that should be submitted upstream
 0001-net-i40e-disable-source-pruning.patch
-0001-Revert-net-netvsc-split-send-buffers-from-Tx-descrip.patch
 
 # Patches for DPDK
 0001-net-bonding-allow-application-to-select-LSC-interrup.patch
@@ -16,7 +15,6 @@
 # Submitted upstream, not yet merged
 0001-net-bonding-fix-external-state-machine-slave-updates.patch
 0002-net-bonding-preserve-external-state-machine-actor-st.patch
-0001-net-i40e-enable-i40e-outer-vlan-strip-in-qinq.patch
 
 # Qos extensions
 revert-to-older-librte-sched.patch
