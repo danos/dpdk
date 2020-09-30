@@ -1,0 +1,76 @@
+--- a/lib/librte_sched/rte_approx.c
++++ b/lib/librte_sched/rte_approx.c
+@@ -165,3 +165,10 @@ int rte_approx(double alpha, double d, u
+ 	/* Perform approximation */
+ 	return find_best_rational_approximation(alpha_num, d_num, denum, p, q);
+ }
++
++int rte_approx_int(uint32_t alpha_num, uint32_t denum, uint32_t *p, uint32_t *q)
++{
++	/* Perform approximation */
++	return find_best_rational_approximation(alpha_num, 1, denum, p, q);
++}
++
+--- a/lib/librte_sched/rte_approx.h
++++ b/lib/librte_sched/rte_approx.h
+@@ -39,6 +39,24 @@ extern "C" {
+  */
+ int rte_approx(double alpha, double d, uint32_t *p, uint32_t *q);
+ 
++/**
++ * Find best rational approximation using integers
++ *
++ * @param alpha_num
++ *   Numerator for the rational number calculation
++ * @param denum
++ *   Denominator for the rational number calculation
++ * @param p
++ *   Pointer to pre-allocated space where the numerator of the rational
++ *   approximation will be stored when operation is successful
++ * @param q
++ *   Pointer to pre-allocated space where the denominator of the rational
++ *   approximation will be stored when operation is successful
++ * @return
++ *   0 upon success, error code otherwise
++ */
++int rte_approx_int(uint32_t alpha_num, uint32_t denum, uint32_t *p, uint32_t *q);
++
+ #ifdef __cplusplus
+ }
+ #endif
+--- a/lib/librte_sched/rte_sched.c
++++ b/lib/librte_sched/rte_sched.c
+@@ -40,7 +40,6 @@
+ 
+ #endif
+ 
+-#define RTE_SCHED_TB_RATE_CONFIG_ERR          (1e-7)
+ #define RTE_SCHED_BYTERATE_TO_BITRATE_SHIFT   3
+ #define RTE_SCHED_GRINDER_PCACHE_SIZE         (64 / RTE_SCHED_QUEUES_PER_PIPE)
+ #define RTE_SCHED_PIPE_INVALID                UINT32_MAX
+@@ -661,11 +660,7 @@ rte_sched_pipe_profile_convert(struct rt
+ 		dst->tb_credits_per_period = 1;
+ 		dst->tb_period = 1;
+ 	} else {
+-		double tb_rate = (double) src->tb_rate
+-				/ (double) rate;
+-		double d = RTE_SCHED_TB_RATE_CONFIG_ERR;
+-
+-		rte_approx(tb_rate, d,
++		rte_approx_int(src->tb_rate, rate,
+ 			&dst->tb_credits_per_period, &dst->tb_period);
+ 	}
+ 
+@@ -1020,10 +1015,8 @@ rte_sched_subport_config_common(struct r
+ 		s->tb_credits_per_period = 1;
+ 		s->tb_period = 1;
+ 	} else {
+-		double tb_rate = ((double) params->tb_rate) / ((double) port->rate);
+-		double d = RTE_SCHED_TB_RATE_CONFIG_ERR;
+-
+-		rte_approx(tb_rate, d, &s->tb_credits_per_period, &s->tb_period);
++		rte_approx_int(params->tb_rate, port->rate,
++			       &s->tb_credits_per_period, &s->tb_period);
+ 	}
+ 
+ 	s->tb_size = params->tb_size;
