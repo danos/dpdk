@@ -30,14 +30,25 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	/* Weighted Round Robin (WRR) */
  	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
-@@ -1794,6 +1794,7 @@ grinder_credits_update(struct rte_sched_
+@@ -1794,15 +1794,16 @@ grinder_credits_update(struct rte_sched_
  	struct rte_sched_pipe_profile *params = grinder->pipe_params;
  	uint64_t n_periods;
  	uint32_t tc;
 +	uint64_t lapsed;
  
  	/* Subport TB */
- 	n_periods = (port->time - subport->tb_time) / subport->tb_period;
+-	n_periods = (port->time - subport->tb_time) / subport->tb_period;
++	n_periods = (port->time_cpu_bytes - subport->tb_time) / subport->tb_period;
+ 	subport->tb_credits += n_periods * subport->tb_credits_per_period;
+ 	subport->tb_credits = rte_sched_min_val_2_u32(subport->tb_credits, subport->tb_size);
+ 	subport->tb_time += n_periods * subport->tb_period;
+ 
+ 	/* Pipe TB */
+-	n_periods = (port->time - pipe->tb_time) / params->tb_period;
++	n_periods = (port->time_cpu_bytes - pipe->tb_time) / params->tb_period;
+ 	pipe->tb_credits += n_periods * params->tb_credits_per_period;
+ 	pipe->tb_credits = rte_sched_min_val_2_u32(pipe->tb_credits, params->tb_size);
+ 	pipe->tb_time += n_periods * params->tb_period;
 @@ -1810,19 +1811,43 @@ grinder_credits_update(struct rte_sched_
  	/* Subport TCs */
  	if (unlikely(port->time >= subport->tc_time)) {
