@@ -1,3 +1,14 @@
+dpdk (19.11.4-0vyatta2) unstable; urgency=medium
+
+  [ aroberts ]
+  * Fix performance issue when shaping to line rate
+  * Add an integer rational number calculator
+
+  [ Charles (Chas) Williams ]
+  * Update rte_sched symbols versions
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 30 Sep 2020 10:37:58 -0400
+
 dpdk (19.11.4-0vyatta1) unstable; urgency=medium
 
   [ Kevin Traynor ]
