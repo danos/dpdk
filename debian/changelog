@@ -1,3 +1,13 @@
+dpdk (18.11.5-1vyatta16) unstable; urgency=medium
+
+  [ aroberts ]
+  * Fix performance issue when shaping to line rate
+  * Add an integer rational number calculator
+
+  [ Charles (Chas) Williams ]
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 02 Oct 2020 10:48:36 -0400
+
 dpdk (18.11.5-1vyatta15) unstable; urgency=medium
 
   * net/i40e: disable source pruning (Bugfix: VRVDR-52611)
