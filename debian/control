@@ -70,7 +70,7 @@ Suggests: dpdk-doc,
           dpdk-igb-uio-dkms (= ${binary:Version}),
           dpdk-rte-kni-dkms (= ${binary:Version}),
           linux-image-generic,
-          ${librte:Suggests},
+          librte-meta-allpmds,
 Breaks: dpdk-dev (<< 18.11-4~),
 Replaces: dpdk-dev (<< 18.11),
 Description: Data Plane Development Kit (runtime)
@@ -78,6 +78,17 @@ Description: Data Plane Development Kit (runtime)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime environment to run DPDK applications.
+
+Package: librte-meta-allpmds
+Section: libs
+Architecture: amd64 arm64 armhf i386 ppc64el
+Depends: ${librte:Allpmds},
+         ${misc:Depends},
+Description: Data Plane Development Kit (all poll mode drivers)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This is a metapackage to pull in all poll mode drivers produced by DPDK.
 
 Package: dpdk-dev
 Section: oldlibs
