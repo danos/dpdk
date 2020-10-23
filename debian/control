@@ -46,25 +46,25 @@ Depends: lsb-base (>= 3.2-14),
          pciutils,
          ${misc:Depends},
          ${python3:Depends},
-Recommends: librte-mempool20.0,
-            librte-mempool-ring20.0,
-            librte-pmd-af-packet20.0,
-            librte-pmd-bond20.0,
-            librte-pmd-e1000-20.0,
-            librte-pmd-fm10k20.0,
-            librte-pmd-i40e20.0,
-            librte-pmd-ixgbe20.0,
-            librte-pmd-kni20.0,
-            librte-pmd-mlx4-20.0,
-            librte-pmd-mlx5-20.0,
-            librte-pmd-netvsc20.0,
-            librte-pmd-pcap20.0,
-            librte-pmd-tap20.0,
-            librte-pmd-thunderx20.0,
-            librte-pmd-vdev-netvsc20.0,
-            librte-pmd-vhost20.0,
-            librte-pmd-virtio20.0,
-            librte-pmd-vmxnet3-20.0,
+Recommends: librte-mempool21.0,
+            librte-mempool-ring21.0,
+            librte-pmd-af-packet21.0,
+            librte-pmd-bond21.0,
+            librte-pmd-e1000-21.0,
+            librte-pmd-fm10k21.0,
+            librte-pmd-i40e21.0,
+            librte-pmd-ixgbe21.0,
+            librte-pmd-kni21.0,
+            librte-pmd-mlx4-21.0,
+            librte-pmd-mlx5-21.0,
+            librte-pmd-netvsc21.0,
+            librte-pmd-pcap21.0,
+            librte-pmd-tap21.0,
+            librte-pmd-thunderx21.0,
+            librte-pmd-vdev-netvsc21.0,
+            librte-pmd-vhost21.0,
+            librte-pmd-virtio21.0,
+            librte-pmd-vmxnet3-21.0,
             python3-pyelftools,
 Suggests: dpdk-doc,
           linux-image-generic,
@@ -145,7 +145,7 @@ Description: Data Plane Development Kit (basic development files)
  baseline.
  This is required for a number of static inline functions in the public headers.
 
-Package: librte-bbdev20.0
+Package: librte-bbdev21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__bbdev_8h.html
@@ -159,7 +159,7 @@ Description: Data Plane Development Kit (librte-bbdev runtime library)
  .
  This package contains the runtime libraries for librte_bbdev.
 
-Package: librte-ethdev20.0
+Package: librte-ethdev21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__ethdev_8h.html
@@ -173,7 +173,7 @@ Description: Data Plane Development Kit (libethdev runtime library)
  .
  This package contains the runtime libraries for libethdev.
 
-Package: librte-acl20.0
+Package: librte-acl21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__acl_8h.html
@@ -187,7 +187,7 @@ Description: Data Plane Development Kit (librte-acl runtime library)
  .
  This package contains the runtime libraries for librte_acl.
 
-Package: librte-bus-dpaa20.0
+Package: librte-bus-dpaa21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -199,7 +199,7 @@ Description: Data Plane Development Kit (librte_bus_dpaa runtime library)
  .
  This package contains the runtime libraries for librte_bus_dpaa.
 
-Package: librte-bus-fslmc20.0
+Package: librte-bus-fslmc21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -211,7 +211,7 @@ Description: Data Plane Development Kit (librte_bus_fslmc runtime library)
  .
  This package contains the runtime libraries for librte_bus_fslmc.
 
-Package: librte-bus-pci20.0
+Package: librte-bus-pci21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -223,7 +223,7 @@ Description: Data Plane Development Kit (librte_bus_pci runtime library)
  .
  This package contains the runtime libraries for librte_bus_pci.
 
-Package: librte-bus-vdev20.0
+Package: librte-bus-vdev21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -235,7 +235,7 @@ Description: Data Plane Development Kit (librte_bus_vdev runtime library)
  .
  This package contains the runtime libraries for librte_bus_vdev.
 
-Package: librte-bus-vmbus20.0
+Package: librte-bus-vmbus21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -247,7 +247,7 @@ Description: Data Plane Development Kit (librte_bus_vmbus runtime library)
  .
  This package contains the runtime libraries for librte_bus_vmbus.
 
-Package: librte-bus-ifpga20.0
+Package: librte-bus-ifpga21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/rawdevs/ifpga_rawdev.html
@@ -260,7 +260,7 @@ Description: Data Plane Development Kit (librte_bus_ifpga runtime library)
  .
  This package contains the runtime libraries for librte_bus_ifpga.
 
-Package: librte-rawdev-ifpga20.0
+Package: librte-rawdev-ifpga21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/rawdevs/ifpga_rawdev.html
@@ -277,7 +277,7 @@ Description: Data Plane Development Kit (librte_rawdev_ifpga runtime library)
  utilizes Intel FPGA Software Stack OPAE(Open Programmable Acceleration Engine)
  for FPGA management.
 
-Package: librte-pmd-ifc20.0
+Package: librte-pmd-ifc21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/ifc.html
@@ -290,7 +290,7 @@ Description: Data Plane Development Kit (librte_pmd_ifc runtime library)
  .
  This package contains the runtime libraries for librte_pmd_ifc.
 
-Package: librte-cfgfile20.0
+Package: librte-cfgfile21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__cfgfile_8h.html
@@ -304,7 +304,7 @@ Description: Data Plane Development Kit (librte-cfgfile runtime library)
  .
  This package contains the runtime libraries for librte_cfgfile.
 
-Package: librte-cmdline20.0
+Package: librte-cmdline21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/cmdline_8h.html
@@ -318,7 +318,7 @@ Description: Data Plane Development Kit (librte-cmdline runtime library)
  .
  This package contains the runtime libraries for librte_cmdline.
 
-Package: librte-cryptodev20.0
+Package: librte-cryptodev21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__cryptodev_8h.html
@@ -332,7 +332,7 @@ Description: Data Plane Development Kit (librte-cryptodev runtime library)
  .
  This package contains the runtime libraries for librte_cryptodev.
 
-Package: librte-distributor20.0
+Package: librte-distributor21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__distributor_8h.html
@@ -346,7 +346,7 @@ Description: Data Plane Development Kit (librte-distributor runtime library)
  .
  This package contains the runtime libraries for librte_distributor.
 
-Package: librte-eal20.0
+Package: librte-eal21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__eal_8h.html
@@ -360,7 +360,7 @@ Description: Data Plane Development Kit (librte-eal runtime library)
  .
  This package contains the runtime libraries for librte_eal.
 
-Package: librte-flow-classify20.0
+Package: librte-flow-classify21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__flow__classify_8h.html
@@ -373,7 +373,7 @@ Description: Data Plane Development Kit (librte-flow-classify runtime library)
  .
  This package contains the runtime libraries for librte_flow_classify.
 
-Package: librte-graph20.0
+Package: librte-graph21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__graph_8h.html
@@ -386,7 +386,7 @@ Description: Data Plane Development Kit (librte-graph runtime library)
  .
  This package contains the runtime libraries for librte_graph.
 
-Package: librte-gro20.0
+Package: librte-gro21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__gro_8h.html
@@ -399,7 +399,7 @@ Description: Data Plane Development Kit (librte-gro runtime library)
  .
  This package contains the runtime libraries for librte_gro.
 
-Package: librte-gso20.0
+Package: librte-gso21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__gso_8h.html
@@ -412,7 +412,7 @@ Description: Data Plane Development Kit (librte-gso runtime library)
  .
  This package contains the runtime libraries for librte_gso.
 
-Package: librte-hash20.0
+Package: librte-hash21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__hash_8h.html
@@ -426,7 +426,7 @@ Description: Data Plane Development Kit (librte-hash runtime library)
  .
  This package contains the runtime libraries for librte_hash.
 
-Package: librte-ip-frag20.0
+Package: librte-ip-frag21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__ip__frag_8h.html
@@ -440,7 +440,7 @@ Description: Data Plane Development Kit (librte-ip-frag runtime library)
  .
  This package contains the runtime libraries for librte_ip_frag.
 
-Package: librte-jobstats20.0
+Package: librte-jobstats21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__jobstats_8h_source.html
@@ -454,7 +454,7 @@ Description: Data Plane Development Kit (librte-jobstats runtime library)
  .
  This package contains the runtime libraries for librte_jobstats.
 
-Package: librte-kni20.0
+Package: librte-kni21.0
 Architecture: amd64 arm64 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__kni_8h.html
@@ -468,7 +468,7 @@ Description: Data Plane Development Kit (librte-kni runtime library)
  .
  This package contains the runtime libraries for librte_kni.
 
-Package: librte-kvargs20.0
+Package: librte-kvargs21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__kvargs_8h.html
@@ -482,7 +482,7 @@ Description: Data Plane Development Kit (librte-kvargs runtime library)
  .
  This package contains the runtime libraries for librte_kvargs.
 
-Package: librte-lpm20.0
+Package: librte-lpm21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__lpm_8h.html
@@ -496,7 +496,7 @@ Description: Data Plane Development Kit (librte-lpm runtime library)
  .
  This package contains the runtime libraries for librte_lpm.
 
-Package: librte-mbuf20.0
+Package: librte-mbuf21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__mbuf_8h.html
@@ -510,7 +510,7 @@ Description: Data Plane Development Kit (librte-mbuf2 runtime library)
  .
  This package contains the runtime libraries for librte_mbuf.
 
-Package: librte-member20.0
+Package: librte-member21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__member_8h.html
@@ -524,7 +524,7 @@ Description: Data Plane Development Kit (librte-member runtime library)
  .
  This package contains the runtime libraries for librte_member.
 
-Package: librte-mempool20.0
+Package: librte-mempool21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__mempool_8h.html
@@ -538,7 +538,7 @@ Description: Data Plane Development Kit (librte-mempool runtime library)
  .
  This package contains the runtime libraries for librte_mempool.
 
-Package: librte-mempool-bucket20.0
+Package: librte-mempool-bucket21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -551,7 +551,7 @@ Description: Data Plane Development Kit (librte-mempool-bucket runtime library)
  .
  This package contains the runtime libraries for librte_mempool_bucket.
 
-Package: librte-meter20.0
+Package: librte-meter21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__meter_8h.html
@@ -565,7 +565,7 @@ Description: Data Plane Development Kit (librte-meter runtime library)
  .
  This package contains the runtime libraries for librte_meter.
 
-Package: librte-pci20.0
+Package: librte-pci21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__pci_8h.html
@@ -578,7 +578,7 @@ Description: Data Plane Development Kit (librte_pci runtime library)
  .
  This package contains the runtime libraries for librte_pci.
 
-Package: librte-pipeline20.0
+Package: librte-pipeline21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__pipeline_8h.html
@@ -592,7 +592,7 @@ Description: Data Plane Development Kit (librte-pipeline runtime library)
  .
  This package contains the runtime libraries for librte_pipeline.
 
-Package: librte-rawdev20.0
+Package: librte-rawdev21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__rawdev_8h.html
@@ -606,7 +606,7 @@ Description: Data Plane Development Kit (librte-rawdev runtime library)
  .
  This package contains the runtime libraries for librte_rawdev.
 
-Package: librte-net20.0
+Package: librte-net21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/prog_guide/overview.html?highlight=librte_net#librte-net
@@ -625,7 +625,7 @@ Description: Data Plane Development Kit (librte-net runtime library)
  contains protocol numbers (for use in IP headers), IP-related macros,
  IPv4/IPv6 header structures and TCP, UDP and SCTP header structures.
 
-Package: librte-node20.0
+Package: librte-node21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/prog_guide/graph_lib.html
@@ -643,7 +643,7 @@ Description: Data Plane Development Kit (librte-node runtime library)
  edge update, and edge shrink, etc. The API also allows one to create the stats
  cluster to monitor per graph and per node stats.
 
-Package: librte-bpf20.0
+Package: librte-bpf21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/prog_guide/bpf_lib.html
@@ -661,7 +661,7 @@ Description: Data Plane Development Kit (librte-bpf runtime library)
  execute Enhanced Berkeley Packet Filter (eBPF) bytecode within user-space
  dpdk application.
 
-Package: librte-compressdev20.0
+Package: librte-compressdev21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/compressdevs/isal.html
@@ -677,7 +677,7 @@ Description: Data Plane Development Kit (librte-compressdev runtime library)
  .
  Provides poll mode compression & decompression driver support.
 
-Package: librte-ipsec20.0
+Package: librte-ipsec21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/prog_guide/ipsec_lib.html
@@ -691,7 +691,7 @@ Description: Data Plane Development Kit (librte-ipsec runtime library)
  .
  This package contains the runtime libraries for librte-ipsec.
 
-Package: librte-rcu20.0
+Package: librte-rcu21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/prog_guide/rcu_lib.html
@@ -705,7 +705,7 @@ Description: Data Plane Development Kit (librte-rcu runtime library)
  .
  This package contains the runtime libraries for librte-rcu.
 
-Package: librte-regexdev20.0
+Package: librte-regexdev21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/regexdevs/index.html
@@ -718,7 +718,7 @@ Description: Data Plane Development Kit (librte-regexdev runtime library)
  .
  This package contains the runtime libraries for librte-regexdev.
 
-Package: librte-stack20.0
+Package: librte-stack21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/prog_guide/stack_lib.html
@@ -732,7 +732,7 @@ Description: Data Plane Development Kit (librte-stack runtime library)
  .
  This package contains the runtime libraries for librte-stack.
 
-Package: librte-fib20.0
+Package: librte-fib21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/api/rte__fib_8h.html
@@ -747,7 +747,7 @@ Description: Data Plane Development Kit (libfib runtime library)
  This package contains the runtime libraries for libfib.
  FIB (Forwarding information base) implementation for IPv4 Longest Prefix Match
 
-Package: librte-rib20.0
+Package: librte-rib21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/api/rte__rib_8h.html
@@ -762,7 +762,7 @@ Description: Data Plane Development Kit (librib runtime library)
  This package contains the runtime libraries for librib.
  RIB is a Level compressed tree implementation for IPv4 Longest Prefix Match
 
-Package: librte-pmd-af-packet20.0
+Package: librte-pmd-af-packet21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/browse/dpdk/tree/drivers/net/af_packet
@@ -776,7 +776,7 @@ Description: Data Plane Development Kit (librte-pmd-af-packet runtime library)
  .
  This package contains the runtime libraries for librte_pmd_af_packet.
 
-Package: librte-pmd-bnx2x20.0
+Package: librte-pmd-bnx2x21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/bnx2x.html
@@ -790,7 +790,7 @@ Description: Data Plane Development Kit (librte-pmd-bnx2x runtime library)
  .
  This package contains the runtime libraries for librte_pmd_bnx2x.
 
-Package: librte-pmd-bnxt20.0
+Package: librte-pmd-bnxt21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/bnxt.html
@@ -804,7 +804,7 @@ Description: Data Plane Development Kit (librte-pmd-bnxt runtime library)
  .
  This package contains the runtime libraries for librte_pmd_bnxt.
 
-Package: librte-pmd-bond20.0
+Package: librte-pmd-bond21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/prog_guide/link_bonding_poll_mode_drv_lib.html
@@ -818,7 +818,7 @@ Description: Data Plane Development Kit (librte-pmd-bond runtime library)
  .
  This package contains the runtime libraries for librte_pmd_bond.
 
-Package: librte-pmd-caam-jr20.0
+Package: librte-pmd-caam-jr21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/cryptodevs/caam_jr.html
@@ -832,7 +832,7 @@ Description: Data Plane Development Kit (librte-pmd-caam-jr runtime library)
  .
  This package contains the runtime libraries for librte_pmd_caam_jr.
 
-Package: librte-pmd-ccp20.0
+Package: librte-pmd-ccp21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/cryptodevs/ccp.html
@@ -846,7 +846,7 @@ Description: Data Plane Development Kit (librte-pmd-ccp runtime library)
  .
  This package contains the runtime libraries for librte_pmd_ccp.
 
-Package: librte-pmd-cxgbe20.0
+Package: librte-pmd-cxgbe21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/cxgbe.html
@@ -860,7 +860,7 @@ Description: Data Plane Development Kit (librte-pmd-cxgbe runtime library)
  .
  This package contains the runtime libraries for librte_pmd_cxgbe.
 
-Package: librte-pmd-dpaa20.0
+Package: librte-pmd-dpaa21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa.html
@@ -874,7 +874,7 @@ Description: Data Plane Development Kit (librte-pmd-dpaa runtime library)
  .
  This package contains the runtime libraries for librte_pmd_dpaa.
 
-Package: librte-pmd-dpaa-sec20.0
+Package: librte-pmd-dpaa-sec21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa.html
@@ -888,7 +888,7 @@ Description: Data Plane Development Kit (librte-pmd-dpaa-sec runtime library)
  .
  This package contains the runtime libraries for librte_pmd_dpaa_sec.
 
-Package: librte-pmd-dpaa-event20.0
+Package: librte-pmd-dpaa-event21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa.html
@@ -902,7 +902,7 @@ Description: Data Plane Development Kit (librte-pmd-dpaa-event runtime library)
  .
  This package contains the runtime libraries for librte_pmd_dpaa_event.
 
-Package: librte-pmd-dpaa2-20.0
+Package: librte-pmd-dpaa2-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
@@ -916,7 +916,7 @@ Description: Data Plane Development Kit (librte-pmd-dpaa2 runtime library)
  .
  This package contains the runtime libraries for librte_pmd_dpaa2.
 
-Package: librte-pmd-dpaa2-event20.0
+Package: librte-pmd-dpaa2-event21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
@@ -930,7 +930,7 @@ Description: Data Plane Development Kit (librte-pmd-dpaa2-event runtime library)
  .
  This package contains the runtime libraries for librte_pmd_dpaa2_event.
 
-Package: librte-pmd-dpaa2-sec20.0
+Package: librte-pmd-dpaa2-sec21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
@@ -944,7 +944,7 @@ Description: Data Plane Development Kit (librte-pmd-dpaa2-sec runtime library)
  .
  This package contains the runtime libraries for librte_pmd_dpaa2_sec.
 
-Package: librte-pmd-dsw-event20.0
+Package: librte-pmd-dsw-event21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/eventdevs/dsw.html
@@ -958,7 +958,7 @@ Description: Data Plane Development Kit (librte-pmd-dsw-event runtime library)
  .
  This package contains the runtime libraries for librte_dsw_event.
 
-Package: librte-pmd-e1000-20.0
+Package: librte-pmd-e1000-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/e1000em.html
@@ -972,7 +972,7 @@ Description: Data Plane Development Kit (librte-pmd-e1000 runtime library)
  .
  This package contains the runtime libraries for librte_pmd_e1000.
 
-Package: librte-pmd-enetc20.0
+Package: librte-pmd-enetc21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/enetc.html
@@ -986,7 +986,7 @@ Description: Data Plane Development Kit (librte-pmd-enetc runtime library)
  .
  This package contains the runtime libraries for librte_pmd_enetc.
 
-Package: librte-pmd-ena20.0
+Package: librte-pmd-ena21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/ena.html
@@ -1000,7 +1000,7 @@ Description: Data Plane Development Kit (librte-pmd-ena runtime library)
  .
  This package contains the runtime libraries for librte_pmd_ena.
 
-Package: librte-pmd-enic20.0
+Package: librte-pmd-enic21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/enic.html
@@ -1014,7 +1014,7 @@ Description: Data Plane Development Kit (librte-pmd-enic runtime library)
  .
  This package contains the runtime libraries for librte_pmd_enic.
 
-Package: librte-pmd-failsafe20.0
+Package: librte-pmd-failsafe21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/fail_safe.html
@@ -1028,7 +1028,7 @@ Description: Data Plane Development Kit (librte-pmd-failsafe runtime library)
  .
  This package contains the runtime libraries for librte_pmd_failsafe.
 
-Package: librte-pmd-fm10k20.0
+Package: librte-pmd-fm10k21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/fm10k.html
@@ -1042,7 +1042,7 @@ Description: Data Plane Development Kit (librte-pmd-fm10k runtime library)
  .
  This package contains the runtime libraries for librte_pmd_fm10k.
 
-Package: librte-pmd-i40e20.0
+Package: librte-pmd-i40e21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/i40e.html
@@ -1056,7 +1056,7 @@ Description: Data Plane Development Kit (librte-pmd-i40e runtime library)
  .
  This package contains the runtime libraries for librte_pmd_i40e.
 
-Package: librte-pmd-ixgbe20.0
+Package: librte-pmd-ixgbe21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/ixgbe.html
@@ -1070,7 +1070,7 @@ Description: Data Plane Development Kit (librte-pmd-ixgbe runtime library)
  .
  This package contains the runtime libraries for librte_pmd_ixgbe.
 
-Package: librte-pmd-netvsc20.0
+Package: librte-pmd-netvsc21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/netvsc.html
@@ -1083,7 +1083,7 @@ Description: Data Plane Development Kit (librte-pmd-netvsc runtime library)
  .
  This package contains the runtime libraries for librte_pmd_netvsc.
 
-Package: librte-pmd-null-crypto20.0
+Package: librte-pmd-null-crypto21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/cryptodevs/null.html
@@ -1097,7 +1097,7 @@ Description: Data Plane Development Kit (librte-pmd-null-crypto runtime library)
  .
  This package contains the runtime libraries for librte_pmd_null_crypto.
 
-Package: librte-pmd-null20.0
+Package: librte-pmd-null21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/browse/dpdk/tree/drivers/net/null
@@ -1111,7 +1111,7 @@ Description: Data Plane Development Kit (librte-pmd-null runtime library)
  .
  This package contains the runtime libraries for librte_pmd_null.
 
-Package: librte-pmd-pcap20.0
+Package: librte-pmd-pcap21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/pcap_ring.html#libpcap-based-pmd
@@ -1125,7 +1125,7 @@ Description: Data Plane Development Kit (librte-pmd-pcap runtime library)
  .
  This package contains the runtime libraries for librte_pmd_pcap.
 
-Package: librte-pmd-openssl20.0
+Package: librte-pmd-openssl21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/cryptodevs/openssl.html
@@ -1139,7 +1139,7 @@ Description: Data Plane Development Kit (librte-pmd-openssl runtime library)
  .
  This package contains the runtime libraries for librte_pmd_openssl.
 
-Package: librte-pmd-ring20.0
+Package: librte-pmd-ring21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/pcap_ring.html#rings-based-pmd
@@ -1153,7 +1153,7 @@ Description: Data Plane Development Kit (librte-pmd-ring runtime library)
  .
  This package contains the runtime libraries for librte_pmd_ring.
 
-Package: librte-pmd-snow3g20.0
+Package: librte-pmd-snow3g21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1165,7 +1165,7 @@ Description: Data Plane Development Kit (librte-pmd-snow3g runtime library)
  .
  This package contains the runtime libraries for librte_pmd_snow3g.
 
-Package: librte-pmd-softnic20.0
+Package: librte-pmd-softnic21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1180,7 +1180,7 @@ Description: Data Plane Development Kit (librte-pmd-softnic runtime library)
  .
  This package contains the runtime libraries for librte_pmd_softnic.
 
-Package: librte-pmd-vhost20.0
+Package: librte-pmd-vhost21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/vhost.html
@@ -1194,7 +1194,7 @@ Description: Data Plane Development Kit (librte-pmd-vhost runtime library)
  .
  This package contains the runtime libraries for librte_pmd_vhost.
 
-Package: librte-pmd-virtio20.0
+Package: librte-pmd-virtio21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/virtio.html
@@ -1208,7 +1208,7 @@ Description: Data Plane Development Kit (librte-pmd-virtio runtime library)
  .
  This package contains the runtime libraries for librte_pmd_virtio.
 
-Package: librte-pmd-vmxnet3-20.0
+Package: librte-pmd-vmxnet3-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/vmxnet3.html
@@ -1222,7 +1222,7 @@ Description: Data Plane Development Kit (librte-pmd-vmxnet3 runtime library)
  .
  This package contains the runtime libraries for librte_pmd_vmxnet3.
 
-Package: librte-pmd-zlib20.0
+Package: librte-pmd-zlib21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/compressdevs/zlib.html
@@ -1236,7 +1236,7 @@ Description: Data Plane Development Kit (librte-pmd-zlib runtime library)
  .
  This package contains the runtime libraries for librte_pmd_zlib.
 
-Package: librte-pmd-qat20.0
+Package: librte-pmd-qat21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/cryptodevs/qat.html
@@ -1249,7 +1249,7 @@ Description: Data Plane Development Kit (librte-pmd-qat runtime library)
  .
  This package contains the runtime libraries for librte_pmd_qat.
 
-Package: librte-port20.0
+Package: librte-port21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__port_8h.html
@@ -1263,7 +1263,7 @@ Description: Data Plane Development Kit (librte-port runtime library)
  .
  This package contains the runtime libraries for librte_port.
 
-Package: librte-power20.0
+Package: librte-power21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__power_8h.html
@@ -1277,7 +1277,7 @@ Description: Data Plane Development Kit (librte-power runtime library)
  .
  This package contains the runtime libraries for librte_power.
 
-Package: librte-reorder20.0
+Package: librte-reorder21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__reorder_8h.html
@@ -1291,7 +1291,7 @@ Description: Data Plane Development Kit (librte-reorder runtime library)
  .
  This package contains the runtime libraries for librte_reorder.
 
-Package: librte-ring20.0
+Package: librte-ring21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__ring_8h.html
@@ -1305,7 +1305,7 @@ Description: Data Plane Development Kit (librte_ring runtime library)
  .
  This package contains the runtime libraries for librte_ring.
 
-Package: librte-sched20.0
+Package: librte-sched21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__sched_8h.html
@@ -1319,7 +1319,7 @@ Description: Data Plane Development Kit (librte_sched runtime library)
  .
  This package contains the runtime libraries for librte_sched.
 
-Package: librte-security20.0
+Package: librte-security21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__security_8h.html
@@ -1333,7 +1333,7 @@ Description: Data Plane Development Kit (librte_security runtime library)
  .
  This package contains the runtime libraries for librte_security.
 
-Package: librte-table20.0
+Package: librte-table21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__table_8h.html
@@ -1347,7 +1347,7 @@ Description: Data Plane Development Kit (librte_table runtime library)
  .
  This package contains the runtime libraries for librte_table.
 
-Package: librte-telemetry20.0
+Package: librte-telemetry21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__telemetry_8h.html
@@ -1361,7 +1361,7 @@ Description: Data Plane Development Kit (librte_telemetry runtime library)
  .
  This package contains the runtime libraries for librte_telemetry.
 
-Package: librte-timer20.0
+Package: librte-timer21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__timer_8h.html
@@ -1375,7 +1375,7 @@ Description: Data Plane Development Kit (librte_timer runtime library)
  .
  This package contains the runtime libraries for librte_timer.
 
-Package: librte-vhost20.0
+Package: librte-vhost21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/api/rte__vhost_8h.html
@@ -1389,7 +1389,7 @@ Description: Data Plane Development Kit (librte_vhost runtime library)
  .
  This package contains the runtime libraries for librte_vhost.
 
-Package: librte-pdump20.0
+Package: librte-pdump21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1402,7 +1402,7 @@ Description: Data Plane Development Kit (librte_pdump runtime library)
  .
  This package contains the runtime libraries for librte_pdump.
 
-Package: librte-bitratestats20.0
+Package: librte-bitratestats21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1415,7 +1415,7 @@ Description: Data Plane Development Kit (librte_bitratestats runtime library)
  .
  This package contains the runtime libraries for librte_bitratestats.
 
-Package: librte-efd20.0
+Package: librte-efd21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1428,7 +1428,7 @@ Description: Data Plane Development Kit (librte_efd runtime library)
  .
  This package contains the runtime libraries for librte_efd.
 
-Package: librte-eventdev20.0
+Package: librte-eventdev21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1441,7 +1441,7 @@ Description: Data Plane Development Kit (librte_eventdev runtime library)
  .
  This package contains the runtime libraries for librte_eventdev.
 
-Package: librte-latencystats20.0
+Package: librte-latencystats21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1454,7 +1454,7 @@ Description: Data Plane Development Kit (librte_latencystats runtime library)
  .
  This package contains the runtime libraries for librte_latencystats.
 
-Package: librte-mempool-dpaa20.0
+Package: librte-mempool-dpaa21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa.html
@@ -1468,7 +1468,7 @@ Description: Data Plane Development Kit (librte_mempool_dpaa runtime library)
  .
  This package contains the runtime libraries for librte_mempool_dpaa.
 
-Package: librte-mempool-dpaa2-20.0
+Package: librte-mempool-dpaa2-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
@@ -1482,7 +1482,7 @@ Description: Data Plane Development Kit (librte_mempool_dpaa2 runtime library)
  .
  This package contains the runtime libraries for librte_mempool_dpaa2.
 
-Package: librte-mempool-octeontx20.0
+Package: librte-mempool-octeontx21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1495,7 +1495,7 @@ Description: Data Plane Development Kit (librte_mempool_octeontx runtime library
  .
  This package contains the runtime libraries for librte_mempool_octeontx.
 
-Package: librte-mempool-ring20.0
+Package: librte-mempool-ring21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1508,7 +1508,7 @@ Description: Data Plane Development Kit (librte_mempool_ring runtime library)
  .
  This package contains the runtime libraries for librte_mempool_ring.
 
-Package: librte-mempool-stack20.0
+Package: librte-mempool-stack21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1521,7 +1521,7 @@ Description: Data Plane Development Kit (librte_mempool_stack runtime library)
  .
  This package contains the runtime libraries for librte_mempool_stack.
 
-Package: librte-metrics20.0
+Package: librte-metrics21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1534,7 +1534,7 @@ Description: Data Plane Development Kit (librte_metrics runtime library)
  .
  This package contains the runtime libraries for librte_metrics.
 
-Package: librte-pmd-aesni-gcm20.0
+Package: librte-pmd-aesni-gcm21.0
 Architecture: amd64
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1547,7 +1547,7 @@ Description: Data Plane Development Kit (librte_pmd_aesni_gcm runtime library)
  .
  This package contains the runtime libraries for librte_pmd_aesni_gcm.
 
-Package: librte-pmd-aesni-mb20.0
+Package: librte-pmd-aesni-mb21.0
 Architecture: amd64
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1560,7 +1560,7 @@ Description: Data Plane Development Kit (librte_pmd_aesni_mb runtime library)
  .
  This package contains the runtime libraries for librte_pmd_aesni_mb.
 
-Package: librte-pmd-ark20.0
+Package: librte-pmd-ark21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1573,7 +1573,7 @@ Description: Data Plane Development Kit (librte_pmd_ark runtime library)
  .
  This package contains the runtime libraries for librte_pmd_ark.
 
-Package: librte-pmd-iavf20.0
+Package: librte-pmd-iavf21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1586,7 +1586,7 @@ Description: Data Plane Development Kit (librte_pmd_iavf runtime library)
  .
  This package contains the runtime libraries for librte_pmd_iavf.
 
-Package: librte-pmd-avp20.0
+Package: librte-pmd-avp21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/avp.html
@@ -1600,7 +1600,7 @@ Description: Data Plane Development Kit (librte_pmd_avp runtime library)
  .
  This package contains the runtime libraries for librte_pmd_avp.
 
-Package: librte-pmd-crypto-scheduler20.0
+Package: librte-pmd-crypto-scheduler21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1613,7 +1613,7 @@ Description: Data Plane Development Kit (librte_pmd_crypto_scheduler runtime lib
  .
  This package contains the runtime libraries for librte_pmd_crypto_scheduler.
 
-Package: librte-pmd-kasumi20.0
+Package: librte-pmd-kasumi21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1625,7 +1625,7 @@ Description: Data Plane Development Kit (librte-pmd-kasumi runtime library)
  .
  This package contains the runtime libraries for librte_pmd_kasumi.
 
-Package: librte-pmd-kni20.0
+Package: librte-pmd-kni21.0
 Architecture: amd64 arm64 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1638,7 +1638,7 @@ Description: Data Plane Development Kit (librte_pmd_kni runtime library)
  .
  This package contains the runtime libraries for librte_pmd_kni.
 
-Package: librte-pmd-liquidio20.0
+Package: librte-pmd-liquidio21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1651,7 +1651,7 @@ Description: Data Plane Development Kit (librte_pmd_liquidio runtime library)
  .
  This package contains the runtime libraries for librte_pmd_liquidio.
 
-Package: librte-pmd-nfp20.0
+Package: librte-pmd-nfp21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1664,7 +1664,7 @@ Description: Data Plane Development Kit (librte_pmd_nfp runtime library)
  .
  This package contains the runtime libraries for librte_pmd_nfp.
 
-Package: librte-common-cpt20.0
+Package: librte-common-cpt21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1677,7 +1677,7 @@ Description: Data Plane Development Kit (librte_common_cpt runtime library)
  .
  This package contains the runtime libraries for librte_common_cpt.
 
-Package: librte-common-dpaax20.0
+Package: librte-common-dpaax21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1690,7 +1690,7 @@ Description: Data Plane Development Kit (librte_common_dpaax runtime library)
  .
  This package contains the runtime libraries for librte_common_dpaax.
 
-Package: librte-common-iavf20.0
+Package: librte-common-iavf21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1702,7 +1702,7 @@ Description: Data Plane Development Kit (librte_common_iavf runtime library)
  .
  This package contains the runtime libraries for librte_common_iavf.
 
-Package: librte-common-mlx5-20.0
+Package: librte-common-mlx5-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1714,7 +1714,7 @@ Description: Data Plane Development Kit (librte_common_mlx5 runtime library)
  .
  This package contains the runtime libraries for librte_common_mlx5.
 
-Package: librte-common-octeontx20.0
+Package: librte-common-octeontx21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1727,7 +1727,7 @@ Description: Data Plane Development Kit (librte_mempool_octeontx common library)
  .
  This package contains the runtime libraries for librte_common_octeontx.
 
-Package: librte-pmd-octeontx-event20.0
+Package: librte-pmd-octeontx-event21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1740,7 +1740,7 @@ Description: Data Plane Development Kit (librte_pmd_octeontx_event runtime libra
  .
  This package contains the runtime libraries for librte_pmd_octeontx_event.
 
-Package: librte-pmd-octeontx-compress20.0
+Package: librte-pmd-octeontx-compress21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1752,7 +1752,7 @@ Description: Data Plane Development Kit (librte_pmd_octeontx_compress runtime li
  .
  This package contains the runtime libraries for librte_pmd_octeontx_compress.
 
-Package: librte-pmd-octeontx-crypto20.0
+Package: librte-pmd-octeontx-crypto21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1764,7 +1764,7 @@ Description: Data Plane Development Kit (librte_pmd_octeontx_crypto runtime libr
  .
  This package contains the runtime libraries for librte_pmd_octeontx_crypto.
 
-Package: librte-pmd-octeontx20.0
+Package: librte-pmd-octeontx21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1777,7 +1777,7 @@ Description: Data Plane Development Kit (librte_pmd_octeontx runtime library)
  .
  This package contains the runtime libraries for librte_pmd_octeontx.
 
-Package: librte-pmd-opdl-event20.0
+Package: librte-pmd-opdl-event21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1790,7 +1790,7 @@ Description: Data Plane Development Kit (librte_pmd_opdl_event runtime library)
  .
  This package contains the runtime libraries for librte_pmd_opdl_event.
 
-Package: librte-pmd-sfc20.0
+Package: librte-pmd-sfc21.0
 Architecture: amd64
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1803,7 +1803,7 @@ Description: Data Plane Development Kit (librte_pmd_sfc runtime library)
  .
  This package contains the runtime libraries for librte_pmd_sfc.
 
-Package: librte-pmd-skeleton-event20.0
+Package: librte-pmd-skeleton-event21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1816,7 +1816,7 @@ Description: Data Plane Development Kit (librte_pmd_skeleton_event runtime libra
  .
  This package contains the runtime libraries for librte_pmd_skeleton_event.
 
-Package: librte-pmd-sw-event20.0
+Package: librte-pmd-sw-event21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1829,7 +1829,7 @@ Description: Data Plane Development Kit (librte_pmd_sw_event runtime library)
  .
  This package contains the runtime libraries for librte_pmd_sw_event.
 
-Package: librte-pmd-tap20.0
+Package: librte-pmd-tap21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1842,7 +1842,7 @@ Description: Data Plane Development Kit (librte_pmd_tap runtime library)
  .
  This package contains the runtime libraries for librte_pmd_tap.
 
-Package: librte-pmd-thunderx20.0
+Package: librte-pmd-thunderx21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -1855,7 +1855,7 @@ Description: Data Plane Development Kit (librte_pmd_thunderx runtime library)
  .
  This package contains the runtime libraries for librte_pmd_thunderx.
 
-Package: librte-pmd-mlx4-20.0
+Package: librte-pmd-mlx4-21.0
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/mlx4.html
@@ -1870,7 +1870,7 @@ Description: Data Plane Development Kit (librte-pmd-mlx4 runtime library)
  .
  This package contains the runtime libraries for librte-pmd-mlx4.
 
-Package: librte-pmd-mlx5-20.0
+Package: librte-pmd-mlx5-21.0
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/mlx5.html
@@ -1885,7 +1885,7 @@ Description: Data Plane Development Kit (librte-pmd-mlx5 runtime library)
  .
  This package contains the runtime libraries for librte-pmd-mlx5.
 
-Package: librte-pmd-mlx5-regex20.0
+Package: librte-pmd-mlx5-regex21.0
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/regexdevs/mlx5.html
@@ -1899,7 +1899,7 @@ Description: Data Plane Development Kit (librte-pmd-mlx5-regex runtime library)
  .
  This package contains the runtime libraries for librte-pmd-mlx5-regex.
 
-Package: librte-pmd-mlx5-vdpa20.0
+Package: librte-pmd-mlx5-vdpa21.0
 Architecture: amd64 arm64 i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/vdpadevs/mlx5.html
@@ -1913,7 +1913,7 @@ Description: Data Plane Development Kit (librte-pmd-mlx5-vdpa runtime library)
  .
  This package contains the runtime libraries for librte-pmd-mlx5-vdpa.
 
-Package: librte-pmd-bbdev-null20.0
+Package: librte-pmd-bbdev-null21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/bbdevs/null.html
@@ -1927,7 +1927,7 @@ Description: Data Plane Development Kit (librte-pmd-bbdev-null runtime library)
  .
  This package contains the runtime libraries for librte-pmd-bbdev-null.
 
-Package: librte-pmd-vdev-netvsc20.0
+Package: librte-pmd-vdev-netvsc21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/vdev_netvsc.html
@@ -1941,7 +1941,7 @@ Description: Data Plane Development Kit (librte-pmd-vdev-netvsc runtime library)
  .
  This package contains the runtime libraries for librte-pmd-vdev-netvsc.
 
-Package: librte-pmd-atlantic20.0
+Package: librte-pmd-atlantic21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/atlantic.html
@@ -1955,7 +1955,7 @@ Description: Data Plane Development Kit (librte-pmd-atlantic runtime library)
  .
  This package contains the runtime libraries for librte-pmd-atlantic.
 
-Package: librte-pmd-axgbe20.0
+Package: librte-pmd-axgbe21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/axgbe.html
@@ -1969,7 +1969,7 @@ Description: Data Plane Development Kit (librte-pmd-axgbe runtime library)
  .
  This package contains the runtime libraries for librte-pmd-axgbe.
 
-Package: librte-pmd-virtio-crypto20.0
+Package: librte-pmd-virtio-crypto21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/cryptodevs/virtio.html
@@ -1983,7 +1983,7 @@ Description: Data Plane Development Kit (librte-pmd-virtio-crypto runtime librar
  .
  This package contains the runtime libraries for librte-pmd-virtio-crypto.
 
-Package: librte-pmd-bbdev-fpga-5gnr-fec20.0
+Package: librte-pmd-bbdev-fpga-5gnr-fec21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/bbdevs/fpga_5gnr_fec.html
@@ -1997,7 +1997,7 @@ Description: Data Plane Development Kit (librte-pmd-bbdev-fpga-5gnr-fec runtime 
  .
  This package contains the runtime libraries for librte-pmd-bbdev-fpga-5gnr-fec.
 
-Package: librte-pmd-bbdev-fpga-lte-fec20.0
+Package: librte-pmd-bbdev-fpga-lte-fec21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/bbdevs/fpga_lte_fec.html
@@ -2011,7 +2011,7 @@ Description: Data Plane Development Kit (librte-pmd-bbdev-fpga-lte-fec runtime l
  .
  This package contains the runtime libraries for librte-pmd-bbdev-fpga-lte-fec.
 
-Package: librte-pmd-bbdev-turbo-sw20.0
+Package: librte-pmd-bbdev-turbo-sw21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/bbdevs/turbo_sw.html
@@ -2025,7 +2025,7 @@ Description: Data Plane Development Kit (librte-pmd-bbdev-turbo-sw runtime libra
  .
  This package contains the runtime libraries for librte-pmd-bbdev-turbo-sw.
 
-Package: librte-pmd-hinic20.0
+Package: librte-pmd-hinic21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/hinic.html
@@ -2039,7 +2039,7 @@ Description: Data Plane Development Kit (librte-pmd-hinic runtime library)
  .
  This package contains the runtime libraries for librte-pmd-hinic.
 
-Package: librte-pmd-ice20.0
+Package: librte-pmd-ice21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/ice.html
@@ -2053,7 +2053,7 @@ Description: Data Plane Development Kit (librte-pmd-ice runtime library)
  .
  This package contains the runtime libraries for librte-pmd-ice.
 
-Package: librte-pmd-memif20.0
+Package: librte-pmd-memif21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/memif.html
@@ -2067,7 +2067,7 @@ Description: Data Plane Development Kit (librte-pmd-memif runtime library)
  .
  This package contains the runtime libraries for librte-pmd-memif.
 
-Package: librte-pmd-octeontx2-20.0
+Package: librte-pmd-octeontx2-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/octeontx2.html
@@ -2081,7 +2081,7 @@ Description: Data Plane Development Kit (librte-pmd-octeontx2 runtime library)
  .
  This package contains the runtime libraries for librte-pmd-octeontx2.
 
-Package: librte-pmd-octeontx2-event20.0
+Package: librte-pmd-octeontx2-event21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/octeontx2.html
@@ -2095,7 +2095,7 @@ Description: Data Plane Development Kit (events for octeontx2 pmd)
  .
  This package contains the runtime libraries for events of octeontx2.
 
-Package: librte-pmd-octeontx2-crypto20.0
+Package: librte-pmd-octeontx2-crypto21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/octeontx2.html
@@ -2109,7 +2109,7 @@ Description: Data Plane Development Kit (crypto for octeontx2 pmd)
  .
  This package contains the runtime libraries for crypto of octeontx2.
 
-Package: librte-common-octeontx2-20.0
+Package: librte-common-octeontx2-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/platform/octeontx2.html
@@ -2123,7 +2123,7 @@ Description: Data Plane Development Kit (librte-common-octeontx2 runtime library
  .
  This package contains the runtime libraries for librte-common-octeontx2.
 
-Package: librte-mempool-octeontx2-20.0
+Package: librte-mempool-octeontx2-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/mempool/octeontx2.html
@@ -2137,7 +2137,7 @@ Description: Data Plane Development Kit (librte-mempool-octeontx2 runtime librar
  .
  This package contains the runtime libraries for librte-mempool-octeontx2.
 
-Package: librte-pmd-qede20.0
+Package: librte-pmd-qede21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/qede.html
@@ -2154,7 +2154,7 @@ Description: Data Plane Development Kit (librte-pmd-qede runtime library)
  25G/40G CNA family of adapters as well as their virtual functions (VF)
  in SR-IOV context.
 
-Package: librte-pmd-nitrox20.0
+Package: librte-pmd-nitrox21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/cryptodevs/nitrox.html
@@ -2170,7 +2170,7 @@ Description: Data Plane Development Kit (librte-pmd-nitrox runtime library)
  The Nitrox crypto poll mode driver provides support for offloading
  cryptographic operations to the NITROX V security processor
 
-Package: librte-pmd-pfe20.0
+Package: librte-pmd-pfe21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: http://doc.dpdk.org/guides/nics/pfe.html
@@ -2186,7 +2186,7 @@ Description: Data Plane Development Kit (librte-pmd-pfe runtime library)
  The PFE NIC PMD (librte_pmd_pfe) provides poll mode driver support for the
  inbuilt NIC found in the NXP LS1012 SoC.
 
-Package: librte-pmd-hns3-20.0
+Package: librte-pmd-hns3-21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: http://doc.dpdk.org/guides/nics/hns3.html
@@ -2203,7 +2203,7 @@ Description: Data Plane Development Kit (librte-pmd-hns3 runtime library)
  inbuilt Hisilicon Network Subsystem(HNS) network engine found in the
  Hisilicon Kunpeng 920 SoC
 
-Package: librte-pmd-af-xdp20.0
+Package: librte-pmd-af-xdp21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/af_xdp.html
@@ -2220,7 +2220,7 @@ Description: Data Plane Development Kit (librte-pmd-af-xdp runtime library)
  processing. AF_XDP sockets enable the possibility for XDP program to redirect
  packets to a memory buffer in userspace.
 
-Package: librte-pmd-igc20.0
+Package: librte-pmd-igc21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -2232,7 +2232,7 @@ Description: Data Plane Development Kit (librte-pmd-igc runtime library)
  .
  This package contains the runtime libraries for librte_pmd_igc.
 
-Package: librte-pmd-isal20.0
+Package: librte-pmd-isal21.0
 Architecture: amd64
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/compressdevs/isal.html
@@ -2250,7 +2250,7 @@ Description: Data Plane Development Kit (librte-pmd-isal runtime library)
  implements the deflate algorithm for both Deflate(compression) and
  Inflate(decompression).
 
-Package: librte-pmd-ipn3ke20.0
+Package: librte-pmd-ipn3ke21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/ipn3ke.html
@@ -2267,7 +2267,7 @@ Description: Data Plane Development Kit (librte-pmd-ipn3ke runtime library)
  Acceleration Card) N3000 based on the Intel Ethernet Controller
  X710/XXV710 and Intel Arria 10 FPGA.
 
-Package: librte-pmd-zuc20.0
+Package: librte-pmd-zuc21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
@@ -2279,7 +2279,7 @@ Description: Data Plane Development Kit (librte-pmd-zuc runtime library)
  .
  This package contains the runtime libraries for librte_pmd_zuc.
 
-Package: librte-rawdev-skeleton20.0
+Package: librte-rawdev-skeleton21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/prog_guide/rawdev.html
@@ -2293,7 +2293,7 @@ Description: Data Plane Development Kit (librte-rawdev-skeleton runtime library)
  .
  This package contains the runtime libraries for librte-rawdev-skeleton.
 
-Package: librte-rawdev-dpaa2-cmdif20.0
+Package: librte-rawdev-dpaa2-cmdif21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
@@ -2307,7 +2307,7 @@ Description: Data Plane Development Kit (librte-rawdev-dpaa2-cmdif runtime libra
  .
  This package contains the runtime libraries for librte-rawdev-dpaa2-cmdif.
 
-Package: librte-rawdev-dpaa2-qdma20.0
+Package: librte-rawdev-dpaa2-qdma21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/dpaa2.html
@@ -2321,7 +2321,7 @@ Description: Data Plane Development Kit (librte-rawdev-dpaa2-qdma runtime librar
  .
  This package contains the runtime libraries for librte-rawdev-dpaa2-qdma.
 
-Package: librte-rawdev-ioat20.0
+Package: librte-rawdev-ioat21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/rawdevs/ioat.html
@@ -2335,7 +2335,7 @@ Description: Data Plane Development Kit (librte-rawdev-ioat runtime library)
  .
  This package contains the runtime libraries for librte-rawdev-ioat.
 
-Package: librte-rawdev-ntb20.0
+Package: librte-rawdev-ntb21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/rawdevs/ntb.html
@@ -2349,7 +2349,7 @@ Description: Data Plane Development Kit (librte-rawdev-ntb runtime library)
  .
  This package contains the runtime libraries for librte-rawdev-ntb.
 
-Package: librte-rawdev-octeontx2-dma20.0
+Package: librte-rawdev-octeontx2-dma21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/rawdevs/octeontx2_dma.html
@@ -2363,7 +2363,7 @@ Description: Data Plane Development Kit (librte-rawdev-octeontx2-dma runtime lib
  .
  This package contains the runtime libraries for librte-rawdev-octeontx2-dma.
 
-Package: librte-rawdev-octeontx2-ep20.0
+Package: librte-rawdev-octeontx2-ep21.0
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/rawdevs/octeontx2_ep.html
