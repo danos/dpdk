@@ -324,6 +324,24 @@ cleanup_device(struct virtio_net *dev, int destroy)
 	}
 }
 
+static void
+vhost_free_async_mem(struct vhost_virtqueue *vq)
+{
+	if (vq->async_pkts_pending)
+		rte_free(vq->async_pkts_pending);
+	if (vq->async_pkts_info)
+		rte_free(vq->async_pkts_info);
+	if (vq->it_pool)
+		rte_free(vq->it_pool);
+	if (vq->vec_pool)
+		rte_free(vq->vec_pool);
+
+	vq->async_pkts_pending = NULL;
+	vq->async_pkts_info = NULL;
+	vq->it_pool = NULL;
+	vq->vec_pool = NULL;
+}
+
 void
 free_vq(struct virtio_net *dev, struct vhost_virtqueue *vq)
 {
@@ -331,10 +349,7 @@ free_vq(struct virtio_net *dev, struct vhost_virtqueue *vq)
 		rte_free(vq->shadow_used_packed);
 	else {
 		rte_free(vq->shadow_used_split);
-		if (vq->async_pkts_pending)
-			rte_free(vq->async_pkts_pending);
-		if (vq->async_pending_info)
-			rte_free(vq->async_pending_info);
+		vhost_free_async_mem(vq);
 	}
 	rte_free(vq->batch_copy_elems);
 	rte_mempool_free(vq->iotlb_pool);
@@ -539,8 +554,6 @@ init_vring_queue(struct virtio_net *dev, uint32_t vring_idx)
 	vhost_user_iotlb_init(dev, vring_idx);
 	/* Backends are set to -1 indicating an inactive device. */
 	vq->backend = -1;
-
-	TAILQ_INIT(&vq->zmbuf_list);
 }
 
 static void
@@ -702,18 +715,6 @@ vhost_set_ifname(int vid, const char *if_name, unsigned int if_len)
 
 	strncpy(dev->ifname, if_name, len);
 	dev->ifname[sizeof(dev->ifname) - 1] = '\0';
-}
-
-void
-vhost_enable_dequeue_zero_copy(int vid)
-{
-	struct virtio_net *dev = get_device(vid);
-
-	if (dev == NULL)
-		return;
-
-	dev->dequeue_zero_copy = 1;
-	VHOST_LOG_CONFIG(INFO, "dequeue zero copy is enabled\n");
 }
 
 void
@@ -1538,6 +1539,7 @@ int rte_vhost_async_channel_register(int vid, uint16_t queue_id,
 	struct vhost_virtqueue *vq;
 	struct virtio_net *dev = get_device(vid);
 	struct rte_vhost_async_features f;
+	int node;
 
 	if (dev == NULL || ops == NULL)
 		return -1;
@@ -1570,19 +1572,32 @@ int rte_vhost_async_channel_register(int vid, uint16_t queue_id,
 		goto reg_out;
 	}
 
-	vq->async_pkts_pending = rte_malloc(NULL,
+#ifdef RTE_LIBRTE_VHOST_NUMA
+	if (get_mempolicy(&node, NULL, 0, vq, MPOL_F_NODE | MPOL_F_ADDR)) {
+		VHOST_LOG_CONFIG(ERR,
+			"unable to get numa information in async register. "
+			"allocating async buffer memory on the caller thread node\n");
+		node = SOCKET_ID_ANY;
+	}
+#else
+	node = SOCKET_ID_ANY;
+#endif
+
+	vq->async_pkts_pending = rte_malloc_socket(NULL,
 			vq->size * sizeof(uintptr_t),
-			RTE_CACHE_LINE_SIZE);
-	vq->async_pending_info = rte_malloc(NULL,
-			vq->size * sizeof(uint64_t),
-			RTE_CACHE_LINE_SIZE);
-	if (!vq->async_pkts_pending || !vq->async_pending_info) {
-		if (vq->async_pkts_pending)
-			rte_free(vq->async_pkts_pending);
-
-		if (vq->async_pending_info)
-			rte_free(vq->async_pending_info);
-
+			RTE_CACHE_LINE_SIZE, node);
+	vq->async_pkts_info = rte_malloc_socket(NULL,
+			vq->size * sizeof(struct async_inflight_info),
+			RTE_CACHE_LINE_SIZE, node);
+	vq->it_pool = rte_malloc_socket(NULL,
+			VHOST_MAX_ASYNC_IT * sizeof(struct rte_vhost_iov_iter),
+			RTE_CACHE_LINE_SIZE, node);
+	vq->vec_pool = rte_malloc_socket(NULL,
+			VHOST_MAX_ASYNC_VEC * sizeof(struct iovec),
+			RTE_CACHE_LINE_SIZE, node);
+	if (!vq->async_pkts_pending || !vq->async_pkts_info ||
+		!vq->it_pool || !vq->vec_pool) {
+		vhost_free_async_mem(vq);
 		VHOST_LOG_CONFIG(ERR,
 				"async register failed: cannot allocate memory for vq data "
 				"(vid %d, qid: %d)\n", vid, queue_id);
@@ -1618,10 +1633,15 @@ int rte_vhost_async_channel_unregister(int vid, uint16_t queue_id)
 		return ret;
 
 	ret = 0;
-	rte_spinlock_lock(&vq->access_lock);
 
 	if (!vq->async_registered)
-		goto out;
+		return ret;
+
+	if (!rte_spinlock_trylock(&vq->access_lock)) {
+		VHOST_LOG_CONFIG(ERR, "Failed to unregister async channel. "
+			"virt queue busy.\n");
+		return -1;
+	}
 
 	if (vq->async_pkts_inflight_n) {
 		VHOST_LOG_CONFIG(ERR, "Failed to unregister async channel. "
@@ -1630,15 +1650,7 @@ int rte_vhost_async_channel_unregister(int vid, uint16_t queue_id)
 		goto out;
 	}
 
-	if (vq->async_pkts_pending) {
-		rte_free(vq->async_pkts_pending);
-		vq->async_pkts_pending = NULL;
-	}
-
-	if (vq->async_pending_info) {
-		rte_free(vq->async_pending_info);
-		vq->async_pending_info = NULL;
-	}
+	vhost_free_async_mem(vq);
 
 	vq->async_ops.transfer_data = NULL;
 	vq->async_ops.check_completed_copies = NULL;

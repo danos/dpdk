@@ -12,9 +12,6 @@ the Intel Ethernet Controller E810.
 Prerequisites
 -------------
 
-- The E810 is currently in sampling state only. To obtain early samples and/or get further information
-  about kernel drivers, firmware and DDP support, please speak to your Intel representative.
-
 - Follow the DPDK :ref:`Getting Started Guide for Linux <linux_gsg>` to setup the basic DPDK environment.
 
 - To get better performance on Intel platforms, please follow the "How to get best performance with NICs on Intel platforms"
@@ -75,18 +72,6 @@ Runtime Config Options
 
     -w 80:00.0,pipeline-mode-support=1
 
-- ``Flow Mark Support`` (default ``0``)
-
-  This is a hint to the driver to select the data path that supports flow mark extraction
-  by default.
-  NOTE: This is an experimental devarg, it will be removed when any of below conditions
-  is ready.
-  1) all data paths support flow mark (currently vPMD does not)
-  2) a new offload like RTE_DEV_RX_OFFLOAD_FLOW_MARK be introduced as a standard way to hint.
-  Example::
-
-    -w 80:00.0,flow-mark-support=1
-
 - ``Protocol extraction for per queue``
 
   Configure the RX queues to do protocol extraction into mbuf for protocol
@@ -102,7 +87,7 @@ Runtime Config Options
   The grouping ``()`` can be omitted for single element group. If no queues are
   specified, PMD will use this protocol extraction type for all queues.
 
-  Protocol is : ``vlan, ipv4, ipv6, ipv6_flow, tcp``.
+  Protocol is : ``vlan, ipv4, ipv6, ipv6_flow, tcp, ip_offset``.
 
   .. code-block:: console
 
@@ -182,6 +167,18 @@ Runtime Config Options
   TCPHDR1 - TCP header word 6, "Data Offset" and "Flags" fields.
 
   TCPHDR2 - Reserved
+
+  .. table:: Protocol extraction : ``ip_offset``
+
+   +----------------------------+----------------------------+
+   |           IPHDR2           |           IPHDR1           |
+   +============================+============================+
+   |       IPv6 HDR Offset      |       IPv4 HDR Offset      |
+   +----------------------------+----------------------------+
+
+  IPHDR1 - Outer/Single IPv4 Header offset.
+
+  IPHDR2 - Outer/Single IPv6 Header offset.
 
   Use ``rte_net_ice_dynf_proto_xtr_metadata_get`` to access the protocol
   extraction metadata, and use ``RTE_PKT_RX_DYNF_PROTO_XTR_*`` to get the
@@ -310,8 +307,3 @@ is stored in ``ice_adapter->active_pkg_type``.
 
 A symbolic link to the DDP package file is also ok. The same package
 file is used by both the kernel driver and the DPDK PMD.
-
-limitation
-~~~~~~~~~~
-
-Ice code released is for evaluation only currently.

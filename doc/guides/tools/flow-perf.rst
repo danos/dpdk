@@ -16,24 +16,22 @@ After that the application will start producing rules with same pattern
 but increasing the outer IP source address by 1 each time, thus it will
 give different flow each time, and all other items will have open masks.
 
-
-Known Limitations
-=================
-
-The current version has limitations which can be removed in future:
-
-* Support outer items up to tunnel layer only.
-* Single core insertion only.
-* Only one instance of same action can be added in one rule.
-
 The application also provide the ability to measure rte flow deletion rate,
 in addition to memory consumption before and after the flows creation.
 
 The app supports single and multi core performance measurements.
 
 
+Known Limitations
+-----------------
+
+The current version has limitations which can be removed in future:
+
+* Single core insertion only.
+
+
 Compiling the Application
-=========================
+-------------------------
 
 The ``test-flow-perf`` application is compiled as part of the main compilation
 of the DPDK libraries and tools.
@@ -42,10 +40,10 @@ Refer to the DPDK Getting Started Guides for details.
 
 
 Running the Application
-=======================
+-----------------------
 
 EAL Command-line Options
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 Please refer to :doc:`EAL parameters (Linux) <../linux_gsg/linux_eal_parameters>`
 or :doc:`EAL parameters (FreeBSD) <../freebsd_gsg/freebsd_eal_parameters>` for
@@ -53,7 +51,7 @@ a list of available EAL command-line options.
 
 
 Flow Performance Options
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The following are the command-line options for the flow performance application.
 They must be separated from the EAL options, shown in the previous section,
@@ -85,6 +83,9 @@ The command line options are:
 
 *	``--enable-fwd``
 	Enable packets forwarding after insertion/deletion operations.
+
+*	``--portmask=N``
+	hexadecimal bitmask of ports to be used.
 
 
 Attributes:
@@ -174,6 +175,12 @@ Items:
 	under ``TAG_INDEX`` with full mask, default value = 0.
 	Other fields are open mask.
 
+*	``--icmpv4``
+	Add icmpv4 item to all flows items, This item have open mask.
+
+*	``--icmpv6``
+	Add icmpv6 item to all flows items, This item have open mask.
+
 
 Actions:
 
@@ -246,3 +253,83 @@ Actions:
 	Add hairpin RSS action to all flows actions.
 	The queues in RSS action will be all hairpin queues configured
 	in the app.
+
+*	``--set-src-mac``
+	Add set source mac action to all flows actions.
+	The mac to be set is random each flow.
+
+*	``--set-dst-mac``
+	Add set destination mac action to all flows actions.
+	The mac to be set is random each flow.
+
+*	``-set-src-ipv4``
+	Add set source ipv4 action to all flows actions.
+	The ipv4 header to be set is random each flow.
+
+*	``--set-dst-ipv4``
+	Add set destination ipv4 action to all flows actions.
+	The ipv4 header to be set is random each flow.
+
+*	``--set-src-ipv6``
+	Add set source ipv6 action to all flows actions.
+	The ipv6 header to be set is random each flow.
+
+*	``--set-dst-ipv6``
+	Add set destination ipv6 action to all flows actions.
+	The ipv6 header to be set is random each flow.
+
+*	``--set-src-tp``
+	Add set source tp action to all flows actions.
+	The tp sport header to be set is random each flow.
+
+*	``--set-dst-tp``
+	Add set destination tp action to all flows actions.
+	The tp dport header to be set is random each flow.
+
+*	``--inc-tcp-ack``
+	Add increment TCP acknowledgment by one to all flows actions.
+
+*	``--dec-tcp-ack``
+	Add decrement TCP acknowledgment by one to all flows actions.
+
+*	``--inc-tcp-seq``
+	Add increment TCP sequence by one to all flows actions.
+
+*	``--dec-tcp-seq``
+	Add decrement TCP sequence by one to all flows actions.
+
+*	``--set-ttl``
+	Add set IP ttl action to all flows actions.
+	The ttl value to be set is random each flow.
+
+*	``--dec-ttl``
+	Add decrement IP ttl by one to all flows actions.
+
+*	``--set-ipv4-dscp``
+	Add set IPv4 dscp action to all flows actions.
+	The dscp value to be is random each flow.
+
+*	``--set-ipv6-dscp``
+	Add set IPv6 dscp action to all flows actions.
+	The dscp value to be is random each flow.
+
+*	``--flag``
+	Add flag action to all flows actions.
+
+*	``--raw-encap=<DATA>``
+	Add raw encap action to all flows actions.
+	Data is the data needed to be encaped, with fixed values.
+	Example: raw-encap=ether,ipv4,udp,vxlan
+
+*	``--raw-decap=<DATA>``
+	Add raw decap action to all flows actions.
+	Data is the data needed to be decaped, with fixed values.
+	Example: raw-decap=ether,ipv4,gre
+
+*	``--vxlan-encap``
+	Add vxlan encap action to all flows actions.
+	Data to encap is fixed with pattern: ether,ipv4,udp,vxlan,
+	all encapped items have fixed values.
+
+*	``--vxlan-decap``
+	Add vxlan decap action to all flows actions.

@@ -35,6 +35,47 @@ gen_key_snow3g(const uint8_t *ck, uint32_t *keyx)
 	}
 }
 
+static __rte_always_inline int
+cpt_mac_len_verify(struct rte_crypto_auth_xform *auth)
+{
+	uint16_t mac_len = auth->digest_length;
+	int ret;
+
+	switch (auth->algo) {
+	case RTE_CRYPTO_AUTH_MD5:
+	case RTE_CRYPTO_AUTH_MD5_HMAC:
+		ret = (mac_len == 16) ? 0 : -1;
+		break;
+	case RTE_CRYPTO_AUTH_SHA1:
+	case RTE_CRYPTO_AUTH_SHA1_HMAC:
+		ret = (mac_len == 20) ? 0 : -1;
+		break;
+	case RTE_CRYPTO_AUTH_SHA224:
+	case RTE_CRYPTO_AUTH_SHA224_HMAC:
+		ret = (mac_len == 28) ? 0 : -1;
+		break;
+	case RTE_CRYPTO_AUTH_SHA256:
+	case RTE_CRYPTO_AUTH_SHA256_HMAC:
+		ret = (mac_len == 32) ? 0 : -1;
+		break;
+	case RTE_CRYPTO_AUTH_SHA384:
+	case RTE_CRYPTO_AUTH_SHA384_HMAC:
+		ret = (mac_len == 48) ? 0 : -1;
+		break;
+	case RTE_CRYPTO_AUTH_SHA512:
+	case RTE_CRYPTO_AUTH_SHA512_HMAC:
+		ret = (mac_len == 64) ? 0 : -1;
+		break;
+	case RTE_CRYPTO_AUTH_NULL:
+		ret = 0;
+		break;
+	default:
+		ret = -1;
+	}
+
+	return ret;
+}
+
 static __rte_always_inline void
 cpt_fc_salt_update(void *ctx,
 		   uint8_t *salt)
@@ -47,9 +88,9 @@ static __rte_always_inline int
 cpt_fc_ciph_validate_key_aes(uint16_t key_len)
 {
 	switch (key_len) {
-	case CPT_BYTE_16:
-	case CPT_BYTE_24:
-	case CPT_BYTE_32:
+	case 16:
+	case 24:
+	case 32:
 		return 0;
 	default:
 		return -1;
@@ -82,7 +123,7 @@ cpt_fc_ciph_set_type(cipher_type_t type, struct cpt_ctx *ctx, uint16_t key_len)
 		break;
 	case AES_XTS:
 		key_len = key_len / 2;
-		if (unlikely(key_len == CPT_BYTE_24)) {
+		if (unlikely(key_len == 24)) {
 			CPT_LOG_DP_ERR("Invalid AES key len for XTS");
 			return -1;
 		}
@@ -128,13 +169,13 @@ cpt_fc_ciph_set_key_set_aes_key_type(mc_fc_context_t *fctx, uint16_t key_len)
 {
 	mc_aes_type_t aes_key_type = 0;
 	switch (key_len) {
-	case CPT_BYTE_16:
+	case 16:
 		aes_key_type = AES_128_BIT;
 		break;
-	case CPT_BYTE_24:
+	case 24:
 		aes_key_type = AES_192_BIT;
 		break;
-	case CPT_BYTE_32:
+	case 32:
 		aes_key_type = AES_256_BIT;
 		break;
 	default:
@@ -2862,7 +2903,7 @@ alloc_op_meta(struct rte_mbuf *m_src,
 		tailroom = rte_pktmbuf_tailroom(m_src);
 		if (likely(tailroom > len + 8)) {
 			mdata = (uint8_t *)m_src->buf_addr + m_src->buf_len;
-			mphys = m_src->buf_physaddr + m_src->buf_len;
+			mphys = m_src->buf_iova + m_src->buf_len;
 			mdata -= len;
 			mphys -= len;
 			buf->vaddr = mdata;
@@ -2918,7 +2959,7 @@ prepare_iov_from_pkt(struct rte_mbuf *pkt,
 
 	if (!start_offset) {
 		seg_data = rte_pktmbuf_mtod(pkt, void *);
-		seg_phys = rte_pktmbuf_mtophys(pkt);
+		seg_phys = rte_pktmbuf_iova(pkt);
 		seg_size = pkt->data_len;
 	} else {
 		while (start_offset >= pkt->data_len) {
@@ -2927,7 +2968,7 @@ prepare_iov_from_pkt(struct rte_mbuf *pkt,
 		}
 
 		seg_data = rte_pktmbuf_mtod_offset(pkt, void *, start_offset);
-		seg_phys = rte_pktmbuf_mtophys_offset(pkt, start_offset);
+		seg_phys = rte_pktmbuf_iova_offset(pkt, start_offset);
 		seg_size = pkt->data_len - start_offset;
 		if (!seg_size)
 			return 1;
@@ -2942,7 +2983,7 @@ prepare_iov_from_pkt(struct rte_mbuf *pkt,
 
 	while (unlikely(pkt != NULL)) {
 		seg_data = rte_pktmbuf_mtod(pkt, void *);
-		seg_phys = rte_pktmbuf_mtophys(pkt);
+		seg_phys = rte_pktmbuf_iova(pkt);
 		seg_size = pkt->data_len;
 		if (!seg_size)
 			break;
@@ -2972,7 +3013,7 @@ prepare_iov_from_pkt_inplace(struct rte_mbuf *pkt,
 	iov_ptr_t *iovec;
 
 	seg_data = rte_pktmbuf_mtod(pkt, void *);
-	seg_phys = rte_pktmbuf_mtophys(pkt);
+	seg_phys = rte_pktmbuf_iova(pkt);
 	seg_size = pkt->data_len;
 
 	/* first seg */
@@ -3001,7 +3042,7 @@ prepare_iov_from_pkt_inplace(struct rte_mbuf *pkt,
 
 	while (unlikely(pkt != NULL)) {
 		seg_data = rte_pktmbuf_mtod(pkt, void *);
-		seg_phys = rte_pktmbuf_mtophys(pkt);
+		seg_phys = rte_pktmbuf_iova(pkt);
 		seg_size = pkt->data_len;
 
 		if (!seg_size)
@@ -3463,7 +3504,7 @@ fill_digest_params(struct rte_crypto_op *cop,
 			params.mac_buf.vaddr =
 				rte_pktmbuf_mtod_offset(m_dst, void *, off);
 			params.mac_buf.dma_addr =
-				rte_pktmbuf_mtophys_offset(m_dst, off);
+				rte_pktmbuf_iova_offset(m_dst, off);
 			params.mac_buf.size = mac_len;
 		}
 	} else {

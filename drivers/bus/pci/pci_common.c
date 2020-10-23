@@ -19,6 +19,7 @@
 #include <rte_per_lcore.h>
 #include <rte_memory.h>
 #include <rte_eal.h>
+#include <rte_eal_paging.h>
 #include <rte_string_fns.h>
 #include <rte_common.h>
 #include <rte_devargs.h>
@@ -79,6 +80,45 @@ pci_name_set(struct rte_pci_device *dev)
 		dev->device.name = dev->name;
 }
 
+/* map a particular resource from a file */
+void *
+pci_map_resource(void *requested_addr, int fd, off_t offset, size_t size,
+		 int additional_flags)
+{
+	void *mapaddr;
+
+	/* Map the PCI memory resource of device */
+	mapaddr = rte_mem_map(requested_addr, size,
+		RTE_PROT_READ | RTE_PROT_WRITE,
+		RTE_MAP_SHARED | additional_flags, fd, offset);
+	if (mapaddr == NULL) {
+		RTE_LOG(ERR, EAL,
+			"%s(): cannot map resource(%d, %p, 0x%zx, 0x%llx): %s (%p)\n",
+			__func__, fd, requested_addr, size,
+			(unsigned long long)offset,
+			rte_strerror(rte_errno), mapaddr);
+	} else
+		RTE_LOG(DEBUG, EAL, "  PCI memory mapped at %p\n", mapaddr);
+
+	return mapaddr;
+}
+
+/* unmap a particular resource */
+void
+pci_unmap_resource(void *requested_addr, size_t size)
+{
+	if (requested_addr == NULL)
+		return;
+
+	/* Unmap the PCI memory resource of device */
+	if (rte_mem_unmap(requested_addr, size)) {
+		RTE_LOG(ERR, EAL, "%s(): cannot mem unmap(%p, %#zx): %s\n",
+			__func__, requested_addr, size,
+			rte_strerror(rte_errno));
+	} else
+		RTE_LOG(DEBUG, EAL, "  PCI memory unmapped at %p\n",
+				requested_addr);
+}
 /*
  * Match the PCI Driver and Device using the ID Table
  */
@@ -465,7 +505,7 @@ pci_hot_unplug_handler(struct rte_device *dev)
 
 	switch (pdev->kdrv) {
 #ifdef HAVE_VFIO_DEV_REQ_INTERFACE
-	case RTE_KDRV_VFIO:
+	case RTE_PCI_KDRV_VFIO:
 		/*
 		 * vfio kernel module guaranty the pci device would not be
 		 * deleted until the user space release the resource, so no
@@ -476,9 +516,9 @@ pci_hot_unplug_handler(struct rte_device *dev)
 					       RTE_DEV_EVENT_REMOVE);
 		break;
 #endif
-	case RTE_KDRV_IGB_UIO:
-	case RTE_KDRV_UIO_GENERIC:
-	case RTE_KDRV_NIC_UIO:
+	case RTE_PCI_KDRV_IGB_UIO:
+	case RTE_PCI_KDRV_UIO_GENERIC:
+	case RTE_PCI_KDRV_NIC_UIO:
 		/* BARs resource is invalid, remap it to be safe. */
 		ret = pci_uio_remap_resource(pdev);
 		break;
@@ -552,7 +592,7 @@ pci_dma_map(struct rte_device *dev, void *addr, uint64_t iova, size_t len)
 	 *  In case driver don't provides any specific mapping
 	 *  try fallback to VFIO.
 	 */
-	if (pdev->kdrv == RTE_KDRV_VFIO)
+	if (pdev->kdrv == RTE_PCI_KDRV_VFIO)
 		return rte_vfio_container_dma_map
 				(RTE_VFIO_DEFAULT_CONTAINER_FD, (uintptr_t)addr,
 				 iova, len);
@@ -575,7 +615,7 @@ pci_dma_unmap(struct rte_device *dev, void *addr, uint64_t iova, size_t len)
 	 *  In case driver don't provides any specific mapping
 	 *  try fallback to VFIO.
 	 */
-	if (pdev->kdrv == RTE_KDRV_VFIO)
+	if (pdev->kdrv == RTE_PCI_KDRV_VFIO)
 		return rte_vfio_container_dma_unmap
 				(RTE_VFIO_DEFAULT_CONTAINER_FD, (uintptr_t)addr,
 				 iova, len);
@@ -622,8 +662,8 @@ rte_pci_get_iommu_class(void)
 			iommu_no_va = pci_device_iommu_support_va(dev)
 					? 0 : 1;
 
-		if (dev->kdrv == RTE_KDRV_UNKNOWN ||
-		    dev->kdrv == RTE_KDRV_NONE)
+		if (dev->kdrv == RTE_PCI_KDRV_UNKNOWN ||
+		    dev->kdrv == RTE_PCI_KDRV_NONE)
 			continue;
 		FOREACH_DRIVER_ON_PCIBUS(drv) {
 			enum rte_iova_mode dev_iova_mode;
@@ -663,6 +703,49 @@ rte_pci_get_iommu_class(void)
 		}
 	}
 	return iova_mode;
+}
+
+off_t
+rte_pci_find_ext_capability(struct rte_pci_device *dev, uint32_t cap)
+{
+	off_t offset = RTE_PCI_CFG_SPACE_SIZE;
+	uint32_t header;
+	int ttl;
+
+	/* minimum 8 bytes per capability */
+	ttl = (RTE_PCI_CFG_SPACE_EXP_SIZE - RTE_PCI_CFG_SPACE_SIZE) / 8;
+
+	if (rte_pci_read_config(dev, &header, 4, offset) < 0) {
+		RTE_LOG(ERR, EAL, "error in reading extended capabilities\n");
+		return -1;
+	}
+
+	/*
+	 * If we have no capabilities, this is indicated by cap ID,
+	 * cap version and next pointer all being 0.
+	 */
+	if (header == 0)
+		return 0;
+
+	while (ttl != 0) {
+		if (RTE_PCI_EXT_CAP_ID(header) == cap)
+			return offset;
+
+		offset = RTE_PCI_EXT_CAP_NEXT(header);
+
+		if (offset < RTE_PCI_CFG_SPACE_SIZE)
+			break;
+
+		if (rte_pci_read_config(dev, &header, 4, offset) < 0) {
+			RTE_LOG(ERR, EAL,
+				"error in reading extended capabilities\n");
+			return -1;
+		}
+
+		ttl--;
+	}
+
+	return 0;
 }
 
 struct rte_pci_bus rte_pci_bus = {

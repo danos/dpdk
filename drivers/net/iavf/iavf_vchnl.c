@@ -53,8 +53,11 @@ iavf_read_msg_from_pf(struct iavf_adapter *adapter, uint16_t buf_len,
 		    opcode, vf->cmd_retval);
 
 	if (opcode != vf->pend_cmd) {
-		PMD_DRV_LOG(WARNING, "command mismatch, expect %u, get %u",
-			    vf->pend_cmd, opcode);
+		if (opcode != VIRTCHNL_OP_EVENT) {
+			PMD_DRV_LOG(WARNING,
+				    "command mismatch, expect %u, get %u",
+				    vf->pend_cmd, opcode);
+		}
 		return IAVF_ERR_OPCODE_MISMATCH;
 	}
 
@@ -69,6 +72,9 @@ iavf_execute_vf_cmd(struct iavf_adapter *adapter, struct iavf_cmd_info *args)
 	enum iavf_status ret;
 	int err = 0;
 	int i = 0;
+
+	if (vf->vf_reset)
+		return -EIO;
 
 	if (_atomic_set_cmd(vf, args->ops))
 		return -1;
@@ -183,7 +189,8 @@ iavf_handle_pf_event_msg(struct rte_eth_dev *dev, uint8_t *msg,
 	switch (pf_msg->event) {
 	case VIRTCHNL_EVENT_RESET_IMPENDING:
 		PMD_DRV_LOG(DEBUG, "VIRTCHNL_EVENT_RESET_IMPENDING event");
-		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_RESET,
+		vf->vf_reset = true;
+		rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_RESET,
 					      NULL);
 		break;
 	case VIRTCHNL_EVENT_LINK_CHANGE:
@@ -198,8 +205,7 @@ iavf_handle_pf_event_msg(struct rte_eth_dev *dev, uint8_t *msg,
 			vf->link_speed = iavf_convert_link_speed(speed);
 		}
 		iavf_dev_link_update(dev, 0);
-		_rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC,
-					      NULL);
+		rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 		break;
 	case VIRTCHNL_EVENT_PF_DRIVER_CLOSE:
 		PMD_DRV_LOG(DEBUG, "VIRTCHNL_EVENT_PF_DRIVER_CLOSE event");
@@ -265,7 +271,7 @@ iavf_handle_virtchnl_msg(struct rte_eth_dev *dev)
 			}
 			break;
 		default:
-			PMD_DRV_LOG(ERR, "Request %u is not supported yet",
+			PMD_DRV_LOG(DEBUG, "Request %u is not supported yet",
 				    aq_opc);
 			break;
 		}
@@ -836,10 +842,19 @@ iavf_config_promisc(struct iavf_adapter *adapter,
 
 	err = iavf_execute_vf_cmd(adapter, &args);
 
-	if (err)
+	if (err) {
 		PMD_DRV_LOG(ERR,
 			    "fail to execute command CONFIG_PROMISCUOUS_MODE");
-	return err;
+
+		if (err == IAVF_NOT_SUPPORTED)
+			return -ENOTSUP;
+
+		return -EAGAIN;
+	}
+
+	vf->promisc_unicast_enabled = enable_unicast;
+	vf->promisc_multicast_enabled = enable_multicast;
+	return 0;
 }
 
 int
@@ -1074,4 +1089,60 @@ iavf_add_del_rss_cfg(struct iavf_adapter *adapter,
 			    "OP_DEL_RSS_INPUT_CFG");
 
 	return err;
+}
+
+int
+iavf_add_del_mc_addr_list(struct iavf_adapter *adapter,
+			struct rte_ether_addr *mc_addrs,
+			uint32_t mc_addrs_num, bool add)
+{
+	struct iavf_info *vf = IAVF_DEV_PRIVATE_TO_VF(adapter);
+	uint8_t cmd_buffer[sizeof(struct virtchnl_ether_addr_list) +
+		(IAVF_NUM_MACADDR_MAX * sizeof(struct virtchnl_ether_addr))];
+	struct virtchnl_ether_addr_list *list;
+	struct iavf_cmd_info args;
+	uint32_t i;
+	int err;
+
+	if (mc_addrs == NULL || mc_addrs_num == 0)
+		return 0;
+
+	if (mc_addrs_num > IAVF_NUM_MACADDR_MAX)
+		return -EINVAL;
+
+	list = (struct virtchnl_ether_addr_list *)cmd_buffer;
+	list->vsi_id = vf->vsi_res->vsi_id;
+	list->num_elements = mc_addrs_num;
+
+	for (i = 0; i < mc_addrs_num; i++) {
+		if (!IAVF_IS_MULTICAST(mc_addrs[i].addr_bytes)) {
+			PMD_DRV_LOG(ERR, "Invalid mac:%x:%x:%x:%x:%x:%x",
+				    mc_addrs[i].addr_bytes[0],
+				    mc_addrs[i].addr_bytes[1],
+				    mc_addrs[i].addr_bytes[2],
+				    mc_addrs[i].addr_bytes[3],
+				    mc_addrs[i].addr_bytes[4],
+				    mc_addrs[i].addr_bytes[5]);
+			return -EINVAL;
+		}
+
+		memcpy(list->list[i].addr, mc_addrs[i].addr_bytes,
+			sizeof(list->list[i].addr));
+	}
+
+	args.ops = add ? VIRTCHNL_OP_ADD_ETH_ADDR : VIRTCHNL_OP_DEL_ETH_ADDR;
+	args.in_args = cmd_buffer;
+	args.in_args_size = sizeof(struct virtchnl_ether_addr_list) +
+		i * sizeof(struct virtchnl_ether_addr);
+	args.out_buffer = vf->aq_resp;
+	args.out_size = IAVF_AQ_BUF_SZ;
+	err = iavf_execute_vf_cmd(adapter, &args);
+
+	if (err) {
+		PMD_DRV_LOG(ERR, "fail to execute command %s",
+			add ? "OP_ADD_ETH_ADDR" : "OP_DEL_ETH_ADDR");
+		return err;
+	}
+
+	return 0;
 }

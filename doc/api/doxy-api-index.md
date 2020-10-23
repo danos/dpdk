@@ -44,6 +44,7 @@ The public API headers are grouped by topics:
   [ixgbe]              (@ref rte_pmd_ixgbe.h),
   [i40e]               (@ref rte_pmd_i40e.h),
   [ice]                (@ref rte_pmd_ice.h),
+  [ioat]               (@ref rte_ioat_rawdev.h),
   [bnxt]               (@ref rte_pmd_bnxt.h),
   [dpaa]               (@ref rte_pmd_dpaa.h),
   [dpaa2]              (@ref rte_pmd_dpaa2.h),
@@ -166,6 +167,17 @@ The public API headers are grouped by topics:
   * [pipeline]         (@ref rte_pipeline.h)
     [port_in_action]   (@ref rte_port_in_action.h)
     [table_action]     (@ref rte_table_action.h)
+  * SWX pipeline:
+    [control]          (@ref rte_swx_ctl.h),
+    [extern]           (@ref rte_swx_extern.h),
+    [pipeline]         (@ref rte_swx_pipeline.h)
+  * SWX port:
+    [port]             (@ref rte_swx_port.h),
+    [ethdev]           (@ref rte_swx_port_ethdev.h),
+    [src/sink]         (@ref rte_swx_port_source_sink.h)
+  * SWX table:
+    [table]            (@ref rte_swx_table.h),
+    [table_em]         (@ref rte_swx_table_em.h)
   * [graph]            (@ref rte_graph.h):
     [graph_worker]     (@ref rte_graph_worker.h)
   * graph_nodes:

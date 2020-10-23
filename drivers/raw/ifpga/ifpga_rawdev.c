@@ -41,12 +41,6 @@
 #include "ifpga_rawdev.h"
 #include "ipn3ke_rawdev_api.h"
 
-#define RTE_PCI_EXT_CAP_ID_ERR           0x01	/* Advanced Error Reporting */
-#define RTE_PCI_CFG_SPACE_SIZE           256
-#define RTE_PCI_CFG_SPACE_EXP_SIZE       4096
-#define RTE_PCI_EXT_CAP_ID(header)       (int)(header & 0x0000ffff)
-#define RTE_PCI_EXT_CAP_NEXT(header)     ((header >> 20) & 0xffc)
-
 #define PCI_VENDOR_ID_INTEL          0x8086
 /* PCI Device ID */
 #define PCIE_DEVICE_ID_PF_INT_5_X    0xBCBD
@@ -86,8 +80,8 @@ ifpga_rawdev_allocate(struct rte_rawdev *rawdev);
 static int set_surprise_link_check_aer(
 		struct ifpga_rawdev *ifpga_rdev, int force_disable);
 static int ifpga_pci_find_next_ext_capability(unsigned int fd,
-		int start, int cap);
-static int ifpga_pci_find_ext_capability(unsigned int fd, int cap);
+					      int start, uint32_t cap);
+static int ifpga_pci_find_ext_capability(unsigned int fd, uint32_t cap);
 
 struct ifpga_rawdev *
 ifpga_rawdev_get(const struct rte_rawdev *rawdev)
@@ -144,8 +138,8 @@ ifpga_rawdev_allocate(struct rte_rawdev *rawdev)
 	return dev;
 }
 
-static int ifpga_pci_find_next_ext_capability(unsigned int fd,
-int start, int cap)
+static int
+ifpga_pci_find_next_ext_capability(unsigned int fd, int start, uint32_t cap)
 {
 	uint32_t header;
 	int ttl;
@@ -183,7 +177,8 @@ int start, int cap)
 	return 0;
 }
 
-static int ifpga_pci_find_ext_capability(unsigned int fd, int cap)
+static int
+ifpga_pci_find_ext_capability(unsigned int fd, uint32_t cap)
 {
 	return ifpga_pci_find_next_ext_capability(fd, 0, cap);
 }
@@ -603,9 +598,10 @@ ifpga_fill_afu_dev(struct opae_accelerator *acc,
 	return 0;
 }
 
-static void
+static int
 ifpga_rawdev_info_get(struct rte_rawdev *dev,
-				     rte_rawdev_obj_t dev_info)
+		      rte_rawdev_obj_t dev_info,
+		      size_t dev_info_size)
 {
 	struct opae_adapter *adapter;
 	struct opae_accelerator *acc;
@@ -617,14 +613,14 @@ ifpga_rawdev_info_get(struct rte_rawdev *dev,
 
 	IFPGA_RAWDEV_PMD_FUNC_TRACE();
 
-	if (!dev_info) {
+	if (!dev_info || dev_info_size != sizeof(*afu_dev)) {
 		IFPGA_RAWDEV_PMD_ERR("Invalid request");
-		return;
+		return -EINVAL;
 	}
 
 	adapter = ifpga_rawdev_get_priv(dev);
 	if (!adapter)
-		return;
+		return -ENOENT;
 
 	afu_dev = dev_info;
 	afu_dev->rawdev = dev;
@@ -636,7 +632,7 @@ ifpga_rawdev_info_get(struct rte_rawdev *dev,
 
 		if (ifpga_fill_afu_dev(acc, afu_dev)) {
 			IFPGA_RAWDEV_PMD_ERR("cannot get info\n");
-			return;
+			return -ENOENT;
 		}
 	}
 
@@ -646,21 +642,21 @@ ifpga_rawdev_info_get(struct rte_rawdev *dev,
 		/* get LineSide BAR Index */
 		if (opae_manager_get_eth_group_region_info(mgr, 0,
 			&opae_lside_eth_info)) {
-			return;
+			return -ENOENT;
 		}
 		lside_bar_idx = opae_lside_eth_info.mem_idx;
 
 		/* get NICSide BAR Index */
 		if (opae_manager_get_eth_group_region_info(mgr, 1,
 			&opae_nside_eth_info)) {
-			return;
+			return -ENOENT;
 		}
 		nside_bar_idx = opae_nside_eth_info.mem_idx;
 
 		if (lside_bar_idx >= PCI_MAX_RESOURCE ||
 			nside_bar_idx >= PCI_MAX_RESOURCE ||
 			lside_bar_idx == nside_bar_idx)
-			return;
+			return -ENOENT;
 
 		/* fill LineSide BAR Index */
 		afu_dev->mem_resource[lside_bar_idx].phys_addr =
@@ -678,11 +674,13 @@ ifpga_rawdev_info_get(struct rte_rawdev *dev,
 		afu_dev->mem_resource[nside_bar_idx].addr =
 			opae_nside_eth_info.addr;
 	}
+	return 0;
 }
 
 static int
 ifpga_rawdev_configure(const struct rte_rawdev *dev,
-		rte_rawdev_obj_t config)
+		rte_rawdev_obj_t config,
+		size_t config_size __rte_unused)
 {
 	IFPGA_RAWDEV_PMD_FUNC_TRACE();
 

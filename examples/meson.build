@@ -33,6 +33,7 @@ all_examples = [
 	'ntb', 'packet_ordering',
 	'performance-thread/l3fwd-thread',
 	'performance-thread/pthread_shim',
+	'pipeline',
 	'ptpclient',
 	'qos_meter', 'qos_sched',
 	'rxtx_callbacks',
@@ -80,9 +81,6 @@ foreach example: examples
 	ext_deps = [execinfo]
 	includes = [include_directories(example)]
 	deps = ['eal', 'mempool', 'net', 'mbuf', 'ethdev', 'cmdline']
-	if is_windows
-		deps = ['eal'] # only supported lib on Windows currently
-	endif
 	subdir(example)
 
 	if build

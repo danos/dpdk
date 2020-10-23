@@ -123,9 +123,6 @@ eth_dev_vmbus_allocate(struct rte_vmbus_device *dev, size_t private_data_size)
 	eth_dev->data->dev_flags |= RTE_ETH_DEV_INTR_LSC;
 	eth_dev->intr_handle = &dev->intr_handle;
 
-	/* allow ethdev to remove on close */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
-
 	return eth_dev;
 }
 
@@ -830,24 +827,31 @@ hn_dev_start(struct rte_eth_dev *dev)
 	return error;
 }
 
-static void
+static int
 hn_dev_stop(struct rte_eth_dev *dev)
 {
 	struct hn_data *hv = dev->data->dev_private;
 
 	PMD_INIT_FUNC_TRACE();
+	dev->data->dev_started = 0;
 
 	hn_rndis_set_rxfilter(hv, 0);
-	hn_vf_stop(dev);
+	return hn_vf_stop(dev);
 }
 
-static void
+static int
 hn_dev_close(struct rte_eth_dev *dev)
 {
-	PMD_INIT_FUNC_TRACE();
+	int ret;
 
-	hn_vf_close(dev);
+	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
+
+	ret = hn_vf_close(dev);
 	hn_dev_free_queues(dev);
+
+	return ret;
 }
 
 static const struct eth_dev_ops hn_eth_dev_ops = {
@@ -871,11 +875,8 @@ static const struct eth_dev_ops hn_eth_dev_ops = {
 	.tx_queue_setup		= hn_dev_tx_queue_setup,
 	.tx_queue_release	= hn_dev_tx_queue_release,
 	.tx_done_cleanup        = hn_dev_tx_done_cleanup,
-	.tx_descriptor_status	= hn_dev_tx_descriptor_status,
 	.rx_queue_setup		= hn_dev_rx_queue_setup,
 	.rx_queue_release	= hn_dev_rx_queue_release,
-	.rx_queue_count		= hn_dev_rx_queue_count,
-	.rx_descriptor_status   = hn_dev_rx_queue_status,
 	.link_update		= hn_dev_link_update,
 	.stats_get		= hn_dev_stats_get,
 	.stats_reset            = hn_dev_stats_reset,
@@ -936,6 +937,9 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
 
 	vmbus = container_of(device, struct rte_vmbus_device, device);
 	eth_dev->dev_ops = &hn_eth_dev_ops;
+	eth_dev->rx_queue_count = hn_dev_rx_queue_count;
+	eth_dev->rx_descriptor_status = hn_dev_rx_queue_status;
+	eth_dev->tx_descriptor_status = hn_dev_tx_descriptor_status;
 	eth_dev->tx_pkt_burst = &hn_xmit_pkts;
 	eth_dev->rx_pkt_burst = &hn_recv_pkts;
 
@@ -945,6 +949,8 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
 	 */
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
+
+	eth_dev->data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 
 	/* Since Hyper-V only supports one MAC address */
 	eth_dev->data->mac_addrs = rte_calloc("hv_mac", HN_MAX_MAC_ADDRS,
@@ -1038,19 +1044,15 @@ static int
 eth_hn_dev_uninit(struct rte_eth_dev *eth_dev)
 {
 	struct hn_data *hv = eth_dev->data->dev_private;
-	int ret;
+	int ret, ret_stop;
 
 	PMD_INIT_FUNC_TRACE();
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
 
-	hn_dev_stop(eth_dev);
+	ret_stop = hn_dev_stop(eth_dev);
 	hn_dev_close(eth_dev);
-
-	eth_dev->dev_ops = NULL;
-	eth_dev->tx_pkt_burst = NULL;
-	eth_dev->rx_pkt_burst = NULL;
 
 	hn_detach(hv);
 	hn_chim_uninit(eth_dev);
@@ -1060,7 +1062,7 @@ eth_hn_dev_uninit(struct rte_eth_dev *eth_dev)
 	if (ret != 0)
 		return ret;
 
-	return 0;
+	return ret_stop;
 }
 
 static int eth_hn_probe(struct rte_vmbus_driver *drv __rte_unused,
@@ -1093,7 +1095,7 @@ static int eth_hn_remove(struct rte_vmbus_device *dev)
 
 	eth_dev = rte_eth_dev_allocated(dev->device.name);
 	if (!eth_dev)
-		return -ENODEV;
+		return 0; /* port already released */
 
 	ret = eth_hn_dev_uninit(eth_dev);
 	if (ret)

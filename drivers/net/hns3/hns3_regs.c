@@ -62,6 +62,7 @@ static const uint32_t ring_reg_addrs[] = {HNS3_RING_RX_BASEADDR_L_REG,
 					  HNS3_RING_RX_BASEADDR_H_REG,
 					  HNS3_RING_RX_BD_NUM_REG,
 					  HNS3_RING_RX_BD_LEN_REG,
+					  HNS3_RING_RX_EN_REG,
 					  HNS3_RING_RX_MERGE_EN_REG,
 					  HNS3_RING_RX_TAIL_REG,
 					  HNS3_RING_RX_HEAD_REG,
@@ -73,6 +74,7 @@ static const uint32_t ring_reg_addrs[] = {HNS3_RING_RX_BASEADDR_L_REG,
 					  HNS3_RING_TX_BASEADDR_L_REG,
 					  HNS3_RING_TX_BASEADDR_H_REG,
 					  HNS3_RING_TX_BD_NUM_REG,
+					  HNS3_RING_TX_EN_REG,
 					  HNS3_RING_TX_PRIORITY_REG,
 					  HNS3_RING_TX_TC_REG,
 					  HNS3_RING_TX_MERGE_EN_REG,
@@ -295,7 +297,7 @@ hns3_direct_access_regs(struct hns3_hw *hw, uint32_t *data)
 	reg_um = sizeof(ring_reg_addrs) / sizeof(uint32_t);
 	separator_num = MAX_SEPARATE_NUM - reg_um % REG_NUM_PER_LINE;
 	for (j = 0; j < hw->tqps_num; j++) {
-		reg_offset = HNS3_TQP_REG_OFFSET + HNS3_TQP_REG_SIZE * j;
+		reg_offset = hns3_get_tqp_reg_offset(j);
 		for (i = 0; i < reg_um; i++)
 			*data++ = hns3_read_dev(hw,
 						ring_reg_addrs[i] + reg_offset);

@@ -1,5 +1,5 @@
 ..  SPDX-License-Identifier: BSD-3-Clause
-    Copyright 2016 NXP
+    Copyright 2016,2020 NXP
 
 
 DPAA2 Poll Mode Driver
@@ -300,7 +300,7 @@ The diagram below shows the dpaa2 drivers involved in a networking
 scenario and the objects bound to each driver.  A brief description
 of each driver follows.
 
-.. code-block: console
+.. code-block:: console
 
 
                                        +------------+
@@ -537,6 +537,19 @@ For blacklisting a DPAA2 device, following commands can be used.
     <dpdk app> <EAL args> -b "fslmc:dpni.x" -- ...
 
 Where x is the device object id as configured in resource container.
+
+Running secondary debug app without blacklist
+---------------------------------------------
+
+dpaa2 hardware imposes limits on some H/W access devices like Management
+Control Port and H/W portal. This causes issue in their shared usages in
+case of multi-process applications. It can overcome by using
+whitelist/blacklist in primary and secondary applications.
+
+In order to ease usage of standard debugging apps like dpdk-procinfo, dpaa2
+driver reserves extra Management Control Port and H/W portal which can be
+used by debug application to debug any existing application without
+blacklisting these devices in primary process.
 
 Limitations
 -----------

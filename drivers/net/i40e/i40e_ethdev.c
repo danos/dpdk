@@ -224,8 +224,8 @@ static int eth_i40e_dev_init(struct rte_eth_dev *eth_dev, void *init_params);
 static int eth_i40e_dev_uninit(struct rte_eth_dev *eth_dev);
 static int i40e_dev_configure(struct rte_eth_dev *dev);
 static int i40e_dev_start(struct rte_eth_dev *dev);
-static void i40e_dev_stop(struct rte_eth_dev *dev);
-static void i40e_dev_close(struct rte_eth_dev *dev);
+static int i40e_dev_stop(struct rte_eth_dev *dev);
+static int i40e_dev_close(struct rte_eth_dev *dev);
 static int  i40e_dev_reset(struct rte_eth_dev *dev);
 static int i40e_dev_promiscuous_enable(struct rte_eth_dev *dev);
 static int i40e_dev_promiscuous_disable(struct rte_eth_dev *dev);
@@ -474,10 +474,6 @@ static const struct eth_dev_ops i40e_eth_dev_ops = {
 	.rx_queue_intr_enable         = i40e_dev_rx_queue_intr_enable,
 	.rx_queue_intr_disable        = i40e_dev_rx_queue_intr_disable,
 	.rx_queue_release             = i40e_dev_rx_queue_release,
-	.rx_queue_count               = i40e_dev_rx_queue_count,
-	.rx_descriptor_done           = i40e_dev_rx_descriptor_done,
-	.rx_descriptor_status         = i40e_dev_rx_descriptor_status,
-	.tx_descriptor_status         = i40e_dev_tx_descriptor_status,
 	.tx_queue_setup               = i40e_dev_tx_queue_setup,
 	.tx_queue_release             = i40e_dev_tx_queue_release,
 	.dev_led_on                   = i40e_dev_led_on,
@@ -1448,6 +1444,10 @@ eth_i40e_dev_init(struct rte_eth_dev *dev, void *init_params __rte_unused)
 	PMD_INIT_FUNC_TRACE();
 
 	dev->dev_ops = &i40e_eth_dev_ops;
+	dev->rx_queue_count = i40e_dev_rx_queue_count;
+	dev->rx_descriptor_done = i40e_dev_rx_descriptor_done;
+	dev->rx_descriptor_status = i40e_dev_rx_descriptor_status;
+	dev->tx_descriptor_status = i40e_dev_tx_descriptor_status;
 	dev->rx_pkt_burst = i40e_recv_pkts;
 	dev->tx_pkt_burst = i40e_xmit_pkts;
 	dev->tx_pkt_prepare = i40e_prep_pkts;
@@ -1465,6 +1465,7 @@ eth_i40e_dev_init(struct rte_eth_dev *dev, void *init_params __rte_unused)
 	intr_handle = &pci_dev->intr_handle;
 
 	rte_eth_copy_pci_info(dev, pci_dev);
+	dev->data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 
 	pf->adapter = I40E_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
 	pf->adapter->eth_dev = dev;
@@ -1698,11 +1699,6 @@ eth_i40e_dev_init(struct rte_eth_dev *dev, void *init_params __rte_unused)
 	}
 	rte_ether_addr_copy((struct rte_ether_addr *)hw->mac.perm_addr,
 					&dev->data->mac_addrs[0]);
-
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	/* Init dcb to sw mode by default */
 	ret = i40e_dcb_init_configure(dev, TRUE);
@@ -2547,7 +2543,7 @@ rx_err:
 	return ret;
 }
 
-static void
+static int
 i40e_dev_stop(struct rte_eth_dev *dev)
 {
 	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
@@ -2558,7 +2554,7 @@ i40e_dev_stop(struct rte_eth_dev *dev)
 	int i;
 
 	if (hw->adapter_stopped == 1)
-		return;
+		return 0;
 
 	if (dev->data->dev_conf.intr_conf.rxq == 0) {
 		rte_eal_alarm_cancel(i40e_dev_alarm_handler, dev);
@@ -2604,11 +2600,14 @@ i40e_dev_stop(struct rte_eth_dev *dev)
 	pf->tm_conf.committed = false;
 
 	hw->adapter_stopped = 1;
+	dev->data->dev_started = 0;
 
 	pf->adapter->rss_reta_updated = 0;
+
+	return 0;
 }
 
-static void
+static int
 i40e_dev_close(struct rte_eth_dev *dev)
 {
 	struct i40e_pf *pf = I40E_DEV_PRIVATE_TO_PF(dev->data->dev_private);
@@ -2625,13 +2624,15 @@ i40e_dev_close(struct rte_eth_dev *dev)
 	int retries = 0;
 
 	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	ret = rte_eth_switch_domain_free(pf->switch_domain_id);
 	if (ret)
 		PMD_INIT_LOG(WARNING, "failed to free switch domain: %d", ret);
 
 
-	i40e_dev_stop(dev);
+	ret = i40e_dev_stop(dev);
 
 	/* Remove all mirror rules */
 	while ((p_mirror = TAILQ_FIRST(&pf->mirror_list))) {
@@ -2695,10 +2696,6 @@ i40e_dev_close(struct rte_eth_dev *dev)
 			(reg | I40E_PFGEN_CTRL_PFSWR_MASK));
 	I40E_WRITE_FLUSH(hw);
 
-	dev->dev_ops = NULL;
-	dev->rx_pkt_burst = NULL;
-	dev->tx_pkt_burst = NULL;
-
 	/* Clear PXE mode */
 	i40e_clear_pxe_mode(hw);
 
@@ -2748,6 +2745,7 @@ i40e_dev_close(struct rte_eth_dev *dev)
 	i40e_tm_conf_uninit(dev);
 
 	hw->adapter_closed = 1;
+	return ret;
 }
 
 /*
@@ -3014,7 +3012,10 @@ update_link_aq(struct i40e_hw *hw, struct rte_eth_link *link,
 		link->link_speed = ETH_SPEED_NUM_40G;
 		break;
 	default:
-		link->link_speed = ETH_SPEED_NUM_NONE;
+		if (link->link_status)
+			link->link_speed = ETH_SPEED_NUM_UNKNOWN;
+		else
+			link->link_speed = ETH_SPEED_NUM_NONE;
 		break;
 	}
 }
@@ -3049,6 +3050,21 @@ i40e_dev_link_update(struct rte_eth_dev *dev,
 	return ret;
 }
 
+static void
+i40e_stat_update_48_in_64(struct i40e_hw *hw, uint32_t hireg,
+			  uint32_t loreg, bool offset_loaded, uint64_t *offset,
+			  uint64_t *stat, uint64_t *prev_stat)
+{
+	i40e_stat_update_48(hw, hireg, loreg, offset_loaded, offset, stat);
+	/* enlarge the limitation when statistics counters overflowed */
+	if (offset_loaded) {
+		if (I40E_RXTX_BYTES_L_48_BIT(*prev_stat) > *stat)
+			*stat += (uint64_t)1 << I40E_48_BIT_WIDTH;
+		*stat += I40E_RXTX_BYTES_H_16_BIT(*prev_stat);
+	}
+	*prev_stat = *stat;
+}
+
 /* Get all the statistics of a VSI */
 void
 i40e_update_vsi_stats(struct i40e_vsi *vsi)
@@ -3058,9 +3074,9 @@ i40e_update_vsi_stats(struct i40e_vsi *vsi)
 	struct i40e_hw *hw = I40E_VSI_TO_HW(vsi);
 	int idx = rte_le_to_cpu_16(vsi->info.stat_counter_idx);
 
-	i40e_stat_update_48(hw, I40E_GLV_GORCH(idx), I40E_GLV_GORCL(idx),
-			    vsi->offset_loaded, &oes->rx_bytes,
-			    &nes->rx_bytes);
+	i40e_stat_update_48_in_64(hw, I40E_GLV_GORCH(idx), I40E_GLV_GORCL(idx),
+				  vsi->offset_loaded, &oes->rx_bytes,
+				  &nes->rx_bytes, &vsi->prev_rx_bytes);
 	i40e_stat_update_48(hw, I40E_GLV_UPRCH(idx), I40E_GLV_UPRCL(idx),
 			    vsi->offset_loaded, &oes->rx_unicast,
 			    &nes->rx_unicast);
@@ -3081,9 +3097,9 @@ i40e_update_vsi_stats(struct i40e_vsi *vsi)
 	i40e_stat_update_32(hw, I40E_GLV_RUPP(idx), vsi->offset_loaded,
 			    &oes->rx_unknown_protocol,
 			    &nes->rx_unknown_protocol);
-	i40e_stat_update_48(hw, I40E_GLV_GOTCH(idx), I40E_GLV_GOTCL(idx),
-			    vsi->offset_loaded, &oes->tx_bytes,
-			    &nes->tx_bytes);
+	i40e_stat_update_48_in_64(hw, I40E_GLV_GOTCH(idx), I40E_GLV_GOTCL(idx),
+				  vsi->offset_loaded, &oes->tx_bytes,
+				  &nes->tx_bytes, &vsi->prev_tx_bytes);
 	i40e_stat_update_48(hw, I40E_GLV_UPTCH(idx), I40E_GLV_UPTCL(idx),
 			    vsi->offset_loaded, &oes->tx_unicast,
 			    &nes->tx_unicast);
@@ -3125,17 +3141,18 @@ i40e_read_stats_registers(struct i40e_pf *pf, struct i40e_hw *hw)
 	struct i40e_hw_port_stats *os = &pf->stats_offset; /* old stats */
 
 	/* Get rx/tx bytes of internal transfer packets */
-	i40e_stat_update_48(hw, I40E_GLV_GORCH(hw->port),
-			I40E_GLV_GORCL(hw->port),
-			pf->offset_loaded,
-			&pf->internal_stats_offset.rx_bytes,
-			&pf->internal_stats.rx_bytes);
-
-	i40e_stat_update_48(hw, I40E_GLV_GOTCH(hw->port),
-			I40E_GLV_GOTCL(hw->port),
-			pf->offset_loaded,
-			&pf->internal_stats_offset.tx_bytes,
-			&pf->internal_stats.tx_bytes);
+	i40e_stat_update_48_in_64(hw, I40E_GLV_GORCH(hw->port),
+				  I40E_GLV_GORCL(hw->port),
+				  pf->offset_loaded,
+				  &pf->internal_stats_offset.rx_bytes,
+				  &pf->internal_stats.rx_bytes,
+				  &pf->internal_prev_rx_bytes);
+	i40e_stat_update_48_in_64(hw, I40E_GLV_GOTCH(hw->port),
+				  I40E_GLV_GOTCL(hw->port),
+				  pf->offset_loaded,
+				  &pf->internal_stats_offset.tx_bytes,
+				  &pf->internal_stats.tx_bytes,
+				  &pf->internal_prev_tx_bytes);
 	/* Get total internal rx packet count */
 	i40e_stat_update_48(hw, I40E_GLV_UPRCH(hw->port),
 			    I40E_GLV_UPRCL(hw->port),
@@ -3175,10 +3192,10 @@ i40e_read_stats_registers(struct i40e_pf *pf, struct i40e_hw *hw)
 		pf->internal_stats.rx_broadcast) * RTE_ETHER_CRC_LEN;
 
 	/* Get statistics of struct i40e_eth_stats */
-	i40e_stat_update_48(hw, I40E_GLPRT_GORCH(hw->port),
-			    I40E_GLPRT_GORCL(hw->port),
-			    pf->offset_loaded, &os->eth.rx_bytes,
-			    &ns->eth.rx_bytes);
+	i40e_stat_update_48_in_64(hw, I40E_GLPRT_GORCH(hw->port),
+				  I40E_GLPRT_GORCL(hw->port),
+				  pf->offset_loaded, &os->eth.rx_bytes,
+				  &ns->eth.rx_bytes, &pf->prev_rx_bytes);
 	i40e_stat_update_48(hw, I40E_GLPRT_UPRCH(hw->port),
 			    I40E_GLPRT_UPRCL(hw->port),
 			    pf->offset_loaded, &os->eth.rx_unicast,
@@ -3233,10 +3250,10 @@ i40e_read_stats_registers(struct i40e_pf *pf, struct i40e_hw *hw)
 			    pf->offset_loaded,
 			    &os->eth.rx_unknown_protocol,
 			    &ns->eth.rx_unknown_protocol);
-	i40e_stat_update_48(hw, I40E_GLPRT_GOTCH(hw->port),
-			    I40E_GLPRT_GOTCL(hw->port),
-			    pf->offset_loaded, &os->eth.tx_bytes,
-			    &ns->eth.tx_bytes);
+	i40e_stat_update_48_in_64(hw, I40E_GLPRT_GOTCH(hw->port),
+				  I40E_GLPRT_GOTCL(hw->port),
+				  pf->offset_loaded, &os->eth.tx_bytes,
+				  &ns->eth.tx_bytes, &pf->prev_tx_bytes);
 	i40e_stat_update_48(hw, I40E_GLPRT_UPTCH(hw->port),
 			    I40E_GLPRT_UPTCL(hw->port),
 			    pf->offset_loaded, &os->eth.tx_unicast,
@@ -6843,7 +6860,7 @@ i40e_dev_handle_aq_msg(struct rte_eth_dev *dev)
 		case i40e_aqc_opc_get_link_status:
 			ret = i40e_dev_link_update(dev, 0);
 			if (!ret)
-				_rte_eth_dev_callback_process(dev,
+				rte_eth_dev_callback_process(dev,
 					RTE_ETH_EVENT_INTR_LSC, NULL);
 			break;
 		default:

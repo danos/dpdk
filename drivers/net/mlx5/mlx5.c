@@ -9,9 +9,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <net/if.h>
-#include <sys/mman.h>
-#include <linux/rtnetlink.h>
 
 #include <rte_malloc.h>
 #include <rte_ethdev_driver.h>
@@ -243,6 +240,28 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.malloc = mlx5_malloc,
 		.free = mlx5_free,
 		.type = "mlx5_jump_ipool",
+	},
+	{
+		.size = sizeof(struct mlx5_flow_dv_sample_resource),
+		.trunk_size = 64,
+		.grow_trunk = 3,
+		.grow_shift = 2,
+		.need_lock = 0,
+		.release_mem_en = 1,
+		.malloc = mlx5_malloc,
+		.free = mlx5_free,
+		.type = "mlx5_sample_ipool",
+	},
+	{
+		.size = sizeof(struct mlx5_flow_dv_dest_array_resource),
+		.trunk_size = 64,
+		.grow_trunk = 3,
+		.grow_shift = 2,
+		.need_lock = 0,
+		.release_mem_en = 1,
+		.malloc = mlx5_malloc,
+		.free = mlx5_free,
+		.type = "mlx5_dest_array_ipool",
 	},
 #endif
 	{
@@ -726,6 +745,7 @@ mlx5_alloc_rxtx_uars(struct mlx5_dev_ctx_shared *sh,
 {
 	uint32_t uar_mapping, retry;
 	int err = 0;
+	void *base_addr;
 
 	for (retry = 0; retry < MLX5_ALLOC_UAR_RETRY; ++retry) {
 #ifdef MLX5DV_UAR_ALLOC_TYPE_NC
@@ -784,7 +804,8 @@ mlx5_alloc_rxtx_uars(struct mlx5_dev_ctx_shared *sh,
 			err = ENOMEM;
 			goto exit;
 		}
-		if (sh->tx_uar->base_addr)
+		base_addr = mlx5_os_get_devx_uar_base_addr(sh->tx_uar);
+		if (base_addr)
 			break;
 		/*
 		 * The UARs are allocated by rdma_core within the
@@ -823,7 +844,8 @@ mlx5_alloc_rxtx_uars(struct mlx5_dev_ctx_shared *sh,
 			err = ENOMEM;
 			goto exit;
 		}
-		if (sh->devx_rx_uar->base_addr)
+		base_addr = mlx5_os_get_devx_uar_base_addr(sh->devx_rx_uar);
+		if (base_addr)
 			break;
 		/*
 		 * The UARs are allocated by rdma_core within the
@@ -925,6 +947,16 @@ mlx5_alloc_shared_dev_ctx(const struct mlx5_dev_spawn_data *spawn,
 		goto error;
 	}
 	if (sh->devx) {
+		uint32_t lcore = (uint32_t)rte_lcore_to_cpu_id(-1);
+
+		/* Query the EQN for this core. */
+		err = mlx5_glue->devx_query_eqn(sh->ctx, lcore, &sh->eqn);
+		if (err) {
+			rte_errno = errno;
+			DRV_LOG(ERR, "Failed to query event queue number %d.",
+				rte_errno);
+			goto error;
+		}
 		err = mlx5_os_get_pdn(sh->pd, &sh->pdn);
 		if (err) {
 			DRV_LOG(ERR, "Fail to extract pdn from PD");
@@ -946,8 +978,11 @@ mlx5_alloc_shared_dev_ctx(const struct mlx5_dev_spawn_data *spawn,
 		err = mlx5_alloc_rxtx_uars(sh, config);
 		if (err)
 			goto error;
-		MLX5_ASSERT(sh->tx_uar && sh->tx_uar->base_addr);
-		MLX5_ASSERT(sh->devx_rx_uar && sh->devx_rx_uar->base_addr);
+		MLX5_ASSERT(sh->tx_uar);
+		MLX5_ASSERT(mlx5_os_get_devx_uar_base_addr(sh->tx_uar));
+
+		MLX5_ASSERT(sh->devx_rx_uar);
+		MLX5_ASSERT(mlx5_os_get_devx_uar_base_addr(sh->devx_rx_uar));
 	}
 	sh->flow_id_pool = mlx5_flow_id_pool_alloc
 					((1 << HAIRPIN_FLOW_ID_BITS) - 1);
@@ -1338,7 +1373,7 @@ mlx5_proc_priv_uninit(struct rte_eth_dev *dev)
  * @param dev
  *   Pointer to Ethernet device structure.
  */
-void
+int
 mlx5_dev_close(struct rte_eth_dev *dev)
 {
 	struct mlx5_priv *priv = dev->data->dev_private;
@@ -1348,14 +1383,14 @@ mlx5_dev_close(struct rte_eth_dev *dev)
 	if (rte_eal_process_type() == RTE_PROC_SECONDARY) {
 		/* Check if process_private released. */
 		if (!dev->process_private)
-			return;
+			return 0;
 		mlx5_tx_uar_uninit_secondary(dev);
 		mlx5_proc_priv_uninit(dev);
 		rte_eth_dev_release_port(dev);
-		return;
+		return 0;
 	}
 	if (!priv->sh)
-		return;
+		return 0;
 	DRV_LOG(DEBUG, "port %u closing device \"%s\"",
 		dev->data->port_id,
 		((priv->sh->ctx != NULL) ?
@@ -1408,9 +1443,7 @@ mlx5_dev_close(struct rte_eth_dev *dev)
 	if (priv->reta_idx != NULL)
 		mlx5_free(priv->reta_idx);
 	if (priv->config.vf)
-		mlx5_nl_mac_addr_flush(priv->nl_socket_route, mlx5_ifindex(dev),
-				       dev->data->mac_addrs,
-				       MLX5_MAX_MAC_ADDRESSES, priv->mac_own);
+		mlx5_os_mac_addr_flush(dev);
 	if (priv->nl_socket_route >= 0)
 		close(priv->nl_socket_route);
 	if (priv->nl_socket_rdma >= 0)
@@ -1448,7 +1481,7 @@ mlx5_dev_close(struct rte_eth_dev *dev)
 	/*
 	 * Free the shared context in last turn, because the cleanup
 	 * routines above may use some shared fields, like
-	 * mlx5_nl_mac_addr_flush() uses ibdev_path for retrieveing
+	 * mlx5_os_mac_addr_flush() uses ibdev_path for retrieveing
 	 * ifindex if Netlink fails.
 	 */
 	mlx5_free_shared_dev_ctx(priv->sh);
@@ -1478,6 +1511,7 @@ mlx5_dev_close(struct rte_eth_dev *dev)
 	 * it is freed when dev_private is freed.
 	 */
 	dev->data->mac_addrs = NULL;
+	return 0;
 }
 
 /**
@@ -2008,6 +2042,7 @@ static int
 mlx5_pci_remove(struct rte_pci_device *pci_dev)
 {
 	uint16_t port_id;
+	int ret = 0;
 
 	RTE_ETH_FOREACH_DEV_OF(port_id, &pci_dev->device) {
 		/*
@@ -2015,11 +2050,11 @@ mlx5_pci_remove(struct rte_pci_device *pci_dev)
 		 * call the close function explicitly for secondary process.
 		 */
 		if (rte_eal_process_type() == RTE_PROC_SECONDARY)
-			mlx5_dev_close(&rte_eth_devices[port_id]);
+			ret |= mlx5_dev_close(&rte_eth_devices[port_id]);
 		else
-			rte_eth_dev_close(port_id);
+			ret |= rte_eth_dev_close(port_id);
 	}
-	return 0;
+	return ret == 0 ? 0 : -EIO;
 }
 
 static const struct rte_pci_id mlx5_pci_id_map[] = {

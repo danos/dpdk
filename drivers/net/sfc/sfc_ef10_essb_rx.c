@@ -17,7 +17,9 @@
 
 #include "efx_types.h"
 #include "efx_regs_ef10.h"
+#include "efx.h"
 
+#include "sfc_debug.h"
 #include "sfc_tweak.h"
 #include "sfc_dp_rx.h"
 #include "sfc_kvargs.h"
@@ -302,6 +304,27 @@ sfc_ef10_essb_rx_process_ev(struct sfc_ef10_essb_rxq *rxq, efx_qword_t rx_ev)
 		}
 	} while (ready > 0);
 }
+
+/*
+ * Below function relies on the following length and layout of the
+ * Rx prefix.
+ */
+static const efx_rx_prefix_layout_t sfc_ef10_essb_rx_prefix_layout = {
+	.erpl_length	= ES_EZ_ESSB_RX_PREFIX_LEN,
+	.erpl_fields	= {
+#define	SFC_EF10_ESSB_RX_PREFIX_FIELD(_efx, _ef10) \
+	EFX_RX_PREFIX_FIELD(_efx, ES_EZ_ESSB_RX_PREFIX_ ## _ef10, B_FALSE)
+
+		SFC_EF10_ESSB_RX_PREFIX_FIELD(LENGTH, DATA_LEN),
+		SFC_EF10_ESSB_RX_PREFIX_FIELD(USER_MARK, MARK),
+		SFC_EF10_ESSB_RX_PREFIX_FIELD(RSS_HASH_VALID, HASH_VALID),
+		SFC_EF10_ESSB_RX_PREFIX_FIELD(USER_MARK_VALID, MARK_VALID),
+		SFC_EF10_ESSB_RX_PREFIX_FIELD(USER_FLAG, MATCH_FLAG),
+		SFC_EF10_ESSB_RX_PREFIX_FIELD(RSS_HASH, HASH),
+
+#undef	SFC_EF10_ESSB_RX_PREFIX_FIELD
+	}
+};
 
 static unsigned int
 sfc_ef10_essb_rx_get_pending(struct sfc_ef10_essb_rxq *rxq,
@@ -595,6 +618,8 @@ sfc_ef10_essb_rx_qcreate(uint16_t port_id, uint16_t queue_id,
 			ER_DZ_RX_DESC_UPD_REG_OFST +
 			(info->hw_index << info->vi_window_shift);
 
+	sfc_ef10_essb_rx_info(&rxq->dp.dpq, "RxQ doorbell is %p",
+			      rxq->doorbell);
 	sfc_ef10_essb_rx_info(&rxq->dp.dpq,
 			      "block size is %u, buf stride is %u",
 			      rxq->block_size, rxq->buf_stride);
@@ -630,9 +655,17 @@ sfc_ef10_essb_rx_qdestroy(struct sfc_dp_rxq *dp_rxq)
 
 static sfc_dp_rx_qstart_t sfc_ef10_essb_rx_qstart;
 static int
-sfc_ef10_essb_rx_qstart(struct sfc_dp_rxq *dp_rxq, unsigned int evq_read_ptr)
+sfc_ef10_essb_rx_qstart(struct sfc_dp_rxq *dp_rxq, unsigned int evq_read_ptr,
+			const efx_rx_prefix_layout_t *pinfo)
 {
 	struct sfc_ef10_essb_rxq *rxq = sfc_ef10_essb_rxq_by_dp_rxq(dp_rxq);
+
+	if (pinfo->erpl_length != sfc_ef10_essb_rx_prefix_layout.erpl_length)
+		return ENOTSUP;
+
+	if (efx_rx_prefix_layout_check(pinfo,
+				       &sfc_ef10_essb_rx_prefix_layout) != 0)
+		return ENOTSUP;
 
 	rxq->evq_read_ptr = evq_read_ptr;
 

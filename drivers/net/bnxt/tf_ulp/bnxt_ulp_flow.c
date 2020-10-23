@@ -10,6 +10,7 @@
 #include "ulp_flow_db.h"
 #include "ulp_mapper.h"
 #include "ulp_fc_mgr.h"
+#include "ulp_port_db.h"
 #include <rte_malloc.h>
 
 static int32_t
@@ -87,19 +88,19 @@ bnxt_ulp_flow_create(struct rte_eth_dev *dev,
 	uint32_t class_id, act_tmpl;
 	struct rte_flow *flow_id;
 	uint32_t fid;
-	int ret;
+	int ret = BNXT_TF_RC_ERROR;
 
 	if (bnxt_ulp_flow_validate_args(attr,
 					pattern, actions,
 					error) == BNXT_TF_RC_ERROR) {
 		BNXT_TF_DBG(ERR, "Invalid arguments being passed\n");
-		return NULL;
+		goto parse_error;
 	}
 
 	ulp_ctx = bnxt_ulp_eth_dev_ptr2_cntxt_get(dev);
 	if (!ulp_ctx) {
 		BNXT_TF_DBG(ERR, "ULP context is not initialized\n");
-		return NULL;
+		goto parse_error;
 	}
 
 	/* Initialize the parser params */
@@ -146,8 +147,15 @@ bnxt_ulp_flow_create(struct rte_eth_dev *dev,
 	mapper_cparms.act_prop = &params.act_prop;
 	mapper_cparms.class_tid = class_id;
 	mapper_cparms.act_tid = act_tmpl;
-	mapper_cparms.func_id = bnxt_get_fw_func_id(dev->data->port_id,
-						    BNXT_ULP_INTF_TYPE_INVALID);
+	mapper_cparms.flow_type = BNXT_ULP_FDB_TYPE_REGULAR;
+
+	/* Get the function id */
+	if (ulp_port_db_port_func_id_get(ulp_ctx,
+					 dev->data->port_id,
+					 &mapper_cparms.func_id)) {
+		BNXT_TF_DBG(ERR, "conversion of port to func id failed\n");
+		goto parse_error;
+	}
 	mapper_cparms.dir_attr = params.dir_attr;
 
 	/* Call the ulp mapper to create the flow in the hardware. */
@@ -173,20 +181,20 @@ bnxt_ulp_flow_validate(struct rte_eth_dev *dev,
 {
 	struct ulp_rte_parser_params		params;
 	uint32_t class_id, act_tmpl;
-	int ret;
+	int ret = BNXT_TF_RC_ERROR;
 	struct bnxt_ulp_context *ulp_ctx;
 
 	if (bnxt_ulp_flow_validate_args(attr,
 					pattern, actions,
 					error) == BNXT_TF_RC_ERROR) {
 		BNXT_TF_DBG(ERR, "Invalid arguments being passed\n");
-		return -EINVAL;
+		goto parse_error;
 	}
 
 	ulp_ctx = bnxt_ulp_eth_dev_ptr2_cntxt_get(dev);
 	if (!ulp_ctx) {
 		BNXT_TF_DBG(ERR, "ULP context is not initialized\n");
-		return -EINVAL;
+		goto parse_error;
 	}
 
 	/* Initialize the parser params */
@@ -251,8 +259,17 @@ bnxt_ulp_flow_destroy(struct rte_eth_dev *dev,
 	}
 
 	flow_id = (uint32_t)(uintptr_t)flow;
-	func_id = bnxt_get_fw_func_id(dev->data->port_id,
-				      BNXT_ULP_INTF_TYPE_INVALID);
+
+	if (ulp_port_db_port_func_id_get(ulp_ctx,
+					 dev->data->port_id,
+					 &func_id)) {
+		BNXT_TF_DBG(ERR, "conversion of port to func id failed\n");
+		if (error)
+			rte_flow_error_set(error, EINVAL,
+					   RTE_FLOW_ERROR_TYPE_HANDLE, NULL,
+					   "Failed to destroy flow.");
+		return -EINVAL;
+	}
 
 	if (ulp_flow_db_validate_flow_func(ulp_ctx, flow_id, func_id) ==
 	    false) {
@@ -264,8 +281,8 @@ bnxt_ulp_flow_destroy(struct rte_eth_dev *dev,
 		return -EINVAL;
 	}
 
-	ret = ulp_mapper_flow_destroy(ulp_ctx, flow_id,
-				      BNXT_ULP_REGULAR_FLOW_TABLE);
+	ret = ulp_mapper_flow_destroy(ulp_ctx, BNXT_ULP_FDB_TYPE_REGULAR,
+				      flow_id);
 	if (ret) {
 		BNXT_TF_DBG(ERR, "Failed to destroy flow.\n");
 		if (error)
@@ -284,26 +301,24 @@ bnxt_ulp_flow_flush(struct rte_eth_dev *eth_dev,
 {
 	struct bnxt_ulp_context *ulp_ctx;
 	int32_t ret = 0;
-	struct bnxt *bp;
 	uint16_t func_id;
 
 	ulp_ctx = bnxt_ulp_eth_dev_ptr2_cntxt_get(eth_dev);
 	if (!ulp_ctx) {
-		BNXT_TF_DBG(ERR, "ULP context is not initialized\n");
-		rte_flow_error_set(error, EINVAL,
-				   RTE_FLOW_ERROR_TYPE_HANDLE, NULL,
-				   "Failed to flush flow.");
-		return -EINVAL;
+		return ret;
 	}
-	bp = eth_dev->data->dev_private;
 
 	/* Free the resources for the last device */
-	if (ulp_ctx_deinit_allowed(bp)) {
+	if (ulp_ctx_deinit_allowed(ulp_ctx)) {
 		ret = ulp_flow_db_session_flow_flush(ulp_ctx);
 	} else if (bnxt_ulp_cntxt_ptr2_flow_db_get(ulp_ctx)) {
-		func_id = bnxt_get_fw_func_id(eth_dev->data->port_id,
-					      BNXT_ULP_INTF_TYPE_INVALID);
-		ret = ulp_flow_db_function_flow_flush(ulp_ctx, func_id);
+		ret = ulp_port_db_port_func_id_get(ulp_ctx,
+						   eth_dev->data->port_id,
+						   &func_id);
+		if (!ret)
+			ret = ulp_flow_db_function_flow_flush(ulp_ctx, func_id);
+		else
+			BNXT_TF_DBG(ERR, "convert port to func id failed\n");
 	}
 	if (ret)
 		rte_flow_error_set(error, ret,

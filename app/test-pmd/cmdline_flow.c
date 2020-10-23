@@ -23,6 +23,7 @@
 #include <cmdline_parse_num.h>
 #include <rte_flow.h>
 #include <rte_hexdump.h>
+#include <rte_vxlan.h>
 
 #include "testpmd.h"
 
@@ -49,6 +50,7 @@ enum index {
 	PORT_ID,
 	GROUP_ID,
 	PRIORITY_LEVEL,
+	SHARED_ACTION_ID,
 
 	/* Top-level command. */
 	SET,
@@ -56,10 +58,13 @@ enum index {
 	SET_RAW_ENCAP,
 	SET_RAW_DECAP,
 	SET_RAW_INDEX,
+	SET_SAMPLE_ACTIONS,
+	SET_SAMPLE_INDEX,
 
 	/* Top-level command. */
 	FLOW,
 	/* Sub-level commands. */
+	SHARED_ACTION,
 	VALIDATE,
 	CREATE,
 	DESTROY,
@@ -69,6 +74,14 @@ enum index {
 	LIST,
 	AGED,
 	ISOLATE,
+	TUNNEL,
+
+	/* Tunnel arguments. */
+	TUNNEL_CREATE,
+	TUNNEL_CREATE_TYPE,
+	TUNNEL_LIST,
+	TUNNEL_DESTROY,
+	TUNNEL_DESTROY_ID,
 
 	/* Destroy arguments. */
 	DESTROY_RULE,
@@ -88,6 +101,23 @@ enum index {
 	INGRESS,
 	EGRESS,
 	TRANSFER,
+	TUNNEL_SET,
+	TUNNEL_MATCH,
+
+	/* Shared action arguments */
+	SHARED_ACTION_CREATE,
+	SHARED_ACTION_UPDATE,
+	SHARED_ACTION_DESTROY,
+	SHARED_ACTION_QUERY,
+
+	/* Shared action create arguments */
+	SHARED_ACTION_CREATE_ID,
+	SHARED_ACTION_INGRESS,
+	SHARED_ACTION_EGRESS,
+	SHARED_ACTION_SPEC,
+
+	/* Shared action destroy arguments */
+	SHARED_ACTION_DESTROY_ID,
 
 	/* Validate/create pattern. */
 	PATTERN,
@@ -121,14 +151,17 @@ enum index {
 	ITEM_ETH_DST,
 	ITEM_ETH_SRC,
 	ITEM_ETH_TYPE,
+	ITEM_ETH_HAS_VLAN,
 	ITEM_VLAN,
 	ITEM_VLAN_TCI,
 	ITEM_VLAN_PCP,
 	ITEM_VLAN_DEI,
 	ITEM_VLAN_VID,
 	ITEM_VLAN_INNER_TYPE,
+	ITEM_VLAN_HAS_MORE_VLAN,
 	ITEM_IPV4,
 	ITEM_IPV4_TOS,
+	ITEM_IPV4_FRAGMENT_OFFSET,
 	ITEM_IPV4_TTL,
 	ITEM_IPV4_PROTO,
 	ITEM_IPV4_SRC,
@@ -140,9 +173,12 @@ enum index {
 	ITEM_IPV6_HOP,
 	ITEM_IPV6_SRC,
 	ITEM_IPV6_DST,
+	ITEM_IPV6_HAS_FRAG_EXT,
 	ITEM_ICMP,
 	ITEM_ICMP_TYPE,
 	ITEM_ICMP_CODE,
+	ITEM_ICMP_IDENT,
+	ITEM_ICMP_SEQ,
 	ITEM_UDP,
 	ITEM_UDP_SRC,
 	ITEM_UDP_DST,
@@ -191,6 +227,9 @@ enum index {
 	ITEM_ARP_ETH_IPV4_TPA,
 	ITEM_IPV6_EXT,
 	ITEM_IPV6_EXT_NEXT_HDR,
+	ITEM_IPV6_FRAG_EXT,
+	ITEM_IPV6_FRAG_EXT_NEXT_HDR,
+	ITEM_IPV6_FRAG_EXT_FRAG_DATA,
 	ITEM_ICMP6,
 	ITEM_ICMP6_TYPE,
 	ITEM_ICMP6_CODE,
@@ -358,6 +397,12 @@ enum index {
 	ACTION_SET_IPV6_DSCP_VALUE,
 	ACTION_AGE,
 	ACTION_AGE_TIMEOUT,
+	ACTION_SAMPLE,
+	ACTION_SAMPLE_RATIO,
+	ACTION_SAMPLE_INDEX,
+	ACTION_SAMPLE_INDEX_VALUE,
+	ACTION_SHARED,
+	SHARED_ACTION_ID2PTR,
 };
 
 /** Maximum size for pattern in struct rte_flow_item_raw. */
@@ -419,7 +464,7 @@ struct vxlan_encap_conf vxlan_encap_conf = {
 	.select_tos_ttl = 0,
 	.vni = "\x00\x00\x00",
 	.udp_src = 0,
-	.udp_dst = RTE_BE16(4789),
+	.udp_dst = RTE_BE16(RTE_VXLAN_DEFAULT_PORT),
 	.ipv4_src = RTE_IPV4(127, 0, 0, 1),
 	.ipv4_dst = RTE_IPV4(255, 255, 255, 255),
 	.ipv6_src = "\x00\x00\x00\x00\x00\x00\x00\x00"
@@ -492,6 +537,24 @@ struct mplsogre_decap_conf mplsogre_decap_conf;
 struct mplsoudp_encap_conf mplsoudp_encap_conf;
 
 struct mplsoudp_decap_conf mplsoudp_decap_conf;
+
+#define ACTION_SAMPLE_ACTIONS_NUM 10
+#define RAW_SAMPLE_CONFS_MAX_NUM 8
+/** Storage for struct rte_flow_action_sample including external data. */
+struct action_sample_data {
+	struct rte_flow_action_sample conf;
+	uint32_t idx;
+};
+/** Storage for struct rte_flow_action_sample. */
+struct raw_sample_conf {
+	struct rte_flow_action data[ACTION_SAMPLE_ACTIONS_NUM];
+};
+struct raw_sample_conf raw_sample_confs[RAW_SAMPLE_CONFS_MAX_NUM];
+struct rte_flow_action_mark sample_mark[RAW_SAMPLE_CONFS_MAX_NUM];
+struct rte_flow_action_queue sample_queue[RAW_SAMPLE_CONFS_MAX_NUM];
+struct rte_flow_action_count sample_count[RAW_SAMPLE_CONFS_MAX_NUM];
+struct rte_flow_action_port_id sample_port_id[RAW_SAMPLE_CONFS_MAX_NUM];
+struct rte_flow_action_raw_encap sample_encap[RAW_SAMPLE_CONFS_MAX_NUM];
 
 /** Maximum number of subsequent tokens and arguments on the stack. */
 #define CTX_STACK_SIZE 16
@@ -652,7 +715,15 @@ struct buffer {
 	portid_t port; /**< Affected port ID. */
 	union {
 		struct {
+			uint32_t *action_id;
+			uint32_t action_id_n;
+		} sa_destroy; /**< Shared action destroy arguments. */
+		struct {
+			uint32_t action_id;
+		} sa; /* Shared action query arguments */
+		struct {
 			struct rte_flow_attr attr;
+			struct tunnel_ops tunnel_ops;
 			struct rte_flow_item *pattern;
 			struct rte_flow_action *actions;
 			uint32_t pattern_n;
@@ -707,13 +778,51 @@ struct parse_action_priv {
 		.size = s, \
 	})
 
+static const enum index next_sa_create_attr[] = {
+	SHARED_ACTION_CREATE_ID,
+	SHARED_ACTION_INGRESS,
+	SHARED_ACTION_EGRESS,
+	SHARED_ACTION_SPEC,
+	ZERO,
+};
+
+static const enum index next_sa_subcmd[] = {
+	SHARED_ACTION_CREATE,
+	SHARED_ACTION_UPDATE,
+	SHARED_ACTION_DESTROY,
+	SHARED_ACTION_QUERY,
+	ZERO,
+};
+
 static const enum index next_vc_attr[] = {
 	GROUP,
 	PRIORITY,
 	INGRESS,
 	EGRESS,
 	TRANSFER,
+	TUNNEL_SET,
+	TUNNEL_MATCH,
 	PATTERN,
+	ZERO,
+};
+
+static const enum index tunnel_create_attr[] = {
+	TUNNEL_CREATE,
+	TUNNEL_CREATE_TYPE,
+	END,
+	ZERO,
+};
+
+static const enum index tunnel_destroy_attr[] = {
+	TUNNEL_DESTROY,
+	TUNNEL_DESTROY_ID,
+	END,
+	ZERO,
+};
+
+static const enum index tunnel_list_attr[] = {
+	TUNNEL_LIST,
+	END,
 	ZERO,
 };
 
@@ -737,6 +846,12 @@ static const enum index next_list_attr[] = {
 
 static const enum index next_aged_attr[] = {
 	AGED_DESTROY,
+	END,
+	ZERO,
+};
+
+static const enum index next_sa_destroy_attr[] = {
+	SHARED_ACTION_DESTROY_ID,
 	END,
 	ZERO,
 };
@@ -782,6 +897,7 @@ static const enum index next_item[] = {
 	ITEM_VXLAN_GPE,
 	ITEM_ARP_ETH_IPV4,
 	ITEM_IPV6_EXT,
+	ITEM_IPV6_FRAG_EXT,
 	ITEM_ICMP6,
 	ITEM_ICMP6_ND_NS,
 	ITEM_ICMP6_ND_NA,
@@ -855,6 +971,7 @@ static const enum index item_eth[] = {
 	ITEM_ETH_DST,
 	ITEM_ETH_SRC,
 	ITEM_ETH_TYPE,
+	ITEM_ETH_HAS_VLAN,
 	ITEM_NEXT,
 	ZERO,
 };
@@ -865,12 +982,14 @@ static const enum index item_vlan[] = {
 	ITEM_VLAN_DEI,
 	ITEM_VLAN_VID,
 	ITEM_VLAN_INNER_TYPE,
+	ITEM_VLAN_HAS_MORE_VLAN,
 	ITEM_NEXT,
 	ZERO,
 };
 
 static const enum index item_ipv4[] = {
 	ITEM_IPV4_TOS,
+	ITEM_IPV4_FRAGMENT_OFFSET,
 	ITEM_IPV4_TTL,
 	ITEM_IPV4_PROTO,
 	ITEM_IPV4_SRC,
@@ -886,6 +1005,7 @@ static const enum index item_ipv6[] = {
 	ITEM_IPV6_HOP,
 	ITEM_IPV6_SRC,
 	ITEM_IPV6_DST,
+	ITEM_IPV6_HAS_FRAG_EXT,
 	ITEM_NEXT,
 	ZERO,
 };
@@ -893,6 +1013,8 @@ static const enum index item_ipv6[] = {
 static const enum index item_icmp[] = {
 	ITEM_ICMP_TYPE,
 	ITEM_ICMP_CODE,
+	ITEM_ICMP_IDENT,
+	ITEM_ICMP_SEQ,
 	ITEM_NEXT,
 	ZERO,
 };
@@ -995,6 +1117,13 @@ static const enum index item_arp_eth_ipv4[] = {
 
 static const enum index item_ipv6_ext[] = {
 	ITEM_IPV6_EXT_NEXT_HDR,
+	ITEM_NEXT,
+	ZERO,
+};
+
+static const enum index item_ipv6_frag_ext[] = {
+	ITEM_IPV6_FRAG_EXT_NEXT_HDR,
+	ITEM_IPV6_FRAG_EXT_FRAG_DATA,
 	ITEM_NEXT,
 	ZERO,
 };
@@ -1189,6 +1318,8 @@ static const enum index next_action[] = {
 	ACTION_SET_IPV4_DSCP,
 	ACTION_SET_IPV6_DSCP,
 	ACTION_AGE,
+	ACTION_SAMPLE,
+	ACTION_SHARED,
 	ZERO,
 };
 
@@ -1421,9 +1552,30 @@ static const enum index action_age[] = {
 	ZERO,
 };
 
+static const enum index action_sample[] = {
+	ACTION_SAMPLE,
+	ACTION_SAMPLE_RATIO,
+	ACTION_SAMPLE_INDEX,
+	ACTION_NEXT,
+	ZERO,
+};
+
+static const enum index next_action_sample[] = {
+	ACTION_QUEUE,
+	ACTION_MARK,
+	ACTION_COUNT,
+	ACTION_PORT_ID,
+	ACTION_RAW_ENCAP,
+	ACTION_NEXT,
+	ZERO,
+};
+
 static int parse_set_raw_encap_decap(struct context *, const struct token *,
 				     const char *, unsigned int,
 				     void *, unsigned int);
+static int parse_set_sample_action(struct context *, const struct token *,
+				   const char *, unsigned int,
+				   void *, unsigned int);
 static int parse_set_init(struct context *, const struct token *,
 			  const char *, unsigned int,
 			  void *, unsigned int);
@@ -1491,7 +1643,15 @@ static int parse_vc_action_raw_decap_index(struct context *,
 static int parse_vc_action_set_meta(struct context *ctx,
 				    const struct token *token, const char *str,
 				    unsigned int len, void *buf,
+					unsigned int size);
+static int parse_vc_action_sample(struct context *ctx,
+				    const struct token *token, const char *str,
+				    unsigned int len, void *buf,
 				    unsigned int size);
+static int
+parse_vc_action_sample_index(struct context *ctx, const struct token *token,
+				const char *str, unsigned int len, void *buf,
+				unsigned int size);
 static int parse_destroy(struct context *, const struct token *,
 			 const char *, unsigned int,
 			 void *, unsigned int);
@@ -1516,6 +1676,9 @@ static int parse_aged(struct context *, const struct token *,
 static int parse_isolate(struct context *, const struct token *,
 			 const char *, unsigned int,
 			 void *, unsigned int);
+static int parse_tunnel(struct context *, const struct token *,
+			const char *, unsigned int,
+			void *, unsigned int);
 static int parse_int(struct context *, const struct token *,
 		     const char *, unsigned int,
 		     void *, unsigned int);
@@ -1546,6 +1709,15 @@ static int parse_ipv6_addr(struct context *, const struct token *,
 static int parse_port(struct context *, const struct token *,
 		      const char *, unsigned int,
 		      void *, unsigned int);
+static int parse_sa(struct context *, const struct token *,
+		    const char *, unsigned int,
+		    void *, unsigned int);
+static int parse_sa_destroy(struct context *ctx, const struct token *token,
+			    const char *str, unsigned int len,
+			    void *buf, unsigned int size);
+static int parse_sa_id2ptr(struct context *ctx, const struct token *token,
+			   const char *str, unsigned int len, void *buf,
+			   unsigned int size);
 static int comp_none(struct context *, const struct token *,
 		     unsigned int, char *, unsigned int);
 static int comp_boolean(struct context *, const struct token *,
@@ -1561,6 +1733,8 @@ static int comp_vc_action_rss_type(struct context *, const struct token *,
 static int comp_vc_action_rss_queue(struct context *, const struct token *,
 				    unsigned int, char *, unsigned int);
 static int comp_set_raw_index(struct context *, const struct token *,
+			      unsigned int, char *, unsigned int);
+static int comp_set_sample_index(struct context *, const struct token *,
 			      unsigned int, char *, unsigned int);
 
 /** Token definitions. */
@@ -1684,13 +1858,21 @@ static const struct token token_list[] = {
 		.call = parse_int,
 		.comp = comp_none,
 	},
+	[SHARED_ACTION_ID] = {
+		.name = "{shared_action_id}",
+		.type = "SHARED_ACTION_ID",
+		.help = "shared action id",
+		.call = parse_int,
+		.comp = comp_none,
+	},
 	/* Top-level command. */
 	[FLOW] = {
 		.name = "flow",
 		.type = "{command} {port_id} [{arg} [...]]",
 		.help = "manage ingress/egress flow rules",
 		.next = NEXT(NEXT_ENTRY
-			     (VALIDATE,
+			     (SHARED_ACTION,
+			      VALIDATE,
 			      CREATE,
 			      DESTROY,
 			      FLUSH,
@@ -1698,10 +1880,48 @@ static const struct token token_list[] = {
 			      LIST,
 			      AGED,
 			      QUERY,
-			      ISOLATE)),
+			      ISOLATE,
+			      TUNNEL)),
 		.call = parse_init,
 	},
+	/* Top-level command. */
+	[SHARED_ACTION] = {
+		.name = "shared_action",
+		.type = "{command} {port_id} [{arg} [...]]",
+		.help = "manage shared actions",
+		.next = NEXT(next_sa_subcmd, NEXT_ENTRY(PORT_ID)),
+		.args = ARGS(ARGS_ENTRY(struct buffer, port)),
+		.call = parse_sa,
+	},
 	/* Sub-level commands. */
+	[SHARED_ACTION_CREATE] = {
+		.name = "create",
+		.help = "create shared action",
+		.next = NEXT(next_sa_create_attr),
+		.call = parse_sa,
+	},
+	[SHARED_ACTION_UPDATE] = {
+		.name = "update",
+		.help = "update shared action",
+		.next = NEXT(NEXT_ENTRY(SHARED_ACTION_SPEC),
+			     NEXT_ENTRY(SHARED_ACTION_ID)),
+		.args = ARGS(ARGS_ENTRY(struct buffer, args.vc.attr.group)),
+		.call = parse_sa,
+	},
+	[SHARED_ACTION_DESTROY] = {
+		.name = "destroy",
+		.help = "destroy shared action",
+		.next = NEXT(NEXT_ENTRY(SHARED_ACTION_DESTROY_ID)),
+		.args = ARGS(ARGS_ENTRY(struct buffer, port)),
+		.call = parse_sa_destroy,
+	},
+	[SHARED_ACTION_QUERY] = {
+		.name = "query",
+		.help = "query shared action",
+		.next = NEXT(NEXT_ENTRY(END), NEXT_ENTRY(SHARED_ACTION_ID)),
+		.args = ARGS(ARGS_ENTRY(struct buffer, args.sa.action_id)),
+		.call = parse_sa,
+	},
 	[VALIDATE] = {
 		.name = "validate",
 		.help = "check whether a flow rule can be created",
@@ -1772,6 +1992,49 @@ static const struct token token_list[] = {
 			     ARGS_ENTRY(struct buffer, port)),
 		.call = parse_isolate,
 	},
+	[TUNNEL] = {
+		.name = "tunnel",
+		.help = "new tunnel API",
+		.next = NEXT(NEXT_ENTRY
+			     (TUNNEL_CREATE, TUNNEL_LIST, TUNNEL_DESTROY)),
+		.call = parse_tunnel,
+	},
+	/* Tunnel arguments. */
+	[TUNNEL_CREATE] = {
+		.name = "create",
+		.help = "create new tunnel object",
+		.next = NEXT(tunnel_create_attr, NEXT_ENTRY(PORT_ID)),
+		.args = ARGS(ARGS_ENTRY(struct buffer, port)),
+		.call = parse_tunnel,
+	},
+	[TUNNEL_CREATE_TYPE] = {
+		.name = "type",
+		.help = "create new tunnel",
+		.next = NEXT(tunnel_create_attr, NEXT_ENTRY(FILE_PATH)),
+		.args = ARGS(ARGS_ENTRY(struct tunnel_ops, type)),
+		.call = parse_tunnel,
+	},
+	[TUNNEL_DESTROY] = {
+		.name = "destroy",
+		.help = "destroy tunel",
+		.next = NEXT(tunnel_destroy_attr, NEXT_ENTRY(PORT_ID)),
+		.args = ARGS(ARGS_ENTRY(struct buffer, port)),
+		.call = parse_tunnel,
+	},
+	[TUNNEL_DESTROY_ID] = {
+		.name = "id",
+		.help = "tunnel identifier to testroy",
+		.next = NEXT(tunnel_destroy_attr, NEXT_ENTRY(UNSIGNED)),
+		.args = ARGS(ARGS_ENTRY(struct tunnel_ops, id)),
+		.call = parse_tunnel,
+	},
+	[TUNNEL_LIST] = {
+		.name = "list",
+		.help = "list existing tunnels",
+		.next = NEXT(tunnel_list_attr, NEXT_ENTRY(PORT_ID)),
+		.args = ARGS(ARGS_ENTRY(struct buffer, port)),
+		.call = parse_tunnel,
+	},
 	/* Destroy arguments. */
 	[DESTROY_RULE] = {
 		.name = "rule",
@@ -1833,6 +2096,20 @@ static const struct token token_list[] = {
 		.name = "transfer",
 		.help = "apply rule directly to endpoints found in pattern",
 		.next = NEXT(next_vc_attr),
+		.call = parse_vc,
+	},
+	[TUNNEL_SET] = {
+		.name = "tunnel_set",
+		.help = "tunnel steer rule",
+		.next = NEXT(next_vc_attr, NEXT_ENTRY(UNSIGNED)),
+		.args = ARGS(ARGS_ENTRY(struct tunnel_ops, id)),
+		.call = parse_vc,
+	},
+	[TUNNEL_MATCH] = {
+		.name = "tunnel_match",
+		.help = "tunnel match rule",
+		.next = NEXT(next_vc_attr, NEXT_ENTRY(UNSIGNED)),
+		.args = ARGS(ARGS_ENTRY(struct tunnel_ops, id)),
 		.call = parse_vc,
 	},
 	/* Validate/create pattern. */
@@ -2038,6 +2315,13 @@ static const struct token token_list[] = {
 		.next = NEXT(item_eth, NEXT_ENTRY(UNSIGNED), item_param),
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_eth, type)),
 	},
+	[ITEM_ETH_HAS_VLAN] = {
+		.name = "has_vlan",
+		.help = "packet header contains VLAN",
+		.next = NEXT(item_eth, NEXT_ENTRY(UNSIGNED), item_param),
+		.args = ARGS(ARGS_ENTRY_BF(struct rte_flow_item_eth,
+					   has_vlan, 1)),
+	},
 	[ITEM_VLAN] = {
 		.name = "vlan",
 		.help = "match 802.1Q/ad VLAN tag",
@@ -2079,6 +2363,13 @@ static const struct token token_list[] = {
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_vlan,
 					     inner_type)),
 	},
+	[ITEM_VLAN_HAS_MORE_VLAN] = {
+		.name = "has_more_vlan",
+		.help = "packet header contains another VLAN",
+		.next = NEXT(item_vlan, NEXT_ENTRY(UNSIGNED), item_param),
+		.args = ARGS(ARGS_ENTRY_BF(struct rte_flow_item_vlan,
+					   has_more_vlan, 1)),
+	},
 	[ITEM_IPV4] = {
 		.name = "ipv4",
 		.help = "match IPv4 header",
@@ -2092,6 +2383,13 @@ static const struct token token_list[] = {
 		.next = NEXT(item_ipv4, NEXT_ENTRY(UNSIGNED), item_param),
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_ipv4,
 					     hdr.type_of_service)),
+	},
+	[ITEM_IPV4_FRAGMENT_OFFSET] = {
+		.name = "fragment_offset",
+		.help = "fragmentation flags and fragment offset",
+		.next = NEXT(item_ipv4, NEXT_ENTRY(UNSIGNED), item_param),
+		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_ipv4,
+					     hdr.fragment_offset)),
 	},
 	[ITEM_IPV4_TTL] = {
 		.name = "ttl",
@@ -2172,6 +2470,13 @@ static const struct token token_list[] = {
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_ipv6,
 					     hdr.dst_addr)),
 	},
+	[ITEM_IPV6_HAS_FRAG_EXT] = {
+		.name = "has_frag_ext",
+		.help = "fragment packet attribute",
+		.next = NEXT(item_ipv6, NEXT_ENTRY(UNSIGNED), item_param),
+		.args = ARGS(ARGS_ENTRY_BF(struct rte_flow_item_ipv6,
+					   has_frag_ext, 1)),
+	},
 	[ITEM_ICMP] = {
 		.name = "icmp",
 		.help = "match ICMP header",
@@ -2192,6 +2497,20 @@ static const struct token token_list[] = {
 		.next = NEXT(item_icmp, NEXT_ENTRY(UNSIGNED), item_param),
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_icmp,
 					     hdr.icmp_code)),
+	},
+	[ITEM_ICMP_IDENT] = {
+		.name = "ident",
+		.help = "ICMP packet identifier",
+		.next = NEXT(item_icmp, NEXT_ENTRY(UNSIGNED), item_param),
+		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_icmp,
+					     hdr.icmp_ident)),
+	},
+	[ITEM_ICMP_SEQ] = {
+		.name = "seq",
+		.help = "ICMP packet sequence number",
+		.next = NEXT(item_icmp, NEXT_ENTRY(UNSIGNED), item_param),
+		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_icmp,
+					     hdr.icmp_seq_nb)),
 	},
 	[ITEM_UDP] = {
 		.name = "udp",
@@ -2541,6 +2860,30 @@ static const struct token token_list[] = {
 		.next = NEXT(item_ipv6_ext, NEXT_ENTRY(UNSIGNED), item_param),
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_ipv6_ext,
 					     next_hdr)),
+	},
+	[ITEM_IPV6_FRAG_EXT] = {
+		.name = "ipv6_frag_ext",
+		.help = "match presence of IPv6 fragment extension header",
+		.priv = PRIV_ITEM(IPV6_FRAG_EXT,
+				sizeof(struct rte_flow_item_ipv6_frag_ext)),
+		.next = NEXT(item_ipv6_frag_ext),
+		.call = parse_vc,
+	},
+	[ITEM_IPV6_FRAG_EXT_NEXT_HDR] = {
+		.name = "next_hdr",
+		.help = "next header",
+		.next = NEXT(item_ipv6_frag_ext, NEXT_ENTRY(UNSIGNED),
+			     item_param),
+		.args = ARGS(ARGS_ENTRY(struct rte_flow_item_ipv6_frag_ext,
+					hdr.next_header)),
+	},
+	[ITEM_IPV6_FRAG_EXT_FRAG_DATA] = {
+		.name = "frag_data",
+		.help = "Fragment flags and offset",
+		.next = NEXT(item_ipv6_frag_ext, NEXT_ENTRY(UNSIGNED),
+			     item_param),
+		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_ipv6_frag_ext,
+					     hdr.frag_data)),
 	},
 	[ITEM_ICMP6] = {
 		.name = "icmp6",
@@ -3703,11 +4046,13 @@ static const struct token token_list[] = {
 	/* Top level command. */
 	[SET] = {
 		.name = "set",
-		.help = "set raw encap/decap data",
-		.type = "set raw_encap|raw_decap <index> <pattern>",
+		.help = "set raw encap/decap/sample data",
+		.type = "set raw_encap|raw_decap <index> <pattern>"
+				" or set sample_actions <index> <action>",
 		.next = NEXT(NEXT_ENTRY
 			     (SET_RAW_ENCAP,
-			      SET_RAW_DECAP)),
+			      SET_RAW_DECAP,
+			      SET_SAMPLE_ACTIONS)),
 		.call = parse_set_init,
 	},
 	/* Sub-level commands. */
@@ -3737,6 +4082,23 @@ static const struct token token_list[] = {
 		.help = "index of raw_encap/raw_decap data",
 		.next = NEXT(next_item),
 		.call = parse_port,
+	},
+	[SET_SAMPLE_INDEX] = {
+		.name = "{index}",
+		.type = "UNSIGNED",
+		.help = "index of sample actions",
+		.next = NEXT(next_action_sample),
+		.call = parse_port,
+	},
+	[SET_SAMPLE_ACTIONS] = {
+		.name = "sample_actions",
+		.help = "set sample actions list",
+		.next = NEXT(NEXT_ENTRY(SET_SAMPLE_INDEX)),
+		.args = ARGS(ARGS_ENTRY_ARB_BOUNDED
+				(offsetof(struct buffer, port),
+				 sizeof(((struct buffer *)0)->port),
+				 0, RAW_SAMPLE_CONFS_MAX_NUM - 1)),
+		.call = parse_set_sample_action,
 	},
 	[ACTION_SET_TAG] = {
 		.name = "set_tag",
@@ -3840,6 +4202,88 @@ static const struct token token_list[] = {
 					   timeout, 24)),
 		.next = NEXT(action_age, NEXT_ENTRY(UNSIGNED)),
 		.call = parse_vc_conf,
+	},
+	[ACTION_SAMPLE] = {
+		.name = "sample",
+		.help = "set a sample action",
+		.next = NEXT(action_sample),
+		.priv = PRIV_ACTION(SAMPLE,
+			sizeof(struct action_sample_data)),
+		.call = parse_vc_action_sample,
+	},
+	[ACTION_SAMPLE_RATIO] = {
+		.name = "ratio",
+		.help = "flow sample ratio value",
+		.next = NEXT(action_sample, NEXT_ENTRY(UNSIGNED)),
+		.args = ARGS(ARGS_ENTRY_ARB
+			     (offsetof(struct action_sample_data, conf) +
+			      offsetof(struct rte_flow_action_sample, ratio),
+			      sizeof(((struct rte_flow_action_sample *)0)->
+				     ratio))),
+	},
+	[ACTION_SAMPLE_INDEX] = {
+		.name = "index",
+		.help = "the index of sample actions list",
+		.next = NEXT(NEXT_ENTRY(ACTION_SAMPLE_INDEX_VALUE)),
+	},
+	[ACTION_SAMPLE_INDEX_VALUE] = {
+		.name = "{index}",
+		.type = "UNSIGNED",
+		.help = "unsigned integer value",
+		.next = NEXT(NEXT_ENTRY(ACTION_NEXT)),
+		.call = parse_vc_action_sample_index,
+		.comp = comp_set_sample_index,
+	},
+	/* Shared action destroy arguments. */
+	[SHARED_ACTION_DESTROY_ID] = {
+		.name = "action_id",
+		.help = "specify a shared action id to destroy",
+		.next = NEXT(next_sa_destroy_attr,
+			     NEXT_ENTRY(SHARED_ACTION_ID)),
+		.args = ARGS(ARGS_ENTRY_PTR(struct buffer,
+					    args.sa_destroy.action_id)),
+		.call = parse_sa_destroy,
+	},
+	/* Shared action create arguments. */
+	[SHARED_ACTION_CREATE_ID] = {
+		.name = "action_id",
+		.help = "specify a shared action id to create",
+		.next = NEXT(next_sa_create_attr,
+			     NEXT_ENTRY(SHARED_ACTION_ID)),
+		.args = ARGS(ARGS_ENTRY(struct buffer, args.vc.attr.group)),
+	},
+	[ACTION_SHARED] = {
+		.name = "shared",
+		.help = "apply shared action by id",
+		.priv = PRIV_ACTION(SHARED, 0),
+		.next = NEXT(NEXT_ENTRY(SHARED_ACTION_ID2PTR)),
+		.args = ARGS(ARGS_ENTRY_ARB(0, sizeof(uint32_t))),
+		.call = parse_vc,
+	},
+	[SHARED_ACTION_ID2PTR] = {
+		.name = "{action_id}",
+		.type = "SHARED_ACTION_ID",
+		.help = "shared action id",
+		.next = NEXT(NEXT_ENTRY(ACTION_NEXT)),
+		.call = parse_sa_id2ptr,
+		.comp = comp_none,
+	},
+	[SHARED_ACTION_INGRESS] = {
+		.name = "ingress",
+		.help = "affect rule to ingress",
+		.next = NEXT(next_sa_create_attr),
+		.call = parse_sa,
+	},
+	[SHARED_ACTION_EGRESS] = {
+		.name = "egress",
+		.help = "affect rule to egress",
+		.next = NEXT(next_sa_create_attr),
+		.call = parse_sa,
+	},
+	[SHARED_ACTION_SPEC] = {
+		.name = "action",
+		.help = "specify action to share",
+		.next = NEXT(next_action),
 	},
 };
 
@@ -4025,6 +4469,97 @@ parse_init(struct context *ctx, const struct token *token,
 	return len;
 }
 
+/** Parse tokens for shared action commands. */
+static int
+parse_sa(struct context *ctx, const struct token *token,
+	 const char *str, unsigned int len,
+	 void *buf, unsigned int size)
+{
+	struct buffer *out = buf;
+
+	/* Token name must match. */
+	if (parse_default(ctx, token, str, len, NULL, 0) < 0)
+		return -1;
+	/* Nothing else to do if there is no buffer. */
+	if (!out)
+		return len;
+	if (!out->command) {
+		if (ctx->curr != SHARED_ACTION)
+			return -1;
+		if (sizeof(*out) > size)
+			return -1;
+		out->command = ctx->curr;
+		ctx->objdata = 0;
+		ctx->object = out;
+		ctx->objmask = NULL;
+		out->args.vc.data = (uint8_t *)out + size;
+		return len;
+	}
+	switch (ctx->curr) {
+	case SHARED_ACTION_CREATE:
+	case SHARED_ACTION_UPDATE:
+		out->args.vc.actions =
+			(void *)RTE_ALIGN_CEIL((uintptr_t)(out + 1),
+					       sizeof(double));
+		out->args.vc.attr.group = UINT32_MAX;
+		/* fallthrough */
+	case SHARED_ACTION_QUERY:
+		out->command = ctx->curr;
+		ctx->objdata = 0;
+		ctx->object = out;
+		ctx->objmask = NULL;
+		return len;
+	case SHARED_ACTION_EGRESS:
+		out->args.vc.attr.egress = 1;
+		return len;
+	case SHARED_ACTION_INGRESS:
+		out->args.vc.attr.ingress = 1;
+		return len;
+	default:
+		return -1;
+	}
+}
+
+
+/** Parse tokens for shared action destroy command. */
+static int
+parse_sa_destroy(struct context *ctx, const struct token *token,
+		 const char *str, unsigned int len,
+		 void *buf, unsigned int size)
+{
+	struct buffer *out = buf;
+	uint32_t *action_id;
+
+	/* Token name must match. */
+	if (parse_default(ctx, token, str, len, NULL, 0) < 0)
+		return -1;
+	/* Nothing else to do if there is no buffer. */
+	if (!out)
+		return len;
+	if (!out->command || out->command == SHARED_ACTION) {
+		if (ctx->curr != SHARED_ACTION_DESTROY)
+			return -1;
+		if (sizeof(*out) > size)
+			return -1;
+		out->command = ctx->curr;
+		ctx->objdata = 0;
+		ctx->object = out;
+		ctx->objmask = NULL;
+		out->args.sa_destroy.action_id =
+			(void *)RTE_ALIGN_CEIL((uintptr_t)(out + 1),
+					       sizeof(double));
+		return len;
+	}
+	action_id = out->args.sa_destroy.action_id
+		    + out->args.sa_destroy.action_id_n++;
+	if ((uint8_t *)action_id > (uint8_t *)out + size)
+		return -1;
+	ctx->objdata = 0;
+	ctx->object = action_id;
+	ctx->objmask = NULL;
+	return len;
+}
+
 /** Parse tokens for validate/create commands. */
 static int
 parse_vc(struct context *ctx, const struct token *token,
@@ -4054,11 +4589,27 @@ parse_vc(struct context *ctx, const struct token *token,
 		return len;
 	}
 	ctx->objdata = 0;
-	ctx->object = &out->args.vc.attr;
+	switch (ctx->curr) {
+	default:
+		ctx->object = &out->args.vc.attr;
+		break;
+	case TUNNEL_SET:
+	case TUNNEL_MATCH:
+		ctx->object = &out->args.vc.tunnel_ops;
+		break;
+	}
 	ctx->objmask = NULL;
 	switch (ctx->curr) {
 	case GROUP:
 	case PRIORITY:
+		return len;
+	case TUNNEL_SET:
+		out->args.vc.tunnel_ops.enabled = 1;
+		out->args.vc.tunnel_ops.actions = 1;
+		return len;
+	case TUNNEL_MATCH:
+		out->args.vc.tunnel_ops.enabled = 1;
+		out->args.vc.tunnel_ops.items = 1;
 		return len;
 	case INGRESS:
 		out->args.vc.attr.ingress = 1;
@@ -5351,6 +5902,76 @@ parse_vc_action_set_meta(struct context *ctx, const struct token *token,
 	return len;
 }
 
+static int
+parse_vc_action_sample(struct context *ctx, const struct token *token,
+			 const char *str, unsigned int len, void *buf,
+			 unsigned int size)
+{
+	struct buffer *out = buf;
+	struct rte_flow_action *action;
+	struct action_sample_data *action_sample_data = NULL;
+	static struct rte_flow_action end_action = {
+		RTE_FLOW_ACTION_TYPE_END, 0
+	};
+	int ret;
+
+	ret = parse_vc(ctx, token, str, len, buf, size);
+	if (ret < 0)
+		return ret;
+	/* Nothing else to do if there is no buffer. */
+	if (!out)
+		return ret;
+	if (!out->args.vc.actions_n)
+		return -1;
+	action = &out->args.vc.actions[out->args.vc.actions_n - 1];
+	/* Point to selected object. */
+	ctx->object = out->args.vc.data;
+	ctx->objmask = NULL;
+	/* Copy the headers to the buffer. */
+	action_sample_data = ctx->object;
+	action_sample_data->conf.actions = &end_action;
+	action->conf = &action_sample_data->conf;
+	return ret;
+}
+
+static int
+parse_vc_action_sample_index(struct context *ctx, const struct token *token,
+				const char *str, unsigned int len, void *buf,
+				unsigned int size)
+{
+	struct action_sample_data *action_sample_data;
+	struct rte_flow_action *action;
+	const struct arg *arg;
+	struct buffer *out = buf;
+	int ret;
+	uint16_t idx;
+
+	RTE_SET_USED(token);
+	RTE_SET_USED(buf);
+	RTE_SET_USED(size);
+	if (ctx->curr != ACTION_SAMPLE_INDEX_VALUE)
+		return -1;
+	arg = ARGS_ENTRY_ARB_BOUNDED
+		(offsetof(struct action_sample_data, idx),
+		 sizeof(((struct action_sample_data *)0)->idx),
+		 0, RAW_SAMPLE_CONFS_MAX_NUM - 1);
+	if (push_args(ctx, arg))
+		return -1;
+	ret = parse_int(ctx, token, str, len, NULL, 0);
+	if (ret < 0) {
+		pop_args(ctx);
+		return -1;
+	}
+	if (!ctx->object)
+		return len;
+	action = &out->args.vc.actions[out->args.vc.actions_n - 1];
+	action_sample_data = ctx->object;
+	idx = action_sample_data->idx;
+	action_sample_data->conf.actions = raw_sample_confs[idx].data;
+	action->conf = &action_sample_data->conf;
+	return len;
+}
+
 /** Parse tokens for destroy command. */
 static int
 parse_destroy(struct context *ctx, const struct token *token,
@@ -5594,6 +6215,47 @@ parse_isolate(struct context *ctx, const struct token *token,
 		ctx->object = out;
 		ctx->objmask = NULL;
 	}
+	return len;
+}
+
+static int
+parse_tunnel(struct context *ctx, const struct token *token,
+	     const char *str, unsigned int len,
+	     void *buf, unsigned int size)
+{
+	struct buffer *out = buf;
+
+	/* Token name must match. */
+	if (parse_default(ctx, token, str, len, NULL, 0) < 0)
+		return -1;
+	/* Nothing else to do if there is no buffer. */
+	if (!out)
+		return len;
+	if (!out->command) {
+		if (ctx->curr != TUNNEL)
+			return -1;
+		if (sizeof(*out) > size)
+			return -1;
+		out->command = ctx->curr;
+		ctx->objdata = 0;
+		ctx->object = out;
+		ctx->objmask = NULL;
+	} else {
+		switch (ctx->curr) {
+		default:
+			break;
+		case TUNNEL_CREATE:
+		case TUNNEL_DESTROY:
+		case TUNNEL_LIST:
+			out->command = ctx->curr;
+			break;
+		case TUNNEL_CREATE_TYPE:
+		case TUNNEL_DESTROY_ID:
+			ctx->object = &out->args.vc.tunnel_ops;
+			break;
+		}
+	}
+
 	return len;
 }
 
@@ -6092,6 +6754,32 @@ parse_port(struct context *ctx, const struct token *token,
 	return ret;
 }
 
+static int
+parse_sa_id2ptr(struct context *ctx, const struct token *token,
+		const char *str, unsigned int len,
+		void *buf, unsigned int size)
+{
+	struct rte_flow_action *action = ctx->object;
+	uint32_t id;
+	int ret;
+
+	(void)buf;
+	(void)size;
+	ctx->objdata = 0;
+	ctx->object = &id;
+	ctx->objmask = NULL;
+	ret = parse_int(ctx, token, str, len, ctx->object, sizeof(id));
+	ctx->object = action;
+	if (ret != (int)len)
+		return ret;
+	/* set shared action */
+	if (action) {
+		action->conf = port_shared_action_get_by_id(ctx->port, id);
+		ret = (action->conf) ? ret : -1;
+	}
+	return ret;
+}
+
 /** Parse set command, initialize output buffer for subsequent tokens. */
 static int
 parse_set_raw_encap_decap(struct context *ctx, const struct token *token,
@@ -6115,6 +6803,38 @@ parse_set_raw_encap_decap(struct context *ctx, const struct token *token,
 	if (!out->command)
 		return -1;
 	out->command = ctx->curr;
+	/* For encap/decap we need is pattern */
+	out->args.vc.pattern = (void *)RTE_ALIGN_CEIL((uintptr_t)(out + 1),
+						       sizeof(double));
+	return len;
+}
+
+/** Parse set command, initialize output buffer for subsequent tokens. */
+static int
+parse_set_sample_action(struct context *ctx, const struct token *token,
+			  const char *str, unsigned int len,
+			  void *buf, unsigned int size)
+{
+	struct buffer *out = buf;
+
+	/* Token name must match. */
+	if (parse_default(ctx, token, str, len, NULL, 0) < 0)
+		return -1;
+	/* Nothing else to do if there is no buffer. */
+	if (!out)
+		return len;
+	/* Make sure buffer is large enough. */
+	if (size < sizeof(*out))
+		return -1;
+	ctx->objdata = 0;
+	ctx->objmask = NULL;
+	ctx->object = out;
+	if (!out->command)
+		return -1;
+	out->command = ctx->curr;
+	/* For sampler we need is actions */
+	out->args.vc.actions = (void *)RTE_ALIGN_CEIL((uintptr_t)(out + 1),
+						       sizeof(double));
 	return len;
 }
 
@@ -6151,11 +6871,8 @@ parse_set_init(struct context *ctx, const struct token *token,
 			return -1;
 		out->command = ctx->curr;
 		out->args.vc.data = (uint8_t *)out + size;
-		/* All we need is pattern */
-		out->args.vc.pattern =
-			(void *)RTE_ALIGN_CEIL((uintptr_t)(out + 1),
-					       sizeof(double));
-		ctx->object = out->args.vc.pattern;
+		ctx->object  = (void *)RTE_ALIGN_CEIL((uintptr_t)(out + 1),
+						       sizeof(double));
 	}
 	return len;
 }
@@ -6299,6 +7016,24 @@ comp_set_raw_index(struct context *ctx, const struct token *token,
 	RTE_SET_USED(ctx);
 	RTE_SET_USED(token);
 	for (idx = 0; idx < RAW_ENCAP_CONFS_MAX_NUM; ++idx) {
+		if (buf && idx == ent)
+			return snprintf(buf, size, "%u", idx);
+		++nb;
+	}
+	return nb;
+}
+
+/** Complete index number for set raw_encap/raw_decap commands. */
+static int
+comp_set_sample_index(struct context *ctx, const struct token *token,
+		   unsigned int ent, char *buf, unsigned int size)
+{
+	uint16_t idx = 0;
+	uint16_t nb = 0;
+
+	RTE_SET_USED(ctx);
+	RTE_SET_USED(token);
+	for (idx = 0; idx < RAW_SAMPLE_CONFS_MAX_NUM; ++idx) {
 		if (buf && idx == ent)
 			return snprintf(buf, size, "%u", idx);
 		++nb;
@@ -6541,13 +7276,36 @@ static void
 cmd_flow_parsed(const struct buffer *in)
 {
 	switch (in->command) {
+	case SHARED_ACTION_CREATE:
+		port_shared_action_create(
+				in->port, in->args.vc.attr.group,
+				&((const struct rte_flow_shared_action_conf) {
+					.ingress = in->args.vc.attr.ingress,
+					.egress = in->args.vc.attr.egress,
+				}),
+				in->args.vc.actions);
+		break;
+	case SHARED_ACTION_DESTROY:
+		port_shared_action_destroy(in->port,
+					   in->args.sa_destroy.action_id_n,
+					   in->args.sa_destroy.action_id);
+		break;
+	case SHARED_ACTION_UPDATE:
+		port_shared_action_update(in->port, in->args.vc.attr.group,
+					  in->args.vc.actions);
+		break;
+	case SHARED_ACTION_QUERY:
+		port_shared_action_query(in->port, in->args.sa.action_id);
+		break;
 	case VALIDATE:
 		port_flow_validate(in->port, &in->args.vc.attr,
-				   in->args.vc.pattern, in->args.vc.actions);
+				   in->args.vc.pattern, in->args.vc.actions,
+				   &in->args.vc.tunnel_ops);
 		break;
 	case CREATE:
 		port_flow_create(in->port, &in->args.vc.attr,
-				 in->args.vc.pattern, in->args.vc.actions);
+				 in->args.vc.pattern, in->args.vc.actions,
+				 &in->args.vc.tunnel_ops);
 		break;
 	case DESTROY:
 		port_flow_destroy(in->port, in->args.destroy.rule_n,
@@ -6572,6 +7330,15 @@ cmd_flow_parsed(const struct buffer *in)
 		break;
 	case AGED:
 		port_flow_aged(in->port, in->args.aged.destroy);
+		break;
+	case TUNNEL_CREATE:
+		port_flow_tunnel_create(in->port, &in->args.vc.tunnel_ops);
+		break;
+	case TUNNEL_DESTROY:
+		port_flow_tunnel_destroy(in->port, in->args.vc.tunnel_ops.id);
+		break;
+	case TUNNEL_LIST:
+		port_flow_tunnel_list(in->port);
 		break;
 	default:
 		break;
@@ -6751,7 +7518,65 @@ flow_item_default_mask(const struct rte_flow_item *item)
 	return mask;
 }
 
+/** Dispatch parsed buffer to function calls. */
+static void
+cmd_set_raw_parsed_sample(const struct buffer *in)
+{
+	uint32_t n = in->args.vc.actions_n;
+	uint32_t i = 0;
+	struct rte_flow_action *action = NULL;
+	struct rte_flow_action *data = NULL;
+	size_t size = 0;
+	uint16_t idx = in->port; /* We borrow port field as index */
+	uint32_t max_size = sizeof(struct rte_flow_action) *
+						ACTION_SAMPLE_ACTIONS_NUM;
 
+	RTE_ASSERT(in->command == SET_SAMPLE_ACTIONS);
+	data = (struct rte_flow_action *)&raw_sample_confs[idx].data;
+	memset(data, 0x00, max_size);
+	for (; i <= n - 1; i++) {
+		action = in->args.vc.actions + i;
+		if (action->type == RTE_FLOW_ACTION_TYPE_END)
+			break;
+		switch (action->type) {
+		case RTE_FLOW_ACTION_TYPE_MARK:
+			size = sizeof(struct rte_flow_action_mark);
+			rte_memcpy(&sample_mark[idx],
+				(const void *)action->conf, size);
+			action->conf = &sample_mark[idx];
+			break;
+		case RTE_FLOW_ACTION_TYPE_COUNT:
+			size = sizeof(struct rte_flow_action_count);
+			rte_memcpy(&sample_count[idx],
+				(const void *)action->conf, size);
+			action->conf = &sample_count[idx];
+			break;
+		case RTE_FLOW_ACTION_TYPE_QUEUE:
+			size = sizeof(struct rte_flow_action_queue);
+			rte_memcpy(&sample_queue[idx],
+				(const void *)action->conf, size);
+			action->conf = &sample_queue[idx];
+			break;
+		case RTE_FLOW_ACTION_TYPE_RAW_ENCAP:
+			size = sizeof(struct rte_flow_action_raw_encap);
+			rte_memcpy(&sample_encap[idx],
+				(const void *)action->conf, size);
+			action->conf = &sample_encap[idx];
+			break;
+		case RTE_FLOW_ACTION_TYPE_PORT_ID:
+			size = sizeof(struct rte_flow_action_port_id);
+			rte_memcpy(&sample_port_id[idx],
+				(const void *)action->conf, size);
+			action->conf = &sample_port_id[idx];
+			break;
+		default:
+			printf("Error - Not supported action\n");
+			return;
+		}
+		rte_memcpy(data, action, sizeof(struct rte_flow_action));
+		data++;
+	}
+}
 
 /** Dispatch parsed buffer to function calls. */
 static void
@@ -6768,6 +7593,8 @@ cmd_set_raw_parsed(const struct buffer *in)
 	uint16_t proto = 0;
 	uint16_t idx = in->port; /* We borrow port field as index */
 
+	if (in->command == SET_SAMPLE_ACTIONS)
+		return cmd_set_raw_parsed_sample(in);
 	RTE_ASSERT(in->command == SET_RAW_ENCAP ||
 		   in->command == SET_RAW_DECAP);
 	if (in->command == SET_RAW_ENCAP) {

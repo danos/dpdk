@@ -10,6 +10,7 @@
 
 #include <otx2_common.h>
 #include "otx2_evdev.h"
+#include "otx2_evdev_crypto_adptr_dp.h"
 #include "otx2_ethdev_sec_tx.h"
 
 /* SSO Operations */
@@ -66,16 +67,23 @@ otx2_ssogws_get_work(struct otx2_ssogws *ws, struct rte_event *ev,
 	ws->cur_tt = event.sched_type;
 	ws->cur_grp = event.queue_id;
 
-	if (event.sched_type != SSO_TT_EMPTY &&
-	    event.event_type == RTE_EVENT_TYPE_ETHDEV) {
-		otx2_wqe_to_mbuf(get_work1, mbuf, event.sub_event_type,
-				 (uint32_t) event.get_work0, flags, lookup_mem);
-		/* Extracting tstamp, if PTP enabled*/
-		tstamp_ptr = *(uint64_t *)(((struct nix_wqe_hdr_s *)get_work1)
-					     + OTX2_SSO_WQE_SG_PTR);
-		otx2_nix_mbuf_to_tstamp((struct rte_mbuf *)mbuf, ws->tstamp,
-					flags, (uint64_t *)tstamp_ptr);
-		get_work1 = mbuf;
+	if (event.sched_type != SSO_TT_EMPTY) {
+		if ((flags & NIX_RX_OFFLOAD_SECURITY_F) &&
+		    (event.event_type == RTE_EVENT_TYPE_CRYPTODEV)) {
+			get_work1 = otx2_handle_crypto_event(get_work1);
+		} else if (event.event_type == RTE_EVENT_TYPE_ETHDEV) {
+			otx2_wqe_to_mbuf(get_work1, mbuf, event.sub_event_type,
+					 (uint32_t) event.get_work0, flags,
+					 lookup_mem);
+			/* Extracting tstamp, if PTP enabled*/
+			tstamp_ptr = *(uint64_t *)(((struct nix_wqe_hdr_s *)
+						     get_work1) +
+						     OTX2_SSO_WQE_SG_PTR);
+			otx2_nix_mbuf_to_tstamp((struct rte_mbuf *)mbuf,
+						ws->tstamp, flags,
+						(uint64_t *)tstamp_ptr);
+			get_work1 = mbuf;
+		}
 	}
 
 	ev->event = event.get_work0;
@@ -190,8 +198,7 @@ otx2_ssogws_swtag_untag(struct otx2_ssogws *ws)
 static __rte_always_inline void
 otx2_ssogws_swtag_flush(struct otx2_ssogws *ws)
 {
-	otx2_write64(0, OTX2_SSOW_GET_BASE_ADDR(ws->getwrk_op) +
-		     SSOW_LF_GWS_OP_SWTAG_FLUSH);
+	otx2_write64(0, ws->swtag_flush_op);
 	ws->cur_tt = SSO_SYNC_EMPTY;
 }
 
@@ -208,20 +215,18 @@ otx2_ssogws_swtag_wait(struct otx2_ssogws *ws)
 #ifdef RTE_ARCH_ARM64
 	uint64_t swtp;
 
-	asm volatile (
-			"	ldr %[swtb], [%[swtp_loc]]	\n"
-			"	cbz %[swtb], done%=		\n"
-			"	sevl				\n"
-			"rty%=:	wfe				\n"
-			"	ldr %[swtb], [%[swtp_loc]]	\n"
-			"	cbnz %[swtb], rty%=		\n"
-			"done%=:				\n"
-			: [swtb] "=&r" (swtp)
-			: [swtp_loc] "r" (ws->swtp_op)
-			);
+	asm volatile("		ldr %[swtb], [%[swtp_loc]]	\n"
+		     "		tbz %[swtb], 62, done%=		\n"
+		     "		sevl				\n"
+		     "rty%=:	wfe				\n"
+		     "		ldr %[swtb], [%[swtp_loc]]	\n"
+		     "		tbnz %[swtb], 62, rty%=		\n"
+		     "done%=:					\n"
+		     : [swtb] "=&r" (swtp)
+		     : [swtp_loc] "r" (ws->tag_op));
 #else
 	/* Wait for the SWTAG/SWTAG_FULL operation */
-	while (otx2_read64(ws->swtp_op))
+	while (otx2_read64(ws->tag_op) & BIT_ULL(62))
 		;
 #endif
 }
@@ -248,15 +253,6 @@ otx2_ssogws_head_wait(struct otx2_ssogws *ws)
 	while (!(otx2_read64(ws->tag_op) & BIT_ULL(35)))
 		;
 #endif
-}
-
-static __rte_always_inline void
-otx2_ssogws_order(struct otx2_ssogws *ws, const uint8_t wait_flag)
-{
-	if (wait_flag)
-		otx2_ssogws_head_wait(ws);
-
-	rte_cio_wmb();
 }
 
 static __rte_always_inline const struct otx2_eth_txq *
@@ -290,10 +286,21 @@ otx2_ssogws_event_tx(struct otx2_ssogws *ws, struct rte_event ev[],
 		return otx2_sec_event_tx(ws, ev, m, txq, flags);
 	}
 
-	rte_prefetch_non_temporal(&txq_data[m->port][0]);
 	/* Perform header writes before barrier for TSO */
 	otx2_nix_xmit_prepare_tso(m, flags);
-	otx2_ssogws_order(ws, !ev->sched_type);
+	/* Lets commit any changes in the packet here in case of single seg as
+	 * no further changes to mbuf will be done.
+	 * While for multi seg all mbufs used are set to NULL in
+	 * otx2_nix_prepare_mseg() after preparing the sg list and these changes
+	 * should be committed before LMTST.
+	 * Also in no fast free case some mbuf fields are updated in
+	 * otx2_nix_prefree_seg
+	 * Hence otx2_nix_xmit_submit_lmt_release/otx2_nix_xmit_mseg_one_release
+	 * has store barrier for multiseg.
+	 */
+	if (!(flags & NIX_TX_MULTI_SEG_F) &&
+	    !(flags & NIX_TX_OFFLOAD_MBUF_NOFF_F))
+		rte_io_wmb();
 	txq = otx2_ssogws_xtract_meta(m, txq_data);
 	otx2_ssogws_prepare_pkt(txq, m, cmd, flags);
 
@@ -301,13 +308,34 @@ otx2_ssogws_event_tx(struct otx2_ssogws *ws, struct rte_event ev[],
 		const uint16_t segdw = otx2_nix_prepare_mseg(m, cmd, flags);
 		otx2_nix_xmit_prepare_tstamp(cmd, &txq->cmd[0],
 					     m->ol_flags, segdw, flags);
-		otx2_nix_xmit_mseg_one(cmd, txq->lmt_addr, txq->io_addr, segdw);
+		if (!ev->sched_type) {
+			otx2_nix_xmit_mseg_prep_lmt(cmd, txq->lmt_addr, segdw);
+			otx2_ssogws_head_wait(ws);
+			if (otx2_nix_xmit_submit_lmt_release(txq->io_addr) == 0)
+				otx2_nix_xmit_mseg_one(cmd, txq->lmt_addr,
+						       txq->io_addr, segdw);
+		} else {
+			otx2_nix_xmit_mseg_one_release(cmd, txq->lmt_addr,
+						       txq->io_addr, segdw);
+		}
 	} else {
 		/* Passing no of segdw as 4: HDR + EXT + SG + SMEM */
 		otx2_nix_xmit_prepare_tstamp(cmd, &txq->cmd[0],
 					     m->ol_flags, 4, flags);
-		otx2_nix_xmit_one(cmd, txq->lmt_addr, txq->io_addr, flags);
+
+		if (!ev->sched_type) {
+			otx2_nix_xmit_prep_lmt(cmd, txq->lmt_addr, flags);
+			otx2_ssogws_head_wait(ws);
+			if (otx2_nix_xmit_submit_lmt(txq->io_addr) == 0)
+				otx2_nix_xmit_one(cmd, txq->lmt_addr,
+						  txq->io_addr, flags);
+		} else {
+			otx2_nix_xmit_one(cmd, txq->lmt_addr, txq->io_addr,
+					  flags);
+		}
 	}
+
+	otx2_write64(0, ws->swtag_flush_op);
 
 	return 1;
 }

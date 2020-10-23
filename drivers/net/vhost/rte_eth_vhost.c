@@ -29,7 +29,6 @@ enum {VIRTIO_RXQ, VIRTIO_TXQ, VIRTIO_QNUM};
 #define ETH_VHOST_IFACE_ARG		"iface"
 #define ETH_VHOST_QUEUES_ARG		"queues"
 #define ETH_VHOST_CLIENT_ARG		"client"
-#define ETH_VHOST_DEQUEUE_ZERO_COPY	"dequeue-zero-copy"
 #define ETH_VHOST_IOMMU_SUPPORT		"iommu-support"
 #define ETH_VHOST_POSTCOPY_SUPPORT	"postcopy-support"
 #define ETH_VHOST_VIRTIO_NET_F_HOST_TSO "tso"
@@ -41,7 +40,6 @@ static const char *valid_arguments[] = {
 	ETH_VHOST_IFACE_ARG,
 	ETH_VHOST_QUEUES_ARG,
 	ETH_VHOST_CLIENT_ARG,
-	ETH_VHOST_DEQUEUE_ZERO_COPY,
 	ETH_VHOST_IOMMU_SUPPORT,
 	ETH_VHOST_POSTCOPY_SUPPORT,
 	ETH_VHOST_VIRTIO_NET_F_HOST_TSO,
@@ -832,7 +830,7 @@ new_device(int vid)
 
 	VHOST_LOG(INFO, "Vhost device %d created\n", vid);
 
-	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_INTR_LSC, NULL);
+	rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 
 	return 0;
 }
@@ -889,7 +887,7 @@ destroy_device(int vid)
 	VHOST_LOG(INFO, "Vhost device %d destroyed\n", vid);
 	eth_vhost_uninstall_intr(eth_dev);
 
-	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_INTR_LSC, NULL);
+	rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 }
 
 static int
@@ -968,7 +966,7 @@ vring_state_changed(int vid, uint16_t vring, int enable)
 	VHOST_LOG(INFO, "vring%u is %s\n",
 			vring, enable ? "enabled" : "disabled");
 
-	_rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_QUEUE_STATE, NULL);
+	rte_eth_dev_callback_process(eth_dev, RTE_ETH_EVENT_QUEUE_STATE, NULL);
 
 	return 0;
 }
@@ -1155,27 +1153,33 @@ eth_dev_start(struct rte_eth_dev *eth_dev)
 	return 0;
 }
 
-static void
+static int
 eth_dev_stop(struct rte_eth_dev *dev)
 {
 	struct pmd_internal *internal = dev->data->dev_private;
 
+	dev->data->dev_started = 0;
 	rte_atomic32_set(&internal->started, 0);
 	update_queuing_status(dev);
+
+	return 0;
 }
 
-static void
+static int
 eth_dev_close(struct rte_eth_dev *dev)
 {
 	struct pmd_internal *internal;
 	struct internal_list *list;
-	unsigned int i;
+	unsigned int i, ret;
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	internal = dev->data->dev_private;
 	if (!internal)
-		return;
+		return 0;
 
-	eth_dev_stop(dev);
+	ret = eth_dev_stop(dev);
 
 	list = find_internal_resource(internal->iface_name);
 	if (list) {
@@ -1201,6 +1205,8 @@ eth_dev_close(struct rte_eth_dev *dev)
 
 	rte_free(vring_states[dev->data->port_id]);
 	vring_states[dev->data->port_id] = NULL;
+
+	return ret;
 }
 
 static int
@@ -1385,7 +1391,6 @@ static const struct eth_dev_ops ops = {
 	.rx_queue_release = eth_queue_release,
 	.tx_queue_release = eth_queue_release,
 	.tx_done_cleanup = eth_tx_done_cleanup,
-	.rx_queue_count = eth_rx_queue_count,
 	.link_update = eth_link_update,
 	.stats_get = eth_stats_get,
 	.stats_reset = eth_stats_reset,
@@ -1442,11 +1447,13 @@ eth_dev_vhost_create(struct rte_vdev_device *dev, char *iface_name,
 	internal->flags = flags;
 	internal->disable_flags = disable_flags;
 	data->dev_link = pmd_link;
-	data->dev_flags = RTE_ETH_DEV_INTR_LSC | RTE_ETH_DEV_CLOSE_REMOVE;
+	data->dev_flags = RTE_ETH_DEV_INTR_LSC |
+				RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 	data->promiscuous = 1;
 	data->all_multicast = 1;
 
 	eth_dev->dev_ops = &ops;
+	eth_dev->rx_queue_count = eth_rx_queue_count;
 
 	/* finally assign rx and tx ops */
 	eth_dev->rx_pkt_burst = eth_vhost_rx;
@@ -1501,7 +1508,6 @@ rte_pmd_vhost_probe(struct rte_vdev_device *dev)
 	uint64_t flags = 0;
 	uint64_t disable_flags = 0;
 	int client_mode = 0;
-	int dequeue_zero_copy = 0;
 	int iommu_support = 0;
 	int postcopy_support = 0;
 	int tso = 0;
@@ -1559,16 +1565,6 @@ rte_pmd_vhost_probe(struct rte_vdev_device *dev)
 
 		if (client_mode)
 			flags |= RTE_VHOST_USER_CLIENT;
-	}
-
-	if (rte_kvargs_count(kvlist, ETH_VHOST_DEQUEUE_ZERO_COPY) == 1) {
-		ret = rte_kvargs_process(kvlist, ETH_VHOST_DEQUEUE_ZERO_COPY,
-					 &open_int, &dequeue_zero_copy);
-		if (ret < 0)
-			goto out_free;
-
-		if (dequeue_zero_copy)
-			flags |= RTE_VHOST_USER_DEQUEUE_ZERO_COPY;
 	}
 
 	if (rte_kvargs_count(kvlist, ETH_VHOST_IOMMU_SUPPORT) == 1) {
@@ -1653,11 +1649,7 @@ rte_pmd_vhost_remove(struct rte_vdev_device *dev)
 	if (eth_dev == NULL)
 		return 0;
 
-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		return rte_eth_dev_release_port(eth_dev);
-
 	eth_dev_close(eth_dev);
-
 	rte_eth_dev_release_port(eth_dev);
 
 	return 0;
@@ -1674,7 +1666,6 @@ RTE_PMD_REGISTER_PARAM_STRING(net_vhost,
 	"iface=<ifc> "
 	"queues=<int> "
 	"client=<0|1> "
-	"dequeue-zero-copy=<0|1> "
 	"iommu-support=<0|1> "
 	"postcopy-support=<0|1> "
 	"tso=<0|1> "

@@ -363,6 +363,10 @@ otx2_nix_xmit_prepare(struct rte_mbuf *m, uint64_t *cmd, const uint16_t flags)
 			 * DF bit = 0 otherwise
 			 */
 			send_hdr->w0.df = otx2_nix_prefree_seg(m);
+			/* Ensuring mbuf fields which got updated in
+			 * otx2_nix_prefree_seg are written before LMTST.
+			 */
+			rte_io_wmb();
 		}
 		/* Mark mempool object as "put" since it is freed by NIX */
 		if (!send_hdr->w0.df)
@@ -381,6 +385,24 @@ otx2_nix_xmit_one(uint64_t *cmd, void *lmt_addr,
 		otx2_lmt_mov(lmt_addr, cmd, otx2_nix_tx_ext_subs(flags));
 		lmt_status = otx2_lmt_submit(io_addr);
 	} while (lmt_status == 0);
+}
+
+static __rte_always_inline void
+otx2_nix_xmit_prep_lmt(uint64_t *cmd, void *lmt_addr, const uint32_t flags)
+{
+	otx2_lmt_mov(lmt_addr, cmd, otx2_nix_tx_ext_subs(flags));
+}
+
+static __rte_always_inline uint64_t
+otx2_nix_xmit_submit_lmt(const rte_iova_t io_addr)
+{
+	return otx2_lmt_submit(io_addr);
+}
+
+static __rte_always_inline uint64_t
+otx2_nix_xmit_submit_lmt_release(const rte_iova_t io_addr)
+{
+	return otx2_lmt_submit_release(io_addr);
 }
 
 static __rte_always_inline uint16_t
@@ -454,11 +476,30 @@ otx2_nix_prepare_mseg(struct rte_mbuf *m, uint64_t *cmd, const uint16_t flags)
 }
 
 static __rte_always_inline void
+otx2_nix_xmit_mseg_prep_lmt(uint64_t *cmd, void *lmt_addr, uint16_t segdw)
+{
+	otx2_lmt_mov_seg(lmt_addr, (const void *)cmd, segdw);
+}
+
+static __rte_always_inline void
 otx2_nix_xmit_mseg_one(uint64_t *cmd, void *lmt_addr,
 		       rte_iova_t io_addr, uint16_t segdw)
 {
 	uint64_t lmt_status;
 
+	do {
+		otx2_lmt_mov_seg(lmt_addr, (const void *)cmd, segdw);
+		lmt_status = otx2_lmt_submit(io_addr);
+	} while (lmt_status == 0);
+}
+
+static __rte_always_inline void
+otx2_nix_xmit_mseg_one_release(uint64_t *cmd, void *lmt_addr,
+		       rte_iova_t io_addr, uint16_t segdw)
+{
+	uint64_t lmt_status;
+
+	rte_io_wmb();
 	do {
 		otx2_lmt_mov_seg(lmt_addr, (const void *)cmd, segdw);
 		lmt_status = otx2_lmt_submit(io_addr);

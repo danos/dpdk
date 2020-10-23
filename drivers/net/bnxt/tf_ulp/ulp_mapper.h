@@ -53,6 +53,7 @@ struct bnxt_ulp_mapper_data {
 
 /* Internal Structure for passing the arguments around */
 struct bnxt_ulp_mapper_parms {
+	enum bnxt_ulp_template_type		tmpl_type;
 	uint32_t				dev_id;
 	uint32_t				act_tid;
 	struct bnxt_ulp_mapper_tbl_info		*atbls; /* action table */
@@ -70,11 +71,13 @@ struct bnxt_ulp_mapper_parms {
 	struct bnxt_ulp_context			*ulp_ctx;
 	uint8_t					encap_byte_swap;
 	uint32_t				fid;
-	enum bnxt_ulp_flow_db_tables		tbl_idx;
+	enum bnxt_ulp_fdb_type			flow_type;
 	struct bnxt_ulp_mapper_data		*mapper_data;
 	enum bnxt_ulp_cache_table_opc		tcam_tbl_opc;
 	struct bnxt_ulp_mapper_cache_entry	*cache_ptr;
 	struct bnxt_ulp_device_params           *device_params;
+	uint32_t				parent_fid;
+	uint32_t				parent_flow;
 };
 
 struct bnxt_ulp_mapper_create_parms {
@@ -88,6 +91,12 @@ struct bnxt_ulp_mapper_create_parms {
 	uint32_t			act_tid;
 	uint16_t			func_id;
 	uint32_t			dir_attr;
+	enum bnxt_ulp_fdb_type		flow_type;
+
+	/* if set then create it as a child flow with parent as parent_fid */
+	uint32_t			parent_fid;
+	/* if set then create a parent flow */
+	uint32_t			parent_flow;
 };
 
 /* Function to initialize any dynamic mapper data. */
@@ -109,16 +118,17 @@ ulp_mapper_flow_create(struct bnxt_ulp_context	*ulp_ctx,
 
 /* Function that frees all resources associated with the flow. */
 int32_t
-ulp_mapper_flow_destroy(struct bnxt_ulp_context	*ulp_ctx, uint32_t fid,
-			enum bnxt_ulp_flow_db_tables flow_tbl_type);
+ulp_mapper_flow_destroy(struct bnxt_ulp_context *ulp_ctx,
+			enum bnxt_ulp_fdb_type flow_type,
+			uint32_t fid);
 
 /*
  * Function that frees all resources and can be called on default or regular
  * flows
  */
 int32_t
-ulp_mapper_resources_free(struct bnxt_ulp_context	*ulp_ctx,
-			  uint32_t fid,
-			  enum bnxt_ulp_flow_db_tables	tbl_type);
+ulp_mapper_resources_free(struct bnxt_ulp_context *ulp_ctx,
+			  enum bnxt_ulp_fdb_type flow_type,
+			  uint32_t fid);
 
 #endif /* _ULP_MAPPER_H_ */

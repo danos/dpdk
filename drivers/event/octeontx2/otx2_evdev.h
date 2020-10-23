@@ -162,15 +162,15 @@ struct otx2_sso_evdev {
 	struct otx2_timesync_info *tstamp;
 } __rte_cache_aligned;
 
-#define OTX2_SSOGWS_OPS \
-	/* WS ops */			\
-	uintptr_t getwrk_op;		\
-	uintptr_t tag_op;		\
-	uintptr_t wqp_op;		\
-	uintptr_t swtp_op;		\
-	uintptr_t swtag_norm_op;	\
-	uintptr_t swtag_desched_op;	\
-	uint8_t cur_tt;			\
+#define OTX2_SSOGWS_OPS                                                        \
+	/* WS ops */                                                           \
+	uintptr_t getwrk_op;                                                   \
+	uintptr_t tag_op;                                                      \
+	uintptr_t wqp_op;                                                      \
+	uintptr_t swtag_flush_op;                                              \
+	uintptr_t swtag_norm_op;                                               \
+	uintptr_t swtag_desched_op;                                            \
+	uint8_t cur_tt;                                                        \
 	uint8_t cur_grp
 
 /* Event port aka GWS */
@@ -387,6 +387,17 @@ int otx2_sso_tx_adapter_queue_del(uint8_t id,
 				  const struct rte_eventdev *event_dev,
 				  const struct rte_eth_dev *eth_dev,
 				  int32_t tx_queue_id);
+
+/* Event crypto adapter API's */
+int otx2_ca_caps_get(const struct rte_eventdev *dev,
+		     const struct rte_cryptodev *cdev, uint32_t *caps);
+
+int otx2_ca_qp_add(const struct rte_eventdev *dev,
+		   const struct rte_cryptodev *cdev, int32_t queue_pair_id,
+		   const struct rte_event *event);
+
+int otx2_ca_qp_del(const struct rte_eventdev *dev,
+		   const struct rte_cryptodev *cdev, int32_t queue_pair_id);
 
 /* Clean up API's */
 typedef void (*otx2_handle_event_t)(void *arg, struct rte_event ev);

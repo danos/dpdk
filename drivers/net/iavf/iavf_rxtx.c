@@ -23,6 +23,7 @@
 #include <rte_udp.h>
 #include <rte_ip.h>
 #include <rte_net.h>
+#include <rte_vect.h>
 
 #include "iavf.h"
 #include "iavf_rxtx.h"
@@ -1905,7 +1906,6 @@ iavf_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		tx_offload.l3_len = tx_pkt->l3_len;
 		tx_offload.l4_len = tx_pkt->l4_len;
 		tx_offload.tso_segsz = tx_pkt->tso_segsz;
-
 		/* Calculate the number of context descriptors needed. */
 		nb_ctx = iavf_calc_context_desc(ol_flags);
 
@@ -2105,14 +2105,16 @@ iavf_set_rx_function(struct rte_eth_dev *dev)
 	int i;
 	bool use_avx2 = false;
 
-	if (!iavf_rx_vec_dev_check(dev)) {
+	if (!iavf_rx_vec_dev_check(dev) &&
+			rte_vect_get_max_simd_bitwidth() >= RTE_VECT_SIMD_128) {
 		for (i = 0; i < dev->data->nb_rx_queues; i++) {
 			rxq = dev->data->rx_queues[i];
 			(void)iavf_rxq_vec_setup(rxq);
 		}
 
-		if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2) == 1 ||
-		    rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX512F) == 1)
+		if ((rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2) == 1 ||
+		     rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX512F) == 1) &&
+				rte_vect_get_max_simd_bitwidth() >= RTE_VECT_SIMD_256)
 			use_avx2 = true;
 
 		if (dev->data->scattered_rx) {
@@ -2178,7 +2180,8 @@ iavf_set_tx_function(struct rte_eth_dev *dev)
 	int i;
 	bool use_avx2 = false;
 
-	if (!iavf_tx_vec_dev_check(dev)) {
+	if (!iavf_tx_vec_dev_check(dev) &&
+			rte_vect_get_max_simd_bitwidth() >= RTE_VECT_SIMD_128) {
 		for (i = 0; i < dev->data->nb_tx_queues; i++) {
 			txq = dev->data->tx_queues[i];
 			if (!txq)
@@ -2186,8 +2189,9 @@ iavf_set_tx_function(struct rte_eth_dev *dev)
 			iavf_txq_vec_setup(txq);
 		}
 
-		if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2) == 1 ||
-		    rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX512F) == 1)
+		if ((rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2) == 1 ||
+		     rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX512F) == 1) &&
+				rte_vect_get_max_simd_bitwidth() >= RTE_VECT_SIMD_256)
 			use_avx2 = true;
 
 		PMD_DRV_LOG(DEBUG, "Using %sVector Tx (port %d).",
@@ -2206,6 +2210,73 @@ iavf_set_tx_function(struct rte_eth_dev *dev)
 		    dev->data->port_id);
 	dev->tx_pkt_burst = iavf_xmit_pkts;
 	dev->tx_pkt_prepare = iavf_prep_pkts;
+}
+
+static int
+iavf_tx_done_cleanup_full(struct iavf_tx_queue *txq,
+			uint32_t free_cnt)
+{
+	struct iavf_tx_entry *swr_ring = txq->sw_ring;
+	uint16_t i, tx_last, tx_id;
+	uint16_t nb_tx_free_last;
+	uint16_t nb_tx_to_clean;
+	uint32_t pkt_cnt;
+
+	/* Start free mbuf from the next of tx_tail */
+	tx_last = txq->tx_tail;
+	tx_id  = swr_ring[tx_last].next_id;
+
+	if (txq->nb_free == 0 && iavf_xmit_cleanup(txq))
+		return 0;
+
+	nb_tx_to_clean = txq->nb_free;
+	nb_tx_free_last = txq->nb_free;
+	if (!free_cnt)
+		free_cnt = txq->nb_tx_desc;
+
+	/* Loop through swr_ring to count the amount of
+	 * freeable mubfs and packets.
+	 */
+	for (pkt_cnt = 0; pkt_cnt < free_cnt; ) {
+		for (i = 0; i < nb_tx_to_clean &&
+			pkt_cnt < free_cnt &&
+			tx_id != tx_last; i++) {
+			if (swr_ring[tx_id].mbuf != NULL) {
+				rte_pktmbuf_free_seg(swr_ring[tx_id].mbuf);
+				swr_ring[tx_id].mbuf = NULL;
+
+				/*
+				 * last segment in the packet,
+				 * increment packet count
+				 */
+				pkt_cnt += (swr_ring[tx_id].last_id == tx_id);
+			}
+
+			tx_id = swr_ring[tx_id].next_id;
+		}
+
+		if (txq->rs_thresh > txq->nb_tx_desc -
+			txq->nb_free || tx_id == tx_last)
+			break;
+
+		if (pkt_cnt < free_cnt) {
+			if (iavf_xmit_cleanup(txq))
+				break;
+
+			nb_tx_to_clean = txq->nb_free - nb_tx_free_last;
+			nb_tx_free_last = txq->nb_free;
+		}
+	}
+
+	return (int)pkt_cnt;
+}
+
+int
+iavf_dev_tx_done_cleanup(void *txq, uint32_t free_cnt)
+{
+	struct iavf_tx_queue *q = (struct iavf_tx_queue *)txq;
+
+	return iavf_tx_done_cleanup_full(q, free_cnt);
 }
 
 void

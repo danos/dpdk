@@ -10,6 +10,8 @@
 #include <rte_interrupts.h>
 #include <rte_alarm.h>
 
+#include <mlx5_malloc.h>
+
 #include "mlx5.h"
 #include "mlx5_mr.h"
 #include "mlx5_rxtx.h"
@@ -50,23 +52,45 @@ mlx5_txq_start(struct rte_eth_dev *dev)
 
 	for (i = 0; i != priv->txqs_n; ++i) {
 		struct mlx5_txq_ctrl *txq_ctrl = mlx5_txq_get(dev, i);
+		struct mlx5_txq_data *txq_data = &txq_ctrl->txq;
+		uint32_t flags = MLX5_MEM_RTE | MLX5_MEM_ZERO;
 
 		if (!txq_ctrl)
 			continue;
-		if (txq_ctrl->type == MLX5_TXQ_TYPE_HAIRPIN) {
-			txq_ctrl->obj = mlx5_txq_obj_new
-				(dev, i, MLX5_TXQ_OBJ_TYPE_DEVX_HAIRPIN);
-		} else {
+		if (txq_ctrl->type == MLX5_TXQ_TYPE_STANDARD)
 			txq_alloc_elts(txq_ctrl);
-			txq_ctrl->obj = mlx5_txq_obj_new
-				(dev, i, priv->txpp_en ?
-				MLX5_TXQ_OBJ_TYPE_DEVX_SQ :
-				MLX5_TXQ_OBJ_TYPE_IBV);
-		}
+		MLX5_ASSERT(!txq_ctrl->obj);
+		txq_ctrl->obj = mlx5_malloc(flags, sizeof(struct mlx5_txq_obj),
+					    0, txq_ctrl->socket);
 		if (!txq_ctrl->obj) {
+			DRV_LOG(ERR, "Port %u Tx queue %u cannot allocate "
+				"memory resources.", dev->data->port_id,
+				txq_data->idx);
 			rte_errno = ENOMEM;
 			goto error;
 		}
+		ret = priv->obj_ops.txq_obj_new(dev, i);
+		if (ret < 0) {
+			mlx5_free(txq_ctrl->obj);
+			txq_ctrl->obj = NULL;
+			goto error;
+		}
+		if (txq_ctrl->type == MLX5_TXQ_TYPE_STANDARD) {
+			size_t size = txq_data->cqe_s * sizeof(*txq_data->fcqs);
+			txq_data->fcqs = mlx5_malloc(flags, size,
+						     RTE_CACHE_LINE_SIZE,
+						     txq_ctrl->socket);
+			if (!txq_data->fcqs) {
+				DRV_LOG(ERR, "Port %u Tx queue %u cannot "
+					"allocate memory (FCQ).",
+					dev->data->port_id, i);
+				rte_errno = ENOMEM;
+				goto error;
+			}
+		}
+		DRV_LOG(DEBUG, "Port %u txq %u updated with %p.",
+			dev->data->port_id, i, (void *)&txq_ctrl->obj);
+		LIST_INSERT_HEAD(&priv->txqsobj, txq_ctrl->obj, next);
 	}
 	return 0;
 error:
@@ -109,53 +133,53 @@ mlx5_rxq_start(struct rte_eth_dev *dev)
 	struct mlx5_priv *priv = dev->data->dev_private;
 	unsigned int i;
 	int ret = 0;
-	enum mlx5_rxq_obj_type obj_type = MLX5_RXQ_OBJ_TYPE_IBV;
-	struct mlx5_rxq_data *rxq = NULL;
 
-	for (i = 0; i < priv->rxqs_n; ++i) {
-		rxq = (*priv->rxqs)[i];
-		if (rxq && rxq->lro) {
-			obj_type =  MLX5_RXQ_OBJ_TYPE_DEVX_RQ;
-			break;
-		}
-	}
 	/* Allocate/reuse/resize mempool for Multi-Packet RQ. */
 	if (mlx5_mprq_alloc_mp(dev)) {
 		/* Should not release Rx queues but return immediately. */
 		return -rte_errno;
 	}
+	DRV_LOG(DEBUG, "Port %u device_attr.max_qp_wr is %d.",
+		dev->data->port_id, priv->sh->device_attr.max_qp_wr);
+	DRV_LOG(DEBUG, "Port %u device_attr.max_sge is %d.",
+		dev->data->port_id, priv->sh->device_attr.max_sge);
 	for (i = 0; i != priv->rxqs_n; ++i) {
 		struct mlx5_rxq_ctrl *rxq_ctrl = mlx5_rxq_get(dev, i);
 		struct rte_mempool *mp;
 
 		if (!rxq_ctrl)
 			continue;
-		if (rxq_ctrl->type == MLX5_RXQ_TYPE_HAIRPIN) {
-			rxq_ctrl->obj = mlx5_rxq_obj_new
-				(dev, i, MLX5_RXQ_OBJ_TYPE_DEVX_HAIRPIN);
-			if (!rxq_ctrl->obj)
+		if (rxq_ctrl->type == MLX5_RXQ_TYPE_STANDARD) {
+			/* Pre-register Rx mempool. */
+			mp = mlx5_rxq_mprq_enabled(&rxq_ctrl->rxq) ?
+			     rxq_ctrl->rxq.mprq_mp : rxq_ctrl->rxq.mp;
+			DRV_LOG(DEBUG, "Port %u Rx queue %u registering mp %s"
+				" having %u chunks.", dev->data->port_id,
+				rxq_ctrl->rxq.idx, mp->name, mp->nb_mem_chunks);
+			mlx5_mr_update_mp(dev, &rxq_ctrl->rxq.mr_ctrl, mp);
+			ret = rxq_alloc_elts(rxq_ctrl);
+			if (ret)
 				goto error;
-			continue;
 		}
-		/* Pre-register Rx mempool. */
-		mp = mlx5_rxq_mprq_enabled(&rxq_ctrl->rxq) ?
-		     rxq_ctrl->rxq.mprq_mp : rxq_ctrl->rxq.mp;
-		DRV_LOG(DEBUG,
-			"port %u Rx queue %u registering"
-			" mp %s having %u chunks",
-			dev->data->port_id, rxq_ctrl->rxq.idx,
-			mp->name, mp->nb_mem_chunks);
-		mlx5_mr_update_mp(dev, &rxq_ctrl->rxq.mr_ctrl, mp);
-		ret = rxq_alloc_elts(rxq_ctrl);
-		if (ret)
+		MLX5_ASSERT(!rxq_ctrl->obj);
+		rxq_ctrl->obj = mlx5_malloc(MLX5_MEM_RTE | MLX5_MEM_ZERO,
+					    sizeof(*rxq_ctrl->obj), 0,
+					    rxq_ctrl->socket);
+		if (!rxq_ctrl->obj) {
+			DRV_LOG(ERR,
+				"Port %u Rx queue %u can't allocate resources.",
+				dev->data->port_id, (*priv->rxqs)[i]->idx);
+			rte_errno = ENOMEM;
 			goto error;
-		rxq_ctrl->obj = mlx5_rxq_obj_new(dev, i, obj_type);
-		if (!rxq_ctrl->obj)
+		}
+		ret = priv->obj_ops.rxq_obj_new(dev, i);
+		if (ret) {
+			mlx5_free(rxq_ctrl->obj);
 			goto error;
-		if (obj_type == MLX5_RXQ_OBJ_TYPE_IBV)
-			rxq_ctrl->wqn = rxq_ctrl->obj->wq->wq_num;
-		else if (obj_type == MLX5_RXQ_OBJ_TYPE_DEVX_RQ)
-			rxq_ctrl->wqn = rxq_ctrl->obj->rq->id;
+		}
+		DRV_LOG(DEBUG, "Port %u rxq %u updated with %p.",
+			dev->data->port_id, i, (void *)&rxq_ctrl->obj);
+		LIST_INSERT_HEAD(&priv->rxqsobj, rxq_ctrl->obj, next);
 	}
 	return 0;
 error:
@@ -385,7 +409,7 @@ error:
  * @param dev
  *   Pointer to Ethernet device structure.
  */
-void
+int
 mlx5_dev_stop(struct rte_eth_dev *dev)
 {
 	struct mlx5_priv *priv = dev->data->dev_private;
@@ -410,6 +434,8 @@ mlx5_dev_stop(struct rte_eth_dev *dev)
 	mlx5_txq_stop(dev);
 	mlx5_rxq_stop(dev);
 	mlx5_txpp_stop(dev);
+
+	return 0;
 }
 
 /**

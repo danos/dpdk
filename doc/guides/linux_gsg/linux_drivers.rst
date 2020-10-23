@@ -27,31 +27,20 @@ can provide the uio capability. This module can be loaded using the command:
 
     ``uio_pci_generic`` module doesn't support the creation of virtual functions.
 
-As an alternative to the ``uio_pci_generic``, the DPDK also includes the igb_uio
-module which can be found in the kmod subdirectory referred to above. It can
-be loaded as shown below:
+As an alternative to the ``uio_pci_generic``, there is the ``igb_uio`` module
+which can be found in the repository `dpdk-kmods <http://git.dpdk.org/dpdk-kmods>`_.
+It can be loaded as shown below:
 
 .. code-block:: console
 
     sudo modprobe uio
-    sudo insmod kmod/igb_uio.ko
-
-.. note::
-
-   ``igb_uio`` module is disabled by default starting from ``DPDK v20.02``.
-   To build it, the config option ``CONFIG_RTE_EAL_IGB_UIO`` should be enabled.
-   It is planned to move ``igb_uio`` module to a different git repository.
-
-.. note::
-
-    For some devices which lack support for legacy interrupts, e.g. virtual function
-    (VF) devices, the ``igb_uio`` module may be needed in place of ``uio_pci_generic``.
+    sudo insmod igb_uio.ko
 
 .. note::
 
    If UEFI secure boot is enabled, the Linux kernel may disallow the use of
    UIO on the system. Therefore, devices for use by DPDK should be bound to the
-   ``vfio-pci`` kernel module rather than ``igb_uio`` or ``uio_pci_generic``.
+   ``vfio-pci`` kernel module rather than any UIO-based module.
    For more details see :ref:`linux_gsg_binding_kernel` below.
 
 .. note::
@@ -104,11 +93,11 @@ parameter ``--vfio-vf-token``.
     3. echo 2 > /sys/bus/pci/devices/0000:86:00.0/sriov_numvfs
 
     4. Start the PF:
-        ./x86_64-native-linux-gcc/app/testpmd -l 22-25 -n 4 -w 86:00.0 \
+        <build_dir>/app/dpdk-testpmd -l 22-25 -n 4 -w 86:00.0 \
          --vfio-vf-token=14d63f20-8445-11ea-8900-1f9ce7d5650d --file-prefix=pf -- -i
 
     5. Start the VF:
-        ./x86_64-native-linux-gcc/app/testpmd -l 26-29 -n 4 -w 86:02.0 \
+        <build_dir>/app/dpdk-testpmd -l 26-29 -n 4 -w 86:02.0 \
          --vfio-vf-token=14d63f20-8445-11ea-8900-1f9ce7d5650d --file-prefix=vf0 -- -i
 
 Also, to use VFIO, both kernel and BIOS must support and be configured to use IO virtualization (such as Intel® VT-d).

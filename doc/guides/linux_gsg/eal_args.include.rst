@@ -33,9 +33,9 @@ Lcore-related options
     At a given instance only one core option ``--lcores``, ``-l`` or ``-c`` can
     be used.
 
-*   ``--master-lcore <core ID>``
+*   ``--main-lcore <core ID>``
 
-    Core ID that is used as master.
+    Core ID that is used as main.
 
 *   ``-s <service core mask>``
 
@@ -210,3 +210,19 @@ Other options
 *    ``--no-telemetry``:
 
     Disable telemetry.
+
+*    ``--force-max-simd-bitwidth=<val>``:
+
+    Specify the maximum SIMD bitwidth size to handle. This limits which vector paths,
+    if any, are taken, as any paths taken must use a bitwidth below the max bitwidth limit.
+    For example, to allow all SIMD bitwidths up to and including AVX-512::
+
+        --force-max-simd-bitwidth=512
+
+    The following example shows limiting the bitwidth to 64-bits to disable all vector code::
+
+        --force-max-simd-bitwidth=64
+
+    To disable use of max SIMD bitwidth limit::
+
+        --force-max-simd-bitwidth=0

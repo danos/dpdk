@@ -126,12 +126,19 @@ extern "C" {
 #define PKT_RX_FDIR_FLX      (1ULL << 14)
 
 /**
- * The 2 vlans have been stripped by the hardware and their tci are
- * saved in mbuf->vlan_tci (inner) and mbuf->vlan_tci_outer (outer).
- * This can only happen if vlan stripping is enabled in the RX
+ * The outer VLAN has been stripped by the hardware and its TCI is
+ * saved in mbuf->vlan_tci_outer.
+ * This can only happen if VLAN stripping is enabled in the Rx
  * configuration of the PMD.
- * When PKT_RX_QINQ_STRIPPED is set, the flags (PKT_RX_VLAN |
- * PKT_RX_VLAN_STRIPPED | PKT_RX_QINQ) must also be set.
+ * When PKT_RX_QINQ_STRIPPED is set, the flags PKT_RX_VLAN and PKT_RX_QINQ
+ * must also be set.
+ *
+ * - If both PKT_RX_QINQ_STRIPPED and PKT_RX_VLAN_STRIPPED are set, the 2 VLANs
+ *   have been stripped by the hardware and their TCIs are saved in
+ *   mbuf->vlan_tci (inner) and mbuf->vlan_tci_outer (outer).
+ * - If PKT_RX_QINQ_STRIPPED is set and PKT_RX_VLAN_STRIPPED is unset, only the
+ *   outer VLAN is removed from packet data, but both tci are saved in
+ *   mbuf->vlan_tci (inner) and mbuf->vlan_tci_outer (outer).
  */
 #define PKT_RX_QINQ_STRIPPED (1ULL << 15)
 
@@ -159,8 +166,8 @@ extern "C" {
 
 /**
  * The RX packet is a double VLAN, and the outer tci has been
- * saved in in mbuf->vlan_tci_outer. If PKT_RX_QINQ set, PKT_RX_VLAN
- * also should be set and inner tci should be saved to mbuf->vlan_tci.
+ * saved in mbuf->vlan_tci_outer. If this flag is set, PKT_RX_VLAN
+ * must also be set and the inner tci is saved in mbuf->vlan_tci.
  * If the flag PKT_RX_QINQ_STRIPPED is also present, both VLANs
  * headers have been stripped from mbuf data, else they are still
  * present.
@@ -476,11 +483,7 @@ struct rte_mbuf {
 	 * same mbuf cacheline0 layout for 32-bit and 64-bit. This makes
 	 * working on vector drivers easier.
 	 */
-	RTE_STD_C11
-	union {
-		rte_iova_t buf_iova;
-		rte_iova_t buf_physaddr; /**< deprecated */
-	} __rte_aligned(sizeof(rte_iova_t));
+	rte_iova_t buf_iova __rte_aligned(sizeof(rte_iova_t));
 
 	/* next 8 bytes are initialised on RX descriptor rearm */
 	RTE_MARKER64 rearm_data;
@@ -495,12 +498,7 @@ struct rte_mbuf {
 	 * or non-atomic) is controlled by the CONFIG_RTE_MBUF_REFCNT_ATOMIC
 	 * config option.
 	 */
-	RTE_STD_C11
-	union {
-		rte_atomic16_t refcnt_atomic; /**< Atomically accessed refcnt */
-		/** Non-atomically accessed refcnt */
-		uint16_t refcnt;
-	};
+	uint16_t refcnt;
 	uint16_t nb_segs;         /**< Number of segments. */
 
 	/** Input port (16 bits to support more than 256 virtual ports).
@@ -679,11 +677,7 @@ typedef void (*rte_mbuf_extbuf_free_callback_t)(void *addr, void *opaque);
 struct rte_mbuf_ext_shared_info {
 	rte_mbuf_extbuf_free_callback_t free_cb; /**< Free callback function */
 	void *fcb_opaque;                        /**< Free callback argument */
-	RTE_STD_C11
-	union {
-		rte_atomic16_t refcnt_atomic; /**< Atomically accessed refcnt */
-		uint16_t refcnt;
-	};
+	uint16_t refcnt;
 };
 
 /**< Maximum number of nb_segs allowed. */

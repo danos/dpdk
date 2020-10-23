@@ -151,6 +151,10 @@ mlx5_get_ifname(const struct rte_eth_dev *dev, char (*ifname)[IF_NAMESIZE])
 
 	MLX5_ASSERT(priv);
 	MLX5_ASSERT(priv->sh);
+	if (priv->bond_ifindex > 0) {
+		memcpy(ifname, priv->bond_name, IF_NAMESIZE);
+		return 0;
+	}
 	ifindex = mlx5_ifindex(dev);
 	if (!ifindex) {
 		if (!priv->representor)
@@ -732,7 +736,7 @@ mlx5_dev_interrupt_device_fatal(struct mlx5_dev_ctx_shared *sh)
 		dev = &rte_eth_devices[sh->port[i].ih_port_id];
 		MLX5_ASSERT(dev);
 		if (dev->data->dev_conf.intr_conf.rmv)
-			_rte_eth_dev_callback_process
+			rte_eth_dev_callback_process
 				(dev, RTE_ETH_EVENT_INTR_RMV, NULL);
 	}
 }
@@ -808,7 +812,7 @@ mlx5_dev_interrupt_handler(void *cb_arg)
 				usleep(0);
 				continue;
 			}
-			_rte_eth_dev_callback_process
+			rte_eth_dev_callback_process
 				(dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 			continue;
 		}
@@ -1097,6 +1101,58 @@ mlx5_sysfs_switch_info(unsigned int ifindex, struct mlx5_switch_info *info)
 			     " and as representor", ifindex);
 		rte_errno = ENODEV;
 		return -rte_errno;
+	}
+	return 0;
+}
+
+/**
+ * Get bond information associated with network interface.
+ *
+ * @param pf_ifindex
+ *   Network interface index of bond slave interface
+ * @param[out] ifindex
+ *   Pointer to bond ifindex.
+ * @param[out] ifname
+ *   Pointer to bond ifname.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_sysfs_bond_info(unsigned int pf_ifindex, unsigned int *ifindex,
+		     char *ifname)
+{
+	char name[IF_NAMESIZE];
+	FILE *file;
+	unsigned int index;
+	int ret;
+
+	if (!if_indextoname(pf_ifindex, name) || !strlen(name)) {
+		rte_errno = errno;
+		return -rte_errno;
+	}
+	MKSTR(bond_if, "/sys/class/net/%s/master/ifindex", name);
+	/* read bond ifindex */
+	file = fopen(bond_if, "rb");
+	if (file == NULL) {
+		rte_errno = errno;
+		return -rte_errno;
+	}
+	ret = fscanf(file, "%u", &index);
+	fclose(file);
+	if (ret <= 0) {
+		rte_errno = errno;
+		return -rte_errno;
+	}
+	if (ifindex)
+		*ifindex = index;
+
+	/* read bond device name from symbol link */
+	if (ifname) {
+		if (!if_indextoname(index, ifname)) {
+			rte_errno = errno;
+			return -rte_errno;
+		}
 	}
 	return 0;
 }

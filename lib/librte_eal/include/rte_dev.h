@@ -33,12 +33,6 @@ enum rte_dev_event_type {
 	RTE_DEV_EVENT_MAX	/**< max value of this enum */
 };
 
-struct rte_dev_event {
-	enum rte_dev_event_type type;	/**< device event type */
-	int subsystem;			/**< subsystem id */
-	char *devname;			/**< device name */
-};
-
 typedef void (*rte_dev_event_cb_fn)(const char *device_name,
 					enum rte_dev_event_type event,
 					void *cb_arg);
@@ -53,18 +47,6 @@ typedef void (*rte_dev_event_cb_fn)(const char *device_name,
 	if ((func) == NULL) \
 		return; \
 } while (0)
-
-/**
- * Device driver.
- */
-enum rte_kernel_driver {
-	RTE_KDRV_UNKNOWN = 0,
-	RTE_KDRV_IGB_UIO,
-	RTE_KDRV_VFIO,
-	RTE_KDRV_UIO_GENERIC,
-	RTE_KDRV_NIC_UIO,
-	RTE_KDRV_NONE,
-};
 
 /**
  * Device policies.

@@ -71,7 +71,7 @@ The command line options are:
 *   ``--coremask=0xXX``
 
     Set the hexadecimal bitmask of the cores running the packet forwarding test.
-    The master lcore is reserved for command line parsing only and cannot be masked on for packet forwarding.
+    The main lcore is reserved for command line parsing only and cannot be masked on for packet forwarding.
 
 *   ``--portmask=0xXX``
 
@@ -107,9 +107,12 @@ The command line options are:
     Set the socket from which all memory is allocated in NUMA mode,
     where 0 <= N < number of sockets on the board.
 
-*   ``--mbuf-size=N``
+*   ``--mbuf-size=N[,N1[,...Nn]``
 
-    Set the data size of the mbufs used to N bytes, where N < 65536. The default value is 2048.
+    Set the data size of the mbufs used to N bytes, where N < 65536.
+    The default value is 2048. If multiple mbuf-size values are specified the
+    extra memory pools will be created for allocating mbufs to receive packets
+    with buffer splittling features.
 
 *   ``--total-num-mbufs=N``
 
@@ -358,6 +361,21 @@ The command line options are:
 
     Don't flush the RX streams before starting forwarding. Used mainly with the PCAP PMD.
 
+*   ``--rxoffs=X[,Y]``
+
+    Set the offsets of packet segments on receiving if split
+    feature is engaged. Affects only the queues configured
+    with split offloads (currently BUFFER_SPLIT is supported only).
+
+*   ``--rxpkts=X[,Y]``
+
+    Set the length of segments to scatter packets on receiving if split
+    feature is engaged. Affects only the queues configured
+    with split offloads (currently BUFFER_SPLIT is supported only).
+    Optionally the multiple memory pools can be specified with --mbuf-size
+    command line parameter and the mbufs to receive will be allocated
+    sequentially from these extra memory pools.
+
 *   ``--txpkts=X[,Y]``
 
     Set TX segment sizes or total packet length. Valid for ``tx-only``
@@ -426,6 +444,12 @@ The command line options are:
     Set the UDP port number of tunnel VXLAN-GPE to N.
     The default value is 4790.
 
+*   ``--geneve-parsed-port=N``
+
+    Set the UDP port number that is used for parsing the GENEVE protocol to N.
+    HW may be configured with another tunnel Geneve port.
+    The default value is 6081.
+
 *   ``--mlockall``
 
     Enable locking all memory.
@@ -489,3 +513,19 @@ The command line options are:
     The default value is 0x7::
 
        ETH_MQ_RX_RSS_FLAG | ETH_MQ_RX_DCB_FLAG | ETH_MQ_RX_VMDQ_FLAG
+
+*   ``--record-core-cycles``
+
+    Enable measurement of CPU cycles per packet.
+
+*   ``--record-burst-stats``
+
+    Enable display of RX and TX burst stats.
+
+*   ``--hairpin-mode=0xXX``
+
+    Set the hairpin port mode with bitmask, only valid when hairpin queues number is set.
+    bit 4 - explicit Tx flow rule
+    bit 1 - two hairpin ports paired
+    bit 0 - two hairpin ports loop
+    The default value is 0. Hairpin will use single port mode and implicit Tx flow mode.

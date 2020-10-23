@@ -172,8 +172,12 @@ has_sym_args = [
 	'RDMA_NLDEV_ATTR_NDEV_INDEX' ],
 	[ 'HAVE_MLX5_DR_FLOW_DUMP', 'infiniband/mlx5dv.h',
 	'mlx5dv_dump_dr_domain'],
+	[ 'HAVE_MLX5_DR_CREATE_ACTION_FLOW_SAMPLE', 'infiniband/mlx5dv.h',
+	'mlx5dv_dr_action_create_flow_sampler'],
 	[ 'HAVE_MLX5DV_DR_MEM_RECLAIM', 'infiniband/mlx5dv.h',
 	'mlx5dv_dr_domain_set_reclaim_device_memory'],
+	[ 'HAVE_MLX5_DR_CREATE_ACTION_DEST_ARRAY', 'infiniband/mlx5dv.h',
+	'mlx5dv_dr_action_create_dest_array'],
 	[ 'HAVE_DEVLINK', 'linux/devlink.h', 'DEVLINK_GENL_NAME' ],
 ]
 config = configuration_data()

@@ -218,6 +218,13 @@ For example:
      nvgre
      vxlan-gpe
 
+show port (module_eeprom|eeprom)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Display the EEPROM information of a port::
+
+   testpmd> show port (port_id) (module_eeprom|eeprom)
+
 show port rss reta
 ~~~~~~~~~~~~~~~~~~
 
@@ -266,7 +273,7 @@ show config
 Displays the configuration of the application.
 The configuration comes from the command-line, the runtime or the application defaults::
 
-   testpmd> show config (rxtx|cores|fwd|txpkts|txtimes)
+   testpmd> show config (rxtx|cores|fwd|rxoffs|rxpkts|txpkts|txtimes)
 
 The available information categories are:
 
@@ -275,6 +282,10 @@ The available information categories are:
 * ``cores``: List of forwarding cores.
 
 * ``fwd``: Packet forwarding configuration.
+
+* ``rxoffs``: Packet offsets for RX split.
+
+* ``rxpkts``: Packets to RX split configuration.
 
 * ``txpkts``: Packets to TX configuration.
 
@@ -612,6 +623,20 @@ For example::
   00000020: 03 06 00 00 00 FA 00 00 00 00 08 00 00 00 00 00 | ................
   00000030: 06 00                                           | ..
 
+show fec capabilities
+~~~~~~~~~~~~~~~~~~~~~
+
+Show fec capabilities of a port::
+
+  testpmd> show port (port_id) fec capabilities
+
+show fec mode
+~~~~~~~~~~~~~
+
+Show fec mode of a port::
+
+  testpmd> show port (port_id) fec_mode
+
 
 Configuration Functions
 -----------------------
@@ -699,7 +724,7 @@ This is equivalent to the ``--coremask`` command-line option.
 
 .. note::
 
-   The master lcore is reserved for command line parsing only and cannot be masked on for packet forwarding.
+   The main lcore is reserved for command line parsing only and cannot be masked on for packet forwarding.
 
 set portmask
 ~~~~~~~~~~~~
@@ -709,6 +734,36 @@ Set the forwarding ports hexadecimal mask::
    testpmd> set portmask (mask)
 
 This is equivalent to the ``--portmask`` command-line option.
+
+set record-core-cycles
+~~~~~~~~~~~~~~~~~~~~~~
+
+Set the recording of CPU cycles::
+
+   testpmd> set record-core-cycles (on|off)
+
+Where:
+
+* ``on`` enables measurement of CPU cycles per packet.
+
+* ``off`` disables measurement of CPU cycles per packet.
+
+This is equivalent to the ``--record-core-cycles command-line`` option.
+
+set record-burst-stats
+~~~~~~~~~~~~~~~~~~~~~~
+
+Set the displaying of RX and TX bursts::
+
+   testpmd> set record-burst-stats (on|off)
+
+Where:
+
+* ``on`` enables display of RX and TX bursts.
+
+* ``off`` disables display of RX and TX bursts.
+
+This is equivalent to the ``--record-burst-stats command-line`` option.
 
 set burst
 ~~~~~~~~~
@@ -722,6 +777,36 @@ This is equivalent to the ``--burst command-line`` option.
 When retry is enabled, the transmit delay time and number of retries can also be set::
 
    testpmd> set burst tx delay (microseconds) retry (num)
+
+set rxoffs
+~~~~~~~~~~
+
+Set the offsets of segments relating to the data buffer beginning on receiving
+if split feature is engaged. Affects only the queues configured with split
+offloads (currently BUFFER_SPLIT is supported only).
+
+   testpmd> set rxoffs (x[,y]*)
+
+Where x[,y]* represents a CSV list of values, without white space. If the list
+of offsets is shorter than the list of segments the zero offsets will be used
+for the remaining segments.
+
+set rxpkts
+~~~~~~~~~~
+
+Set the length of segments to scatter packets on receiving if split
+feature is engaged. Affects only the queues configured with split offloads
+(currently BUFFER_SPLIT is supported only). Optionally the multiple memory
+pools can be specified with --mbuf-size command line parameter and the mbufs
+to receive will be allocated sequentially from these extra memory pools (the
+mbuf for the first segment is allocated from the first pool, the second one
+from the second pool, and so on, if segment number is greater then pool's the
+mbuf for remaining segments will be allocated from the last valid pool).
+
+   testpmd> set rxpkts (x[,y]*)
+
+Where x[,y]* represents a CSV list of values, without white space. Zero value
+means to use the corresponding memory pool data buffer size.
 
 set txpkts
 ~~~~~~~~~~
@@ -1098,11 +1183,11 @@ Where:
 * ``ip|udp|tcp|sctp`` always relate to  the inner layer.
 
 * ``outer-ip`` relates to the outer IP layer (only for IPv4) in the case where the packet is recognized
-  as a tunnel packet by the forwarding engine (vxlan, gre and ipip are
+  as a tunnel packet by the forwarding engine (geneve, gre, gtp, ipip, vxlan and vxlan-gpe are
   supported). See also the ``csum parse-tunnel`` command.
 
 * ``outer-udp`` relates to the outer UDP layer in the case where the packet is recognized
-  as a tunnel packet by the forwarding engine (vxlan, vxlan-gpe are
+  as a tunnel packet by the forwarding engine (geneve, gtp, vxlan and vxlan-gpe are
   supported). See also the ``csum parse-tunnel`` command.
 
 .. note::
@@ -1162,7 +1247,7 @@ engine::
    testpmd> csum parse-tunnel (on|off) (tx_port_id)
 
 If enabled, the csum forward engine will try to recognize supported
-tunnel headers (vxlan, gre, ipip).
+tunnel headers (geneve, gtp, gre, ipip, vxlan, vxlan-gpe).
 
 If disabled, treat tunnel packets as non-tunneled packets (a inner
 header is handled as a packet payload).
@@ -1974,6 +2059,14 @@ during the flow rule creation::
           raw_encap index 3 / end
 
 Otherwise the default index ``0`` is used.
+
+Set fec mode
+~~~~~~~~~~~~
+
+Set fec mode for a specific port::
+
+  testpmd> set port (port_id) fec_mode auto|off|rs|baser
+
 
 Port Functions
 --------------
@@ -2889,19 +2982,22 @@ Add the port traffic management private shaper profile::
 
    testpmd> add port tm node shaper profile (port_id) (shaper_profile_id) \
    (cmit_tb_rate) (cmit_tb_size) (peak_tb_rate) (peak_tb_size) \
-   (packet_length_adjust)
+   (packet_length_adjust) (packet_mode)
 
 where:
 
 * ``shaper_profile id``: Shaper profile ID for the new profile.
-* ``cmit_tb_rate``: Committed token bucket rate (bytes per second).
-* ``cmit_tb_size``: Committed token bucket size (bytes).
-* ``peak_tb_rate``: Peak token bucket rate (bytes per second).
-* ``peak_tb_size``: Peak token bucket size (bytes).
+* ``cmit_tb_rate``: Committed token bucket rate (bytes per second or packets per second).
+* ``cmit_tb_size``: Committed token bucket size (bytes or packets).
+* ``peak_tb_rate``: Peak token bucket rate (bytes per second or packets per second).
+* ``peak_tb_size``: Peak token bucket size (bytes or packets).
 * ``packet_length_adjust``: The value (bytes) to be added to the length of
   each packet for the purpose of shaping. This parameter value can be used to
   correct the packet length with the framing overhead bytes that are consumed
   on the wire.
+* ``packet_mode``: Shaper configured in packet mode. This parameter value if
+  zero, configures shaper in byte mode and if non-zero configures it in packet
+  mode.
 
 Delete port traffic management private shaper profile
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3022,6 +3118,33 @@ where:
 * ``shaper_profile_id``: Shaper profile ID of the private shaper to be used by
   the node.
 * ``n_sp_priorities``: Number of strict priorities.
+* ``stats_mask``: Mask of statistics counter types to be enabled for this node.
+* ``n_shared_shapers``: Number of shared shapers.
+* ``shared_shaper_id``: Shared shaper id.
+
+Add port traffic management hierarchy nonleaf node with packet mode
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Add nonleaf node with packet mode to port traffic management hierarchy::
+
+   testpmd> add port tm nonleaf node pktmode (port_id) (node_id) (parent_node_id) \
+   (priority) (weight) (level_id) (shaper_profile_id) \
+   (n_sp_priorities) (stats_mask) (n_shared_shapers) \
+   [(shared_shaper_0) (shared_shaper_1) ...] \
+
+where:
+
+* ``parent_node_id``: Node ID of the parent.
+* ``priority``: Node priority (highest node priority is zero). This is used by
+  the SP algorithm running on the parent node for scheduling this node.
+* ``weight``: Node weight (lowest weight is one). The node weight is relative
+  to the weight sum of all siblings that have the same priority. It is used by
+  the WFQ algorithm running on the parent node for scheduling this node.
+* ``level_id``: Hierarchy level of the node.
+* ``shaper_profile_id``: Shaper profile ID of the private shaper to be used by
+  the node.
+* ``n_sp_priorities``: Number of strict priorities. Packet mode is enabled on
+  all of them.
 * ``stats_mask``: Mask of statistics counter types to be enabled for this node.
 * ``n_shared_shapers``: Number of shared shapers.
 * ``shared_shaper_id``: Shared shaper id.
@@ -3660,6 +3783,45 @@ following sections.
 
    flow aged {port_id} [destroy]
 
+- Tunnel offload - create a tunnel stub::
+
+   flow tunnel create {port_id} type {tunnel_type}
+
+- Tunnel offload - destroy a tunnel stub::
+
+   flow tunnel destroy {port_id} id {tunnel_id}
+
+- Tunnel offload - list port tunnel stubs::
+
+   flow tunnel list {port_id}
+
+Creating a tunnel stub for offload
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``flow tunnel create`` setup a tunnel stub for tunnel offload flow rules::
+
+   flow tunnel create {port_id} type {tunnel_type}
+
+If successful, it will return a tunnel stub ID usable with other commands::
+
+   port [...]: flow tunnel #[...] type [...]
+
+Tunnel stub ID is relative to a port.
+
+Destroying tunnel offload stub
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``flow tunnel destroy`` destroy port tunnel stub::
+
+   flow tunnel destroy {port_id} id {tunnel_id}
+
+Listing tunnel offload stubs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``flow tunnel list`` list port tunnel offload stubs::
+
+   flow tunnel list {port_id}
+
 Validating flow rules
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -3706,6 +3868,7 @@ to ``rte_flow_create()``::
 
    flow create {port_id}
       [group {group_id}] [priority {level}] [ingress] [egress] [transfer]
+      [tunnel_set {tunnel_id}] [tunnel_match {tunnel_id}]
       pattern {item} [/ {item} [...]] / end
       actions {action} [/ {action} [...]] / end
 
@@ -3720,6 +3883,7 @@ Otherwise it will show an error message of the form::
 Parameters describe in the following order:
 
 - Attributes (*group*, *priority*, *ingress*, *egress*, *transfer* tokens).
+- Tunnel offload specification (tunnel_set, tunnel_match)
 - A matching pattern, starting with the *pattern* token and terminated by an
   *end* pattern item.
 - Actions, starting with the *actions* token and terminated by an *end*
@@ -3762,6 +3926,14 @@ simultaneously.
 Most rules affect RX therefore contain the ``ingress`` token::
 
    testpmd> flow create 0 ingress pattern [...]
+
+Tunnel offload
+^^^^^^^^^^^^^^
+
+Indicate tunnel offload rule type
+
+- ``tunnel_set {tunnel_id}``: mark rule as tunnel offload decap_set type.
+- ``tunnel_match {tunnel_id}``:  mark rule as tunel offload match type.
 
 Matching pattern
 ^^^^^^^^^^^^^^^^
@@ -4315,6 +4487,11 @@ This section lists supported actions and their attributes, if any.
 
   - ``dscp_value {unsigned}``: The new DSCP value to be set
 
+- ``shared``: Use shared action created via
+  ``flow shared_action {port_id} create``
+
+  - ``shared_action_id {unsigned}``: Shared action ID to use
+
 Destroying flow rules
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -4604,6 +4781,113 @@ If attach ``destroy`` parameter, the command will destroy all the list aged flow
    testpmd> flow aged 0
    Port 0 total aged flows: 0
 
+Creating shared actions
+~~~~~~~~~~~~~~~~~~~~~~~
+``flow shared_action {port_id} create`` creates shared action with optional
+shared action ID. It is bound to ``rte_flow_shared_action_create()``::
+
+   flow shared_action {port_id} create [action_id {shared_action_id}]
+      [ingress] [egress] action {action} / end
+
+If successful, it will show::
+
+   Shared action #[...] created
+
+Otherwise, it will complain either that shared action already exists or that
+some error occurred::
+
+   Shared action #[...] is already assigned, delete it first
+
+::
+
+   Caught error type [...] ([...]): [...]
+
+Create shared rss action with id 100 to queues 1 and 2 on port 0::
+
+   testpmd> flow shared_action 0 create action_id 100 \
+      ingress action rss queues 1 2 end / end
+
+Create shared rss action with id assigned by testpmd to queues 1 and 2 on
+port 0::
+
+	testpmd> flow shared_action 0 create action_id \
+		ingress action rss queues 0 1 end / end
+
+Updating shared actions
+~~~~~~~~~~~~~~~~~~~~~~~
+``flow shared_action {port_id} update`` updates configuration of the shared
+action from its shared action ID (as returned by
+``flow shared_action {port_id} create``). It is bound to
+``rte_flow_shared_action_update()``::
+
+   flow shared_action {port_id} update {shared_action_id}
+      action {action} / end
+
+If successful, it will show::
+
+   Shared action #[...] updated
+
+Otherwise, it will complain either that shared action not found or that some
+error occurred::
+
+   Failed to find shared action #[...] on port [...]
+
+::
+
+   Caught error type [...] ([...]): [...]
+
+Update shared rss action having id 100 on port 0 with rss to queues 0 and 3
+(in create example above rss queues were 1 and 2)::
+
+   testpmd> flow shared_action 0 update 100 action rss queues 0 3 end / end
+
+Destroying shared actions
+~~~~~~~~~~~~~~~~~~~~~~~~~
+``flow shared_action {port_id} update`` destroys one or more shared actions
+from their shared action IDs (as returned by
+``flow shared_action {port_id} create``). It is bound to
+``rte_flow_shared_action_destroy()``::
+
+   flow shared_action {port_id} destroy action_id {shared_action_id} [...]
+
+If successful, it will show::
+
+   Shared action #[...] destroyed
+
+It does not report anything for shared action IDs that do not exist.
+The usual error message is shown when a shared action cannot be destroyed::
+
+   Caught error type [...] ([...]): [...]
+
+Destroy shared actions having id 100 & 101::
+
+   testpmd> flow shared_action 0 destroy action_id 100 action_id 101
+
+Query shared actions
+~~~~~~~~~~~~~~~~~~~~
+``flow shared_action {port_id} query`` queries the shared action from its
+shared action ID (as returned by ``flow shared_action {port_id} create``).
+It is bound to ``rte_flow_shared_action_query()``::
+
+  flow shared_action {port_id} query {shared_action_id}
+
+Currently only rss shared action supported. If successful, it will show::
+
+   Shared RSS action:
+      refs:[...]
+
+Otherwise, it will complain either that shared action not found or that some
+error occurred::
+
+   Failed to find shared action #[...] on port [...]
+
+::
+
+   Caught error type [...] ([...]): [...]
+
+Query shared action having id 100::
+
+   testpmd> flow shared_action 0 query 100
 
 Sample QinQ flow rules
 ~~~~~~~~~~~~~~~~~~~~~~

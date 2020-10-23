@@ -72,7 +72,7 @@ mlx5_flow_discover_priorities(struct rte_eth_dev *dev)
 		},
 	};
 	struct ibv_flow *flow;
-	struct mlx5_hrxq *drop = mlx5_hrxq_drop_new(dev);
+	struct mlx5_hrxq *drop = mlx5_drop_action_create(dev);
 	uint16_t vprio[] = { 8, 16 };
 	int i;
 	int priority = 0;
@@ -89,7 +89,7 @@ mlx5_flow_discover_priorities(struct rte_eth_dev *dev)
 		claim_zero(mlx5_glue->destroy_flow(flow));
 		priority = vprio[i];
 	}
-	mlx5_hrxq_drop_release(dev);
+	mlx5_drop_action_destroy(dev);
 	switch (priority) {
 	case 8:
 		priority = RTE_DIM(priority_map_3);
@@ -1889,7 +1889,7 @@ flow_verbs_remove(struct rte_eth_dev *dev, struct rte_flow *flow)
 		/* hrxq is union, don't touch it only the flag is set. */
 		if (handle->rix_hrxq) {
 			if (handle->fate_action == MLX5_FLOW_FATE_DROP) {
-				mlx5_hrxq_drop_release(dev);
+				mlx5_drop_action_destroy(dev);
 				handle->rix_hrxq = 0;
 			} else if (handle->fate_action ==
 				   MLX5_FLOW_FATE_QUEUE) {
@@ -1965,7 +1965,7 @@ flow_verbs_apply(struct rte_eth_dev *dev, struct rte_flow *flow,
 		dev_flow = &((struct mlx5_flow *)priv->inter_flows)[idx];
 		handle = dev_flow->handle;
 		if (handle->fate_action == MLX5_FLOW_FATE_DROP) {
-			hrxq = mlx5_hrxq_drop_new(dev);
+			hrxq = mlx5_drop_action_create(dev);
 			if (!hrxq) {
 				rte_flow_error_set
 					(error, errno,
@@ -1981,20 +1981,21 @@ flow_verbs_apply(struct rte_eth_dev *dev, struct rte_flow *flow,
 
 			MLX5_ASSERT(rss_desc->queue_num);
 			hrxq_idx = mlx5_hrxq_get(dev, rss_desc->key,
-					     MLX5_RSS_HASH_KEY_LEN,
-					     dev_flow->hash_fields,
-					     rss_desc->queue,
-					     rss_desc->queue_num);
+						 MLX5_RSS_HASH_KEY_LEN,
+						 dev_flow->hash_fields,
+						 rss_desc->queue,
+						 rss_desc->queue_num);
 			if (!hrxq_idx)
-				hrxq_idx = mlx5_hrxq_new(dev, rss_desc->key,
-						MLX5_RSS_HASH_KEY_LEN,
-						dev_flow->hash_fields,
-						rss_desc->queue,
-						rss_desc->queue_num,
-						!!(handle->layers &
-						MLX5_FLOW_LAYER_TUNNEL));
+				hrxq_idx = mlx5_hrxq_new
+						(dev, rss_desc->key,
+						 MLX5_RSS_HASH_KEY_LEN,
+						 dev_flow->hash_fields,
+						 rss_desc->queue,
+						 rss_desc->queue_num,
+						 !!(handle->layers &
+						 MLX5_FLOW_LAYER_TUNNEL));
 			hrxq = mlx5_ipool_get(priv->sh->ipool[MLX5_IPOOL_HRXQ],
-					 hrxq_idx);
+					      hrxq_idx);
 			if (!hrxq) {
 				rte_flow_error_set
 					(error, rte_errno,
@@ -2033,7 +2034,7 @@ error:
 		/* hrxq is union, don't touch it only the flag is set. */
 		if (handle->rix_hrxq) {
 			if (handle->fate_action == MLX5_FLOW_FATE_DROP) {
-				mlx5_hrxq_drop_release(dev);
+				mlx5_drop_action_destroy(dev);
 				handle->rix_hrxq = 0;
 			} else if (handle->fate_action ==
 				   MLX5_FLOW_FATE_QUEUE) {

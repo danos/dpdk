@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright 2017,2019 NXP
+ * Copyright 2017,2019-2020 NXP
  * Copyright(c) 2017-2020 Intel Corporation.
  */
 
@@ -290,7 +290,15 @@ struct rte_security_pdcp_xform {
 	 * per packet HFN in place of IV. PMDs will extract the HFN
 	 * and perform operations accordingly.
 	 */
-	uint32_t hfn_ovrd;
+	uint8_t hfn_ovrd;
+	/** In case of 5G NR, a new protocol (SDAP) header may be set
+	 * inside PDCP payload which should be authenticated but not
+	 * encrypted. Hence, driver should be notified if SDAP is
+	 * enabled or not, so that SDAP header is not encrypted.
+	 */
+	uint8_t sdap_enabled;
+	/** Reserved for future */
+	uint16_t reserved;
 };
 
 /** DOCSIS direction */
@@ -386,6 +394,7 @@ struct rte_security_session {
  * @param   instance	security instance
  * @param   conf	session configuration parameters
  * @param   mp		mempool to allocate session objects from
+ * @param   priv_mp	mempool to allocate session private data objects from
  * @return
  *  - On success, pointer to session
  *  - On failure, NULL
@@ -393,7 +402,8 @@ struct rte_security_session {
 struct rte_security_session *
 rte_security_session_create(struct rte_security_ctx *instance,
 			    struct rte_security_session_conf *conf,
-			    struct rte_mempool *mp);
+			    struct rte_mempool *mp,
+			    struct rte_mempool *priv_mp);
 
 /**
  * Update security session as specified by the session configuration

@@ -26,7 +26,7 @@
 #define MAX_QUEUES RTE_MAX_LCORE
 #define TEST_REPETITIONS 1000
 
-#ifdef RTE_LIBRTE_PMD_BBDEV_FPGA_LTE_FEC
+#ifdef RTE_BASEBAND_FPGA_LTE_FEC
 #include <fpga_lte_fec.h>
 #define FPGA_LTE_PF_DRIVER_NAME ("intel_fpga_lte_fec_pf")
 #define FPGA_LTE_VF_DRIVER_NAME ("intel_fpga_lte_fec_vf")
@@ -39,7 +39,7 @@
 #define FLR_4G_TIMEOUT 610
 #endif
 
-#ifdef RTE_LIBRTE_PMD_BBDEV_FPGA_5GNR_FEC
+#ifdef RTE_BASEBAND_FPGA_5GNR_FEC
 #include <rte_pmd_fpga_5gnr_fec.h>
 #define FPGA_5GNR_PF_DRIVER_NAME ("intel_fpga_5gnr_fec_pf")
 #define FPGA_5GNR_VF_DRIVER_NAME ("intel_fpga_5gnr_fec_vf")
@@ -50,6 +50,18 @@
 #define UL_5G_LOAD_BALANCE 128
 #define DL_5G_LOAD_BALANCE 128
 #define FLR_5G_TIMEOUT 610
+#endif
+
+#ifdef RTE_BASEBAND_ACC100
+#include <rte_acc100_cfg.h>
+#define ACC100PF_DRIVER_NAME   ("intel_acc100_pf")
+#define ACC100VF_DRIVER_NAME   ("intel_acc100_vf")
+#define ACC100_QMGR_NUM_AQS 16
+#define ACC100_QMGR_NUM_QGS 2
+#define ACC100_QMGR_AQ_DEPTH 5
+#define ACC100_QMGR_INVALID_IDX -1
+#define ACC100_QMGR_RR 1
+#define ACC100_QOS_GBR 0
 #endif
 
 #define OPS_CACHE_SIZE 256U
@@ -565,17 +577,17 @@ add_bbdev_dev(uint8_t dev_id, struct rte_bbdev_info *info,
 /* Configure fpga lte fec with PF & VF values
  * if '-i' flag is set and using fpga device
  */
-#ifdef RTE_LIBRTE_PMD_BBDEV_FPGA_LTE_FEC
+#ifdef RTE_BASEBAND_FPGA_LTE_FEC
 	if ((get_init_device() == true) &&
 		(!strcmp(info->drv.driver_name, FPGA_LTE_PF_DRIVER_NAME))) {
-		struct fpga_lte_fec_conf conf;
+		struct rte_fpga_lte_fec_conf conf;
 		unsigned int i;
 
 		printf("Configure FPGA LTE FEC Driver %s with default values\n",
 				info->drv.driver_name);
 
 		/* clear default configuration before initialization */
-		memset(&conf, 0, sizeof(struct fpga_lte_fec_conf));
+		memset(&conf, 0, sizeof(struct rte_fpga_lte_fec_conf));
 
 		/* Set PF mode :
 		 * true if PF is used for data plane
@@ -603,23 +615,23 @@ add_bbdev_dev(uint8_t dev_id, struct rte_bbdev_info *info,
 		conf.flr_time_out = FLR_4G_TIMEOUT;
 
 		/* setup FPGA PF with configuration information */
-		ret = fpga_lte_fec_configure(info->dev_name, &conf);
+		ret = rte_fpga_lte_fec_configure(info->dev_name, &conf);
 		TEST_ASSERT_SUCCESS(ret,
 				"Failed to configure 4G FPGA PF for bbdev %s",
 				info->dev_name);
 	}
 #endif
-#ifdef RTE_LIBRTE_PMD_BBDEV_FPGA_5GNR_FEC
+#ifdef RTE_BASEBAND_FPGA_5GNR_FEC
 	if ((get_init_device() == true) &&
 		(!strcmp(info->drv.driver_name, FPGA_5GNR_PF_DRIVER_NAME))) {
-		struct fpga_5gnr_fec_conf conf;
+		struct rte_fpga_5gnr_fec_conf conf;
 		unsigned int i;
 
 		printf("Configure FPGA 5GNR FEC Driver %s with default values\n",
 				info->drv.driver_name);
 
 		/* clear default configuration before initialization */
-		memset(&conf, 0, sizeof(struct fpga_5gnr_fec_conf));
+		memset(&conf, 0, sizeof(struct rte_fpga_5gnr_fec_conf));
 
 		/* Set PF mode :
 		 * true if PF is used for data plane
@@ -647,12 +659,71 @@ add_bbdev_dev(uint8_t dev_id, struct rte_bbdev_info *info,
 		conf.flr_time_out = FLR_5G_TIMEOUT;
 
 		/* setup FPGA PF with configuration information */
-		ret = fpga_5gnr_fec_configure(info->dev_name, &conf);
+		ret = rte_fpga_5gnr_fec_configure(info->dev_name, &conf);
 		TEST_ASSERT_SUCCESS(ret,
 				"Failed to configure 5G FPGA PF for bbdev %s",
 				info->dev_name);
 	}
 #endif
+#ifdef RTE_BASEBAND_ACC100
+	if ((get_init_device() == true) &&
+		(!strcmp(info->drv.driver_name, ACC100PF_DRIVER_NAME))) {
+		struct rte_acc100_conf conf;
+		unsigned int i;
+
+		printf("Configure ACC100 FEC Driver %s with default values\n",
+				info->drv.driver_name);
+
+		/* clear default configuration before initialization */
+		memset(&conf, 0, sizeof(struct rte_acc100_conf));
+
+		/* Always set in PF mode for built-in configuration */
+		conf.pf_mode_en = true;
+		for (i = 0; i < RTE_ACC100_NUM_VFS; ++i) {
+			conf.arb_dl_4g[i].gbr_threshold1 = ACC100_QOS_GBR;
+			conf.arb_dl_4g[i].gbr_threshold1 = ACC100_QOS_GBR;
+			conf.arb_dl_4g[i].round_robin_weight = ACC100_QMGR_RR;
+			conf.arb_ul_4g[i].gbr_threshold1 = ACC100_QOS_GBR;
+			conf.arb_ul_4g[i].gbr_threshold1 = ACC100_QOS_GBR;
+			conf.arb_ul_4g[i].round_robin_weight = ACC100_QMGR_RR;
+			conf.arb_dl_5g[i].gbr_threshold1 = ACC100_QOS_GBR;
+			conf.arb_dl_5g[i].gbr_threshold1 = ACC100_QOS_GBR;
+			conf.arb_dl_5g[i].round_robin_weight = ACC100_QMGR_RR;
+			conf.arb_ul_5g[i].gbr_threshold1 = ACC100_QOS_GBR;
+			conf.arb_ul_5g[i].gbr_threshold1 = ACC100_QOS_GBR;
+			conf.arb_ul_5g[i].round_robin_weight = ACC100_QMGR_RR;
+		}
+
+		conf.input_pos_llr_1_bit = true;
+		conf.output_pos_llr_1_bit = true;
+		conf.num_vf_bundles = 1; /**< Number of VF bundles to setup */
+
+		conf.q_ul_4g.num_qgroups = ACC100_QMGR_NUM_QGS;
+		conf.q_ul_4g.first_qgroup_index = ACC100_QMGR_INVALID_IDX;
+		conf.q_ul_4g.num_aqs_per_groups = ACC100_QMGR_NUM_AQS;
+		conf.q_ul_4g.aq_depth_log2 = ACC100_QMGR_AQ_DEPTH;
+		conf.q_dl_4g.num_qgroups = ACC100_QMGR_NUM_QGS;
+		conf.q_dl_4g.first_qgroup_index = ACC100_QMGR_INVALID_IDX;
+		conf.q_dl_4g.num_aqs_per_groups = ACC100_QMGR_NUM_AQS;
+		conf.q_dl_4g.aq_depth_log2 = ACC100_QMGR_AQ_DEPTH;
+		conf.q_ul_5g.num_qgroups = ACC100_QMGR_NUM_QGS;
+		conf.q_ul_5g.first_qgroup_index = ACC100_QMGR_INVALID_IDX;
+		conf.q_ul_5g.num_aqs_per_groups = ACC100_QMGR_NUM_AQS;
+		conf.q_ul_5g.aq_depth_log2 = ACC100_QMGR_AQ_DEPTH;
+		conf.q_dl_5g.num_qgroups = ACC100_QMGR_NUM_QGS;
+		conf.q_dl_5g.first_qgroup_index = ACC100_QMGR_INVALID_IDX;
+		conf.q_dl_5g.num_aqs_per_groups = ACC100_QMGR_NUM_AQS;
+		conf.q_dl_5g.aq_depth_log2 = ACC100_QMGR_AQ_DEPTH;
+
+		/* setup PF with configuration information */
+		ret = rte_acc100_configure(info->dev_name, &conf);
+		TEST_ASSERT_SUCCESS(ret,
+				"Failed to configure ACC100 PF for bbdev %s",
+				info->dev_name);
+	}
+#endif
+	/* Let's refresh this now this is configured */
+	rte_bbdev_info_get(dev_id, info);
 	nb_queues = RTE_MIN(rte_lcore_count(), info->drv.max_num_queues);
 	nb_queues = RTE_MIN(nb_queues, (unsigned int) MAX_QUEUES);
 
@@ -3651,14 +3722,14 @@ bler_test(struct active_device *ad,
 
 	rte_atomic16_set(&op_params->sync, SYNC_WAIT);
 
-	/* Master core is set at first entry */
+	/* Main core is set at first entry */
 	t_params[0].dev_id = ad->dev_id;
 	t_params[0].lcore_id = rte_lcore_id();
 	t_params[0].op_params = op_params;
 	t_params[0].queue_id = ad->queue_ids[used_cores++];
 	t_params[0].iter_count = 0;
 
-	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
+	RTE_LCORE_FOREACH_WORKER(lcore_id) {
 		if (used_cores >= num_lcores)
 			break;
 
@@ -3675,7 +3746,7 @@ bler_test(struct active_device *ad,
 	rte_atomic16_set(&op_params->sync, SYNC_START);
 	ret = bler_function(&t_params[0]);
 
-	/* Master core is always used */
+	/* Main core is always used */
 	for (used_cores = 1; used_cores < num_lcores; used_cores++)
 		ret |= rte_eal_wait_lcore(t_params[used_cores].lcore_id);
 
@@ -3769,14 +3840,14 @@ throughput_test(struct active_device *ad,
 
 	rte_atomic16_set(&op_params->sync, SYNC_WAIT);
 
-	/* Master core is set at first entry */
+	/* Main core is set at first entry */
 	t_params[0].dev_id = ad->dev_id;
 	t_params[0].lcore_id = rte_lcore_id();
 	t_params[0].op_params = op_params;
 	t_params[0].queue_id = ad->queue_ids[used_cores++];
 	t_params[0].iter_count = 0;
 
-	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
+	RTE_LCORE_FOREACH_WORKER(lcore_id) {
 		if (used_cores >= num_lcores)
 			break;
 
@@ -3793,7 +3864,7 @@ throughput_test(struct active_device *ad,
 	rte_atomic16_set(&op_params->sync, SYNC_START);
 	ret = throughput_function(&t_params[0]);
 
-	/* Master core is always used */
+	/* Main core is always used */
 	for (used_cores = 1; used_cores < num_lcores; used_cores++)
 		ret |= rte_eal_wait_lcore(t_params[used_cores].lcore_id);
 
@@ -3817,7 +3888,7 @@ throughput_test(struct active_device *ad,
 	/* In interrupt TC we need to wait for the interrupt callback to deqeue
 	 * all pending operations. Skip waiting for queues which reported an
 	 * error using processing_status variable.
-	 * Wait for master lcore operations.
+	 * Wait for main lcore operations.
 	 */
 	tp = &t_params[0];
 	while ((rte_atomic16_read(&tp->nb_dequeued) <
@@ -3830,7 +3901,7 @@ throughput_test(struct active_device *ad,
 	tp->mbps /= TEST_REPETITIONS;
 	ret |= (int)rte_atomic16_read(&tp->processing_status);
 
-	/* Wait for slave lcores operations */
+	/* Wait for worker lcores operations */
 	for (used_cores = 1; used_cores < num_lcores; used_cores++) {
 		tp = &t_params[used_cores];
 

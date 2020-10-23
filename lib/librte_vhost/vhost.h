@@ -46,10 +46,8 @@
 
 #define MAX_PKT_BURST 32
 
-#define ASYNC_MAX_POLL_SEG 255
-
 #define VHOST_MAX_ASYNC_IT (MAX_PKT_BURST * 2)
-#define VHOST_MAX_ASYNC_VEC (BUF_VECTOR_MAX * 2)
+#define VHOST_MAX_ASYNC_VEC (BUF_VECTOR_MAX * 4)
 
 #define PACKED_DESC_ENQUEUE_USED_FLAG(w)	\
 	((w) ? (VRING_DESC_F_AVAIL | VRING_DESC_F_USED | VRING_DESC_F_WRITE) : \
@@ -93,20 +91,6 @@ struct buf_vector {
 	uint32_t buf_len;
 	uint32_t desc_idx;
 };
-
-/*
- * A structure to hold some fields needed in zero copy code path,
- * mainly for associating an mbuf with the right desc_idx.
- */
-struct zcopy_mbuf {
-	struct rte_mbuf *mbuf;
-	uint32_t desc_idx;
-	uint16_t desc_count;
-	uint16_t in_use;
-
-	TAILQ_ENTRY(zcopy_mbuf) next;
-};
-TAILQ_HEAD(zcopy_mbuf_list, zcopy_mbuf);
 
 /*
  * Structure contains the info for each batched memory copy.
@@ -185,12 +169,6 @@ struct vhost_virtqueue {
 	struct rte_vhost_resubmit_info *resubmit_inflight;
 	uint64_t		global_counter;
 
-	uint16_t		nr_zmbuf;
-	uint16_t		zmbuf_size;
-	uint16_t		last_zmbuf_idx;
-	struct zcopy_mbuf	*zmbufs;
-	struct zcopy_mbuf_list	zmbuf_list;
-
 	union {
 		struct vring_used_elem  *shadow_used_split;
 		struct vring_used_elem_packed *shadow_used_packed;
@@ -220,17 +198,15 @@ struct vhost_virtqueue {
 	/* operation callbacks for async dma */
 	struct rte_vhost_async_channel_ops	async_ops;
 
-	struct rte_vhost_iov_iter it_pool[VHOST_MAX_ASYNC_IT];
-	struct iovec vec_pool[VHOST_MAX_ASYNC_VEC];
+	struct rte_vhost_iov_iter *it_pool;
+	struct iovec *vec_pool;
 
 	/* async data transfer status */
 	uintptr_t	**async_pkts_pending;
-	#define		ASYNC_PENDING_INFO_N_MSK 0xFFFF
-	#define		ASYNC_PENDING_INFO_N_SFT 16
-	uint64_t	*async_pending_info;
+	struct async_inflight_info *async_pkts_info;
 	uint16_t	async_pkts_idx;
 	uint16_t	async_pkts_inflight_n;
-	uint16_t	async_last_seg_n;
+	uint16_t	async_last_pkts_n;
 
 	/* vq async features */
 	bool		async_inorder;
@@ -239,6 +215,7 @@ struct vhost_virtqueue {
 } __rte_cache_aligned;
 
 /* Virtio device status as per Virtio specification */
+#define VIRTIO_DEVICE_STATUS_RESET		0x00
 #define VIRTIO_DEVICE_STATUS_ACK		0x01
 #define VIRTIO_DEVICE_STATUS_DRIVER		0x02
 #define VIRTIO_DEVICE_STATUS_DRIVER_OK		0x04
@@ -379,7 +356,6 @@ struct virtio_net {
 	/* to tell if we need broadcast rarp packet */
 	int16_t			broadcast_rarp;
 	uint32_t		nr_vring;
-	int			dequeue_zero_copy;
 	int			async_copy;
 	int			extbuf;
 	int			linearbuf;
@@ -717,7 +693,6 @@ int alloc_vring_queue(struct virtio_net *dev, uint32_t vring_idx);
 void vhost_attach_vdpa_device(int vid, struct rte_vdpa_device *dev);
 
 void vhost_set_ifname(int, const char *if_name, unsigned int if_len);
-void vhost_enable_dequeue_zero_copy(int vid);
 void vhost_set_builtin_virtio_net(int vid, bool enable);
 void vhost_enable_extbuf(int vid);
 void vhost_enable_linearbuf(int vid);
@@ -895,12 +870,6 @@ mbuf_is_consumed(struct rte_mbuf *m)
 	}
 
 	return true;
-}
-
-static __rte_always_inline void
-put_zmbuf(struct zcopy_mbuf *zmbuf)
-{
-	zmbuf->in_use = 0;
 }
 
 #endif /* _VHOST_NET_CDEV_H_ */

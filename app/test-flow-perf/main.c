@@ -45,10 +45,15 @@
 struct rte_flow *flow;
 static uint8_t flow_group;
 
-static uint64_t flow_items;
-static uint64_t flow_actions;
-static uint64_t flow_attrs;
+static uint64_t encap_data;
+static uint64_t decap_data;
 
+static uint64_t flow_items[MAX_ITEMS_NUM];
+static uint64_t flow_actions[MAX_ACTIONS_NUM];
+static uint64_t flow_attrs[MAX_ATTRS_NUM];
+static uint8_t items_idx, actions_idx, attrs_idx;
+
+static uint64_t ports_mask;
 static volatile bool force_quit;
 static bool dump_iterations;
 static bool delete_flag;
@@ -102,6 +107,7 @@ usage(char *progname)
 	printf("  --dump-socket-mem: To dump all socket memory\n");
 	printf("  --enable-fwd: To enable packets forwarding"
 		" after insertion\n");
+	printf("  --portmask=N: hexadecimal bitmask of ports used\n");
 
 	printf("To set flow attributes:\n");
 	printf("  --ingress: set ingress attribute in flows\n");
@@ -124,6 +130,8 @@ usage(char *progname)
 	printf("  --gtp: add gtp layer in flow items\n");
 	printf("  --meta: add meta layer in flow items\n");
 	printf("  --tag: add tag layer in flow items\n");
+	printf("  --icmpv4: add icmpv4 layer in flow items\n");
+	printf("  --icmpv6: add icmpv6 layer in flow items\n");
 
 	printf("To set flow actions:\n");
 	printf("  --port-id: add port-id action in flow actions\n");
@@ -137,12 +145,58 @@ usage(char *progname)
 	printf("  --drop: add drop action in flow actions\n");
 	printf("  --hairpin-queue=N: add hairpin-queue action in flow actions\n");
 	printf("  --hairpin-rss=N: add hairpin-rss action in flow actions\n");
+	printf("  --set-src-mac: add set src mac action to flow actions\n"
+		"Src mac to be set is random each flow\n");
+	printf("  --set-dst-mac: add set dst mac action to flow actions\n"
+		 "Dst mac to be set is random each flow\n");
+	printf("  --set-src-ipv4: add set src ipv4 action to flow actions\n"
+		"Src ipv4 to be set is random each flow\n");
+	printf("  --set-dst-ipv4 add set dst ipv4 action to flow actions\n"
+		"Dst ipv4 to be set is random each flow\n");
+	printf("  --set-src-ipv6: add set src ipv6 action to flow actions\n"
+		"Src ipv6 to be set is random each flow\n");
+	printf("  --set-dst-ipv6: add set dst ipv6 action to flow actions\n"
+		"Dst ipv6 to be set is random each flow\n");
+	printf("  --set-src-tp: add set src tp action to flow actions\n"
+		"Src tp to be set is random each flow\n");
+	printf("  --set-dst-tp: add set dst tp action to flow actions\n"
+		"Dst tp to be set is random each flow\n");
+	printf("  --inc-tcp-ack: add inc tcp ack action to flow actions\n"
+		"tcp ack will be increments by 1\n");
+	printf("  --dec-tcp-ack: add dec tcp ack action to flow actions\n"
+		"tcp ack will be decrements by 1\n");
+	printf("  --inc-tcp-seq: add inc tcp seq action to flow actions\n"
+		"tcp seq will be increments by 1\n");
+	printf("  --dec-tcp-seq: add dec tcp seq action to flow actions\n"
+		"tcp seq will be decrements by 1\n");
+	printf("  --set-ttl: add set ttl action to flow actions\n"
+		"L3 ttl to be set is random each flow\n");
+	printf("  --dec-ttl: add dec ttl action to flow actions\n"
+		"L3 ttl will be decrements by 1\n");
+	printf("  --set-ipv4-dscp: add set ipv4 dscp action to flow actions\n"
+		"ipv4 dscp value to be set is random each flow\n");
+	printf("  --set-ipv6-dscp: add set ipv6 dscp action to flow actions\n"
+		"ipv6 dscp value to be set is random each flow\n");
+	printf("  --flag: add flag action to flow actions\n");
+	printf("  --raw-encap=<data>: add raw encap action to flow actions\n"
+		"Data is the data needed to be encaped\n"
+		"Example: raw-encap=ether,ipv4,udp,vxlan\n");
+	printf("  --raw-decap=<data>: add raw decap action to flow actions\n"
+		"Data is the data needed to be decaped\n"
+		"Example: raw-decap=ether,ipv4,udp,vxlan\n");
+	printf("  --vxlan-encap: add vxlan-encap action to flow actions\n"
+		"Encapped data is fixed with pattern: ether,ipv4,udp,vxlan\n"
+		"With fixed values\n");
+	printf("  --vxlan-decap: add vxlan_decap action to flow actions\n");
 }
 
 static void
 args_parse(int argc, char **argv)
 {
+	uint64_t pm;
 	char **argvopt;
+	char *token;
+	char *end;
 	int n, opt;
 	int opt_idx;
 	size_t i;
@@ -150,133 +204,324 @@ args_parse(int argc, char **argv)
 	static const struct option_dict {
 		const char *str;
 		const uint64_t mask;
-		uint64_t *bitmap;
+		uint64_t *map;
+		uint8_t *map_idx;
+
 	} flow_options[] = {
 		{
 			.str = "ether",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_ETH),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "ipv4",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_IPV4),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "ipv6",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_IPV6),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "vlan",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_VLAN),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "tcp",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_TCP),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "udp",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_UDP),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "vxlan",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_VXLAN),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "vxlan-gpe",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_VXLAN_GPE),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "gre",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_GRE),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "geneve",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_GENEVE),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "gtp",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_GTP),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "meta",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_META),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "tag",
 			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_TAG),
-			.bitmap = &flow_items
+			.map = &flow_items[0],
+			.map_idx = &items_idx
+		},
+		{
+			.str = "icmpv4",
+			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_ICMP),
+			.map = &flow_items[0],
+			.map_idx = &items_idx
+		},
+		{
+			.str = "icmpv6",
+			.mask = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_ICMP6),
+			.map = &flow_items[0],
+			.map_idx = &items_idx
 		},
 		{
 			.str = "ingress",
 			.mask = INGRESS,
-			.bitmap = &flow_attrs
+			.map = &flow_attrs[0],
+			.map_idx = &attrs_idx
 		},
 		{
 			.str = "egress",
 			.mask = EGRESS,
-			.bitmap = &flow_attrs
+			.map = &flow_attrs[0],
+			.map_idx = &attrs_idx
 		},
 		{
 			.str = "transfer",
 			.mask = TRANSFER,
-			.bitmap = &flow_attrs
+			.map = &flow_attrs[0],
+			.map_idx = &attrs_idx
 		},
 		{
 			.str = "port-id",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_PORT_ID),
-			.bitmap = &flow_actions
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
 		},
 		{
 			.str = "rss",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_RSS),
-			.bitmap = &flow_actions
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
 		},
 		{
 			.str = "queue",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_QUEUE),
-			.bitmap = &flow_actions
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
 		},
 		{
 			.str = "jump",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_JUMP),
-			.bitmap = &flow_actions
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
 		},
 		{
 			.str = "mark",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_MARK),
-			.bitmap = &flow_actions
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
 		},
 		{
 			.str = "count",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_COUNT),
-			.bitmap = &flow_actions
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
 		},
 		{
 			.str = "set-meta",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_SET_META),
-			.bitmap = &flow_actions
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
 		},
 		{
 			.str = "set-tag",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_SET_TAG),
-			.bitmap = &flow_actions
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
 		},
 		{
 			.str = "drop",
 			.mask = FLOW_ACTION_MASK(RTE_FLOW_ACTION_TYPE_DROP),
-			.bitmap = &flow_actions
-		}
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-src-mac",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_MAC_SRC
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-dst-mac",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_MAC_DST
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-src-ipv4",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_IPV4_SRC
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-dst-ipv4",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_IPV4_DST
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-src-ipv6",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_IPV6_SRC
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-dst-ipv6",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_IPV6_DST
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-src-tp",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_TP_SRC
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-dst-tp",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_TP_DST
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "inc-tcp-ack",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_INC_TCP_ACK
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "dec-tcp-ack",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_DEC_TCP_ACK
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "inc-tcp-seq",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_INC_TCP_SEQ
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "dec-tcp-seq",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_DEC_TCP_SEQ
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-ttl",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_TTL
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "dec-ttl",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_DEC_TTL
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-ipv4-dscp",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_IPV4_DSCP
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "set-ipv6-dscp",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_SET_IPV6_DSCP
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "flag",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_FLAG
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "vxlan-encap",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_VXLAN_ENCAP
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
+		{
+			.str = "vxlan-decap",
+			.mask = FLOW_ACTION_MASK(
+				RTE_FLOW_ACTION_TYPE_VXLAN_DECAP
+			),
+			.map = &flow_actions[0],
+			.map_idx = &actions_idx
+		},
 	};
 
 	static const struct option lgopts[] = {
@@ -287,6 +532,7 @@ args_parse(int argc, char **argv)
 		{ "deletion-rate",              0, 0, 0 },
 		{ "dump-socket-mem",            0, 0, 0 },
 		{ "enable-fwd",                 0, 0, 0 },
+		{ "portmask",                   1, 0, 0 },
 		/* Attributes */
 		{ "ingress",                    0, 0, 0 },
 		{ "egress",                     0, 0, 0 },
@@ -306,6 +552,8 @@ args_parse(int argc, char **argv)
 		{ "gtp",                        0, 0, 0 },
 		{ "meta",                       0, 0, 0 },
 		{ "tag",                        0, 0, 0 },
+		{ "icmpv4",                     0, 0, 0 },
+		{ "icmpv6",                     0, 0, 0 },
 		/* Actions */
 		{ "port-id",                    0, 0, 0 },
 		{ "rss",                        0, 0, 0 },
@@ -318,11 +566,32 @@ args_parse(int argc, char **argv)
 		{ "drop",                       0, 0, 0 },
 		{ "hairpin-queue",              1, 0, 0 },
 		{ "hairpin-rss",                1, 0, 0 },
+		{ "set-src-mac",                0, 0, 0 },
+		{ "set-dst-mac",                0, 0, 0 },
+		{ "set-src-ipv4",               0, 0, 0 },
+		{ "set-dst-ipv4",               0, 0, 0 },
+		{ "set-src-ipv6",               0, 0, 0 },
+		{ "set-dst-ipv6",               0, 0, 0 },
+		{ "set-src-tp",                 0, 0, 0 },
+		{ "set-dst-tp",                 0, 0, 0 },
+		{ "inc-tcp-ack",                0, 0, 0 },
+		{ "dec-tcp-ack",                0, 0, 0 },
+		{ "inc-tcp-seq",                0, 0, 0 },
+		{ "dec-tcp-seq",                0, 0, 0 },
+		{ "set-ttl",                    0, 0, 0 },
+		{ "dec-ttl",                    0, 0, 0 },
+		{ "set-ipv4-dscp",              0, 0, 0 },
+		{ "set-ipv6-dscp",              0, 0, 0 },
+		{ "flag",                       0, 0, 0 },
+		{ "raw-encap",                  1, 0, 0 },
+		{ "raw-decap",                  1, 0, 0 },
+		{ "vxlan-encap",                0, 0, 0 },
+		{ "vxlan-decap",                0, 0, 0 },
 	};
 
-	flow_items = 0;
-	flow_actions = 0;
-	flow_attrs = 0;
+	RTE_ETH_FOREACH_DEV(i)
+		ports_mask |= 1 << i;
+
 	hairpin_queues_num = 0;
 	argvopt = argv;
 
@@ -343,13 +612,14 @@ args_parse(int argc, char **argv)
 				else
 					rte_exit(EXIT_SUCCESS,
 						"flow group should be >= 0\n");
-				printf("group %d ", flow_group);
+				printf("group %d / ", flow_group);
 			}
 
 			for (i = 0; i < RTE_DIM(flow_options); i++)
 				if (strcmp(lgopts[opt_idx].name,
 						flow_options[i].str) == 0) {
-					*flow_options[i].bitmap |=
+					flow_options[i].map[
+					(*flow_options[i].map_idx)++] =
 						flow_options[i].mask;
 					printf("%s / ", flow_options[i].str);
 				}
@@ -363,7 +633,8 @@ args_parse(int argc, char **argv)
 					rte_exit(EXIT_SUCCESS,
 						"Hairpin queues should be > 0\n");
 
-				flow_actions |= HAIRPIN_RSS_ACTION;
+				flow_actions[actions_idx++] =
+					HAIRPIN_RSS_ACTION;
 				printf("hairpin-rss / ");
 			}
 			if (strcmp(lgopts[opt_idx].name,
@@ -375,10 +646,63 @@ args_parse(int argc, char **argv)
 					rte_exit(EXIT_SUCCESS,
 						"Hairpin queues should be > 0\n");
 
-				flow_actions |= HAIRPIN_QUEUE_ACTION;
+				flow_actions[actions_idx++] =
+					HAIRPIN_QUEUE_ACTION;
 				printf("hairpin-queue / ");
 			}
 
+			if (strcmp(lgopts[opt_idx].name, "raw-encap") == 0) {
+				printf("raw-encap ");
+				flow_actions[actions_idx++] =
+					FLOW_ITEM_MASK(
+						RTE_FLOW_ACTION_TYPE_RAW_ENCAP
+					);
+
+				token = strtok(optarg, ",");
+				while (token != NULL) {
+					for (i = 0; i < RTE_DIM(flow_options); i++) {
+						if (strcmp(flow_options[i].str, token) == 0) {
+							printf("%s,", token);
+							encap_data |= flow_options[i].mask;
+							break;
+						}
+						/* Reached last item with no match */
+						if (i == (RTE_DIM(flow_options) - 1)) {
+							fprintf(stderr, "Invalid encap item: %s\n", token);
+							usage(argv[0]);
+							rte_exit(EXIT_SUCCESS, "Invalid encap item\n");
+						}
+					}
+					token = strtok(NULL, ",");
+				}
+				printf(" / ");
+			}
+			if (strcmp(lgopts[opt_idx].name, "raw-decap") == 0) {
+				printf("raw-decap ");
+				flow_actions[actions_idx++] =
+					FLOW_ITEM_MASK(
+						RTE_FLOW_ACTION_TYPE_RAW_DECAP
+					);
+
+				token = strtok(optarg, ",");
+				while (token != NULL) {
+					for (i = 0; i < RTE_DIM(flow_options); i++) {
+						if (strcmp(flow_options[i].str, token) == 0) {
+							printf("%s,", token);
+							encap_data |= flow_options[i].mask;
+							break;
+						}
+						/* Reached last item with no match */
+						if (i == (RTE_DIM(flow_options) - 1)) {
+							fprintf(stderr, "Invalid decap item: %s\n", token);
+							usage(argv[0]);
+							rte_exit(EXIT_SUCCESS, "Invalid decap item\n");
+						}
+					}
+					token = strtok(NULL, ",");
+				}
+				printf(" / ");
+			}
 			/* Control */
 			if (strcmp(lgopts[opt_idx].name,
 					"flows-count") == 0) {
@@ -403,6 +727,15 @@ args_parse(int argc, char **argv)
 			if (strcmp(lgopts[opt_idx].name,
 					"enable-fwd") == 0)
 				enable_fwd = true;
+			if (strcmp(lgopts[opt_idx].name,
+					"portmask") == 0) {
+				/* parse hexadecimal string */
+				end = NULL;
+				pm = strtoull(optarg, &end, 16);
+				if ((optarg[0] == '\0') || (end == NULL) || (*end != '\0'))
+					rte_exit(EXIT_FAILURE, "Invalid fwd port mask\n");
+				ports_mask = pm;
+			}
 			break;
 		default:
 			fprintf(stderr, "Invalid option: %s\n", argv[optind]);
@@ -558,6 +891,11 @@ flows_handler(void)
 	int port_id;
 	int iter_id;
 	uint32_t flow_index;
+	uint64_t global_items[MAX_ITEMS_NUM] = { 0 };
+	uint64_t global_actions[MAX_ACTIONS_NUM] = { 0 };
+
+	global_items[0] = FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_ETH);
+	global_actions[0] = FLOW_ITEM_MASK(RTE_FLOW_ACTION_TYPE_JUMP);
 
 	nr_ports = rte_eth_dev_count_avail();
 
@@ -575,6 +913,9 @@ flows_handler(void)
 		rte_exit(EXIT_FAILURE, "No Memory available!");
 
 	for (port_id = 0; port_id < nr_ports; port_id++) {
+		/* If port outside portmask */
+		if (!((ports_mask >> port_id) & 0x1))
+			continue;
 		cpu_time_used = 0;
 		flow_index = 0;
 		if (flow_group > 0) {
@@ -587,9 +928,8 @@ flows_handler(void)
 			 *
 			 */
 			flow = generate_flow(port_id, 0, flow_attrs,
-				FLOW_ITEM_MASK(RTE_FLOW_ITEM_TYPE_ETH),
-				FLOW_ITEM_MASK(RTE_FLOW_ACTION_TYPE_JUMP),
-				flow_group, 0, 0, &error);
+				global_items, global_actions,
+				flow_group, 0, 0, 0, 0, &error);
 
 			if (flow == NULL) {
 				print_flow_error(error);
@@ -605,7 +945,9 @@ flows_handler(void)
 			flow = generate_flow(port_id, flow_group,
 				flow_attrs, flow_items, flow_actions,
 				JUMP_ACTION_TABLE, i,
-				hairpin_queues_num, &error);
+				hairpin_queues_num,
+				encap_data, decap_data,
+				&error);
 
 			if (force_quit)
 				i = flows_count;
@@ -1103,12 +1445,13 @@ main(int argc, char **argv)
 
 	if (enable_fwd) {
 		init_lcore_info();
-		rte_eal_mp_remote_launch(start_forwarding, NULL, CALL_MASTER);
+		rte_eal_mp_remote_launch(start_forwarding, NULL, CALL_MAIN);
 	}
 
 	RTE_ETH_FOREACH_DEV(port) {
 		rte_flow_flush(port, &error);
-		rte_eth_dev_stop(port);
+		if (rte_eth_dev_stop(port) != 0)
+			printf("Failed to stop device on port %u\n", port);
 		rte_eth_dev_close(port);
 	}
 	return 0;

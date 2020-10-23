@@ -185,6 +185,20 @@ Supports receiving segmented mbufs.
 * **[related]    eth_dev_ops**: ``rx_pkt_burst``.
 
 
+.. _nic_features_buffer_split:
+
+Buffer Split on Rx
+------------------
+
+Scatters the packets being received on specified boundaries to segmented mbufs.
+
+* **[uses]       rte_eth_rxconf,rte_eth_rxmode**: ``offloads:RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT``.
+* **[uses]       rte_eth_rxconf**: ``rx_conf.rx_seg, rx_conf.rx_nseg``.
+* **[implements] datapath**: ``Buffer Split functionality``.
+* **[provides]   rte_eth_dev_info**: ``rx_offload_capa:RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT``.
+* **[related] API**: ``rte_eth_rx_queue_setup()``.
+
+
 .. _nic_features_lro:
 
 LRO
@@ -646,9 +660,9 @@ used, status can be "Available", "Done" or "Unavailable". When
 ``rx_descriptor_done`` is used, status can be "DD bit is set" or "DD bit is
 not set".
 
-* **[implements] eth_dev_ops**: ``rx_descriptor_status``.
+* **[implements] rte_eth_dev**: ``rx_descriptor_status``.
 * **[related]    API**: ``rte_eth_rx_descriptor_status()``.
-* **[implements] eth_dev_ops**: ``rx_descriptor_done``.
+* **[implements] rte_eth_dev**: ``rx_descriptor_done``.
 * **[related]    API**: ``rte_eth_rx_descriptor_done()``.
 
 
@@ -660,7 +674,7 @@ Tx descriptor status
 Supports checking the status of a Tx descriptor. Status can be "Full", "Done"
 or "Unavailable."
 
-* **[implements] eth_dev_ops**: ``tx_descriptor_status``.
+* **[implements] rte_eth_dev**: ``tx_descriptor_status``.
 * **[related]    API**: ``rte_eth_tx_descriptor_status()``.
 
 

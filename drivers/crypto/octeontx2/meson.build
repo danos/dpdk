@@ -10,8 +10,9 @@ deps += ['bus_pci']
 deps += ['common_cpt']
 deps += ['common_octeontx2']
 deps += ['ethdev']
+deps += ['eventdev']
 deps += ['security']
-name = 'octeontx2_crypto'
+fmt_name = 'octeontx2_crypto'
 
 sources = files('otx2_cryptodev.c',
 		'otx2_cryptodev_capabilities.c',

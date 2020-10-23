@@ -607,7 +607,7 @@ status_up:
  * Is the only place for us to close all the tx streams dumpers.
  * If not called the dumpers will be flushed within each tx burst.
  */
-static void
+static int
 eth_dev_stop(struct rte_eth_dev *dev)
 {
 	unsigned int i;
@@ -649,6 +649,8 @@ status_down:
 		dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 
 	dev->data->dev_link.link_status = ETH_LINK_DOWN;
+
+	return 0;
 }
 
 static int
@@ -728,17 +730,32 @@ eth_stats_reset(struct rte_eth_dev *dev)
 	return 0;
 }
 
-static void
+static int
 eth_dev_close(struct rte_eth_dev *dev)
 {
 	unsigned int i;
 	struct pmd_internals *internals = dev->data->dev_private;
+
+	PMD_LOG(INFO, "Closing pcap ethdev on NUMA socket %d",
+			rte_socket_id());
+
+	rte_free(dev->process_private);
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	/* Device wide flag, but cleanup must be performed per queue. */
 	if (internals->infinite_rx) {
 		for (i = 0; i < dev->data->nb_rx_queues; i++) {
 			struct pcap_rx_queue *pcap_q = &internals->rx_queue[i];
 			struct rte_mbuf *pcap_buf;
+
+			/*
+			 * 'pcap_q->pkts' can be NULL if 'eth_dev_close()'
+			 * called before 'eth_rx_queue_setup()' has been called
+			 */
+			if (pcap_q->pkts == NULL)
+				continue;
 
 			while (!rte_ring_dequeue(pcap_q->pkts,
 					(void **)&pcap_buf))
@@ -748,6 +765,11 @@ eth_dev_close(struct rte_eth_dev *dev)
 		}
 	}
 
+	if (internals->phy_mac == 0)
+		/* not dynamically allocated, must not be freed */
+		dev->data->mac_addrs = NULL;
+
+	return 0;
 }
 
 static void
@@ -1136,6 +1158,7 @@ pmd_init_internals(struct rte_vdev_device *vdev,
 	data->mac_addrs = &(*internals)->eth_addr;
 	data->promiscuous = 1;
 	data->all_multicast = 1;
+	data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 
 	/*
 	 * NOTE: we'll replace the data element, of originally allocated
@@ -1403,7 +1426,8 @@ pmd_pcap_probe(struct rte_vdev_device *dev)
 	devargs_all.is_rx_pcap =
 		rte_kvargs_count(kvlist, ETH_PCAP_RX_PCAP_ARG) ? 1 : 0;
 	devargs_all.is_rx_iface =
-		rte_kvargs_count(kvlist, ETH_PCAP_RX_IFACE_ARG) ? 1 : 0;
+		(rte_kvargs_count(kvlist, ETH_PCAP_RX_IFACE_ARG) +
+		 rte_kvargs_count(kvlist, ETH_PCAP_RX_IFACE_IN_ARG)) ? 1 : 0;
 	pcaps.num_of_queue = 0;
 
 	devargs_all.is_tx_pcap =
@@ -1543,30 +1567,16 @@ free_kvlist:
 static int
 pmd_pcap_remove(struct rte_vdev_device *dev)
 {
-	struct pmd_internals *internals = NULL;
 	struct rte_eth_dev *eth_dev = NULL;
-
-	PMD_LOG(INFO, "Closing pcap ethdev on numa socket %d",
-			rte_socket_id());
 
 	if (!dev)
 		return -1;
 
-	/* reserve an ethdev entry */
 	eth_dev = rte_eth_dev_allocated(rte_vdev_device_name(dev));
 	if (eth_dev == NULL)
-		return -1;
-
-	if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
-		internals = eth_dev->data->dev_private;
-		if (internals != NULL && internals->phy_mac == 0)
-			/* not dynamically allocated, must not be freed */
-			eth_dev->data->mac_addrs = NULL;
-	}
+		return 0; /* port already released */
 
 	eth_dev_close(eth_dev);
-
-	rte_free(eth_dev->process_private);
 	rte_eth_dev_release_port(eth_dev);
 
 	return 0;

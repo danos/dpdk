@@ -1842,6 +1842,7 @@ check_all_ports_link_status(uint32_t port_mask)
 	uint8_t count, all_ports_up, print_flag = 0;
 	struct rte_eth_link link;
 	int ret;
+	char link_status_text[RTE_ETH_LINK_MAX_STR_LEN];
 
 	printf("\nChecking link status");
 	fflush(stdout);
@@ -1861,14 +1862,10 @@ check_all_ports_link_status(uint32_t port_mask)
 			}
 			/* print link status if flag set */
 			if (print_flag == 1) {
-				if (link.link_status)
-					printf(
-					"Port%d Link Up - speed %u Mbps -%s\n",
-						portid, link.link_speed,
-				(link.link_duplex == ETH_LINK_FULL_DUPLEX) ?
-					("full-duplex") : ("half-duplex"));
-				else
-					printf("Port %d Link Down\n", portid);
+				rte_eth_link_to_str(link_status_text,
+					sizeof(link_status_text), &link);
+				printf("Port %d %s\n", portid,
+				       link_status_text);
 				continue;
 			}
 			/* clear all_ports_up flag if any link down */
@@ -2351,12 +2348,8 @@ session_pool_init(struct socket_ctx *ctx, int32_t socket_id, size_t sess_sz)
 
 	snprintf(mp_name, RTE_MEMPOOL_NAMESIZE,
 			"sess_mp_%u", socket_id);
-	/*
-	 * Doubled due to rte_security_session_create() uses one mempool for
-	 * session and for session private data.
-	 */
 	nb_sess = (get_nb_crypto_sessions() + CDEV_MP_CACHE_SZ *
-		rte_lcore_count()) * 2;
+		rte_lcore_count());
 	sess_mp = rte_cryptodev_sym_session_pool_create(
 			mp_name, nb_sess, sess_sz, CDEV_MP_CACHE_SZ, 0,
 			socket_id);
@@ -2379,12 +2372,8 @@ session_priv_pool_init(struct socket_ctx *ctx, int32_t socket_id,
 
 	snprintf(mp_name, RTE_MEMPOOL_NAMESIZE,
 			"sess_mp_priv_%u", socket_id);
-	/*
-	 * Doubled due to rte_security_session_create() uses one mempool for
-	 * session and for session private data.
-	 */
 	nb_sess = (get_nb_crypto_sessions() + CDEV_MP_CACHE_SZ *
-		rte_lcore_count()) * 2;
+		rte_lcore_count());
 	sess_mp = rte_mempool_create(mp_name,
 			nb_sess,
 			sess_sz,
@@ -2992,8 +2981,8 @@ main(int32_t argc, char **argv)
 #endif /* STATS_INTERVAL */
 
 	/* launch per-lcore init on every lcore */
-	rte_eal_mp_remote_launch(ipsec_launch_one_lcore, eh_conf, CALL_MASTER);
-	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
+	rte_eal_mp_remote_launch(ipsec_launch_one_lcore, eh_conf, CALL_MAIN);
+	RTE_LCORE_FOREACH_WORKER(lcore_id) {
 		if (rte_eal_wait_lcore(lcore_id) < 0)
 			return -1;
 	}
@@ -3035,7 +3024,12 @@ main(int32_t argc, char **argv)
 					" for port %u, err msg: %s\n", portid,
 					err.message);
 		}
-		rte_eth_dev_stop(portid);
+		ret = rte_eth_dev_stop(portid);
+		if (ret != 0)
+			RTE_LOG(ERR, IPSEC,
+				"rte_eth_dev_stop: err=%s, port=%u\n",
+				rte_strerror(-ret), portid);
+
 		rte_eth_dev_close(portid);
 		printf(" Done\n");
 	}

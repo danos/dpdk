@@ -13,6 +13,7 @@
 #include <rte_cycles.h>
 #include <rte_alarm.h>
 #include <rte_kvargs.h>
+#include <rte_vect.h>
 
 #include "bnxt.h"
 #include "bnxt_filter.h"
@@ -99,12 +100,24 @@ static const struct rte_pci_id bnxt_pci_id_map[] = {
 #define BNXT_DEVARG_FLOW_XSTAT	"flow-xstat"
 #define BNXT_DEVARG_MAX_NUM_KFLOWS  "max-num-kflows"
 #define BNXT_DEVARG_REPRESENTOR	"representor"
+#define BNXT_DEVARG_REP_BASED_PF  "rep-based-pf"
+#define BNXT_DEVARG_REP_IS_PF  "rep-is-pf"
+#define BNXT_DEVARG_REP_Q_R2F  "rep-q-r2f"
+#define BNXT_DEVARG_REP_Q_F2R  "rep-q-f2r"
+#define BNXT_DEVARG_REP_FC_R2F  "rep-fc-r2f"
+#define BNXT_DEVARG_REP_FC_F2R  "rep-fc-f2r"
 
 static const char *const bnxt_dev_args[] = {
 	BNXT_DEVARG_REPRESENTOR,
 	BNXT_DEVARG_TRUFLOW,
 	BNXT_DEVARG_FLOW_XSTAT,
 	BNXT_DEVARG_MAX_NUM_KFLOWS,
+	BNXT_DEVARG_REP_BASED_PF,
+	BNXT_DEVARG_REP_IS_PF,
+	BNXT_DEVARG_REP_Q_R2F,
+	BNXT_DEVARG_REP_Q_F2R,
+	BNXT_DEVARG_REP_FC_R2F,
+	BNXT_DEVARG_REP_FC_F2R,
 	NULL
 };
 
@@ -119,6 +132,36 @@ static const char *const bnxt_dev_args[] = {
  * flow_xstat == true to enable the feature
  */
 #define	BNXT_DEVARG_FLOW_XSTAT_INVALID(flow_xstat)	((flow_xstat) > 1)
+
+/*
+ * rep_is_pf == false to indicate VF representor
+ * rep_is_pf == true to indicate PF representor
+ */
+#define	BNXT_DEVARG_REP_IS_PF_INVALID(rep_is_pf)	((rep_is_pf) > 1)
+
+/*
+ * rep_based_pf == Physical index of the PF
+ */
+#define	BNXT_DEVARG_REP_BASED_PF_INVALID(rep_based_pf)	((rep_based_pf) > 15)
+/*
+ * rep_q_r2f == Logical COS Queue index for the rep to endpoint direction
+ */
+#define	BNXT_DEVARG_REP_Q_R2F_INVALID(rep_q_r2f)	((rep_q_r2f) > 3)
+
+/*
+ * rep_q_f2r == Logical COS Queue index for the endpoint to rep direction
+ */
+#define	BNXT_DEVARG_REP_Q_F2R_INVALID(rep_q_f2r)	((rep_q_f2r) > 3)
+
+/*
+ * rep_fc_r2f == Flow control for the representor to endpoint direction
+ */
+#define BNXT_DEVARG_REP_FC_R2F_INVALID(rep_fc_r2f)	((rep_fc_r2f) > 1)
+
+/*
+ * rep_fc_f2r == Flow control for the endpoint to representor direction
+ */
+#define BNXT_DEVARG_REP_FC_F2R_INVALID(rep_fc_f2r)	((rep_fc_f2r) > 1)
 
 /*
  * max_num_kflows must be >= 32
@@ -605,9 +648,35 @@ static int bnxt_init_ctx_mem(struct bnxt *bp)
 	return rc;
 }
 
-static int bnxt_init_chip(struct bnxt *bp)
+static int bnxt_update_phy_setting(struct bnxt *bp)
 {
 	struct rte_eth_link new;
+	int rc;
+
+	rc = bnxt_get_hwrm_link_config(bp, &new);
+	if (rc) {
+		PMD_DRV_LOG(ERR, "Failed to get link settings\n");
+		return rc;
+	}
+
+	/*
+	 * On BCM957508-N2100 adapters, FW will not allow any user other
+	 * than BMC to shutdown the port. bnxt_get_hwrm_link_config() call
+	 * always returns link up. Force phy update always in that case.
+	 */
+	if (!new.link_status || IS_BNXT_DEV_957508_N2100(bp)) {
+		rc = bnxt_set_hwrm_link_config(bp, true);
+		if (rc) {
+			PMD_DRV_LOG(ERR, "Failed to update PHY settings\n");
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
+static int bnxt_init_chip(struct bnxt *bp)
+{
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(bp->eth_dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	uint32_t intr_vector = 0;
@@ -737,21 +806,9 @@ skip_cosq_cfg:
 		goto err_free;
 #endif
 
-	rc = bnxt_get_hwrm_link_config(bp, &new);
-	if (rc) {
-		PMD_DRV_LOG(ERR, "HWRM Get link config failure rc: %x\n", rc);
+	rc = bnxt_update_phy_setting(bp);
+	if (rc)
 		goto err_free;
-	}
-
-	if (!bp->link_info->link_up) {
-		rc = bnxt_set_hwrm_link_config(bp, true);
-		if (rc) {
-			PMD_DRV_LOG(ERR,
-				"HWRM link config failure rc: %x\n", rc);
-			goto err_free;
-		}
-	}
-	bnxt_print_link_info(bp->eth_dev);
 
 	bp->mark_table = rte_zmalloc("bnxt_mark_table", BNXT_MARK_TABLE_SZ, 0);
 	if (!bp->mark_table)
@@ -808,7 +865,11 @@ uint32_t bnxt_get_speed_capabilities(struct bnxt *bp)
 		speed_capa |= ETH_LINK_SPEED_50G;
 	if (link_speed & HWRM_PORT_PHY_QCFG_OUTPUT_SUPPORT_SPEEDS_100GB)
 		speed_capa |= ETH_LINK_SPEED_100G;
-	if (link_speed & HWRM_PORT_PHY_QCFG_OUTPUT_SUPPORT_SPEEDS_200GB)
+	if (link_speed & HWRM_PORT_PHY_QCFG_OUTPUT_SUPPORT_PAM4_SPEEDS_50G)
+		speed_capa |= ETH_LINK_SPEED_50G;
+	if (link_speed & HWRM_PORT_PHY_QCFG_OUTPUT_SUPPORT_PAM4_SPEEDS_100G)
+		speed_capa |= ETH_LINK_SPEED_100G;
+	if (link_speed & HWRM_PORT_PHY_QCFG_OUTPUT_SUPPORT_PAM4_SPEEDS_200G)
 		speed_capa |= ETH_LINK_SPEED_200G;
 
 	if (bp->link_info->auto_mode ==
@@ -860,7 +921,9 @@ static int bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 	dev_info->rx_offload_capa = BNXT_DEV_RX_OFFLOAD_SUPPORT;
 	if (bp->flags & BNXT_FLAG_PTP_SUPPORTED)
 		dev_info->rx_offload_capa |= DEV_RX_OFFLOAD_TIMESTAMP;
-	dev_info->tx_offload_capa = BNXT_DEV_TX_OFFLOAD_SUPPORT;
+	dev_info->tx_queue_offload_capa = DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+	dev_info->tx_offload_capa = BNXT_DEV_TX_OFFLOAD_SUPPORT |
+				    dev_info->tx_queue_offload_capa;
 	dev_info->flow_type_rss_offloads = BNXT_ETH_RSS_SUPPORT;
 
 	dev_info->speed_capa = bnxt_get_speed_capabilities(bp);
@@ -873,8 +936,7 @@ static int bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 			.wthresh = 0,
 		},
 		.rx_free_thresh = 32,
-		/* If no descriptors available, pkts are dropped by default */
-		.rx_drop_en = 1,
+		.rx_drop_en = BNXT_DEFAULT_RX_DROP_EN,
 	};
 
 	dev_info->default_txconf = (struct rte_eth_txconf) {
@@ -893,6 +955,14 @@ static int bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 	dev_info->rx_desc_lim.nb_max = BNXT_MAX_RX_RING_DESC;
 	dev_info->tx_desc_lim.nb_min = BNXT_MIN_RING_DESC;
 	dev_info->tx_desc_lim.nb_max = BNXT_MAX_TX_RING_DESC;
+
+	if (BNXT_PF(bp) || BNXT_VF_IS_TRUSTED(bp)) {
+		dev_info->switch_info.name = eth_dev->device->name;
+		dev_info->switch_info.domain_id = bp->switch_domain_id;
+		dev_info->switch_info.port_id =
+				BNXT_PF(bp) ? BNXT_SWITCH_PORT_ID_PF :
+				    BNXT_SWITCH_PORT_ID_TRUSTED_VF;
+	}
 
 	/* *INDENT-ON* */
 
@@ -1100,7 +1170,8 @@ bnxt_receive_function(struct rte_eth_dev *eth_dev)
 		DEV_RX_OFFLOAD_OUTER_IPV4_CKSUM |
 		DEV_RX_OFFLOAD_RSS_HASH |
 		DEV_RX_OFFLOAD_VLAN_FILTER)) &&
-	    !BNXT_TRUFLOW_EN(bp)) {
+	    !BNXT_TRUFLOW_EN(bp) && BNXT_NUM_ASYNC_CPR(bp) &&
+	    rte_vect_get_max_simd_bitwidth() >= RTE_VECT_SIMD_128) {
 		PMD_DRV_LOG(INFO, "Using vector mode receive for port %d\n",
 			    eth_dev->data->port_id);
 		bp->flags |= BNXT_FLAG_RX_VECTOR_PKT_MODE;
@@ -1124,6 +1195,7 @@ bnxt_transmit_function(__rte_unused struct rte_eth_dev *eth_dev)
 {
 #if defined(RTE_ARCH_X86) || defined(RTE_ARCH_ARM64)
 #ifndef RTE_LIBRTE_IEEE1588
+	uint64_t offloads = eth_dev->data->dev_conf.txmode.offloads;
 	struct bnxt *bp = eth_dev->data->dev_private;
 
 	/*
@@ -1131,8 +1203,9 @@ bnxt_transmit_function(__rte_unused struct rte_eth_dev *eth_dev)
 	 * or tx offloads.
 	 */
 	if (!eth_dev->data->scattered_rx &&
-	    !eth_dev->data->dev_conf.txmode.offloads &&
-	    !BNXT_TRUFLOW_EN(bp)) {
+	    !(offloads & ~DEV_TX_OFFLOAD_MBUF_FAST_FREE) &&
+	    !BNXT_TRUFLOW_EN(bp) &&
+	    rte_vect_get_max_simd_bitwidth() >= RTE_VECT_SIMD_128) {
 		PMD_DRV_LOG(INFO, "Using vector mode transmit for port %d\n",
 			    eth_dev->data->port_id);
 		return bnxt_xmit_pkts_vec;
@@ -1143,7 +1216,7 @@ bnxt_transmit_function(__rte_unused struct rte_eth_dev *eth_dev)
 		    "Port %d scatter: %d tx offload: %" PRIX64 "\n",
 		    eth_dev->data->port_id,
 		    eth_dev->data->scattered_rx,
-		    eth_dev->data->dev_conf.txmode.offloads);
+		    offloads);
 #endif
 #endif
 	return bnxt_xmit_pkts;
@@ -1212,7 +1285,7 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	eth_dev->data->scattered_rx = bnxt_scattered_rx(eth_dev);
 	eth_dev->data->dev_started = 1;
 
-	bnxt_link_update(eth_dev, 1, ETH_LINK_UP);
+	bnxt_link_update_op(eth_dev, 1);
 
 	if (rx_offloads & DEV_RX_OFFLOAD_VLAN_FILTER)
 		vlan_mask |= ETH_VLAN_FILTER_MASK;
@@ -1222,14 +1295,15 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	if (rc)
 		goto error;
 
+	/* Initialize bnxt ULP port details */
+	rc = bnxt_ulp_port_init(bp);
+	if (rc)
+		goto error;
+
 	eth_dev->rx_pkt_burst = bnxt_receive_function(eth_dev);
 	eth_dev->tx_pkt_burst = bnxt_transmit_function(eth_dev);
 
-	pthread_mutex_lock(&bp->def_cp_lock);
 	bnxt_schedule_fw_health_check(bp);
-	pthread_mutex_unlock(&bp->def_cp_lock);
-
-	bnxt_ulp_init(bp);
 
 	return 0;
 
@@ -1274,13 +1348,17 @@ static void bnxt_free_switch_domain(struct bnxt *bp)
 }
 
 /* Unload the driver, release resources */
-static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
+static int bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 {
 	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
+	struct rte_eth_link link;
+	int ret;
 
 	eth_dev->data->dev_started = 0;
+	eth_dev->data->scattered_rx = 0;
+
 	/* Prevent crashes when queues are still in use */
 	eth_dev->rx_pkt_burst = &bnxt_dummy_recv_pkts;
 	eth_dev->tx_pkt_burst = &bnxt_dummy_xmit_pkts;
@@ -1290,19 +1368,26 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 	/* disable uio/vfio intr/eventfd mapping */
 	rte_intr_disable(intr_handle);
 
-	bnxt_ulp_destroy_df_rules(bp, false);
-	bnxt_ulp_deinit(bp);
+	/* Stop the child representors for this device */
+	ret = bnxt_rep_stop_all(bp);
+	if (ret != 0)
+		return ret;
+
+	/* delete the bnxt ULP port details */
+	bnxt_ulp_port_deinit(bp);
 
 	bnxt_cancel_fw_health_check(bp);
 
-	bnxt_dev_set_link_down_op(eth_dev);
-
-	/* Wait for link to be reset and the async notification to process.
-	 * During reset recovery, there is no need to wait and
-	 * VF/NPAR functions do not have privilege to change PHY config.
-	 */
-	if (!is_bnxt_in_error(bp) && BNXT_SINGLE_PF(bp))
-		bnxt_link_update(eth_dev, 1, ETH_LINK_DOWN);
+	/* Do not bring link down during reset recovery */
+	if (!is_bnxt_in_error(bp)) {
+		bnxt_dev_set_link_down_op(eth_dev);
+		/* Wait for link to be reset */
+		if (BNXT_SINGLE_PF(bp))
+			rte_delay_ms(500);
+		/* clear the recorded link status */
+		memset(&link, 0, sizeof(link));
+		rte_eth_linkstatus_set(eth_dev, &link);
+	}
 
 	/* Clean queue intr-vector mapping */
 	rte_intr_efd_disable(intr_handle);
@@ -1327,11 +1412,17 @@ static void bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 	/* All filters are deleted on a port stop. */
 	if (BNXT_FLOW_XSTATS_EN(bp))
 		bp->flow_stat->flow_count = 0;
+
+	return 0;
 }
 
-static void bnxt_dev_close_op(struct rte_eth_dev *eth_dev)
+static int bnxt_dev_close_op(struct rte_eth_dev *eth_dev)
 {
 	struct bnxt *bp = eth_dev->data->dev_private;
+	int ret = 0;
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	/* cancel the recovery handler before remove dev */
 	rte_eal_alarm_cancel(bnxt_dev_reset_and_resume, (void *)bp);
@@ -1339,7 +1430,7 @@ static void bnxt_dev_close_op(struct rte_eth_dev *eth_dev)
 	bnxt_cancel_fc_thread(bp);
 
 	if (eth_dev->data->dev_started)
-		bnxt_dev_stop_op(eth_dev);
+		ret = bnxt_dev_stop_op(eth_dev);
 
 	bnxt_free_switch_domain(bp);
 
@@ -1351,20 +1442,17 @@ static void bnxt_dev_close_op(struct rte_eth_dev *eth_dev)
 	bnxt_free_pf_info(bp);
 	bnxt_free_parent_info(bp);
 
-	eth_dev->dev_ops = NULL;
-	eth_dev->rx_pkt_burst = NULL;
-	eth_dev->tx_pkt_burst = NULL;
-
 	rte_memzone_free((const struct rte_memzone *)bp->tx_mem_zone);
 	bp->tx_mem_zone = NULL;
 	rte_memzone_free((const struct rte_memzone *)bp->rx_mem_zone);
 	bp->rx_mem_zone = NULL;
 
-	rte_free(bp->pf->vf_info);
-	bp->pf->vf_info = NULL;
+	bnxt_hwrm_free_vf_info(bp);
 
 	rte_free(bp->grp_info);
 	bp->grp_info = NULL;
+
+	return ret;
 }
 
 static void bnxt_mac_addr_remove_op(struct rte_eth_dev *eth_dev,
@@ -1478,14 +1566,13 @@ static int bnxt_mac_addr_add_op(struct rte_eth_dev *eth_dev,
 	return rc;
 }
 
-int bnxt_link_update(struct rte_eth_dev *eth_dev, int wait_to_complete,
-		     bool exp_link_status)
+int bnxt_link_update_op(struct rte_eth_dev *eth_dev, int wait_to_complete)
 {
 	int rc = 0;
 	struct bnxt *bp = eth_dev->data->dev_private;
 	struct rte_eth_link new;
-	int cnt = exp_link_status ? BNXT_LINK_UP_WAIT_CNT :
-		  BNXT_LINK_DOWN_WAIT_CNT;
+	int cnt = wait_to_complete ? BNXT_MAX_LINK_WAIT_CNT :
+			BNXT_MIN_LINK_WAIT_CNT;
 
 	rc = is_bnxt_in_error(bp);
 	if (rc)
@@ -1503,11 +1590,17 @@ int bnxt_link_update(struct rte_eth_dev *eth_dev, int wait_to_complete,
 			goto out;
 		}
 
-		if (!wait_to_complete || new.link_status == exp_link_status)
+		if (!wait_to_complete || new.link_status)
 			break;
 
 		rte_delay_ms(BNXT_LINK_WAIT_INTERVAL);
 	} while (cnt--);
+
+	/* Only single function PF can bring phy down.
+	 * When port is stopped, report link down for VF/MH/NPAR functions.
+	 */
+	if (!BNXT_SINGLE_PF(bp) && !eth_dev->data->dev_started)
+		memset(&new, 0, sizeof(new));
 
 out:
 	/* Timed out or success */
@@ -1515,20 +1608,14 @@ out:
 	new.link_speed != eth_dev->data->dev_link.link_speed) {
 		rte_eth_linkstatus_set(eth_dev, &new);
 
-		_rte_eth_dev_callback_process(eth_dev,
-					      RTE_ETH_EVENT_INTR_LSC,
-					      NULL);
+		rte_eth_dev_callback_process(eth_dev,
+					     RTE_ETH_EVENT_INTR_LSC,
+					     NULL);
 
 		bnxt_print_link_info(eth_dev);
 	}
 
 	return rc;
-}
-
-int bnxt_link_update_op(struct rte_eth_dev *eth_dev,
-			int wait_to_complete)
-{
-	return bnxt_link_update(eth_dev, wait_to_complete, ETH_LINK_UP);
 }
 
 static int bnxt_promiscuous_enable_op(struct rte_eth_dev *eth_dev)
@@ -1585,8 +1672,6 @@ static int bnxt_promiscuous_disable_op(struct rte_eth_dev *eth_dev)
 	rc = bnxt_hwrm_cfa_l2_set_rx_mask(bp, vnic, 0, NULL);
 	if (rc != 0)
 		vnic->flags = old_flags;
-
-	bnxt_ulp_create_df_rules(bp);
 
 	return rc;
 }
@@ -1821,6 +1906,9 @@ static int bnxt_rss_hash_update_op(struct rte_eth_dev *eth_dev,
 	/* Update the default RSS VNIC(s) */
 	vnic = BNXT_GET_DEFAULT_VNIC(bp);
 	vnic->hash_type = bnxt_rte_to_hwrm_hash_types(rss_conf->rss_hf);
+	vnic->hash_mode =
+		bnxt_rte_to_hwrm_hash_level(bp, rss_conf->rss_hf,
+					    ETH_RSS_LEVEL(rss_conf->rss_hf));
 
 	/*
 	 * If hashkey is not specified, use the previously configured
@@ -1891,6 +1979,10 @@ static int bnxt_rss_hash_conf_get_op(struct rte_eth_dev *eth_dev,
 			hash_types &=
 				~HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_UDP_IPV6;
 		}
+
+		rss_conf->rss_hf |=
+			bnxt_hwrm_to_rte_rss_level(bp, vnic->hash_mode);
+
 		if (hash_types) {
 			PMD_DRV_LOG(ERR,
 				"Unknown RSS config from firmware (%08x), RSS disabled",
@@ -2105,14 +2197,6 @@ bnxt_udp_tunnel_port_del_op(struct rte_eth_dev *eth_dev,
 	}
 
 	rc = bnxt_hwrm_tunnel_dst_port_free(bp, port, tunnel_type);
-	if (!rc) {
-		if (tunnel_type ==
-		    HWRM_TUNNEL_DST_PORT_FREE_INPUT_TUNNEL_TYPE_VXLAN)
-			bp->vxlan_port = 0;
-		if (tunnel_type ==
-		    HWRM_TUNNEL_DST_PORT_FREE_INPUT_TUNNEL_TYPE_GENEVE)
-			bp->geneve_port = 0;
-	}
 	return rc;
 }
 
@@ -2575,8 +2659,9 @@ bnxt_rxq_info_get_op(struct rte_eth_dev *dev, uint16_t queue_id,
 	qinfo->nb_desc = rxq->nb_rx_desc;
 
 	qinfo->conf.rx_free_thresh = rxq->rx_free_thresh;
-	qinfo->conf.rx_drop_en = 0;
+	qinfo->conf.rx_drop_en = rxq->drop_en;
 	qinfo->conf.rx_deferred_start = rxq->rx_deferred_start;
+	qinfo->conf.offloads = dev->data->dev_conf.rxmode.offloads;
 }
 
 static void
@@ -2600,48 +2685,65 @@ bnxt_txq_info_get_op(struct rte_eth_dev *dev, uint16_t queue_id,
 	qinfo->conf.tx_free_thresh = txq->tx_free_thresh;
 	qinfo->conf.tx_rs_thresh = 0;
 	qinfo->conf.tx_deferred_start = txq->tx_deferred_start;
+	qinfo->conf.offloads = txq->offloads;
 }
+
+static const struct {
+	eth_rx_burst_t pkt_burst;
+	const char *info;
+} bnxt_rx_burst_info[] = {
+	{bnxt_recv_pkts,	"Scalar"},
+#if defined(RTE_ARCH_X86)
+	{bnxt_recv_pkts_vec,	"Vector SSE"},
+#elif defined(RTE_ARCH_ARM64)
+	{bnxt_recv_pkts_vec,	"Vector Neon"},
+#endif
+};
 
 static int
 bnxt_rx_burst_mode_get(struct rte_eth_dev *dev, __rte_unused uint16_t queue_id,
 		       struct rte_eth_burst_mode *mode)
 {
 	eth_rx_burst_t pkt_burst = dev->rx_pkt_burst;
+	size_t i;
 
-	if (pkt_burst == bnxt_recv_pkts) {
-		snprintf(mode->info, sizeof(mode->info), "%s",
-			 "Scalar");
-		return 0;
+	for (i = 0; i < RTE_DIM(bnxt_rx_burst_info); i++) {
+		if (pkt_burst == bnxt_rx_burst_info[i].pkt_burst) {
+			snprintf(mode->info, sizeof(mode->info), "%s",
+				 bnxt_rx_burst_info[i].info);
+			return 0;
+		}
 	}
-#if defined(RTE_ARCH_X86) || defined(RTE_ARCH_ARM64)
-	if (pkt_burst == bnxt_recv_pkts_vec) {
-		snprintf(mode->info, sizeof(mode->info), "%s",
-			 "Vector SSE");
-		return 0;
-	}
-#endif
 
 	return -EINVAL;
 }
+
+static const struct {
+	eth_tx_burst_t pkt_burst;
+	const char *info;
+} bnxt_tx_burst_info[] = {
+	{bnxt_xmit_pkts,	"Scalar"},
+#if defined(RTE_ARCH_X86)
+	{bnxt_xmit_pkts_vec,	"Vector SSE"},
+#elif defined(RTE_ARCH_ARM64)
+	{bnxt_xmit_pkts_vec,	"Vector Neon"},
+#endif
+};
 
 static int
 bnxt_tx_burst_mode_get(struct rte_eth_dev *dev, __rte_unused uint16_t queue_id,
 		       struct rte_eth_burst_mode *mode)
 {
 	eth_tx_burst_t pkt_burst = dev->tx_pkt_burst;
+	size_t i;
 
-	if (pkt_burst == bnxt_xmit_pkts) {
-		snprintf(mode->info, sizeof(mode->info), "%s",
-			 "Scalar");
-		return 0;
+	for (i = 0; i < RTE_DIM(bnxt_tx_burst_info); i++) {
+		if (pkt_burst == bnxt_tx_burst_info[i].pkt_burst) {
+			snprintf(mode->info, sizeof(mode->info), "%s",
+				 bnxt_tx_burst_info[i].info);
+			return 0;
+		}
 	}
-#if defined(RTE_ARCH_X86) || defined(RTE_ARCH_ARM64)
-	if (pkt_burst == bnxt_xmit_pkts_vec) {
-		snprintf(mode->info, sizeof(mode->info), "%s",
-			 "Vector SSE");
-		return 0;
-	}
-#endif
 
 	return -EINVAL;
 }
@@ -2664,14 +2766,12 @@ int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 	new_pkt_size = new_mtu + RTE_ETHER_HDR_LEN + RTE_ETHER_CRC_LEN +
 		       VLAN_TAG_SIZE * BNXT_NUM_VLANS;
 
-#if defined(RTE_ARCH_X86) || defined(RTE_ARCH_ARM64)
 	/*
-	 * If vector-mode tx/rx is active, disallow any MTU change that would
-	 * require scattered receive support.
+	 * Disallow any MTU change that would require scattered receive support
+	 * if it is not already enabled.
 	 */
 	if (eth_dev->data->dev_started &&
-	    (eth_dev->rx_pkt_burst == bnxt_recv_pkts_vec ||
-	     eth_dev->tx_pkt_burst == bnxt_xmit_pkts_vec) &&
+	    !eth_dev->data->scattered_rx &&
 	    (new_pkt_size >
 	     eth_dev->data->min_rx_buf_size - RTE_PKTMBUF_HEADROOM)) {
 		PMD_DRV_LOG(ERR,
@@ -2679,7 +2779,6 @@ int bnxt_mtu_set_op(struct rte_eth_dev *eth_dev, uint16_t new_mtu)
 		PMD_DRV_LOG(ERR, "Stop port before changing MTU.\n");
 		return -EINVAL;
 	}
-#endif
 
 	if (new_mtu > RTE_ETHER_MTU) {
 		bp->flags |= BNXT_FLAG_JUMBO;
@@ -2812,7 +2911,7 @@ bnxt_rx_descriptor_status_op(void *rx_queue, uint16_t offset)
 	struct bnxt_rx_queue *rxq = (struct bnxt_rx_queue *)rx_queue;
 	struct bnxt_rx_ring_info *rxr;
 	struct bnxt_cp_ring_info *cpr;
-	struct bnxt_sw_rx_bd *rx_buf;
+	struct rte_mbuf *rx_buf;
 	struct rx_pkt_cmpl *rxcmp;
 	uint32_t cons, cp_cons;
 	int rc;
@@ -2841,8 +2940,8 @@ bnxt_rx_descriptor_status_op(void *rx_queue, uint16_t offset)
 		if (CMPL_VALID(rxcmp, !cpr->valid))
 			return RTE_ETH_RX_DESC_DONE;
 	}
-	rx_buf = &rxr->rx_buf_ring[cons];
-	if (rx_buf->mbuf == NULL)
+	rx_buf = rxr->rx_buf_ring[cons];
+	if (rx_buf == NULL || rx_buf == &rxq->fake_mbuf)
 		return RTE_ETH_RX_DESC_UNAVAIL;
 
 
@@ -3688,9 +3787,20 @@ bnxt_filter_ctrl_op(struct rte_eth_dev *dev,
 	struct bnxt *bp = dev->data->dev_private;
 	int ret = 0;
 
+	if (!bp)
+		return -EIO;
+
 	if (BNXT_ETH_DEV_IS_REPRESENTOR(dev)) {
-		struct bnxt_vf_representor *vfr = dev->data->dev_private;
+		struct bnxt_representor *vfr = dev->data->dev_private;
 		bp = vfr->parent_dev->data->dev_private;
+		/* parent is deleted while children are still valid */
+		if (!bp) {
+			PMD_DRV_LOG(DEBUG, "BNXT Port:%d VFR Error %d:%d\n",
+				    dev->data->port_id,
+				    filter_type,
+				    filter_op);
+			return -EIO;
+		}
 	}
 
 	ret = is_bnxt_in_error(bp);
@@ -4233,9 +4343,6 @@ static const struct eth_dev_ops bnxt_dev_ops = {
 	.dev_led_off = bnxt_dev_led_off_op,
 	.xstats_get_by_id = bnxt_dev_xstats_get_by_id_op,
 	.xstats_get_names_by_id = bnxt_dev_xstats_get_names_by_id_op,
-	.rx_queue_count = bnxt_rx_queue_count_op,
-	.rx_descriptor_status = bnxt_rx_descriptor_status_op,
-	.tx_descriptor_status = bnxt_tx_descriptor_status_op,
 	.rx_queue_start = bnxt_rx_queue_start,
 	.rx_queue_stop = bnxt_rx_queue_stop,
 	.tx_queue_start = bnxt_tx_queue_start,
@@ -4331,7 +4438,7 @@ static void bnxt_write_fw_reset_reg(struct bnxt *bp, uint32_t index)
 
 static void bnxt_dev_cleanup(struct bnxt *bp)
 {
-	bnxt_set_hwrm_link_config(bp, false);
+	bp->eth_dev->data->dev_link.link_status = 0;
 	bp->link_info->link_up = 0;
 	if (bp->eth_dev->data->dev_started)
 		bnxt_dev_stop_op(bp->eth_dev);
@@ -4627,17 +4734,22 @@ void bnxt_schedule_fw_health_check(struct bnxt *bp)
 {
 	uint32_t polling_freq;
 
+	pthread_mutex_lock(&bp->health_check_lock);
+
 	if (!bnxt_is_recovery_enabled(bp))
-		return;
+		goto done;
 
 	if (bp->flags & BNXT_FLAG_FW_HEALTH_CHECK_SCHEDULED)
-		return;
+		goto done;
 
 	polling_freq = bp->recovery_info->driver_polling_freq;
 
 	rte_eal_alarm_set(US_PER_MS * polling_freq,
 			  bnxt_check_fw_health, (void *)bp);
 	bp->flags |= BNXT_FLAG_FW_HEALTH_CHECK_SCHEDULED;
+
+done:
+	pthread_mutex_unlock(&bp->health_check_lock);
 }
 
 static void bnxt_cancel_fw_health_check(struct bnxt *bp)
@@ -5093,37 +5205,14 @@ static void bnxt_config_vf_req_fwd(struct bnxt *bp)
 	if (!BNXT_PF(bp))
 		return;
 
-#define ALLOW_FUNC(x)	\
-	{ \
-		uint32_t arg = (x); \
-		bp->pf->vf_req_fwd[((arg) >> 5)] &= \
-		~rte_cpu_to_le_32(1 << ((arg) & 0x1f)); \
-	}
+	memset(bp->pf->vf_req_fwd, 0, sizeof(bp->pf->vf_req_fwd));
 
-	/* Forward all requests if firmware is new enough */
-	if (((bp->fw_ver >= ((20 << 24) | (6 << 16) | (100 << 8))) &&
-	     (bp->fw_ver < ((20 << 24) | (7 << 16)))) ||
-	    ((bp->fw_ver >= ((20 << 24) | (8 << 16))))) {
-		memset(bp->pf->vf_req_fwd, 0xff, sizeof(bp->pf->vf_req_fwd));
-	} else {
-		PMD_DRV_LOG(WARNING,
-			    "Firmware too old for VF mailbox functionality\n");
-		memset(bp->pf->vf_req_fwd, 0, sizeof(bp->pf->vf_req_fwd));
-	}
-
-	/*
-	 * The following are used for driver cleanup. If we disallow these,
-	 * VF drivers can't clean up cleanly.
-	 */
-	ALLOW_FUNC(HWRM_FUNC_DRV_UNRGTR);
-	ALLOW_FUNC(HWRM_VNIC_FREE);
-	ALLOW_FUNC(HWRM_RING_FREE);
-	ALLOW_FUNC(HWRM_RING_GRP_FREE);
-	ALLOW_FUNC(HWRM_VNIC_RSS_COS_LB_CTX_FREE);
-	ALLOW_FUNC(HWRM_CFA_L2_FILTER_FREE);
-	ALLOW_FUNC(HWRM_STAT_CTX_FREE);
-	ALLOW_FUNC(HWRM_PORT_PHY_QCFG);
-	ALLOW_FUNC(HWRM_VNIC_TPA_CFG);
+	if (!(bp->fw_cap & BNXT_FW_CAP_LINK_ADMIN))
+		BNXT_HWRM_CMD_TO_FORWARD(HWRM_PORT_PHY_QCFG);
+	BNXT_HWRM_CMD_TO_FORWARD(HWRM_FUNC_CFG);
+	BNXT_HWRM_CMD_TO_FORWARD(HWRM_FUNC_VF_CFG);
+	BNXT_HWRM_CMD_TO_FORWARD(HWRM_CFA_L2_FILTER_ALLOC);
+	BNXT_HWRM_CMD_TO_FORWARD(HWRM_OEM_CMD);
 }
 
 uint16_t
@@ -5135,7 +5224,7 @@ bnxt_get_svif(uint16_t port_id, bool func_svif,
 
 	eth_dev = &rte_eth_devices[port_id];
 	if (BNXT_ETH_DEV_IS_REPRESENTOR(eth_dev)) {
-		struct bnxt_vf_representor *vfr = eth_dev->data->dev_private;
+		struct bnxt_representor *vfr = eth_dev->data->dev_private;
 		if (!vfr)
 			return 0;
 
@@ -5159,7 +5248,7 @@ bnxt_get_vnic_id(uint16_t port, enum bnxt_ulp_intf_type type)
 
 	eth_dev = &rte_eth_devices[port];
 	if (BNXT_ETH_DEV_IS_REPRESENTOR(eth_dev)) {
-		struct bnxt_vf_representor *vfr = eth_dev->data->dev_private;
+		struct bnxt_representor *vfr = eth_dev->data->dev_private;
 		if (!vfr)
 			return 0;
 
@@ -5184,7 +5273,7 @@ bnxt_get_fw_func_id(uint16_t port, enum bnxt_ulp_intf_type type)
 
 	eth_dev = &rte_eth_devices[port];
 	if (BNXT_ETH_DEV_IS_REPRESENTOR(eth_dev)) {
-		struct bnxt_vf_representor *vfr = eth_dev->data->dev_private;
+		struct bnxt_representor *vfr = eth_dev->data->dev_private;
 		if (!vfr)
 			return 0;
 
@@ -5223,7 +5312,7 @@ bnxt_get_interface_type(uint16_t port)
 uint16_t
 bnxt_get_phy_port_id(uint16_t port_id)
 {
-	struct bnxt_vf_representor *vfr;
+	struct bnxt_representor *vfr;
 	struct rte_eth_dev *eth_dev;
 	struct bnxt *bp;
 
@@ -5249,7 +5338,7 @@ bnxt_get_parif(uint16_t port_id, enum bnxt_ulp_intf_type type)
 
 	eth_dev = &rte_eth_devices[port_id];
 	if (BNXT_ETH_DEV_IS_REPRESENTOR(eth_dev)) {
-		struct bnxt_vf_representor *vfr = eth_dev->data->dev_private;
+		struct bnxt_representor *vfr = eth_dev->data->dev_private;
 		if (!vfr)
 			return 0;
 
@@ -5425,6 +5514,10 @@ bnxt_init_locks(struct bnxt *bp)
 	err = pthread_mutex_init(&bp->def_cp_lock, NULL);
 	if (err)
 		PMD_DRV_LOG(ERR, "Unable to initialize def_cp_lock\n");
+
+	err = pthread_mutex_init(&bp->health_check_lock, NULL);
+	if (err)
+		PMD_DRV_LOG(ERR, "Unable to initialize health_check_lock\n");
 	return err;
 }
 
@@ -5524,9 +5617,13 @@ bnxt_parse_devarg_truflow(__rte_unused const char *key,
 		return -EINVAL;
 	}
 
-	bp->flags |= BNXT_FLAG_TRUFLOW_EN;
-	if (BNXT_TRUFLOW_EN(bp))
+	if (truflow) {
+		bp->flags |= BNXT_FLAG_TRUFLOW_EN;
 		PMD_DRV_LOG(INFO, "Host-based truflow feature enabled.\n");
+	} else {
+		bp->flags &= ~BNXT_FLAG_TRUFLOW_EN;
+		PMD_DRV_LOG(INFO, "Host-based truflow feature disabled.\n");
+	}
 
 	return 0;
 }
@@ -5602,6 +5699,227 @@ bnxt_parse_devarg_max_num_kflows(__rte_unused const char *key,
 	return 0;
 }
 
+static int
+bnxt_parse_devarg_rep_is_pf(__rte_unused const char *key,
+			    const char *value, void *opaque_arg)
+{
+	struct bnxt_representor *vfr_bp = opaque_arg;
+	unsigned long rep_is_pf;
+	char *end = NULL;
+
+	if (!value || !opaque_arg) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_is_pf devargs.\n");
+		return -EINVAL;
+	}
+
+	rep_is_pf = strtoul(value, &end, 10);
+	if (end == NULL || *end != '\0' ||
+	    (rep_is_pf == ULONG_MAX && errno == ERANGE)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_is_pf devargs.\n");
+		return -EINVAL;
+	}
+
+	if (BNXT_DEVARG_REP_IS_PF_INVALID(rep_is_pf)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid value passed to rep_is_pf devargs.\n");
+		return -EINVAL;
+	}
+
+	vfr_bp->flags |= rep_is_pf;
+	if (BNXT_REP_PF(vfr_bp))
+		PMD_DRV_LOG(INFO, "PF representor\n");
+	else
+		PMD_DRV_LOG(INFO, "VF representor\n");
+
+	return 0;
+}
+
+static int
+bnxt_parse_devarg_rep_based_pf(__rte_unused const char *key,
+			       const char *value, void *opaque_arg)
+{
+	struct bnxt_representor *vfr_bp = opaque_arg;
+	unsigned long rep_based_pf;
+	char *end = NULL;
+
+	if (!value || !opaque_arg) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_based_pf "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	rep_based_pf = strtoul(value, &end, 10);
+	if (end == NULL || *end != '\0' ||
+	    (rep_based_pf == ULONG_MAX && errno == ERANGE)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_based_pf "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	if (BNXT_DEVARG_REP_BASED_PF_INVALID(rep_based_pf)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid value passed to rep_based_pf devargs.\n");
+		return -EINVAL;
+	}
+
+	vfr_bp->rep_based_pf = rep_based_pf;
+	PMD_DRV_LOG(INFO, "rep-based-pf = %d\n", vfr_bp->rep_based_pf);
+
+	return 0;
+}
+
+static int
+bnxt_parse_devarg_rep_q_r2f(__rte_unused const char *key,
+			    const char *value, void *opaque_arg)
+{
+	struct bnxt_representor *vfr_bp = opaque_arg;
+	unsigned long rep_q_r2f;
+	char *end = NULL;
+
+	if (!value || !opaque_arg) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_q_r2f "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	rep_q_r2f = strtoul(value, &end, 10);
+	if (end == NULL || *end != '\0' ||
+	    (rep_q_r2f == ULONG_MAX && errno == ERANGE)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_q_r2f "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	if (BNXT_DEVARG_REP_Q_R2F_INVALID(rep_q_r2f)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid value passed to rep_q_r2f devargs.\n");
+		return -EINVAL;
+	}
+
+	vfr_bp->rep_q_r2f = rep_q_r2f;
+	vfr_bp->flags |= BNXT_REP_Q_R2F_VALID;
+	PMD_DRV_LOG(INFO, "rep-q-r2f = %d\n", vfr_bp->rep_q_r2f);
+
+	return 0;
+}
+
+static int
+bnxt_parse_devarg_rep_q_f2r(__rte_unused const char *key,
+			    const char *value, void *opaque_arg)
+{
+	struct bnxt_representor *vfr_bp = opaque_arg;
+	unsigned long rep_q_f2r;
+	char *end = NULL;
+
+	if (!value || !opaque_arg) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_q_f2r "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	rep_q_f2r = strtoul(value, &end, 10);
+	if (end == NULL || *end != '\0' ||
+	    (rep_q_f2r == ULONG_MAX && errno == ERANGE)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_q_f2r "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	if (BNXT_DEVARG_REP_Q_F2R_INVALID(rep_q_f2r)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid value passed to rep_q_f2r devargs.\n");
+		return -EINVAL;
+	}
+
+	vfr_bp->rep_q_f2r = rep_q_f2r;
+	vfr_bp->flags |= BNXT_REP_Q_F2R_VALID;
+	PMD_DRV_LOG(INFO, "rep-q-f2r = %d\n", vfr_bp->rep_q_f2r);
+
+	return 0;
+}
+
+static int
+bnxt_parse_devarg_rep_fc_r2f(__rte_unused const char *key,
+			     const char *value, void *opaque_arg)
+{
+	struct bnxt_representor *vfr_bp = opaque_arg;
+	unsigned long rep_fc_r2f;
+	char *end = NULL;
+
+	if (!value || !opaque_arg) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_fc_r2f "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	rep_fc_r2f = strtoul(value, &end, 10);
+	if (end == NULL || *end != '\0' ||
+	    (rep_fc_r2f == ULONG_MAX && errno == ERANGE)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_fc_r2f "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	if (BNXT_DEVARG_REP_FC_R2F_INVALID(rep_fc_r2f)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid value passed to rep_fc_r2f devargs.\n");
+		return -EINVAL;
+	}
+
+	vfr_bp->flags |= BNXT_REP_FC_R2F_VALID;
+	vfr_bp->rep_fc_r2f = rep_fc_r2f;
+	PMD_DRV_LOG(INFO, "rep-fc-r2f = %lu\n", rep_fc_r2f);
+
+	return 0;
+}
+
+static int
+bnxt_parse_devarg_rep_fc_f2r(__rte_unused const char *key,
+			     const char *value, void *opaque_arg)
+{
+	struct bnxt_representor *vfr_bp = opaque_arg;
+	unsigned long rep_fc_f2r;
+	char *end = NULL;
+
+	if (!value || !opaque_arg) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_fc_f2r "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	rep_fc_f2r = strtoul(value, &end, 10);
+	if (end == NULL || *end != '\0' ||
+	    (rep_fc_f2r == ULONG_MAX && errno == ERANGE)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid parameter passed to rep_fc_f2r "
+			    "devargs.\n");
+		return -EINVAL;
+	}
+
+	if (BNXT_DEVARG_REP_FC_F2R_INVALID(rep_fc_f2r)) {
+		PMD_DRV_LOG(ERR,
+			    "Invalid value passed to rep_fc_f2r devargs.\n");
+		return -EINVAL;
+	}
+
+	vfr_bp->flags |= BNXT_REP_FC_F2R_VALID;
+	vfr_bp->rep_fc_f2r = rep_fc_f2r;
+	PMD_DRV_LOG(INFO, "rep-fc-f2r = %lu\n", rep_fc_f2r);
+
+	return 0;
+}
+
 static void
 bnxt_parse_dev_args(struct bnxt *bp, struct rte_devargs *devargs)
 {
@@ -5668,6 +5986,9 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev, void *params __rte_unused)
 		PMD_DRV_LOG(INFO, "%s\n", bnxt_version);
 
 	eth_dev->dev_ops = &bnxt_dev_ops;
+	eth_dev->rx_queue_count = bnxt_rx_queue_count_op;
+	eth_dev->rx_descriptor_status = bnxt_rx_descriptor_status_op;
+	eth_dev->tx_descriptor_status = bnxt_tx_descriptor_status_op;
 	eth_dev->rx_pkt_burst = &bnxt_recv_pkts;
 	eth_dev->tx_pkt_burst = &bnxt_xmit_pkts;
 
@@ -5679,6 +6000,7 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev, void *params __rte_unused)
 		return 0;
 
 	rte_eth_copy_pci_info(eth_dev, pci_dev);
+	eth_dev->data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 
 	bp = eth_dev->data->dev_private;
 
@@ -5741,11 +6063,6 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev, void *params __rte_unused)
 		goto error_free;
 
 	bnxt_alloc_switch_domain(bp);
-
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	PMD_DRV_LOG(INFO,
 		    DRV_MODULE_NAME "found at mem %" PRIX64 ", node addr %pM\n",
@@ -5833,8 +6150,11 @@ bnxt_uninit_locks(struct bnxt *bp)
 {
 	pthread_mutex_destroy(&bp->flow_lock);
 	pthread_mutex_destroy(&bp->def_cp_lock);
-	if (bp->rep_info)
+	pthread_mutex_destroy(&bp->health_check_lock);
+	if (bp->rep_info) {
 		pthread_mutex_destroy(&bp->rep_info->vfr_lock);
+		pthread_mutex_destroy(&bp->rep_info->vfr_start_lock);
+	}
 }
 
 static int
@@ -5844,7 +6164,10 @@ bnxt_uninit_resources(struct bnxt *bp, bool reconfig_dev)
 
 	bnxt_free_int(bp);
 	bnxt_free_mem(bp, reconfig_dev);
+
 	bnxt_hwrm_func_buf_unrgtr(bp);
+	rte_free(bp->pf->vf_req_buf);
+
 	rc = bnxt_hwrm_func_driver_unregister(bp, 0);
 	bp->flags &= ~BNXT_FLAG_REGISTERED;
 	bnxt_free_ctx_mem(bp);
@@ -5890,8 +6213,12 @@ static int bnxt_pci_remove_dev_with_reps(struct rte_eth_dev *eth_dev)
 		vf_rep_eth_dev = bp->rep_info[i].vfr_eth_dev;
 		if (!vf_rep_eth_dev)
 			continue;
-		rte_eth_dev_destroy(vf_rep_eth_dev, bnxt_vf_representor_uninit);
+		PMD_DRV_LOG(DEBUG, "BNXT Port:%d VFR pci remove\n",
+			    vf_rep_eth_dev->data->port_id);
+		rte_eth_dev_destroy(vf_rep_eth_dev, bnxt_representor_uninit);
 	}
+	PMD_DRV_LOG(DEBUG, "BNXT Port:%d pci remove\n",
+		    eth_dev->data->port_id);
 	ret = rte_eth_dev_destroy(eth_dev, bnxt_dev_uninit);
 
 	return ret;
@@ -5937,18 +6264,28 @@ static int bnxt_init_rep_info(struct bnxt *bp)
 		bnxt_free_rep_info(bp);
 		return rc;
 	}
+
+	rc = pthread_mutex_init(&bp->rep_info->vfr_start_lock, NULL);
+	if (rc) {
+		PMD_DRV_LOG(ERR, "Unable to initialize vfr_start_lock\n");
+		bnxt_free_rep_info(bp);
+		return rc;
+	}
+
 	return rc;
 }
 
 static int bnxt_rep_port_probe(struct rte_pci_device *pci_dev,
 			       struct rte_eth_devargs eth_da,
-			       struct rte_eth_dev *backing_eth_dev)
+			       struct rte_eth_dev *backing_eth_dev,
+			       const char *dev_args)
 {
 	struct rte_eth_dev *vf_rep_eth_dev;
 	char name[RTE_ETH_NAME_MAX_LEN];
 	struct bnxt *backing_bp;
 	uint16_t num_rep;
 	int i, ret = 0;
+	struct rte_kvargs *kvlist;
 
 	num_rep = eth_da.nb_representor_ports;
 	if (num_rep > BNXT_MAX_VF_REPS) {
@@ -5957,7 +6294,7 @@ static int bnxt_rep_port_probe(struct rte_pci_device *pci_dev,
 		return -EINVAL;
 	}
 
-	if (num_rep > RTE_MAX_ETHPORTS) {
+	if (num_rep >= RTE_MAX_ETHPORTS) {
 		PMD_DRV_LOG(ERR,
 			    "nb_representor_ports = %d > %d MAX ETHPORTS\n",
 			    num_rep, RTE_MAX_ETHPORTS);
@@ -5979,7 +6316,7 @@ static int bnxt_rep_port_probe(struct rte_pci_device *pci_dev,
 		return 0;
 
 	for (i = 0; i < num_rep; i++) {
-		struct bnxt_vf_representor representor = {
+		struct bnxt_representor representor = {
 			.vf_id = eth_da.representor_ports[i],
 			.switch_domain_id = backing_bp->switch_domain_id,
 			.parent_dev = backing_eth_dev
@@ -5995,30 +6332,93 @@ static int bnxt_rep_port_probe(struct rte_pci_device *pci_dev,
 		snprintf(name, sizeof(name), "net_%s_representor_%d",
 			 pci_dev->device.name, eth_da.representor_ports[i]);
 
-		ret = rte_eth_dev_create(&pci_dev->device, name,
-					 sizeof(struct bnxt_vf_representor),
-					 NULL, NULL,
-					 bnxt_vf_representor_init,
-					 &representor);
+		kvlist = rte_kvargs_parse(dev_args, bnxt_dev_args);
+		if (kvlist) {
+			/*
+			 * Handler for "rep_is_pf" devarg.
+			 * Invoked as for ex: "-w 000:00:0d.0,
+			 * rep-based-pf=<pf index> rep-is-pf=<VF=0 or PF=1>"
+			 */
+			rte_kvargs_process(kvlist, BNXT_DEVARG_REP_IS_PF,
+					   bnxt_parse_devarg_rep_is_pf,
+					   (void *)&representor);
+			/*
+			 * Handler for "rep_based_pf" devarg.
+			 * Invoked as for ex: "-w 000:00:0d.0,
+			 * rep-based-pf=<pf index> rep-is-pf=<VF=0 or PF=1>"
+			 */
+			rte_kvargs_process(kvlist, BNXT_DEVARG_REP_BASED_PF,
+					   bnxt_parse_devarg_rep_based_pf,
+					   (void *)&representor);
+			/*
+			 * Handler for "rep_based_pf" devarg.
+			 * Invoked as for ex: "-w 000:00:0d.0,
+			 * rep-based-pf=<pf index> rep-is-pf=<VF=0 or PF=1>"
+			 */
+			rte_kvargs_process(kvlist, BNXT_DEVARG_REP_Q_R2F,
+					   bnxt_parse_devarg_rep_q_r2f,
+					   (void *)&representor);
+			/*
+			 * Handler for "rep_based_pf" devarg.
+			 * Invoked as for ex: "-w 000:00:0d.0,
+			 * rep-based-pf=<pf index> rep-is-pf=<VF=0 or PF=1>"
+			 */
+			rte_kvargs_process(kvlist, BNXT_DEVARG_REP_Q_F2R,
+					   bnxt_parse_devarg_rep_q_f2r,
+					   (void *)&representor);
+			/*
+			 * Handler for "rep_based_pf" devarg.
+			 * Invoked as for ex: "-w 000:00:0d.0,
+			 * rep-based-pf=<pf index> rep-is-pf=<VF=0 or PF=1>"
+			 */
+			rte_kvargs_process(kvlist, BNXT_DEVARG_REP_FC_R2F,
+					   bnxt_parse_devarg_rep_fc_r2f,
+					   (void *)&representor);
+			/*
+			 * Handler for "rep_based_pf" devarg.
+			 * Invoked as for ex: "-w 000:00:0d.0,
+			 * rep-based-pf=<pf index> rep-is-pf=<VF=0 or PF=1>"
+			 */
+			rte_kvargs_process(kvlist, BNXT_DEVARG_REP_FC_F2R,
+					   bnxt_parse_devarg_rep_fc_f2r,
+					   (void *)&representor);
+		}
 
-		if (!ret) {
-			vf_rep_eth_dev = rte_eth_dev_allocated(name);
-			if (!vf_rep_eth_dev) {
-				PMD_DRV_LOG(ERR, "Failed to find the eth_dev"
-					    " for VF-Rep: %s.", name);
-				bnxt_pci_remove_dev_with_reps(backing_eth_dev);
-				ret = -ENODEV;
-				return ret;
-			}
-			backing_bp->rep_info[representor.vf_id].vfr_eth_dev =
-				vf_rep_eth_dev;
-			backing_bp->num_reps++;
-		} else {
+		ret = rte_eth_dev_create(&pci_dev->device, name,
+					 sizeof(struct bnxt_representor),
+					 NULL, NULL,
+					 bnxt_representor_init,
+					 &representor);
+		if (ret) {
 			PMD_DRV_LOG(ERR, "failed to create bnxt vf "
 				    "representor %s.", name);
-			bnxt_pci_remove_dev_with_reps(backing_eth_dev);
+			goto err;
 		}
+
+		vf_rep_eth_dev = rte_eth_dev_allocated(name);
+		if (!vf_rep_eth_dev) {
+			PMD_DRV_LOG(ERR, "Failed to find the eth_dev"
+				    " for VF-Rep: %s.", name);
+			ret = -ENODEV;
+			goto err;
+		}
+
+		PMD_DRV_LOG(DEBUG, "BNXT Port:%d VFR pci probe\n",
+			    backing_eth_dev->data->port_id);
+		backing_bp->rep_info[representor.vf_id].vfr_eth_dev =
+							 vf_rep_eth_dev;
+		backing_bp->num_reps++;
+
 	}
+
+	return 0;
+
+err:
+	/* If num_rep > 1, then rollback already created
+	 * ports, since we'll be failing the probe anyway
+	 */
+	if (num_rep > 1)
+		bnxt_pci_remove_dev_with_reps(backing_eth_dev);
 
 	return ret;
 }
@@ -6058,9 +6458,15 @@ static int bnxt_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 
 		backing_eth_dev = rte_eth_dev_allocated(pci_dev->device.name);
 	}
+	PMD_DRV_LOG(DEBUG, "BNXT Port:%d pci probe\n",
+		    backing_eth_dev->data->port_id);
+
+	if (!num_rep)
+		return ret;
 
 	/* probe representor ports now */
-	ret = bnxt_rep_port_probe(pci_dev, eth_da, backing_eth_dev);
+	ret = bnxt_rep_port_probe(pci_dev, eth_da, backing_eth_dev,
+				  pci_dev->device.devargs->args);
 
 	return ret;
 }
@@ -6077,10 +6483,11 @@ static int bnxt_pci_remove(struct rte_pci_device *pci_dev)
 			   * +ve value will at least help in proper cleanup
 			   */
 
+	PMD_DRV_LOG(DEBUG, "BNXT Port:%d pci remove\n", eth_dev->data->port_id);
 	if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
 		if (eth_dev->data->dev_flags & RTE_ETH_DEV_REPRESENTOR)
 			return rte_eth_dev_destroy(eth_dev,
-						   bnxt_vf_representor_uninit);
+						   bnxt_representor_uninit);
 		else
 			return rte_eth_dev_destroy(eth_dev,
 						   bnxt_dev_uninit);

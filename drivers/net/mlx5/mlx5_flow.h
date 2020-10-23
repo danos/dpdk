@@ -196,6 +196,7 @@ enum mlx5_feature_name {
 #define MLX5_FLOW_ACTION_SET_IPV6_DSCP (1ull << 33)
 #define MLX5_FLOW_ACTION_AGE (1ull << 34)
 #define MLX5_FLOW_ACTION_DEFAULT_MISS (1ull << 35)
+#define MLX5_FLOW_ACTION_SAMPLE (1ull << 36)
 
 #define MLX5_FLOW_FATE_ACTIONS \
 	(MLX5_FLOW_ACTION_DROP | MLX5_FLOW_ACTION_QUEUE | \
@@ -388,9 +389,21 @@ struct mlx5_flow_dv_matcher {
 
 #define MLX5_ENCAP_MAX_LEN 132
 
+/* Encap/decap resource key of the hash organization. */
+union mlx5_flow_encap_decap_key {
+	struct {
+		uint32_t ft_type:8;	/**< Flow table type, Rx or Tx. */
+		uint32_t refmt_type:8;	/**< Header reformat type. */
+		uint32_t buf_size:8;	/**< Encap buf size. */
+		uint32_t table_level:8;	/**< Root table or not. */
+		uint32_t cksum;		/**< Encap buf check sum. */
+	};
+	uint64_t v64;			/**< full 64bits value of key */
+};
+
 /* Encap/decap resource structure. */
 struct mlx5_flow_dv_encap_decap_resource {
-	ILIST_ENTRY(uint32_t)next;
+	struct mlx5_hlist_entry entry;
 	/* Pointer to next element. */
 	rte_atomic32_t refcnt; /**< Reference counter. */
 	void *action;
@@ -400,6 +413,7 @@ struct mlx5_flow_dv_encap_decap_resource {
 	uint8_t reformat_type;
 	uint8_t ft_type;
 	uint64_t flags; /**< Flags for RDMA API. */
+	uint32_t idx; /**< Index for the index memory pool. */
 };
 
 /* Tag resource structure. */
@@ -427,7 +441,7 @@ struct mlx5_flow_dv_tag_resource {
 
 /* Modify resource structure */
 struct mlx5_flow_dv_modify_hdr_resource {
-	LIST_ENTRY(mlx5_flow_dv_modify_hdr_resource) next;
+	struct mlx5_hlist_entry entry;
 	/* Pointer to next element. */
 	rte_atomic32_t refcnt; /**< Reference counter. */
 	void *action;
@@ -437,6 +451,17 @@ struct mlx5_flow_dv_modify_hdr_resource {
 	uint64_t flags; /**< Flags for RDMA API. */
 	struct mlx5_modification_cmd actions[];
 	/**< Modification actions. */
+};
+
+/* Modify resource key of the hash organization. */
+union mlx5_flow_modify_hdr_key {
+	struct {
+		uint32_t ft_type:8;	/**< Flow table type, Rx or Tx. */
+		uint32_t actions_num:5;	/**< Number of modification actions. */
+		uint32_t group:19;	/**< Flow group id. */
+		uint32_t cksum;		/**< Actions check sum. */
+	};
+	uint64_t v64;			/**< full 64bits value of key */
 };
 
 /* Jump action resource structure. */
@@ -495,6 +520,58 @@ struct mlx5_flow_tbl_data_entry {
 	uint32_t idx; /**< index for the indexed mempool. */
 };
 
+/* Sub rdma-core actions list. */
+struct mlx5_flow_sub_actions_list {
+	uint32_t actions_num; /**< Number of sample actions. */
+	uint64_t action_flags;
+	void *dr_queue_action;
+	void *dr_tag_action;
+	void *dr_cnt_action;
+	void *dr_port_id_action;
+	void *dr_encap_action;
+};
+
+/* Sample sub-actions resource list. */
+struct mlx5_flow_sub_actions_idx {
+	uint32_t rix_hrxq; /**< Hash Rx queue object index. */
+	uint32_t rix_tag; /**< Index to the tag action. */
+	uint32_t cnt;
+	uint32_t rix_port_id_action; /**< Index to port ID action resource. */
+	uint32_t rix_encap_decap; /**< Index to encap/decap resource. */
+};
+
+/* Sample action resource structure. */
+struct mlx5_flow_dv_sample_resource {
+	ILIST_ENTRY(uint32_t)next; /**< Pointer to next element. */
+	uint32_t refcnt; /**< Reference counter. */
+	void *verbs_action; /**< Verbs sample action object. */
+	uint8_t ft_type; /** Flow Table Type */
+	uint32_t ft_id; /** Flow Table Level */
+	uint32_t ratio;   /** Sample Ratio */
+	uint64_t set_action; /** Restore reg_c0 value */
+	void *normal_path_tbl; /** Flow Table pointer */
+	void *default_miss; /** default_miss dr_action. */
+	struct mlx5_flow_sub_actions_idx sample_idx;
+	/**< Action index resources. */
+	struct mlx5_flow_sub_actions_list sample_act;
+	/**< Action resources. */
+};
+
+#define MLX5_MAX_DEST_NUM	2
+
+/* Destination array action resource structure. */
+struct mlx5_flow_dv_dest_array_resource {
+	ILIST_ENTRY(uint32_t)next; /**< Pointer to next element. */
+	uint32_t refcnt; /**< Reference counter. */
+	uint8_t ft_type; /** Flow Table Type */
+	uint8_t num_of_dest; /**< Number of destination actions. */
+	void *action; /**< Pointer to the rdma core action. */
+	struct mlx5_flow_sub_actions_idx sample_idx[MLX5_MAX_DEST_NUM];
+	/**< Action index resources. */
+	struct mlx5_flow_sub_actions_list sample_act[MLX5_MAX_DEST_NUM];
+	/**< Action resources. */
+};
+
 /* Verbs specification header. */
 struct ibv_spec_header {
 	enum ibv_flow_spec_type type;
@@ -527,6 +604,10 @@ struct mlx5_flow_handle_dv {
 	/**< Index to push VLAN action resource in cache. */
 	uint32_t rix_tag;
 	/**< Index to the tag action. */
+	uint32_t rix_sample;
+	/**< Index to sample action resource in cache. */
+	uint32_t rix_dest_array;
+	/**< Index to destination array resource in cache. */
 } __rte_packed;
 
 /** Device flow handle structure: used both for creating & destroying. */
@@ -592,6 +673,10 @@ struct mlx5_flow_dv_workspace {
 	/**< Pointer to the jump action resource. */
 	struct mlx5_flow_dv_match_params value;
 	/**< Holds the value that the packet is compared to. */
+	struct mlx5_flow_dv_sample_resource *sample_res;
+	/**< Pointer to the sample action resource. */
+	struct mlx5_flow_dv_dest_array_resource *dest_array_res;
+	/**< Pointer to the destination array resource. */
 };
 
 /*

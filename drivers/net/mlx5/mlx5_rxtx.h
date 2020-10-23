@@ -68,7 +68,7 @@ struct rxq_zip {
 /* Multi-Packet RQ buffer header. */
 struct mlx5_mprq_buf {
 	struct rte_mempool *mp;
-	rte_atomic16_t refcnt; /* Atomically accessed refcnt. */
+	uint16_t refcnt; /* Atomically accessed refcnt. */
 	uint8_t pad[RTE_PKTMBUF_HEADROOM]; /* Headroom for the first packet. */
 	struct rte_mbuf_ext_shared_info shinfos[];
 	/*
@@ -155,39 +155,10 @@ struct mlx5_rxq_data {
 	int32_t flow_meta_offset;
 } __rte_cache_aligned;
 
-enum mlx5_rxq_obj_type {
-	MLX5_RXQ_OBJ_TYPE_IBV,		/* mlx5_rxq_obj with ibv_wq. */
-	MLX5_RXQ_OBJ_TYPE_DEVX_RQ,	/* mlx5_rxq_obj with mlx5_devx_rq. */
-	MLX5_RXQ_OBJ_TYPE_DEVX_HAIRPIN,
-	/* mlx5_rxq_obj with mlx5_devx_rq and hairpin support. */
-};
-
 enum mlx5_rxq_type {
 	MLX5_RXQ_TYPE_STANDARD, /* Standard Rx queue. */
 	MLX5_RXQ_TYPE_HAIRPIN, /* Hairpin Rx queue. */
 	MLX5_RXQ_TYPE_UNDEFINED,
-};
-
-/* Verbs/DevX Rx queue elements. */
-struct mlx5_rxq_obj {
-	LIST_ENTRY(mlx5_rxq_obj) next; /* Pointer to the next element. */
-	rte_atomic32_t refcnt; /* Reference counter. */
-	struct mlx5_rxq_ctrl *rxq_ctrl; /* Back pointer to parent. */
-	enum mlx5_rxq_obj_type type;
-	int fd; /* File descriptor for event channel */
-	RTE_STD_C11
-	union {
-		struct {
-			struct ibv_wq *wq; /* Work Queue. */
-			struct ibv_cq *ibv_cq; /* Completion Queue. */
-			struct ibv_comp_channel *ibv_channel;
-		};
-		struct {
-			struct mlx5_devx_obj *rq; /* DevX Rx Queue object. */
-			struct mlx5_devx_obj *devx_cq; /* DevX CQ object. */
-			struct mlx5dv_devx_event_channel *devx_channel;
-		};
-	};
 };
 
 /* RX queue control descriptor. */
@@ -200,58 +171,19 @@ struct mlx5_rxq_ctrl {
 	enum mlx5_rxq_type type; /* Rxq type. */
 	unsigned int socket; /* CPU socket ID for allocations. */
 	unsigned int irq:1; /* Whether IRQ is enabled. */
-	unsigned int rq_dbr_umem_id_valid:1;
-	unsigned int cq_dbr_umem_id_valid:1;
 	uint32_t flow_mark_n; /* Number of Mark/Flag flows using this Queue. */
 	uint32_t flow_tunnels_n[MLX5_FLOW_TUNNEL]; /* Tunnels counters. */
 	uint32_t wqn; /* WQ number. */
 	uint16_t dump_file_n; /* Number of dump files. */
-	uint32_t rq_dbr_umem_id;
+	struct mlx5_devx_dbr_page *rq_dbrec_page;
 	uint64_t rq_dbr_offset;
 	/* Storing RQ door-bell information, needed when freeing door-bell. */
-	uint32_t cq_dbr_umem_id;
+	struct mlx5_devx_dbr_page *cq_dbrec_page;
 	uint64_t cq_dbr_offset;
 	/* Storing CQ door-bell information, needed when freeing door-bell. */
-	struct mlx5dv_devx_umem *wq_umem; /* WQ buffer registration info. */
-	struct mlx5dv_devx_umem *cq_umem; /* CQ buffer registration info. */
+	void *wq_umem; /* WQ buffer registration info. */
+	void *cq_umem; /* CQ buffer registration info. */
 	struct rte_eth_hairpin_conf hairpin_conf; /* Hairpin configuration. */
-};
-
-enum mlx5_ind_tbl_type {
-	MLX5_IND_TBL_TYPE_IBV,
-	MLX5_IND_TBL_TYPE_DEVX,
-};
-
-/* Indirection table. */
-struct mlx5_ind_table_obj {
-	LIST_ENTRY(mlx5_ind_table_obj) next; /* Pointer to the next element. */
-	rte_atomic32_t refcnt; /* Reference counter. */
-	enum mlx5_ind_tbl_type type;
-	RTE_STD_C11
-	union {
-		struct ibv_rwq_ind_table *ind_table; /**< Indirection table. */
-		struct mlx5_devx_obj *rqt; /* DevX RQT object. */
-	};
-	uint32_t queues_n; /**< Number of queues in the list. */
-	uint16_t queues[]; /**< Queue list. */
-};
-
-/* Hash Rx queue. */
-struct mlx5_hrxq {
-	ILIST_ENTRY(uint32_t)next; /* Index to the next element. */
-	rte_atomic32_t refcnt; /* Reference counter. */
-	struct mlx5_ind_table_obj *ind_table; /* Indirection table. */
-	RTE_STD_C11
-	union {
-		struct ibv_qp *qp; /* Verbs queue pair. */
-		struct mlx5_devx_obj *tir; /* DevX TIR object. */
-	};
-#ifdef HAVE_IBV_FLOW_DV_SUPPORT
-	void *action; /* DV QP action pointer. */
-#endif
-	uint64_t hash_fields; /* Verbs Hash fields. */
-	uint32_t rss_key_len; /* Hash key length in bytes. */
-	uint8_t rss_key[]; /* Hash key. */
 };
 
 /* TX queue send local data. */
@@ -329,49 +261,9 @@ struct mlx5_txq_data {
 	/* Storage for queued packets, must be the last field. */
 } __rte_cache_aligned;
 
-enum mlx5_txq_obj_type {
-	MLX5_TXQ_OBJ_TYPE_IBV,		/* mlx5_txq_obj with ibv_wq. */
-	MLX5_TXQ_OBJ_TYPE_DEVX_SQ,	/* mlx5_txq_obj with mlx5_devx_sq. */
-	MLX5_TXQ_OBJ_TYPE_DEVX_HAIRPIN,
-	/* mlx5_txq_obj with mlx5_devx_tq and hairpin support. */
-};
-
 enum mlx5_txq_type {
 	MLX5_TXQ_TYPE_STANDARD, /* Standard Tx queue. */
 	MLX5_TXQ_TYPE_HAIRPIN, /* Hairpin Rx queue. */
-};
-
-/* Verbs/DevX Tx queue elements. */
-struct mlx5_txq_obj {
-	LIST_ENTRY(mlx5_txq_obj) next; /* Pointer to the next element. */
-	rte_atomic32_t refcnt; /* Reference counter. */
-	struct mlx5_txq_ctrl *txq_ctrl; /* Pointer to the control queue. */
-	enum mlx5_txq_obj_type type; /* The txq object type. */
-	RTE_STD_C11
-	union {
-		struct {
-			struct ibv_cq *cq; /* Completion Queue. */
-			struct ibv_qp *qp; /* Queue Pair. */
-		};
-		struct {
-			struct mlx5_devx_obj *sq;
-			/* DevX object for Sx queue. */
-			struct mlx5_devx_obj *tis; /* The TIS object. */
-		};
-		struct {
-			struct rte_eth_dev *dev;
-			struct mlx5_devx_obj *cq_devx;
-			struct mlx5dv_devx_umem *cq_umem;
-			void *cq_buf;
-			int64_t cq_dbrec_offset;
-			struct mlx5_devx_dbr_page *cq_dbrec_page;
-			struct mlx5_devx_obj *sq_devx;
-			struct mlx5dv_devx_umem *sq_umem;
-			void *sq_buf;
-			int64_t sq_dbrec_offset;
-			struct mlx5_devx_dbr_page *sq_dbrec_page;
-		};
-	};
 };
 
 /* TX queue control descriptor. */
@@ -402,6 +294,7 @@ extern uint8_t rss_hash_default_key[];
 int mlx5_check_mprq_support(struct rte_eth_dev *dev);
 int mlx5_rxq_mprq_enabled(struct mlx5_rxq_data *rxq);
 int mlx5_mprq_enabled(struct rte_eth_dev *dev);
+unsigned int mlx5_rxq_cqe_num(struct mlx5_rxq_data *rxq_data);
 int mlx5_mprq_free_mp(struct rte_eth_dev *dev);
 int mlx5_mprq_alloc_mp(struct rte_eth_dev *dev);
 int mlx5_rx_queue_start(struct rte_eth_dev *dev, uint16_t queue_id);
@@ -419,8 +312,6 @@ int mlx5_rx_intr_vec_enable(struct rte_eth_dev *dev);
 void mlx5_rx_intr_vec_disable(struct rte_eth_dev *dev);
 int mlx5_rx_intr_enable(struct rte_eth_dev *dev, uint16_t rx_queue_id);
 int mlx5_rx_intr_disable(struct rte_eth_dev *dev, uint16_t rx_queue_id);
-struct mlx5_rxq_obj *mlx5_rxq_obj_new(struct rte_eth_dev *dev, uint16_t idx,
-				      enum mlx5_rxq_obj_type type);
 int mlx5_rxq_obj_verify(struct rte_eth_dev *dev);
 struct mlx5_rxq_ctrl *mlx5_rxq_new(struct rte_eth_dev *dev, uint16_t idx,
 				   uint16_t desc, unsigned int socket,
@@ -434,6 +325,11 @@ int mlx5_rxq_release(struct rte_eth_dev *dev, uint16_t idx);
 int mlx5_rxq_verify(struct rte_eth_dev *dev);
 int rxq_alloc_elts(struct mlx5_rxq_ctrl *rxq_ctrl);
 int mlx5_ind_table_obj_verify(struct rte_eth_dev *dev);
+struct mlx5_ind_table_obj *mlx5_ind_table_obj_get(struct rte_eth_dev *dev,
+						  const uint16_t *queues,
+						  uint32_t queues_n);
+int mlx5_ind_table_obj_release(struct rte_eth_dev *dev,
+			       struct mlx5_ind_table_obj *ind_tbl);
 uint32_t mlx5_hrxq_new(struct rte_eth_dev *dev,
 		       const uint8_t *rss_key, uint32_t rss_key_len,
 		       uint64_t hash_fields,
@@ -446,8 +342,8 @@ uint32_t mlx5_hrxq_get(struct rte_eth_dev *dev,
 int mlx5_hrxq_release(struct rte_eth_dev *dev, uint32_t hxrq_idx);
 int mlx5_hrxq_verify(struct rte_eth_dev *dev);
 enum mlx5_rxq_type mlx5_rxq_get_type(struct rte_eth_dev *dev, uint16_t idx);
-struct mlx5_hrxq *mlx5_hrxq_drop_new(struct rte_eth_dev *dev);
-void mlx5_hrxq_drop_release(struct rte_eth_dev *dev);
+struct mlx5_hrxq *mlx5_drop_action_create(struct rte_eth_dev *dev);
+void mlx5_drop_action_destroy(struct rte_eth_dev *dev);
 uint64_t mlx5_get_rx_port_offloads(void);
 uint64_t mlx5_get_rx_queue_offloads(struct rte_eth_dev *dev);
 void mlx5_rxq_timestamp_set(struct rte_eth_dev *dev);
@@ -465,12 +361,9 @@ int mlx5_tx_hairpin_queue_setup
 	(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 	 const struct rte_eth_hairpin_conf *hairpin_conf);
 void mlx5_tx_queue_release(void *dpdk_txq);
+void txq_uar_init(struct mlx5_txq_ctrl *txq_ctrl);
 int mlx5_tx_uar_init_secondary(struct rte_eth_dev *dev, int fd);
 void mlx5_tx_uar_uninit_secondary(struct rte_eth_dev *dev);
-struct mlx5_txq_obj *mlx5_txq_obj_new(struct rte_eth_dev *dev, uint16_t idx,
-				      enum mlx5_txq_obj_type type);
-struct mlx5_txq_obj *mlx5_txq_obj_get(struct rte_eth_dev *dev, uint16_t idx);
-int mlx5_txq_obj_release(struct mlx5_txq_obj *txq_ibv);
 int mlx5_txq_obj_verify(struct rte_eth_dev *dev);
 struct mlx5_txq_ctrl *mlx5_txq_new(struct rte_eth_dev *dev, uint16_t idx,
 				   uint16_t desc, unsigned int socket,
@@ -691,7 +584,7 @@ mlx5_tx_dbrec_cond_wmb(struct mlx5_txq_data *txq, volatile struct mlx5_wqe *wqe,
 	uint64_t *dst = MLX5_TX_BFREG(txq);
 	volatile uint64_t *src = ((volatile uint64_t *)wqe);
 
-	rte_cio_wmb();
+	rte_io_wmb();
 	*txq->qp_db = rte_cpu_to_be_32(txq->wqe_ci);
 	/* Ensure ordering between DB record and BF copy. */
 	rte_wmb();

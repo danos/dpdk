@@ -328,7 +328,7 @@ The "rte_cryptodev_devices_get()" returns the devices exposed by either of these
 
 	The cryptodev driver name is passed to the dpdk-test-crypto-perf tool in the "-devtype" parameter.
 
-	The qat crypto device name is in the format of the slave parameter passed to the crypto scheduler.
+	The qat crypto device name is in the format of the worker parameter passed to the crypto scheduler.
 
 * The qat compressdev driver name is "compress_qat".
   The rte_compressdev_devices_get() returns the devices exposed by this driver.
@@ -642,9 +642,8 @@ Install the DPDK igb_uio driver, bind the VF PCI Device id to it and use lspci
 to confirm the VF devices are now in use by igb_uio kernel driver,
 e.g. for the C62x device::
 
-    cd to the top-level DPDK directory
     modprobe uio
-    insmod ./build/kmod/igb_uio.ko
+    insmod igb_uio.ko
     echo "8086 37c9" > /sys/bus/pci/drivers/igb_uio/new_id
     lspci -vvd:37c9
 

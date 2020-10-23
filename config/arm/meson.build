@@ -21,9 +21,9 @@ flags_common_default = [
 	#	['RTE_ARM64_MEMCPY_ALIGN_MASK', 0xF],
 	#	['RTE_ARM64_MEMCPY_STRICT_ALIGN', false],
 
-	['RTE_LIBRTE_FM10K_PMD', false],
-	['RTE_LIBRTE_SFC_EFX_PMD', false],
-	['RTE_LIBRTE_AVP_PMD', false],
+	['RTE_NET_FM10K', false],
+	['RTE_NET_SFC_EFX', false],
+	['RTE_NET_AVP', false],
 
 	['RTE_SCHED_VECTOR', false],
 	['RTE_ARM_USE_WFE', false],
@@ -88,7 +88,7 @@ flags_octeontx2_extra = [
 	['RTE_USE_C11_MEM_MODEL', true]]
 
 machine_args_generic = [
-	['default', ['-march=armv8-a+crc']],
+	['default', ['-march=armv8-a+crc', '-moutline-atomics']],
 	['native', ['-march=native']],
 	['0xd03', ['-mcpu=cortex-a53']],
 	['0xd04', ['-mcpu=cortex-a35']],
@@ -128,11 +128,11 @@ impl_0x56 = ['Marvell ARMADA', flags_armada, machine_args_generic]
 impl_0x69 = ['Intel', flags_generic, machine_args_generic]
 impl_dpaa = ['NXP DPAA', flags_dpaa, machine_args_generic]
 
+dpdk_conf.set('RTE_ARCH_ARM', 1)
 dpdk_conf.set('RTE_FORCE_INTRINSICS', 1)
 
-if not dpdk_conf.get('RTE_ARCH_64')
+if dpdk_conf.get('RTE_ARCH_32')
 	dpdk_conf.set('RTE_CACHE_LINE_SIZE', 64)
-	dpdk_conf.set('RTE_ARCH_ARM', 1)
 	dpdk_conf.set('RTE_ARCH_ARMv7', 1)
 	# the minimum architecture supported, armv7-a, needs the following,
 	# mk/machine/armv7a/rte.vars.mk sets it too
@@ -208,20 +208,14 @@ message(machine_args)
 
 if (cc.get_define('__ARM_NEON', args: machine_args) != '' or
     cc.get_define('__aarch64__', args: machine_args) != '')
-	dpdk_conf.set('RTE_MACHINE_CPUFLAG_NEON', 1)
 	compile_time_cpuflags += ['RTE_CPUFLAG_NEON']
 endif
 
 if cc.get_define('__ARM_FEATURE_CRC32', args: machine_args) != ''
-	dpdk_conf.set('RTE_MACHINE_CPUFLAG_CRC32', 1)
 	compile_time_cpuflags += ['RTE_CPUFLAG_CRC32']
 endif
 
 if cc.get_define('__ARM_FEATURE_CRYPTO', args: machine_args) != ''
-	dpdk_conf.set('RTE_MACHINE_CPUFLAG_AES', 1)
-	dpdk_conf.set('RTE_MACHINE_CPUFLAG_PMULL', 1)
-	dpdk_conf.set('RTE_MACHINE_CPUFLAG_SHA1', 1)
-	dpdk_conf.set('RTE_MACHINE_CPUFLAG_SHA2', 1)
 	compile_time_cpuflags += ['RTE_CPUFLAG_AES', 'RTE_CPUFLAG_PMULL',
 	'RTE_CPUFLAG_SHA1', 'RTE_CPUFLAG_SHA2']
 endif

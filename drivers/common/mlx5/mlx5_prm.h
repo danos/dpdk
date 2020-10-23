@@ -539,7 +539,7 @@ enum mlx5_modification_field {
 #define MLX5_MREG_C_NUM (MLX5_MODI_META_REG_C_7 - MLX5_MODI_META_REG_C_0 + 1)
 
 enum modify_reg {
-	REG_NONE = 0,
+	REG_NON = 0,
 	REG_A,
 	REG_B,
 	REG_C_0,
@@ -608,7 +608,7 @@ typedef uint8_t u8;
 #define MLX5_SET(typ, p, fld, v) \
 	do { \
 		u32 _v = v; \
-		*((__be32 *)(p) + __mlx5_dw_off(typ, fld)) = \
+		*((rte_be32_t *)(p) + __mlx5_dw_off(typ, fld)) = \
 		rte_cpu_to_be_32((rte_be_to_cpu_32(*((u32 *)(p) + \
 				  __mlx5_dw_off(typ, fld))) & \
 				  (~__mlx5_dw_mask(typ, fld))) | \
@@ -619,15 +619,15 @@ typedef uint8_t u8;
 #define MLX5_SET64(typ, p, fld, v) \
 	do { \
 		MLX5_ASSERT(__mlx5_bit_sz(typ, fld) == 64); \
-		*((__be64 *)(p) + __mlx5_64_off(typ, fld)) = \
+		*((rte_be64_t *)(p) + __mlx5_64_off(typ, fld)) = \
 			rte_cpu_to_be_64(v); \
 	} while (0)
 
 #define MLX5_SET16(typ, p, fld, v) \
 	do { \
 		u16 _v = v; \
-		*((__be16 *)(p) + __mlx5_16_off(typ, fld)) = \
-		rte_cpu_to_be_16((rte_be_to_cpu_16(*((__be16 *)(p) + \
+		*((rte_be16_t *)(p) + __mlx5_16_off(typ, fld)) = \
+		rte_cpu_to_be_16((rte_be_to_cpu_16(*((rte_be16_t *)(p) + \
 				  __mlx5_16_off(typ, fld))) & \
 				  (~__mlx5_16_mask(typ, fld))) | \
 				 (((_v) & __mlx5_mask16(typ, fld)) << \
@@ -639,14 +639,14 @@ typedef uint8_t u8;
 	__mlx5_dw_off(typ, fld))) >> __mlx5_dw_bit_off(typ, fld)) & \
 	__mlx5_mask(typ, fld))
 #define MLX5_GET(typ, p, fld) \
-	((rte_be_to_cpu_32(*((__be32 *)(p) +\
+	((rte_be_to_cpu_32(*((rte_be32_t *)(p) +\
 	__mlx5_dw_off(typ, fld))) >> __mlx5_dw_bit_off(typ, fld)) & \
 	__mlx5_mask(typ, fld))
 #define MLX5_GET16(typ, p, fld) \
-	((rte_be_to_cpu_16(*((__be16 *)(p) + \
+	((rte_be_to_cpu_16(*((rte_be16_t *)(p) + \
 	  __mlx5_16_off(typ, fld))) >> __mlx5_16_bit_off(typ, fld)) & \
 	 __mlx5_mask16(typ, fld))
-#define MLX5_GET64(typ, p, fld) rte_be_to_cpu_64(*((__be64 *)(p) + \
+#define MLX5_GET64(typ, p, fld) rte_be_to_cpu_64(*((rte_be64_t *)(p) + \
 						   __mlx5_64_off(typ, fld)))
 #define MLX5_FLD_SZ_BYTES(typ, fld) (__mlx5_bit_sz(typ, fld) / 8)
 
@@ -1036,6 +1036,7 @@ enum {
 	MLX5_GET_HCA_CAP_OP_MOD_GENERAL_DEVICE = 0x0 << 1,
 	MLX5_GET_HCA_CAP_OP_MOD_ETHERNET_OFFLOAD_CAPS = 0x1 << 1,
 	MLX5_GET_HCA_CAP_OP_MOD_QOS_CAP = 0xc << 1,
+	MLX5_GET_HCA_CAP_OP_MOD_NIC_FLOW_TABLE = 0x7 << 1,
 	MLX5_GET_HCA_CAP_OP_MOD_VDPA_EMULATION = 0x13 << 1,
 };
 
@@ -1470,13 +1471,73 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8 reserved_at_1c0[0x620];
 };
 
+struct mlx5_ifc_flow_table_prop_layout_bits {
+	u8 ft_support[0x1];
+	u8 flow_tag[0x1];
+	u8 flow_counter[0x1];
+	u8 flow_modify_en[0x1];
+	u8 modify_root[0x1];
+	u8 identified_miss_table[0x1];
+	u8 flow_table_modify[0x1];
+	u8 reformat[0x1];
+	u8 decap[0x1];
+	u8 reset_root_to_default[0x1];
+	u8 pop_vlan[0x1];
+	u8 push_vlan[0x1];
+	u8 fpga_vendor_acceleration[0x1];
+	u8 pop_vlan_2[0x1];
+	u8 push_vlan_2[0x1];
+	u8 reformat_and_vlan_action[0x1];
+	u8 modify_and_vlan_action[0x1];
+	u8 sw_owner[0x1];
+	u8 reformat_l3_tunnel_to_l2[0x1];
+	u8 reformat_l2_to_l3_tunnel[0x1];
+	u8 reformat_and_modify_action[0x1];
+	u8 reserved_at_15[0x9];
+	u8 sw_owner_v2[0x1];
+	u8 reserved_at_1f[0x1];
+	u8 reserved_at_20[0x2];
+	u8 log_max_ft_size[0x6];
+	u8 log_max_modify_header_context[0x8];
+	u8 max_modify_header_actions[0x8];
+	u8 max_ft_level[0x8];
+	u8 reserved_at_40[0x8];
+	u8 log_max_ft_sampler_num[8];
+	u8 metadata_reg_b_width[0x8];
+	u8 metadata_reg_a_width[0x8];
+	u8 reserved_at_60[0x18];
+	u8 log_max_ft_num[0x8];
+	u8 reserved_at_80[0x10];
+	u8 log_max_flow_counter[0x8];
+	u8 log_max_destination[0x8];
+	u8 reserved_at_a0[0x18];
+	u8 log_max_flow[0x8];
+	u8 reserved_at_c0[0x140];
+};
+
+struct mlx5_ifc_flow_table_nic_cap_bits {
+	u8	   reserved_at_0[0x200];
+	struct mlx5_ifc_flow_table_prop_layout_bits flow_table_properties;
+};
+
 union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_cmd_hca_cap_bits cmd_hca_cap;
 	struct mlx5_ifc_per_protocol_networking_offload_caps_bits
 	       per_protocol_networking_offload_caps;
 	struct mlx5_ifc_qos_cap_bits qos_cap;
 	struct mlx5_ifc_virtio_emulation_cap_bits vdpa_caps;
+	struct mlx5_ifc_flow_table_nic_cap_bits flow_table_nic_cap;
 	u8 reserved_at_0[0x8000];
+};
+
+struct mlx5_ifc_set_action_in_bits {
+	u8 action_type[0x4];
+	u8 field[0xc];
+	u8 reserved_at_10[0x3];
+	u8 offset[0x5];
+	u8 reserved_at_18[0x3];
+	u8 length[0x5];
+	u8 data[0x20];
 };
 
 struct mlx5_ifc_query_hca_cap_out_bits {
@@ -2833,6 +2894,14 @@ struct mlx5_mini_cqe8 {
 		} s_wqe_info;
 	};
 	uint32_t byte_cnt;
+};
+
+/* Mini CQE responder format. */
+enum {
+	MLX5_CQE_RESP_FORMAT_HASH = 0x0,
+	MLX5_CQE_RESP_FORMAT_CSUM = 0x1,
+	MLX5_CQE_RESP_FORMAT_CSUM_FLOW_TAG = 0x2,
+	MLX5_CQE_RESP_FORMAT_CSUM_STRIDX = 0x3,
 };
 
 /* srTCM PRM flow meter parameters. */

@@ -501,7 +501,8 @@ otx2_sso_info_get(struct rte_eventdev *event_dev,
 					RTE_EVENT_DEV_CAP_QUEUE_ALL_TYPES |
 					RTE_EVENT_DEV_CAP_RUNTIME_PORT_LINK |
 					RTE_EVENT_DEV_CAP_MULTIPLE_QUEUE_PORT |
-					RTE_EVENT_DEV_CAP_NONSEQ_MODE;
+					RTE_EVENT_DEV_CAP_NONSEQ_MODE |
+					RTE_EVENT_DEV_CAP_CARRY_FLOW_ID;
 }
 
 static void
@@ -771,7 +772,7 @@ sso_set_port_ops(struct otx2_ssogws *ws, uintptr_t base)
 	ws->tag_op		= base + SSOW_LF_GWS_TAG;
 	ws->wqp_op		= base + SSOW_LF_GWS_WQP;
 	ws->getwrk_op		= base + SSOW_LF_GWS_OP_GET_WORK;
-	ws->swtp_op		= base + SSOW_LF_GWS_SWTP;
+	ws->swtag_flush_op	= base + SSOW_LF_GWS_OP_SWTAG_FLUSH;
 	ws->swtag_norm_op	= base + SSOW_LF_GWS_OP_SWTAG_NORM;
 	ws->swtag_desched_op	= base + SSOW_LF_GWS_OP_SWTAG_DESCHED;
 }
@@ -1586,6 +1587,10 @@ static struct rte_eventdev_ops otx2_sso_ops = {
 	.eth_tx_adapter_queue_del = otx2_sso_tx_adapter_queue_del,
 
 	.timer_adapter_caps_get = otx2_tim_caps_get,
+
+	.crypto_adapter_caps_get = otx2_ca_caps_get,
+	.crypto_adapter_queue_pair_add = otx2_ca_qp_add,
+	.crypto_adapter_queue_pair_del = otx2_ca_qp_del,
 
 	.xstats_get       = otx2_sso_xstats_get,
 	.xstats_reset     = otx2_sso_xstats_reset,
