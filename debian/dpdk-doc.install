@@ -1,4 +1,4 @@
 doc/guides/custom.css usr/share/doc/dpdk/html/_static/css
 examples usr/share/dpdk
-obj-*/doc/api/api usr/share/doc/dpdk
-obj-*/doc/guides/html usr/share/doc/dpdk
+obj-*/doc/api/html/* usr/share/doc/dpdk/api
+obj-*/doc/guides/html/* usr/share/doc/dpdk/guides
