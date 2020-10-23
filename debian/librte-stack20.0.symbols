@@ -1,5 +1,0 @@
-librte_stack.so.20.0 librte-stack20.0 #MINVER#
- EXPERIMENTAL@EXPERIMENTAL 19.11
- rte_stack_create@EXPERIMENTAL 19.11
- rte_stack_free@EXPERIMENTAL 19.11
- rte_stack_lookup@EXPERIMENTAL 19.11

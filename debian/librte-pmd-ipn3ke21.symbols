@@ -1,0 +1,6 @@
+librte_pmd_ipn3ke.so.21 librte-pmd-ipn3ke21 #MINVER#
+ DPDK_20.0@DPDK_20.0 19.11.1
+ EXPERIMENTAL@EXPERIMENTAL 19.11.1
+ ipn3ke_bridge_func@EXPERIMENTAL 19.11.1
+# INFO: this library exports no stable symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

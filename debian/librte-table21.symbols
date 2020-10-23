@@ -1,0 +1,16 @@
+librte_table.so.21 librte-table21 #MINVER#
+ DPDK_20.0@DPDK_20.0 19.11
+ rte_table_acl_ops@DPDK_20.0 19.11
+ rte_table_array_ops@DPDK_20.0 19.11
+ rte_table_hash_cuckoo_ops@DPDK_20.0 19.11
+ rte_table_hash_ext_ops@DPDK_20.0 19.11
+ rte_table_hash_key16_ext_ops@DPDK_20.0 19.11
+ rte_table_hash_key16_lru_ops@DPDK_20.0 19.11
+ rte_table_hash_key32_ext_ops@DPDK_20.0 19.11
+ rte_table_hash_key32_lru_ops@DPDK_20.0 19.11
+ rte_table_hash_key8_ext_ops@DPDK_20.0 19.11
+ rte_table_hash_key8_lru_ops@DPDK_20.0 19.11
+ rte_table_hash_lru_ops@DPDK_20.0 19.11
+ rte_table_lpm_ipv6_ops@DPDK_20.0 19.11
+ rte_table_lpm_ops@DPDK_20.0 19.11
+ rte_table_stub_ops@DPDK_20.0 19.11

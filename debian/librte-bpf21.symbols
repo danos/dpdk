@@ -1,0 +1,12 @@
+librte_bpf.so.21 librte-bpf21 #MINVER#
+ EXPERIMENTAL@EXPERIMENTAL 19.11
+ rte_bpf_destroy@EXPERIMENTAL 19.11
+ rte_bpf_elf_load@EXPERIMENTAL 19.11
+ rte_bpf_eth_rx_elf_load@EXPERIMENTAL 19.11
+ rte_bpf_eth_rx_unload@EXPERIMENTAL 19.11
+ rte_bpf_eth_tx_elf_load@EXPERIMENTAL 19.11
+ rte_bpf_eth_tx_unload@EXPERIMENTAL 19.11
+ rte_bpf_exec@EXPERIMENTAL 19.11
+ rte_bpf_exec_burst@EXPERIMENTAL 19.11
+ rte_bpf_get_jit@EXPERIMENTAL 19.11
+ rte_bpf_load@EXPERIMENTAL 19.11

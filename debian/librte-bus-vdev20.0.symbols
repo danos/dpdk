@@ -1,8 +1,0 @@
-librte_bus_vdev.so.20.0 librte-bus-vdev20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- rte_vdev_add_custom_scan@DPDK_20.0 19.11
- rte_vdev_init@DPDK_20.0 19.11
- rte_vdev_register@DPDK_20.0 19.11
- rte_vdev_remove_custom_scan@DPDK_20.0 19.11
- rte_vdev_uninit@DPDK_20.0 19.11
- rte_vdev_unregister@DPDK_20.0 19.11

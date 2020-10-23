@@ -1,7 +1,0 @@
-librte_mempool_octeontx2.so.20.0 librte-mempool-octeontx2-20.0 #MINVER#
-#MISSING: 20.08# DPDK_20.0@DPDK_20.0 19.11
- INTERNAL@INTERNAL 20.08
-#MISSING: 20.08# otx2_npa_lf_fini@DPDK_20.0 19.11
- otx2_npa_lf_fini@INTERNAL 20.08
-#MISSING: 20.08# otx2_npa_lf_init@DPDK_20.0 19.11
- otx2_npa_lf_init@INTERNAL 20.08

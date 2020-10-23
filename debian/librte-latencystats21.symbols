@@ -1,0 +1,7 @@
+librte_latencystats.so.21 librte-latencystats21 #MINVER#
+ DPDK_20.0@DPDK_20.0 19.11
+ rte_latencystats_get@DPDK_20.0 19.11
+ rte_latencystats_get_names@DPDK_20.0 19.11
+ rte_latencystats_init@DPDK_20.0 19.11
+ rte_latencystats_uninit@DPDK_20.0 19.11
+ rte_latencystats_update@DPDK_20.0 19.11

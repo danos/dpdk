@@ -1,7 +1,0 @@
-librte_pmd_mlx5.so.20.0 librte-pmd-mlx5-20.0 #MINVER#
-# Built since 18.02 due to rdma-core being available
- EXPERIMENTAL@EXPERIMENTAL 20.08
- rte_pmd_mlx5_get_dyn_flag_names@EXPERIMENTAL 20.08
- DPDK_20.0@DPDK_20.0 19.11
-# INFO: this library exports no symbols, essentially it is a driver that
-# registers itself on load and is then only driven by callbacks.

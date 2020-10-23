@@ -1,7 +1,0 @@
-librte_pci.so.20.0 librte-pci20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- pci_map_resource@DPDK_20.0 19.11
- pci_unmap_resource@DPDK_20.0 19.11
- rte_pci_addr_cmp@DPDK_20.0 19.11
- rte_pci_addr_parse@DPDK_20.0 19.11
- rte_pci_device_name@DPDK_20.0 19.11

@@ -1,5 +1,0 @@
-librte_bitratestats.so.20.0 librte-bitratestats20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- rte_stats_bitrate_calc@DPDK_20.0 19.11
- rte_stats_bitrate_create@DPDK_20.0 19.11
- rte_stats_bitrate_reg@DPDK_20.0 19.11

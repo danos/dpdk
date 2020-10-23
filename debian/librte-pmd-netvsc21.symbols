@@ -1,0 +1,2 @@
+librte_pmd_netvsc.so.21 librte-pmd-netvsc21 #MINVER#
+ DPDK_20.0@DPDK_20.0 19.11

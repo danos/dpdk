@@ -1,8 +1,0 @@
-librte_gro.so.20.0 librte-gro20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- rte_gro_ctx_create@DPDK_20.0 19.11
- rte_gro_ctx_destroy@DPDK_20.0 19.11
- rte_gro_get_pkt_count@DPDK_20.0 19.11
- rte_gro_reassemble@DPDK_20.0 19.11
- rte_gro_reassemble_burst@DPDK_20.0 19.11
- rte_gro_timeout_flush@DPDK_20.0 19.11

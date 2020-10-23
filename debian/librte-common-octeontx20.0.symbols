@@ -1,8 +1,0 @@
-librte_common_octeontx.so.20.0 librte-common-octeontx20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- octeontx_get_global_domain@DPDK_20.0 19.11
- octeontx_logtype_mbox@DPDK_20.0 19.11
- octeontx_mbox_init@DPDK_20.0 19.11
- octeontx_mbox_send@DPDK_20.0 19.11
- octeontx_mbox_set_ram_mbox_base@DPDK_20.0 19.11
- octeontx_mbox_set_reg@DPDK_20.0 19.11

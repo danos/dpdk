@@ -1,0 +1,11 @@
+librte_pmd_ice.so.21 librte-pmd-ice21 #MINVER#
+ DPDK_20.0@DPDK_20.0 19.11
+ EXPERIMENTAL@EXPERIMENTAL 19.11
+ rte_net_ice_dynfield_proto_xtr_metadata_offs@EXPERIMENTAL 19.11
+ rte_net_ice_dynflag_proto_xtr_ipv4_mask@EXPERIMENTAL 19.11
+ rte_net_ice_dynflag_proto_xtr_ipv6_flow_mask@EXPERIMENTAL 19.11
+ rte_net_ice_dynflag_proto_xtr_ipv6_mask@EXPERIMENTAL 19.11
+ rte_net_ice_dynflag_proto_xtr_tcp_mask@EXPERIMENTAL 19.11
+ rte_net_ice_dynflag_proto_xtr_vlan_mask@EXPERIMENTAL 19.11
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

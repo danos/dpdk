@@ -1,0 +1,12 @@
+librte_pmd_crypto_scheduler.so.21 librte-pmd-crypto-scheduler21 #MINVER#
+ DPDK_20.0@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_load_user_scheduler@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_mode_get@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_mode_set@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_option_get@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_option_set@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_ordering_get@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_ordering_set@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_slave_attach@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_slave_detach@DPDK_20.0 19.11
+ rte_cryptodev_scheduler_slaves_get@DPDK_20.0 19.11
