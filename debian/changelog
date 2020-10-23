@@ -1,6 +1,36 @@
 dpdk (20.11~rc1-1) experimental; urgency=medium
 
   * New upstream release candidate 20.11~rc1
+    For details see https://doc.dpdk.org/guides/rel_notes/release_20_11.html
+  * d/update-helper-control.py: bump to new deb822 name
+  * d/p/*: drop python3 test fixes [applied upstream]
+  * d/control, d/rules: igb-uio module no more provided by dkms source
+  * d/*.symbols: update to new names and added packages
+    - bump symbols to new 21 abiver
+    - d/*.symbols: add new libs for baseband-acc100 common-sfc-efx
+      crypto-bcmfs regex-octeontx2
+    - d/*.symbols: add stubs for packages that missed .symbols files
+    - d/*.symbols: rename to new package naming scheme
+    - d/*.symbols: adapt to new ABI throwing away pre @21 mappings
+    - d/librte-port21.symbols: mark non i386 symbols as arch specific
+  * d/control: bump package names to new 21.0 abiver
+  * d/dpdk-doc.install: new path for api doc
+  * d/dpdk-doc.doc-base.*: adapt base paths of html docs
+  * d/control: new PMDs and PMD name restructuring
+  * d/rules, d/control: adapt generated suggest to new naming scheme
+    providing per type meta packages
+    - librte-meta-all: dependencies to all librte libs of DPDK
+    - librte-meta-<category>: dependencies to all librte libs of a certain
+      DPDK lib category
+  * d/rules: adapt to SONAME being only the MAJOR of the full ABI_VERSION
+  * d/rules, d/control: bump debhelper compat to 12
+    - d/rules: change dh_systemd_start to dh_installsystemd for compat >=11
+  * d/control, d/*.symbols: restrict symbols/packages not build on arm64, armhf,
+    ppc64el and i386
+  * d/t/test-linkage: adapt test to new lib naming scheme
+  * d/librte-meta-{all,allpmds}.lintian-overrides: accept long package lists
+  * d/rules: remove build artifacts breaking reproducible build
+  * d/rules: sort package parsing for reproducible build
 
  -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 23 Oct 2020 08:20:40 +0200
 
