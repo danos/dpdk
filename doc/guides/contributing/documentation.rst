@@ -62,7 +62,7 @@ added to by the developer.
 
   The Release Notes document which features have been added in the current and previous releases of DPDK and highlight
   any known issues.
-  The Releases Notes also contain notifications of features that will change ABI compatibility in the next major release.
+  The Releases Notes also contain notifications of features that will change ABI compatibility in the next release.
 
   Developers should include updates to the Release Notes with patch sets that relate to any of the following sections:
 
@@ -164,14 +164,10 @@ For full support with figure and table captioning the latest version of Sphinx c
 .. code-block:: console
 
    # Ubuntu/Debian.
-   sudo apt-get -y install python-pip
-   sudo pip install --upgrade sphinx
-   sudo pip install --upgrade sphinx_rtd_theme
+   sudo apt-get -y install python3-sphinx python3-sphinx-rtd-theme
 
    # Red Hat/Fedora.
-   sudo dnf     -y install python-pip
-   sudo pip install --upgrade sphinx
-   sudo pip install --upgrade sphinx_rtd_theme
+   sudo dnf     -y install python3-sphinx python3-sphinx_rtd_theme
 
 For further information on getting started with Sphinx see the
 `Sphinx Getting Started <http://www.sphinx-doc.org/en/master/usage/quickstart.html>`_.

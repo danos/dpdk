@@ -45,9 +45,6 @@
 			    DEV_RX_OFFLOAD_VLAN_STRIP | \
 			    DEV_RX_OFFLOAD_RSS_HASH)
 
-int hn_logtype_init;
-int hn_logtype_driver;
-
 struct hn_xstats_name_off {
 	char name[RTE_ETH_XSTATS_NAME_SIZE];
 	unsigned int offset;
@@ -58,6 +55,7 @@ static const struct hn_xstats_name_off hn_stat_strings[] = {
 	{ "good_bytes",             offsetof(struct hn_stats, bytes) },
 	{ "errors",                 offsetof(struct hn_stats, errors) },
 	{ "ring full",              offsetof(struct hn_stats, ring_full) },
+	{ "channel full",           offsetof(struct hn_stats, channel_full) },
 	{ "multicast_packets",      offsetof(struct hn_stats, multicast) },
 	{ "broadcast_packets",      offsetof(struct hn_stats, broadcast) },
 	{ "undersize_packets",      offsetof(struct hn_stats, size_bins[0]) },
@@ -124,9 +122,6 @@ eth_dev_vmbus_allocate(struct rte_vmbus_device *dev, size_t private_data_size)
 	dev->intr_handle.type = RTE_INTR_HANDLE_EXT;
 	eth_dev->data->dev_flags |= RTE_ETH_DEV_INTR_LSC;
 	eth_dev->intr_handle = &dev->intr_handle;
-
-	/* allow ethdev to remove on close */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	return eth_dev;
 }
@@ -201,7 +196,7 @@ static int hn_parse_args(const struct rte_eth_dev *dev)
  */
 int
 hn_dev_link_update(struct rte_eth_dev *dev,
-		   int wait_to_complete)
+		   int wait_to_complete __rte_unused)
 {
 	struct hn_data *hv = dev->data->dev_private;
 	struct rte_eth_link link, old;
@@ -214,8 +209,6 @@ hn_dev_link_update(struct rte_eth_dev *dev,
 		return error;
 
 	hn_rndis_get_linkspeed(hv);
-
-	hn_vf_link_update(dev, wait_to_complete);
 
 	link = (struct rte_eth_link) {
 		.link_duplex = ETH_LINK_FULL_DUPLEX,
@@ -834,24 +827,31 @@ hn_dev_start(struct rte_eth_dev *dev)
 	return error;
 }
 
-static void
+static int
 hn_dev_stop(struct rte_eth_dev *dev)
 {
 	struct hn_data *hv = dev->data->dev_private;
 
 	PMD_INIT_FUNC_TRACE();
+	dev->data->dev_started = 0;
 
 	hn_rndis_set_rxfilter(hv, 0);
-	hn_vf_stop(dev);
+	return hn_vf_stop(dev);
 }
 
-static void
+static int
 hn_dev_close(struct rte_eth_dev *dev)
 {
-	PMD_INIT_FUNC_TRACE();
+	int ret;
 
-	hn_vf_close(dev);
+	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
+
+	ret = hn_vf_close(dev);
 	hn_dev_free_queues(dev);
+
+	return ret;
 }
 
 static const struct eth_dev_ops hn_eth_dev_ops = {
@@ -860,6 +860,8 @@ static const struct eth_dev_ops hn_eth_dev_ops = {
 	.dev_stop		= hn_dev_stop,
 	.dev_close		= hn_dev_close,
 	.dev_infos_get		= hn_dev_info_get,
+	.txq_info_get		= hn_dev_tx_queue_info,
+	.rxq_info_get		= hn_dev_rx_queue_info,
 	.dev_supported_ptypes_get = hn_vf_supported_ptypes,
 	.promiscuous_enable     = hn_dev_promiscuous_enable,
 	.promiscuous_disable    = hn_dev_promiscuous_disable,
@@ -935,6 +937,9 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
 
 	vmbus = container_of(device, struct rte_vmbus_device, device);
 	eth_dev->dev_ops = &hn_eth_dev_ops;
+	eth_dev->rx_queue_count = hn_dev_rx_queue_count;
+	eth_dev->rx_descriptor_status = hn_dev_rx_queue_status;
+	eth_dev->tx_descriptor_status = hn_dev_tx_descriptor_status;
 	eth_dev->tx_pkt_burst = &hn_xmit_pkts;
 	eth_dev->rx_pkt_burst = &hn_recv_pkts;
 
@@ -944,6 +949,8 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
 	 */
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
+
+	eth_dev->data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 
 	/* Since Hyper-V only supports one MAC address */
 	eth_dev->data->mac_addrs = rte_calloc("hv_mac", HN_MAX_MAC_ADDRS,
@@ -960,7 +967,7 @@ eth_hn_dev_init(struct rte_eth_dev *eth_dev)
 	hv->port_id = eth_dev->data->port_id;
 	hv->latency = HN_CHAN_LATENCY_NS;
 	hv->max_queues = 1;
-	rte_spinlock_init(&hv->vf_lock);
+	rte_rwlock_init(&hv->vf_lock);
 	hv->vf_port = HN_INVALID_PORT;
 
 	err = hn_parse_args(eth_dev);
@@ -1037,19 +1044,15 @@ static int
 eth_hn_dev_uninit(struct rte_eth_dev *eth_dev)
 {
 	struct hn_data *hv = eth_dev->data->dev_private;
-	int ret;
+	int ret, ret_stop;
 
 	PMD_INIT_FUNC_TRACE();
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
 
-	hn_dev_stop(eth_dev);
+	ret_stop = hn_dev_stop(eth_dev);
 	hn_dev_close(eth_dev);
-
-	eth_dev->dev_ops = NULL;
-	eth_dev->tx_pkt_burst = NULL;
-	eth_dev->rx_pkt_burst = NULL;
 
 	hn_detach(hv);
 	hn_chim_uninit(eth_dev);
@@ -1059,7 +1062,7 @@ eth_hn_dev_uninit(struct rte_eth_dev *eth_dev)
 	if (ret != 0)
 		return ret;
 
-	return 0;
+	return ret_stop;
 }
 
 static int eth_hn_probe(struct rte_vmbus_driver *drv __rte_unused,
@@ -1092,7 +1095,7 @@ static int eth_hn_remove(struct rte_vmbus_device *dev)
 
 	eth_dev = rte_eth_dev_allocated(dev->device.name);
 	if (!eth_dev)
-		return -ENODEV;
+		return 0; /* port already released */
 
 	ret = eth_hn_dev_uninit(eth_dev);
 	if (ret)
@@ -1117,13 +1120,5 @@ static struct rte_vmbus_driver rte_netvsc_pmd = {
 
 RTE_PMD_REGISTER_VMBUS(net_netvsc, rte_netvsc_pmd);
 RTE_PMD_REGISTER_KMOD_DEP(net_netvsc, "* uio_hv_generic");
-
-RTE_INIT(hn_init_log)
-{
-	hn_logtype_init = rte_log_register("pmd.net.netvsc.init");
-	if (hn_logtype_init >= 0)
-		rte_log_set_level(hn_logtype_init, RTE_LOG_NOTICE);
-	hn_logtype_driver = rte_log_register("pmd.net.netvsc.driver");
-	if (hn_logtype_driver >= 0)
-		rte_log_set_level(hn_logtype_driver, RTE_LOG_NOTICE);
-}
+RTE_LOG_REGISTER(hn_logtype_init, pmd.net.netvsc.init, NOTICE);
+RTE_LOG_REGISTER(hn_logtype_driver, pmd.net.netvsc.driver, NOTICE);

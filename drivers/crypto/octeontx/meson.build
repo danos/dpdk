@@ -7,9 +7,8 @@ endif
 
 deps += ['bus_pci']
 deps += ['common_cpt']
-name = 'octeontx_crypto'
+fmt_name = 'octeontx_crypto'
 
-allow_experimental_apis = true
 sources = files('otx_cryptodev.c',
 		'otx_cryptodev_capabilities.c',
 		'otx_cryptodev_hw_access.c',

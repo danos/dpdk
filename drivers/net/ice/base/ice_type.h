@@ -14,9 +14,7 @@
 
 #define BITS_PER_BYTE	8
 
-#ifndef _FORCE_
 #define _FORCE_
-#endif
 
 #define ICE_BYTES_PER_WORD	2
 #define ICE_BYTES_PER_DWORD	4
@@ -35,6 +33,16 @@
 #define MIN_T(_t, _a, _b)	min((_t)(_a), (_t)(_b))
 
 #define IS_ASCII(_ch)	((_ch) < 0x80)
+
+#define STRUCT_HACK_VAR_LEN
+/**
+ * ice_struct_size - size of struct with C99 flexible array member
+ * @ptr: pointer to structure
+ * @field: flexible array member (last member of the structure)
+ * @num: number of elements of that flexible array member
+ */
+#define ice_struct_size(ptr, field, num) \
+	(sizeof(*(ptr)) + sizeof(*(ptr)->field) * (num))
 
 #include "ice_status.h"
 #include "ice_hw_autogen.h"
@@ -98,6 +106,7 @@ static inline u32 ice_round_to_num(u32 N, u32 R)
 #define ICE_HI_DWORD(x)		((u32)((((x) >> 16) >> 16) & 0xFFFFFFFF))
 #define ICE_LO_DWORD(x)		((u32)((x) & 0xFFFFFFFF))
 #define ICE_HI_WORD(x)		((u16)(((x) >> 16) & 0xFFFF))
+#define ICE_LO_WORD(x)		((u16)((x) & 0xFFFF))
 
 /* debug masks - set these bits in hw->debug_mask to control output */
 #define ICE_DBG_TRACE		BIT_ULL(0) /* for function-trace only */
@@ -118,6 +127,7 @@ static inline u32 ice_round_to_num(u32 N, u32 R)
 
 #define ICE_DBG_PKG		BIT_ULL(16)
 #define ICE_DBG_RES		BIT_ULL(17)
+#define ICE_DBG_ACL		BIT_ULL(18)
 #define ICE_DBG_AQ_MSG		BIT_ULL(24)
 #define ICE_DBG_AQ_DESC		BIT_ULL(25)
 #define ICE_DBG_AQ_DESC_BUF	BIT_ULL(26)
@@ -130,9 +140,7 @@ static inline u32 ice_round_to_num(u32 N, u32 R)
 #define ICE_DBG_USER		BIT_ULL(31)
 #define ICE_DBG_ALL		0xFFFFFFFFFFFFFFFFULL
 
-#ifndef __ALWAYS_UNUSED
 #define __ALWAYS_UNUSED
-#endif
 
 #define IS_ETHER_ADDR_EQUAL(addr1, addr2) \
 	(((bool)((((u16 *)(addr1))[0] == ((u16 *)(addr2))[0]))) && \
@@ -169,6 +177,7 @@ enum ice_fc_mode {
 	ICE_FC_RX_PAUSE,
 	ICE_FC_TX_PAUSE,
 	ICE_FC_FULL,
+	ICE_FC_AUTO,
 	ICE_FC_PFC,
 	ICE_FC_DFLT
 };
@@ -205,6 +214,7 @@ enum ice_set_fc_aq_failures {
 /* MAC types */
 enum ice_mac_type {
 	ICE_MAC_UNKNOWN = 0,
+	ICE_MAC_E810,
 	ICE_MAC_GENERIC,
 };
 
@@ -215,6 +225,7 @@ enum ice_media_type {
 	ICE_MEDIA_BASET,
 	ICE_MEDIA_BACKPLANE,
 	ICE_MEDIA_DA,
+	ICE_MEDIA_AUI,
 };
 
 /* Software VSI types. */
@@ -292,6 +303,22 @@ enum ice_fltr_ptype {
 	ICE_FLTR_PTYPE_NONF_IPV4_GTPU_IPV4_TCP,
 	ICE_FLTR_PTYPE_NONF_IPV4_GTPU_IPV4_ICMP,
 	ICE_FLTR_PTYPE_NONF_IPV4_GTPU_IPV4_OTHER,
+	ICE_FLTR_PTYPE_NONF_IPV6_GTPU_IPV6_OTHER,
+	ICE_FLTR_PTYPE_NONF_IPV4_GTPU_EH_IPV4_OTHER,
+	ICE_FLTR_PTYPE_NONF_IPV6_GTPU_EH_IPV6_OTHER,
+	ICE_FLTR_PTYPE_NONF_IPV4_L2TPV3,
+	ICE_FLTR_PTYPE_NONF_IPV6_L2TPV3,
+	ICE_FLTR_PTYPE_NONF_IPV4_ESP,
+	ICE_FLTR_PTYPE_NONF_IPV6_ESP,
+	ICE_FLTR_PTYPE_NONF_IPV4_AH,
+	ICE_FLTR_PTYPE_NONF_IPV6_AH,
+	ICE_FLTR_PTYPE_NONF_IPV4_NAT_T_ESP,
+	ICE_FLTR_PTYPE_NONF_IPV6_NAT_T_ESP,
+	ICE_FLTR_PTYPE_NONF_IPV4_PFCP_NODE,
+	ICE_FLTR_PTYPE_NONF_IPV4_PFCP_SESSION,
+	ICE_FLTR_PTYPE_NONF_IPV6_PFCP_NODE,
+	ICE_FLTR_PTYPE_NONF_IPV6_PFCP_SESSION,
+	ICE_FLTR_PTYPE_NON_IP_L2,
 	ICE_FLTR_PTYPE_FRAG_IPV4,
 	ICE_FLTR_PTYPE_NONF_IPV6_UDP,
 	ICE_FLTR_PTYPE_NONF_IPV6_TCP,
@@ -388,6 +415,8 @@ struct ice_hw_common_caps {
 	u8 apm_wol_support;
 	u8 acpi_prog_mthd;
 	u8 proxy_support;
+	bool nvm_unified_update;
+#define ICE_NVM_MGMT_UNIFIED_UPD_SUPPORT	BIT(3)
 };
 
 /* Function specific capabilities */
@@ -475,13 +504,72 @@ struct ice_fc_info {
 	enum ice_fc_mode req_mode;	/* FC mode requested by caller */
 };
 
-/* NVM Information */
+/* Option ROM version information */
+struct ice_orom_info {
+	u8 major;			/* Major version of OROM */
+	u8 patch;			/* Patch version of OROM */
+	u16 build;			/* Build version of OROM */
+};
+
+/* NVM version information */
 struct ice_nvm_info {
-	u32 eetrack;			/* NVM data version */
-	u32 oem_ver;			/* OEM version info */
+	u32 eetrack;
+	u8 major;
+	u8 minor;
+};
+
+/* Enumeration of possible flash banks for the NVM, OROM, and Netlist modules
+ * of the flash image.
+ */
+enum ice_flash_bank {
+	ICE_INVALID_FLASH_BANK,
+	ICE_1ST_FLASH_BANK,
+	ICE_2ND_FLASH_BANK,
+};
+
+/* information for accessing NVM, OROM, and Netlist flash banks */
+struct ice_bank_info {
+	u32 nvm_ptr;				/* Pointer to 1st NVM bank */
+	u32 nvm_size;				/* Size of NVM bank */
+	u32 orom_ptr;				/* Pointer to 1st OROM bank */
+	u32 orom_size;				/* Size of OROM bank */
+	u32 netlist_ptr;			/* Pointer to 1st Netlist bank */
+	u32 netlist_size;			/* Size of Netlist bank */
+	enum ice_flash_bank nvm_bank;		/* Active NVM bank */
+	enum ice_flash_bank orom_bank;		/* Active OROM bank */
+	enum ice_flash_bank netlist_bank;	/* Active Netlist bank */
+};
+
+/* Flash Chip Information */
+struct ice_flash_info {
+	struct ice_orom_info orom;	/* Option ROM version info */
+	struct ice_nvm_info nvm;	/* NVM version information */
+	struct ice_bank_info banks;	/* Flash Bank information */
 	u16 sr_words;			/* Shadow RAM size in words */
-	u16 ver;			/* dev starter version */
-	u8 blank_nvm_mode;		/* is NVM empty (no FW present)*/
+	u32 flash_size;			/* Size of available flash in bytes */
+	u8 blank_nvm_mode;		/* is NVM empty (no FW present) */
+};
+
+struct ice_link_default_override_tlv {
+	u8 options;
+#define ICE_LINK_OVERRIDE_OPT_M		0x3F
+#define ICE_LINK_OVERRIDE_STRICT_MODE	BIT(0)
+#define ICE_LINK_OVERRIDE_EPCT_DIS	BIT(1)
+#define ICE_LINK_OVERRIDE_PORT_DIS	BIT(2)
+#define ICE_LINK_OVERRIDE_EN		BIT(3)
+#define ICE_LINK_OVERRIDE_AUTO_LINK_DIS	BIT(4)
+#define ICE_LINK_OVERRIDE_EEE_EN	BIT(5)
+	u8 phy_config;
+#define ICE_LINK_OVERRIDE_PHY_CFG_S	8
+#define ICE_LINK_OVERRIDE_PHY_CFG_M	(0xC3 << ICE_LINK_OVERRIDE_PHY_CFG_S)
+#define ICE_LINK_OVERRIDE_PAUSE_M	0x3
+#define ICE_LINK_OVERRIDE_LESM_EN	BIT(6)
+#define ICE_LINK_OVERRIDE_AUTO_FEC_EN	BIT(7)
+	u8 fec_options;
+#define ICE_LINK_OVERRIDE_FEC_OPT_M	0xFF
+	u8 rsvd1;
+	u64 phy_type_low;
+	u64 phy_type_high;
 };
 
 #define ICE_NVM_VER_LEN	32
@@ -560,7 +648,7 @@ enum ice_rl_type {
 #define ICE_SCHED_NO_BW_WT		0
 #define ICE_SCHED_DFLT_RL_PROF_ID	0
 #define ICE_SCHED_NO_SHARED_RL_PROF_ID	0xFFFF
-#define ICE_SCHED_DFLT_BW_WT		1
+#define ICE_SCHED_DFLT_BW_WT		4
 #define ICE_SCHED_INVAL_PROF_ID		0xFFFF
 #define ICE_SCHED_DFLT_BURST_SIZE	(15 * 1024)	/* in bytes (15k) */
 
@@ -693,6 +781,14 @@ struct ice_dcbx_cfg {
 #define ICE_DCBX_APPS_NON_WILLING	0x1
 };
 
+struct ice_qos_cfg {
+	struct ice_dcbx_cfg local_dcbx_cfg;	/* Oper/Local Cfg */
+	struct ice_dcbx_cfg desired_dcbx_cfg;	/* CEE Desired Cfg */
+	struct ice_dcbx_cfg remote_dcbx_cfg;	/* Peer Cfg */
+	u8 dcbx_status : 3;			/* see ICE_DCBX_STATUS_DIS */
+	u8 is_sw_lldp : 1;
+};
+
 struct ice_port_info {
 	struct ice_sched_node *root;	/* Root Node per Port */
 	struct ice_hw *hw;		/* back pointer to HW instance */
@@ -714,16 +810,9 @@ struct ice_port_info {
 	struct ice_lock sched_lock;	/* protect access to TXSched tree */
 	struct ice_sched_node *
 		sib_head[ICE_MAX_TRAFFIC_CLASS][ICE_AQC_TOPO_MAX_LEVEL_NUM];
-	/* List contain profile ID(s) and other params per layer */
-	struct LIST_HEAD_TYPE rl_prof_list[ICE_AQC_TOPO_MAX_LEVEL_NUM];
+	struct ice_bw_type_info root_node_bw_t_info;
 	struct ice_bw_type_info tc_node_bw_t_info[ICE_MAX_TRAFFIC_CLASS];
-	struct ice_dcbx_cfg local_dcbx_cfg;	/* Oper/Local Cfg */
-	/* DCBX info */
-	struct ice_dcbx_cfg remote_dcbx_cfg;	/* Peer Cfg */
-	struct ice_dcbx_cfg desired_dcbx_cfg;	/* CEE Desired Cfg */
-	/* LLDP/DCBX Status */
-	u8 dcbx_status:3;		/* see ICE_DCBX_STATUS_DIS */
-	u8 is_sw_lldp:1;
+	struct ice_qos_cfg qos_cfg;
 	u8 is_vf:1;
 };
 
@@ -731,6 +820,7 @@ struct ice_switch_info {
 	struct LIST_HEAD_TYPE vsi_list_map_head;
 	struct ice_sw_recipe *recp_list;
 	u16 prof_res_bm_init;
+	u16 max_used_prof_index;
 
 	ice_declare_bitmap(prof_res_bm[ICE_MAX_NUM_PROFILES], ICE_MAX_FV_WORDS);
 };
@@ -763,18 +853,20 @@ struct ice_hw {
 	u16 max_burst_size;	/* driver sets this value */
 
 	/* Tx Scheduler values */
-	u16 num_tx_sched_layers;
-	u16 num_tx_sched_phys_layers;
+	u8 num_tx_sched_layers;
+	u8 num_tx_sched_phys_layers;
 	u8 flattened_layers;
 	u8 max_cgds;
 	u8 sw_entry_point_layer;
 	u16 max_children[ICE_AQC_TOPO_MAX_LEVEL_NUM];
 	struct LIST_HEAD_TYPE agg_list;	/* lists all aggregator */
+	/* List contain profile ID(s) and other params per layer */
+	struct LIST_HEAD_TYPE rl_prof_list[ICE_AQC_TOPO_MAX_LEVEL_NUM];
 	struct ice_vsi_ctx *vsi_ctx[ICE_MAX_VSI];
 	u8 evb_veb;		/* true for VEB, false for VEPA */
 	u8 reset_ongoing;	/* true if HW is in reset, false otherwise */
 	struct ice_bus_info bus;
-	struct ice_nvm_info nvm;
+	struct ice_flash_info flash;
 	struct ice_hw_dev_caps dev_caps;	/* device capabilities */
 	struct ice_hw_func_caps func_caps;	/* function capabilities */
 
@@ -783,6 +875,11 @@ struct ice_hw {
 	/* Control Queue info */
 	struct ice_ctl_q_info adminq;
 	struct ice_ctl_q_info mailboxq;
+	/* Additional function to send AdminQ command */
+	int (*aq_send_cmd_fn)(void *param, struct ice_aq_desc *desc,
+			      void *buf, u16 buf_size);
+	void *aq_send_cmd_param;
+	u8 dcf_enabled;		/* Device Config Function */
 
 	u8 api_branch;		/* API branch version */
 	u8 api_maj_ver;		/* API major version */
@@ -815,8 +912,17 @@ struct ice_hw {
 
 	u8 ucast_shared;	/* true if VSIs can share unicast addr */
 
+#define ICE_PHY_PER_NAC		1
+#define ICE_MAX_QUAD		2
+#define ICE_NUM_QUAD_TYPE	2
+#define ICE_PORTS_PER_QUAD	4
+#define ICE_PHY_0_LAST_QUAD	1
+#define ICE_PORTS_PER_PHY	8
+#define ICE_NUM_EXTERNAL_PORTS		ICE_PORTS_PER_PHY
+
 	/* Active package version (currently active) */
 	struct ice_pkg_ver active_pkg_ver;
+	u32 active_track_id;
 	u8 active_pkg_name[ICE_PKG_NAME_SIZE];
 	u8 active_pkg_in_nvm;
 
@@ -838,8 +944,12 @@ struct ice_hw {
 	u32 pkg_size;
 
 	/* tunneling info */
+	struct ice_lock tnl_lock;
 	struct ice_tunnel_table tnl;
 
+	struct ice_acl_tbl *acl_tbl;
+	struct ice_fd_hw_prof **acl_prof;
+	u16 acl_fltr_cnt[ICE_FLTR_PTYPE_MAX];
 	/* HW block tables */
 	struct ice_blk_info blk[ICE_BLK_COUNT];
 	struct ice_lock fl_profs_locks[ICE_BLK_COUNT];	/* lock fltr profiles */
@@ -960,7 +1070,7 @@ enum ice_sw_fwd_act_type {
 #define ICE_SR_PBA_BLOCK_PTR			0x16
 #define ICE_SR_BOOT_CFG_PTR			0x132
 #define ICE_SR_NVM_WOL_CFG			0x19
-#define ICE_NVM_OEM_VER_OFF			0x02
+#define ICE_NVM_OROM_VER_OFF			0x02
 #define ICE_SR_NVM_DEV_STARTER_VER		0x18
 #define ICE_SR_ALTERNATE_SAN_MAC_ADDR_PTR	0x27
 #define ICE_SR_PERMANENT_SAN_MAC_ADDR_PTR	0x28
@@ -974,12 +1084,12 @@ enum ice_sw_fwd_act_type {
 #define ICE_NVM_VER_HI_SHIFT			12
 #define ICE_NVM_VER_HI_MASK			(0xf << ICE_NVM_VER_HI_SHIFT)
 #define ICE_OEM_EETRACK_ID			0xffffffff
-#define ICE_OEM_VER_PATCH_SHIFT			0
-#define ICE_OEM_VER_PATCH_MASK		(0xff << ICE_OEM_VER_PATCH_SHIFT)
-#define ICE_OEM_VER_BUILD_SHIFT			8
-#define ICE_OEM_VER_BUILD_MASK		(0xffff << ICE_OEM_VER_BUILD_SHIFT)
-#define ICE_OEM_VER_SHIFT			24
-#define ICE_OEM_VER_MASK			(0xff << ICE_OEM_VER_SHIFT)
+#define ICE_OROM_VER_PATCH_SHIFT		0
+#define ICE_OROM_VER_PATCH_MASK		(0xff << ICE_OROM_VER_PATCH_SHIFT)
+#define ICE_OROM_VER_BUILD_SHIFT		8
+#define ICE_OROM_VER_BUILD_MASK		(0xffff << ICE_OROM_VER_BUILD_SHIFT)
+#define ICE_OROM_VER_SHIFT			24
+#define ICE_OROM_VER_MASK			(0xff << ICE_OROM_VER_SHIFT)
 #define ICE_SR_VPD_PTR				0x2F
 #define ICE_SR_PXE_SETUP_PTR			0x30
 #define ICE_SR_PXE_CFG_CUST_OPTIONS_PTR		0x31
@@ -997,13 +1107,14 @@ enum ice_sw_fwd_act_type {
 #define ICE_SR_1ST_SCRATCH_PAD_PTR		0x41
 #define ICE_SR_1ST_NVM_BANK_PTR			0x42
 #define ICE_SR_NVM_BANK_SIZE			0x43
-#define ICE_SR_1ND_OROM_BANK_PTR		0x44
+#define ICE_SR_1ST_OROM_BANK_PTR		0x44
 #define ICE_SR_OROM_BANK_SIZE			0x45
 #define ICE_SR_NETLIST_BANK_PTR			0x46
 #define ICE_SR_NETLIST_BANK_SIZE		0x47
 #define ICE_SR_EMP_SR_SETTINGS_PTR		0x48
 #define ICE_SR_CONFIGURATION_METADATA_PTR	0x4D
 #define ICE_SR_IMMEDIATE_VALUES_PTR		0x4E
+#define ICE_SR_LINK_DEFAULT_OVERRIDE_PTR	0x134
 #define ICE_SR_POR_REGISTERS_AUTOLOAD_PTR	0x118
 
 /* Auxiliary field, mask and shift definition for Shadow RAM and NVM Flash */
@@ -1011,6 +1122,12 @@ enum ice_sw_fwd_act_type {
 #define ICE_SR_PCIE_ALT_SIZE_WORDS	512
 #define ICE_SR_CTRL_WORD_1_S		0x06
 #define ICE_SR_CTRL_WORD_1_M		(0x03 << ICE_SR_CTRL_WORD_1_S)
+#define ICE_SR_CTRL_WORD_VALID		0x1
+#define ICE_SR_CTRL_WORD_OROM_BANK	BIT(3)
+#define ICE_SR_CTRL_WORD_NETLIST_BANK	BIT(4)
+#define ICE_SR_CTRL_WORD_NVM_BANK	BIT(5)
+
+#define ICE_SR_NVM_PTR_4KB_UNITS	BIT(15)
 
 /* Shadow RAM related */
 #define ICE_SR_SECTOR_SIZE_IN_WORDS	0x800
@@ -1020,6 +1137,16 @@ enum ice_sw_fwd_act_type {
  * including the checksum word itself, the sum should be 0xBABA.
  */
 #define ICE_SR_SW_CHECKSUM_BASE		0xBABA
+
+/* Link override related */
+#define ICE_SR_PFA_LINK_OVERRIDE_WORDS		10
+#define ICE_SR_PFA_LINK_OVERRIDE_PHY_WORDS	4
+#define ICE_SR_PFA_LINK_OVERRIDE_OFFSET		2
+#define ICE_SR_PFA_LINK_OVERRIDE_FEC_OFFSET	1
+#define ICE_SR_PFA_LINK_OVERRIDE_PHY_OFFSET	2
+#define ICE_FW_API_LINK_OVERRIDE_MAJ		1
+#define ICE_FW_API_LINK_OVERRIDE_MIN		5
+#define ICE_FW_API_LINK_OVERRIDE_PATCH		2
 
 #define ICE_PBA_FLAG_DFLT		0xFAFA
 /* Hash redirection LUT for VSI - maximum array size */
@@ -1033,4 +1160,8 @@ enum ice_sw_fwd_act_type {
 #define GLPCI_LBARCTRL_VF_PE_DB_SIZE_8KB 0x1
 #define GLPCI_LBARCTRL_VF_PE_DB_SIZE_64KB 0x2
 
+/* AQ API version for LLDP_FILTER_CONTROL */
+#define ICE_FW_API_LLDP_FLTR_MAJ	1
+#define ICE_FW_API_LLDP_FLTR_MIN	7
+#define ICE_FW_API_LLDP_FLTR_PATCH	1
 #endif /* _ICE_TYPE_H_ */

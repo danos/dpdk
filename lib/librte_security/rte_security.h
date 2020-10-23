@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright 2017,2019 NXP
- * Copyright(c) 2017 Intel Corporation.
+ * Copyright 2017,2019-2020 NXP
+ * Copyright(c) 2017-2020 Intel Corporation.
  */
 
 #ifndef _RTE_SECURITY_H_
@@ -290,7 +290,37 @@ struct rte_security_pdcp_xform {
 	 * per packet HFN in place of IV. PMDs will extract the HFN
 	 * and perform operations accordingly.
 	 */
-	uint32_t hfn_ovrd;
+	uint8_t hfn_ovrd;
+	/** In case of 5G NR, a new protocol (SDAP) header may be set
+	 * inside PDCP payload which should be authenticated but not
+	 * encrypted. Hence, driver should be notified if SDAP is
+	 * enabled or not, so that SDAP header is not encrypted.
+	 */
+	uint8_t sdap_enabled;
+	/** Reserved for future */
+	uint16_t reserved;
+};
+
+/** DOCSIS direction */
+enum rte_security_docsis_direction {
+	RTE_SECURITY_DOCSIS_UPLINK,
+	/**< Uplink
+	 * - Decryption, followed by CRC Verification
+	 */
+	RTE_SECURITY_DOCSIS_DOWNLINK,
+	/**< Downlink
+	 * - CRC Generation, followed by Encryption
+	 */
+};
+
+/**
+ * DOCSIS security session configuration.
+ *
+ * This structure contains data required to create a DOCSIS security session.
+ */
+struct rte_security_docsis_xform {
+	enum rte_security_docsis_direction direction;
+	/**< DOCSIS direction */
 };
 
 /**
@@ -307,9 +337,13 @@ enum rte_security_session_action_type {
 	/**< All security protocol processing is performed inline during
 	 * transmission
 	 */
-	RTE_SECURITY_ACTION_TYPE_LOOKASIDE_PROTOCOL
+	RTE_SECURITY_ACTION_TYPE_LOOKASIDE_PROTOCOL,
 	/**< All security protocol processing including crypto is performed
 	 * on a lookaside accelerator
+	 */
+	RTE_SECURITY_ACTION_TYPE_CPU_CRYPTO
+	/**< Similar to ACTION_TYPE_NONE but crypto processing for security
+	 * protocol is processed synchronously by a CPU.
 	 */
 };
 
@@ -321,6 +355,8 @@ enum rte_security_session_protocol {
 	/**< MACSec Protocol */
 	RTE_SECURITY_PROTOCOL_PDCP,
 	/**< PDCP Protocol */
+	RTE_SECURITY_PROTOCOL_DOCSIS,
+	/**< DOCSIS Protocol */
 };
 
 /**
@@ -336,6 +372,7 @@ struct rte_security_session_conf {
 		struct rte_security_ipsec_xform ipsec;
 		struct rte_security_macsec_xform macsec;
 		struct rte_security_pdcp_xform pdcp;
+		struct rte_security_docsis_xform docsis;
 	};
 	/**< Configuration parameters for security session */
 	struct rte_crypto_sym_xform *crypto_xform;
@@ -357,6 +394,7 @@ struct rte_security_session {
  * @param   instance	security instance
  * @param   conf	session configuration parameters
  * @param   mp		mempool to allocate session objects from
+ * @param   priv_mp	mempool to allocate session private data objects from
  * @return
  *  - On success, pointer to session
  *  - On failure, NULL
@@ -364,7 +402,8 @@ struct rte_security_session {
 struct rte_security_session *
 rte_security_session_create(struct rte_security_ctx *instance,
 			    struct rte_security_session_conf *conf,
-			    struct rte_mempool *mp);
+			    struct rte_mempool *mp,
+			    struct rte_mempool *priv_mp);
 
 /**
  * Update security session as specified by the session configuration
@@ -519,6 +558,10 @@ struct rte_security_pdcp_stats {
 	uint64_t reserved;
 };
 
+struct rte_security_docsis_stats {
+	uint64_t reserved;
+};
+
 struct rte_security_stats {
 	enum rte_security_session_protocol protocol;
 	/**< Security protocol to be configured */
@@ -528,6 +571,7 @@ struct rte_security_stats {
 		struct rte_security_macsec_stats macsec;
 		struct rte_security_ipsec_stats ipsec;
 		struct rte_security_pdcp_stats pdcp;
+		struct rte_security_docsis_stats docsis;
 	};
 };
 
@@ -587,6 +631,11 @@ struct rte_security_capability {
 			/**< Capability flags, see RTE_SECURITY_PDCP_* */
 		} pdcp;
 		/**< PDCP capability */
+		struct {
+			enum rte_security_docsis_direction direction;
+			/**< DOCSIS direction */
+		} docsis;
+		/**< DOCSIS capability */
 	};
 
 	const struct rte_cryptodev_capabilities *crypto_capabilities;
@@ -645,6 +694,9 @@ struct rte_security_capability_idx {
 			enum rte_security_pdcp_domain domain;
 			uint32_t capa_flags;
 		} pdcp;
+		struct {
+			enum rte_security_docsis_direction direction;
+		} docsis;
 	};
 };
 

@@ -92,7 +92,6 @@ static uint32_t enable_tx_csum;
 static uint32_t enable_tso;
 
 static int client_mode;
-static int dequeue_zero_copy;
 
 static int builtin_net_driver;
 
@@ -247,16 +246,6 @@ port_init(uint16_t port)
 	rx_ring_size = RTE_TEST_RX_DESC_DEFAULT;
 	tx_ring_size = RTE_TEST_TX_DESC_DEFAULT;
 
-	/*
-	 * When dequeue zero copy is enabled, guest Tx used vring will be
-	 * updated only when corresponding mbuf is freed. Thus, the nb_tx_desc
-	 * (tx_ring_size here) must be small enough so that the driver will
-	 * hit the free threshold easily and free mbufs timely. Otherwise,
-	 * guest Tx vring would be starved.
-	 */
-	if (dequeue_zero_copy)
-		tx_ring_size = 64;
-
 	tx_rings = (uint16_t)rte_lcore_count();
 
 	/* Get port configuration. */
@@ -407,10 +396,7 @@ parse_portmask(const char *portmask)
 	/* parse hexadecimal string */
 	pm = strtoul(portmask, &end, 16);
 	if ((portmask[0] == '\0') || (end == NULL) || (*end != '\0') || (errno != 0))
-		return -1;
-
-	if (pm == 0)
-		return -1;
+		return 0;
 
 	return pm;
 
@@ -460,8 +446,7 @@ us_vhost_usage(const char *prgname)
 	"		--socket-file: The path of the socket file.\n"
 	"		--tx-csum [0|1] disable/enable TX checksum offload.\n"
 	"		--tso [0|1] disable/enable TCP segment offload.\n"
-	"		--client register a vhost-user socket as client mode.\n"
-	"		--dequeue-zero-copy enables dequeue zero copy\n",
+	"		--client register a vhost-user socket as client mode.\n",
 	       prgname);
 }
 
@@ -486,7 +471,6 @@ us_vhost_parse_args(int argc, char **argv)
 		{"tx-csum", required_argument, NULL, 0},
 		{"tso", required_argument, NULL, 0},
 		{"client", no_argument, &client_mode, 1},
-		{"dequeue-zero-copy", no_argument, &dequeue_zero_copy, 1},
 		{"builtin-net-driver", no_argument, &builtin_net_driver, 1},
 		{NULL, 0, 0, 0},
 	};
@@ -1205,7 +1189,7 @@ destroy_device(int vid)
 
 
 	/* Set the dev_removal_flag on each lcore. */
-	RTE_LCORE_FOREACH_SLAVE(lcore)
+	RTE_LCORE_FOREACH_WORKER(lcore)
 		lcore_info[lcore].dev_removal_flag = REQUEST_DEV_REMOVAL;
 
 	/*
@@ -1213,7 +1197,7 @@ destroy_device(int vid)
 	 * we can be sure that they can no longer access the device removed
 	 * from the linked lists and that the devices are no longer in use.
 	 */
-	RTE_LCORE_FOREACH_SLAVE(lcore) {
+	RTE_LCORE_FOREACH_WORKER(lcore) {
 		while (lcore_info[lcore].dev_removal_flag != ACK_DEV_REMOVAL)
 			rte_pause();
 	}
@@ -1258,7 +1242,7 @@ new_device(int vid)
 	vdev->remove = 0;
 
 	/* Find a suitable lcore to add the device. */
-	RTE_LCORE_FOREACH_SLAVE(lcore) {
+	RTE_LCORE_FOREACH_WORKER(lcore) {
 		if (lcore_info[lcore].device_num < device_num_min) {
 			device_num_min = lcore_info[lcore].device_num;
 			core_add = lcore;
@@ -1334,6 +1318,8 @@ print_stats(__rte_unused void *arg)
 		}
 
 		printf("===================================================\n");
+
+		fflush(stdout);
 	}
 
 	return NULL;
@@ -1505,14 +1491,11 @@ main(int argc, char *argv[])
 	}
 
 	/* Launch all data cores. */
-	RTE_LCORE_FOREACH_SLAVE(lcore_id)
+	RTE_LCORE_FOREACH_WORKER(lcore_id)
 		rte_eal_remote_launch(switch_worker, NULL, lcore_id);
 
 	if (client_mode)
 		flags |= RTE_VHOST_USER_CLIENT;
-
-	if (dequeue_zero_copy)
-		flags |= RTE_VHOST_USER_DEQUEUE_ZERO_COPY;
 
 	/* Register vhost user driver to handle vhost messages. */
 	for (i = 0; i < nb_sockets; i++) {
@@ -1566,7 +1549,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	RTE_LCORE_FOREACH_SLAVE(lcore_id)
+	RTE_LCORE_FOREACH_WORKER(lcore_id)
 		rte_eal_wait_lcore(lcore_id);
 
 	return 0;

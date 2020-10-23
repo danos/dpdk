@@ -160,8 +160,8 @@ static void hn_txd_init(struct rte_mempool *mp __rte_unused,
 
 	txd->queue_id = txq->queue_id;
 	txd->chim_index = NVS_CHIM_IDX_INVALID;
-	txd->rndis_pkt = (struct rndis_packet_msg *)(char *)txq->tx_rndis
-		+ idx * HN_RNDIS_PKT_ALIGNED;
+	txd->rndis_pkt = (struct rndis_packet_msg *)((char *)txq->tx_rndis
+		+ idx * HN_RNDIS_PKT_ALIGNED);
 }
 
 int
@@ -206,11 +206,13 @@ hn_chim_uninit(struct rte_eth_dev *dev)
 static uint32_t hn_chim_alloc(struct hn_data *hv)
 {
 	uint32_t index = NVS_CHIM_IDX_INVALID;
-	uint64_t slab;
+	uint64_t slab = 0;
 
 	rte_spinlock_lock(&hv->chim_lock);
-	if (rte_bitmap_scan(hv->chim_bmap, &index, &slab))
+	if (rte_bitmap_scan(hv->chim_bmap, &index, &slab)) {
+		index += rte_bsf64(slab);
 		rte_bitmap_clear(hv->chim_bmap, index);
+	}
 	rte_spinlock_unlock(&hv->chim_lock);
 
 	return index;
@@ -250,16 +252,6 @@ hn_dev_tx_queue_setup(struct rte_eth_dev *dev,
 
 	PMD_INIT_FUNC_TRACE();
 
-	txq = rte_zmalloc_socket("HN_TXQ", sizeof(*txq), RTE_CACHE_LINE_SIZE,
-				 socket_id);
-	if (!txq)
-		return -ENOMEM;
-
-	txq->hv = hv;
-	txq->chan = hv->channels[queue_idx];
-	txq->port_id = dev->data->port_id;
-	txq->queue_id = queue_idx;
-
 	tx_free_thresh = tx_conf->tx_free_thresh;
 	if (tx_free_thresh == 0)
 		tx_free_thresh = RTE_MIN(nb_desc / 4,
@@ -274,6 +266,15 @@ hn_dev_tx_queue_setup(struct rte_eth_dev *dev,
 		return -EINVAL;
 	}
 
+	txq = rte_zmalloc_socket("HN_TXQ", sizeof(*txq), RTE_CACHE_LINE_SIZE,
+				 socket_id);
+	if (!txq)
+		return -ENOMEM;
+
+	txq->hv = hv;
+	txq->chan = hv->channels[queue_idx];
+	txq->port_id = dev->data->port_id;
+	txq->queue_id = queue_idx;
 	txq->free_thresh = tx_free_thresh;
 
 	snprintf(name, sizeof(name),
@@ -319,6 +320,15 @@ error:
 	return err;
 }
 
+void
+hn_dev_tx_queue_info(struct rte_eth_dev *dev, uint16_t queue_id,
+		     struct rte_eth_txq_info *qinfo)
+{
+	struct hn_tx_queue *txq = dev->data->tx_queues[queue_id];
+
+	qinfo->nb_desc = txq->txdesc_pool->size;
+	qinfo->conf.offloads = dev->data->dev_conf.txmode.offloads;
+}
 
 static struct hn_txdesc *hn_txd_get(struct hn_tx_queue *txq)
 {
@@ -360,6 +370,29 @@ hn_dev_tx_queue_release(void *arg)
 	rte_free(txq);
 }
 
+/*
+ * Check the status of a Tx descriptor in the queue.
+ *
+ * returns:
+ *  - -EINVAL              - offset outside of tx_descriptor pool.
+ *  - RTE_ETH_TX_DESC_FULL - descriptor is not acknowledged by host.
+ *  - RTE_ETH_TX_DESC_DONE - descriptor is available.
+ */
+int hn_dev_tx_descriptor_status(void *arg, uint16_t offset)
+{
+	const struct hn_tx_queue *txq = arg;
+
+	hn_process_events(txq->hv, txq->queue_id, 0);
+
+	if (offset >= rte_mempool_avail_count(txq->txdesc_pool))
+		return -EINVAL;
+
+	if (offset < rte_mempool_in_use_count(txq->txdesc_pool))
+		return RTE_ETH_TX_DESC_FULL;
+	else
+		return RTE_ETH_TX_DESC_DONE;
+}
+
 static void
 hn_nvs_send_completed(struct rte_eth_dev *dev, uint16_t queue_id,
 		      unsigned long xactid, const struct hn_nvs_rndis_ack *ack)
@@ -380,13 +413,15 @@ hn_nvs_send_completed(struct rte_eth_dev *dev, uint16_t queue_id,
 		txq->stats.bytes += txd->data_size;
 		txq->stats.packets += txd->packets;
 	} else {
-		PMD_TX_LOG(NOTICE, "port %u:%u complete tx %u failed status %u",
-			   txq->port_id, txq->queue_id, txd->chim_index, ack->status);
+		PMD_DRV_LOG(NOTICE, "port %u:%u complete tx %u failed status %u",
+			    txq->port_id, txq->queue_id, txd->chim_index, ack->status);
 		++txq->stats.errors;
 	}
 
-	if (txd->chim_index != NVS_CHIM_IDX_INVALID)
+	if (txd->chim_index != NVS_CHIM_IDX_INVALID) {
 		hn_chim_free(hv, txd->chim_index);
+		txd->chim_index = NVS_CHIM_IDX_INVALID;
+	}
 
 	rte_pktmbuf_free(txd->m);
 	hn_txd_put(txq, txd);
@@ -406,8 +441,7 @@ hn_nvs_handle_comp(struct rte_eth_dev *dev, uint16_t queue_id,
 		break;
 
 	default:
-		PMD_TX_LOG(NOTICE,
-			   "unexpected send completion type %u",
+		PMD_DRV_LOG(NOTICE, "unexpected send completion type %u",
 			   hdr->type);
 	}
 }
@@ -488,35 +522,24 @@ next:
 	return 0;
 }
 
-/*
- * Ack the consumed RXBUF associated w/ this channel packet,
- * so that this RXBUF can be recycled by the hypervisor.
- */
-static void hn_rx_buf_release(struct hn_rx_bufinfo *rxb)
-{
-	struct rte_mbuf_ext_shared_info *shinfo = &rxb->shinfo;
-	struct hn_data *hv = rxb->hv;
-
-	if (rte_mbuf_ext_refcnt_update(shinfo, -1) == 0) {
-		hn_nvs_ack_rxbuf(rxb->chan, rxb->xactid);
-		--hv->rxbuf_outstanding;
-	}
-}
-
 static void hn_rx_buf_free_cb(void *buf __rte_unused, void *opaque)
 {
-	hn_rx_buf_release(opaque);
+	struct hn_rx_bufinfo *rxb = opaque;
+	struct hn_rx_queue *rxq = rxb->rxq;
+
+	rte_atomic32_dec(&rxq->rxbuf_outstanding);
+	hn_nvs_ack_rxbuf(rxb->chan, rxb->xactid);
 }
 
-static struct hn_rx_bufinfo *hn_rx_buf_init(const struct hn_rx_queue *rxq,
+static struct hn_rx_bufinfo *hn_rx_buf_init(struct hn_rx_queue *rxq,
 					    const struct vmbus_chanpkt_rxbuf *pkt)
 {
 	struct hn_rx_bufinfo *rxb;
 
-	rxb = rxq->hv->rxbuf_info + pkt->hdr.xactid;
+	rxb = rxq->rxbuf_info + pkt->hdr.xactid;
 	rxb->chan = rxq->chan;
 	rxb->xactid = pkt->hdr.xactid;
-	rxb->hv = rxq->hv;
+	rxb->rxq = rxq;
 
 	rxb->shinfo.free_cb = hn_rx_buf_free_cb;
 	rxb->shinfo.fcb_opaque = rxb;
@@ -530,6 +553,7 @@ static void hn_rxpkt(struct hn_rx_queue *rxq, struct hn_rx_bufinfo *rxb,
 {
 	struct hn_data *hv = rxq->hv;
 	struct rte_mbuf *m;
+	bool use_extbuf = false;
 
 	m = rte_pktmbuf_alloc(rxq->mb_pool);
 	if (unlikely(!m)) {
@@ -545,7 +569,8 @@ static void hn_rxpkt(struct hn_rx_queue *rxq, struct hn_rx_bufinfo *rxb,
 	 * some space available in receive area for later packets.
 	 */
 	if (dlen >= HN_RXCOPY_THRESHOLD &&
-	    hv->rxbuf_outstanding < hv->rxbuf_section_cnt / 2) {
+	    (uint32_t)rte_atomic32_read(&rxq->rxbuf_outstanding) <
+			hv->rxbuf_section_cnt / 2) {
 		struct rte_mbuf_ext_shared_info *shinfo;
 		const void *rxbuf;
 		rte_iova_t iova;
@@ -559,12 +584,14 @@ static void hn_rxpkt(struct hn_rx_queue *rxq, struct hn_rx_bufinfo *rxb,
 		iova = rte_mem_virt2iova(rxbuf) + RTE_PTR_DIFF(data, rxbuf);
 		shinfo = &rxb->shinfo;
 
-		if (rte_mbuf_ext_refcnt_update(shinfo, 1) == 1)
-			++hv->rxbuf_outstanding;
+		/* shinfo is already set to 1 by the caller */
+		if (rte_mbuf_ext_refcnt_update(shinfo, 1) == 2)
+			rte_atomic32_inc(&rxq->rxbuf_outstanding);
 
 		rte_pktmbuf_attach_extbuf(m, data, iova,
 					  dlen + headroom, shinfo);
 		m->data_off = headroom;
+		use_extbuf = true;
 	} else {
 		/* Mbuf's in pool must be large enough to hold small packets */
 		if (unlikely(rte_pktmbuf_tailroom(m) < dlen)) {
@@ -592,6 +619,8 @@ static void hn_rxpkt(struct hn_rx_queue *rxq, struct hn_rx_bufinfo *rxb,
 		if (!hv->vlan_strip && rte_vlan_insert(&m)) {
 			PMD_DRV_LOG(DEBUG, "vlan insert failed");
 			++rxq->stats.errors;
+			if (use_extbuf)
+				rte_pktmbuf_detach_extbuf(m);
 			rte_pktmbuf_free(m);
 			return;
 		}
@@ -625,6 +654,9 @@ static void hn_rxpkt(struct hn_rx_queue *rxq, struct hn_rx_bufinfo *rxb,
 
 	if (unlikely(rte_ring_sp_enqueue(rxq->rx_ring, m) != 0)) {
 		++rxq->stats.ring_full;
+		PMD_RX_LOG(DEBUG, "rx ring full");
+		if (use_extbuf)
+			rte_pktmbuf_detach_extbuf(m);
 		rte_pktmbuf_free(m);
 	}
 }
@@ -633,7 +665,8 @@ static void hn_rndis_rx_data(struct hn_rx_queue *rxq,
 			     struct hn_rx_bufinfo *rxb,
 			     void *data, uint32_t dlen)
 {
-	unsigned int data_off, data_len, pktinfo_off, pktinfo_len;
+	unsigned int data_off, data_len;
+	unsigned int pktinfo_off, pktinfo_len;
 	const struct rndis_packet_msg *pkt = data;
 	struct hn_rxinfo info = {
 		.vlan_info = HN_NDIS_VLAN_INFO_INVALID,
@@ -678,7 +711,8 @@ static void hn_rndis_rx_data(struct hn_rx_queue *rxq,
 			goto error;
 	}
 
-	if (unlikely(data_off + data_len > pkt->len))
+	/* overflow check */
+	if (data_len > data_len + data_off || data_len + data_off > pkt->len)
 		goto error;
 
 	if (unlikely(data_len < RTE_ETHER_HDR_LEN))
@@ -800,7 +834,8 @@ hn_nvs_handle_rxbuf(struct rte_eth_dev *dev,
 	}
 
 	/* Send ACK now if external mbuf not used */
-	hn_rx_buf_release(rxb);
+	if (rte_mbuf_ext_refcnt_update(&rxb->shinfo, -1) == 0)
+		hn_nvs_ack_rxbuf(rxb->chan, rxb->xactid);
 }
 
 /*
@@ -856,7 +891,35 @@ struct hn_rx_queue *hn_rx_queue_alloc(struct hn_data *hv,
 		return NULL;
 	}
 
+	/* setup rxbuf_info for non-primary queue */
+	if (queue_id) {
+		rxq->rxbuf_info = rte_calloc("HN_RXBUF_INFO",
+					hv->rxbuf_section_cnt,
+					sizeof(*rxq->rxbuf_info),
+					RTE_CACHE_LINE_SIZE);
+
+		if (!rxq->rxbuf_info) {
+			PMD_DRV_LOG(ERR,
+				"Could not allocate rxbuf info for queue %d\n",
+				queue_id);
+			rte_free(rxq->event_buf);
+			rte_free(rxq);
+			return NULL;
+		}
+	}
+
 	return rxq;
+}
+
+void
+hn_dev_rx_queue_info(struct rte_eth_dev *dev, uint16_t queue_id,
+		     struct rte_eth_rxq_info *qinfo)
+{
+	struct hn_rx_queue *rxq = dev->data->rx_queues[queue_id];
+
+	qinfo->mp = rxq->mb_pool;
+	qinfo->nb_desc = rxq->rx_ring->size;
+	qinfo->conf.offloads = dev->data->dev_conf.rxmode.offloads;
 }
 
 int
@@ -910,6 +973,7 @@ hn_dev_rx_queue_setup(struct rte_eth_dev *dev,
 
 fail:
 	rte_ring_free(rxq->rx_ring);
+	rte_free(rxq->rxbuf_info);
 	rte_free(rxq->event_buf);
 	rte_free(rxq);
 	return error;
@@ -932,6 +996,7 @@ hn_rx_queue_free(struct hn_rx_queue *rxq, bool keep_primary)
 	if (keep_primary && rxq == rxq->hv->primary)
 		return;
 
+	rte_free(rxq->rxbuf_info);
 	rte_free(rxq->event_buf);
 	rte_free(rxq);
 }
@@ -944,6 +1009,40 @@ hn_dev_rx_queue_release(void *arg)
 	PMD_INIT_FUNC_TRACE();
 
 	hn_rx_queue_free(rxq, true);
+}
+
+/*
+ * Get the number of used descriptor in a rx queue
+ * For this device that means how many packets are pending in the ring.
+ */
+uint32_t
+hn_dev_rx_queue_count(struct rte_eth_dev *dev, uint16_t queue_id)
+{
+	struct hn_rx_queue *rxq = dev->data->rx_queues[queue_id];
+
+	return rte_ring_count(rxq->rx_ring);
+}
+
+/*
+ * Check the status of a Rx descriptor in the queue
+ *
+ * returns:
+ *  - -EINVAL               - offset outside of ring
+ *  - RTE_ETH_RX_DESC_AVAIL - no data available yet
+ *  - RTE_ETH_RX_DESC_DONE  - data is waiting in stagin ring
+ */
+int hn_dev_rx_queue_status(void *arg, uint16_t offset)
+{
+	const struct hn_rx_queue *rxq = arg;
+
+	hn_process_events(rxq->hv, rxq->queue_id, 0);
+	if (offset >= rxq->rx_ring->capacity)
+		return -EINVAL;
+
+	if (offset < rte_ring_count(rxq->rx_ring))
+		return RTE_ETH_RX_DESC_DONE;
+	else
+		return RTE_ETH_RX_DESC_AVAIL;
 }
 
 int
@@ -1097,10 +1196,16 @@ static int hn_flush_txagg(struct hn_tx_queue *txq, bool *need_sig)
 
 	if (likely(ret == 0))
 		hn_reset_txagg(txq);
-	else
-		PMD_TX_LOG(NOTICE, "port %u:%u send failed: %d",
-			   txq->port_id, txq->queue_id, ret);
+	else if (ret == -EAGAIN) {
+		PMD_TX_LOG(DEBUG, "port %u:%u channel full",
+			   txq->port_id, txq->queue_id);
+		++txq->stats.channel_full;
+	} else {
+		++txq->stats.errors;
 
+		PMD_DRV_LOG(NOTICE, "port %u:%u send failed: %d",
+			   txq->port_id, txq->queue_id, ret);
+	}
 	return ret;
 }
 
@@ -1340,11 +1445,12 @@ static int hn_xmit_sg(struct hn_tx_queue *txq,
 	hn_rndis_dump(txd->rndis_pkt);
 
 	/* pass IOVA of rndis header in first segment */
-	addr = rte_malloc_virt2iova(txd->rndis_pkt);
+	addr = rte_malloc_virt2iova(txq->tx_rndis);
 	if (unlikely(addr == RTE_BAD_IOVA)) {
 		PMD_DRV_LOG(ERR, "RNDIS transmit can not get iova");
 		return -EINVAL;
 	}
+	addr = addr + ((char *)txd->rndis_pkt - (char *)txq->tx_rndis);
 
 	sg[0].page = addr / PAGE_SIZE;
 	sg[0].ofs = addr & PAGE_MASK;
@@ -1372,24 +1478,32 @@ hn_xmit_pkts(void *ptxq, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 	struct hn_data *hv = txq->hv;
 	struct rte_eth_dev *vf_dev;
 	bool need_sig = false;
-	uint16_t nb_tx, avail;
+	uint16_t nb_tx, tx_thresh;
 	int ret;
 
 	if (unlikely(hv->closed))
 		return 0;
 
-	/* Transmit over VF if present and up */
-	vf_dev = hn_get_vf_dev(hv);
+	/*
+	 * Always check for events on the primary channel
+	 * because that is where hotplug notifications occur.
+	 */
+	tx_thresh = RTE_MAX(txq->free_thresh, nb_pkts);
+	if (txq->queue_id == 0 ||
+	    rte_mempool_avail_count(txq->txdesc_pool) < tx_thresh)
+		hn_process_events(hv, txq->queue_id, 0);
 
+	/* Transmit over VF if present and up */
+	rte_rwlock_read_lock(&hv->vf_lock);
+	vf_dev = hn_get_vf_dev(hv);
 	if (vf_dev && vf_dev->data->dev_started) {
 		void *sub_q = vf_dev->data->tx_queues[queue_id];
 
-		return (*vf_dev->tx_pkt_burst)(sub_q, tx_pkts, nb_pkts);
+		nb_tx = (*vf_dev->tx_pkt_burst)(sub_q, tx_pkts, nb_pkts);
+		rte_rwlock_read_unlock(&hv->vf_lock);
+		return nb_tx;
 	}
-
-	avail = rte_mempool_avail_count(txq->txdesc_pool);
-	if (nb_pkts > avail || avail <= txq->free_thresh)
-		hn_process_events(hv, txq->queue_id, 0);
+	rte_rwlock_read_unlock(&hv->vf_lock);
 
 	for (nb_tx = 0; nb_tx < nb_pkts; nb_tx++) {
 		struct rte_mbuf *m = tx_pkts[nb_tx];
@@ -1438,8 +1552,13 @@ hn_xmit_pkts(void *ptxq, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 
 			ret = hn_xmit_sg(txq, txd, m, &need_sig);
 			if (unlikely(ret != 0)) {
-				PMD_TX_LOG(NOTICE, "sg send failed: %d", ret);
-				++txq->stats.errors;
+				if (ret == -EAGAIN) {
+					PMD_TX_LOG(DEBUG, "sg channel full");
+					++txq->stats.channel_full;
+				} else {
+					PMD_DRV_LOG(NOTICE, "sg send failed: %d", ret);
+					++txq->stats.errors;
+				}
 				hn_txd_put(txq, txd);
 				goto fail;
 			}
@@ -1487,10 +1606,7 @@ hn_recv_pkts(void *prxq, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 	if (unlikely(hv->closed))
 		return 0;
 
-	/* Receive from VF if present and up */
-	vf_dev = hn_get_vf_dev(hv);
-
-	/* Check for new completions */
+	/* Check for new completions (and hotplug) */
 	if (likely(rte_ring_count(rxq->rx_ring) < nb_pkts))
 		hn_process_events(hv, rxq->queue_id, 0);
 
@@ -1499,10 +1615,13 @@ hn_recv_pkts(void *prxq, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 					   (void **)rx_pkts, nb_pkts, NULL);
 
 	/* If VF is available, check that as well */
+	rte_rwlock_read_lock(&hv->vf_lock);
+	vf_dev = hn_get_vf_dev(hv);
 	if (vf_dev && vf_dev->data->dev_started)
 		nb_rcv += hn_recv_vf(vf_dev->data->port_id, rxq,
 				     rx_pkts + nb_rcv, nb_pkts - nb_rcv);
 
+	rte_rwlock_read_unlock(&hv->vf_lock);
 	return nb_rcv;
 }
 

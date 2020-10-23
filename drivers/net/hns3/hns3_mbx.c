@@ -23,6 +23,7 @@
 #include "hns3_regs.h"
 #include "hns3_logs.h"
 #include "hns3_intr.h"
+#include "hns3_rxtx.h"
 
 #define HNS3_CMD_CODE_OFFSET		2
 
@@ -292,6 +293,79 @@ hns3_update_resp_position(struct hns3_hw *hw, uint32_t resp_msg)
 	resp->tail = tail;
 }
 
+static void
+hns3_link_fail_parse(struct hns3_hw *hw, uint8_t link_fail_code)
+{
+	switch (link_fail_code) {
+	case HNS3_MBX_LF_NORMAL:
+		break;
+	case HNS3_MBX_LF_REF_CLOCK_LOST:
+		hns3_warn(hw, "Reference clock lost!");
+		break;
+	case HNS3_MBX_LF_XSFP_TX_DISABLE:
+		hns3_warn(hw, "SFP tx is disabled!");
+		break;
+	case HNS3_MBX_LF_XSFP_ABSENT:
+		hns3_warn(hw, "SFP is absent!");
+		break;
+	default:
+		hns3_warn(hw, "Unknown fail code:%u!", link_fail_code);
+		break;
+	}
+}
+
+static void
+hns3_handle_link_change_event(struct hns3_hw *hw,
+			      struct hns3_mbx_pf_to_vf_cmd *req)
+{
+#define LINK_STATUS_OFFSET     1
+#define LINK_FAIL_CODE_OFFSET  2
+
+	if (!req->msg[LINK_STATUS_OFFSET])
+		hns3_link_fail_parse(hw, req->msg[LINK_FAIL_CODE_OFFSET]);
+
+	hns3_update_link_status(hw);
+}
+
+static void
+hns3_update_port_base_vlan_info(struct hns3_hw *hw,
+				struct hns3_mbx_pf_to_vf_cmd *req)
+{
+#define PVID_STATE_OFFSET	1
+	uint16_t new_pvid_state = req->msg[PVID_STATE_OFFSET] ?
+		HNS3_PORT_BASE_VLAN_ENABLE : HNS3_PORT_BASE_VLAN_DISABLE;
+	/*
+	 * Currently, hardware doesn't support more than two layers VLAN offload
+	 * based on hns3 network engine, which would cause packets loss or wrong
+	 * packets for these types of packets. If the hns3 PF kernel ethdev
+	 * driver sets the PVID for VF device after initialization of the
+	 * related VF device, the PF driver will notify VF driver to update the
+	 * PVID configuration state. The VF driver will update the PVID
+	 * configuration state immediately to ensure that the VLAN process in Tx
+	 * and Rx is correct. But in the window period of this state transition,
+	 * packets loss or packets with wrong VLAN may occur.
+	 */
+	if (hw->port_base_vlan_cfg.state != new_pvid_state) {
+		hw->port_base_vlan_cfg.state = new_pvid_state;
+		hns3_update_all_queues_pvid_proc_en(hw);
+	}
+}
+
+static void
+hns3_handle_promisc_info(struct hns3_hw *hw, uint16_t promisc_en)
+{
+	if (!promisc_en) {
+		/*
+		 * When promisc/allmulti mode is closed by the hns3 PF kernel
+		 * ethdev driver for untrusted, modify VF's related status.
+		 */
+		hns3_warn(hw, "Promisc mode will be closed by host for being "
+			      "untrusted.");
+		hw->data->promiscuous = 0;
+		hw->data->all_multicast = 0;
+	}
+}
+
 void
 hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
 {
@@ -346,6 +420,25 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
 			hns3_mbx_tail_ptr_move_arq(hw->arq);
 
 			hns3_mbx_handler(hw);
+			break;
+		case HNS3_MBX_PUSH_LINK_STATUS:
+			hns3_handle_link_change_event(hw, req);
+			break;
+		case HNS3_MBX_PUSH_VLAN_INFO:
+			/*
+			 * When the PVID configuration status of VF device is
+			 * changed by the hns3 PF kernel driver, VF driver will
+			 * receive this mailbox message from PF driver.
+			 */
+			hns3_update_port_base_vlan_info(hw, req);
+			break;
+		case HNS3_MBX_PUSH_PROMISC_INFO:
+			/*
+			 * When the trust status of VF device changed by the
+			 * hns3 PF kernel driver, VF driver will receive this
+			 * mailbox message from PF driver.
+			 */
+			hns3_handle_promisc_info(hw, req->msg[1]);
 			break;
 		default:
 			hns3_err(hw,

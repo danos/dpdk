@@ -26,18 +26,21 @@
 struct rte_security_session *
 rte_security_session_create(struct rte_security_ctx *instance,
 			    struct rte_security_session_conf *conf,
-			    struct rte_mempool *mp)
+			    struct rte_mempool *mp,
+			    struct rte_mempool *priv_mp)
 {
 	struct rte_security_session *sess = NULL;
 
 	RTE_PTR_CHAIN3_OR_ERR_RET(instance, ops, session_create, NULL, NULL);
 	RTE_PTR_OR_ERR_RET(conf, NULL);
 	RTE_PTR_OR_ERR_RET(mp, NULL);
+	RTE_PTR_OR_ERR_RET(priv_mp, NULL);
 
 	if (rte_mempool_get(mp, (void **)&sess))
 		return NULL;
 
-	if (instance->ops->session_create(instance->device, conf, sess, mp)) {
+	if (instance->ops->session_create(instance->device, conf,
+				sess, priv_mp)) {
 		rte_mempool_put(mp, (void *)sess);
 		return NULL;
 	}
@@ -172,6 +175,11 @@ rte_security_capability_get(struct rte_security_ctx *instance,
 			} else if (idx->protocol == RTE_SECURITY_PROTOCOL_PDCP) {
 				if (capability->pdcp.domain ==
 							idx->pdcp.domain)
+					return capability;
+			} else if (idx->protocol ==
+						RTE_SECURITY_PROTOCOL_DOCSIS) {
+				if (capability->docsis.direction ==
+							idx->docsis.direction)
 					return capability;
 			}
 		}

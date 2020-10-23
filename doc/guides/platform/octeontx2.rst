@@ -13,6 +13,7 @@ More information about OCTEON TX2 SoC can be found at `Marvell Official Website
 Supported OCTEON TX2 SoCs
 -------------------------
 
+- CN98xx
 - CN96xx
 - CN93xx
 
@@ -65,6 +66,8 @@ DPDK subsystem.
    | 8 | DPI | rte_rawdev                                                   |
    +---+-----+--------------------------------------------------------------+
    | 9 | SDP | rte_ethdev                                                   |
+   +---+-----+--------------------------------------------------------------+
+   | 10| REE | rte_regexdev                                                 |
    +---+-----+--------------------------------------------------------------+
 
 PF0 is called the administrative / admin function (AF) and has exclusive
@@ -154,6 +157,9 @@ This section lists dataplane H/W block(s) available in OCTEON TX2 SoC.
 
 #. **Crypto Device Driver**
    See :doc:`../cryptodevs/octeontx2` for CPT crypto device driver information.
+
+#. **Regex Device Driver**
+   See :doc:`../regexdevs/octeontx2` for REE regex device driver information.
 
 Procedure to Setup Platform
 ---------------------------

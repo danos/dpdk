@@ -19,7 +19,6 @@
 #define HNS3_SHAPER_BS_U_DEF	5
 #define HNS3_SHAPER_BS_S_DEF	20
 #define BW_MAX_PERCENT		100
-#define HNS3_ETHER_MAX_RATE	100000
 
 /*
  * hns3_shaper_para_calc: calculate ir parameter for the shaper
@@ -63,9 +62,9 @@ hns3_shaper_para_calc(struct hns3_hw *hw, uint32_t ir, uint8_t shaper_level,
 		return -EINVAL;
 	}
 
-	if (ir > HNS3_ETHER_MAX_RATE) {
-		hns3_err(hw, "rate(%d) exceeds the rate driver supported "
-			 "HNS3_ETHER_MAX_RATE(%d)", ir, HNS3_ETHER_MAX_RATE);
+	if (ir > hw->max_tm_rate) {
+		hns3_err(hw, "rate(%d) exceeds the max rate(%d) driver "
+			 "supported.", ir, hw->max_tm_rate);
 		return -EINVAL;
 	}
 
@@ -101,7 +100,7 @@ hns3_shaper_para_calc(struct hns3_hw *hw, uint32_t ir, uint8_t shaper_level,
 		 * ir_calc gets minimum value when tick is the maximum value.
 		 * At the same time, value of ir_u_calc can only be increased up
 		 * to eight after the while loop if the value of ir is equal
-		 * to HNS3_ETHER_MAX_RATE.
+		 * to hw->max_tm_rate.
 		 */
 		uint32_t numerator;
 		do {
@@ -366,12 +365,22 @@ hns3_dcb_port_shaper_cfg(struct hns3_hw *hw)
 
 	shap_cfg_cmd->port_shapping_para = rte_cpu_to_le_32(shapping_para);
 
+	/*
+	 * Configure the port_rate and set bit HNS3_TM_RATE_VLD_B of flag
+	 * field in hns3_port_shapping_cmd to require firmware to recalculate
+	 * shapping parameters. And whether the parameters are recalculated
+	 * depends on the firmware version. But driver still needs to
+	 * calculate it and configure to firmware for better compatibility.
+	 */
+	shap_cfg_cmd->port_rate = rte_cpu_to_le_32(hw->mac.link_speed);
+	hns3_set_bit(shap_cfg_cmd->flag, HNS3_TM_RATE_VLD_B, 1);
+
 	return hns3_cmd_send(hw, &desc, 1);
 }
 
 static int
 hns3_dcb_pg_shapping_cfg(struct hns3_hw *hw, enum hns3_shap_bucket bucket,
-			 uint8_t pg_id, uint32_t shapping_para)
+			 uint8_t pg_id, uint32_t shapping_para, uint32_t rate)
 {
 	struct hns3_pg_shapping_cmd *shap_cfg_cmd;
 	enum hns3_opcode_type opcode;
@@ -387,6 +396,16 @@ hns3_dcb_pg_shapping_cfg(struct hns3_hw *hw, enum hns3_shap_bucket bucket,
 
 	shap_cfg_cmd->pg_shapping_para = rte_cpu_to_le_32(shapping_para);
 
+	/*
+	 * Configure the pg_rate and set bit HNS3_TM_RATE_VLD_B of flag field in
+	 * hns3_pg_shapping_cmd to require firmware to recalculate shapping
+	 * parameters. And whether parameters are recalculated depends on
+	 * the firmware version. But driver still needs to calculate it and
+	 * configure to firmware for better compatibility.
+	 */
+	shap_cfg_cmd->pg_rate = rte_cpu_to_le_32(rate);
+	hns3_set_bit(shap_cfg_cmd->flag, HNS3_TM_RATE_VLD_B, 1);
+
 	return hns3_cmd_send(hw, &desc, 1);
 }
 
@@ -398,6 +417,7 @@ hns3_dcb_pg_shaper_cfg(struct hns3_hw *hw)
 	struct hns3_pf *pf = &hns->pf;
 	uint32_t ir_u, ir_b, ir_s;
 	uint32_t shaper_para;
+	uint32_t rate;
 	uint8_t i;
 	int ret;
 
@@ -407,10 +427,10 @@ hns3_dcb_pg_shaper_cfg(struct hns3_hw *hw)
 
 	/* Pg to pri */
 	for (i = 0; i < hw->dcb_info.num_pg; i++) {
+		rate = hw->dcb_info.pg_info[i].bw_limit;
+
 		/* Calc shaper para */
-		ret = hns3_shaper_para_calc(hw,
-					    hw->dcb_info.pg_info[i].bw_limit,
-					    HNS3_SHAPER_LVL_PG,
+		ret = hns3_shaper_para_calc(hw, rate, HNS3_SHAPER_LVL_PG,
 					    &shaper_parameter);
 		if (ret) {
 			hns3_err(hw, "calculate shaper parameter failed: %d",
@@ -423,7 +443,7 @@ hns3_dcb_pg_shaper_cfg(struct hns3_hw *hw)
 							 HNS3_SHAPER_BS_S_DEF);
 
 		ret = hns3_dcb_pg_shapping_cfg(hw, HNS3_DCB_SHAP_C_BUCKET, i,
-					       shaper_para);
+					       shaper_para, rate);
 		if (ret) {
 			hns3_err(hw,
 				 "config PG CIR shaper parameter failed: %d",
@@ -439,7 +459,7 @@ hns3_dcb_pg_shaper_cfg(struct hns3_hw *hw)
 							 HNS3_SHAPER_BS_S_DEF);
 
 		ret = hns3_dcb_pg_shapping_cfg(hw, HNS3_DCB_SHAP_P_BUCKET, i,
-					       shaper_para);
+					       shaper_para, rate);
 		if (ret) {
 			hns3_err(hw,
 				 "config PG PIR shaper parameter failed: %d",
@@ -487,7 +507,7 @@ hns3_dcb_pri_schd_mode_cfg(struct hns3_hw *hw, uint8_t pri_id)
 
 static int
 hns3_dcb_pri_shapping_cfg(struct hns3_hw *hw, enum hns3_shap_bucket bucket,
-			  uint8_t pri_id, uint32_t shapping_para)
+			  uint8_t pri_id, uint32_t shapping_para, uint32_t rate)
 {
 	struct hns3_pri_shapping_cmd *shap_cfg_cmd;
 	enum hns3_opcode_type opcode;
@@ -504,6 +524,16 @@ hns3_dcb_pri_shapping_cfg(struct hns3_hw *hw, enum hns3_shap_bucket bucket,
 
 	shap_cfg_cmd->pri_shapping_para = rte_cpu_to_le_32(shapping_para);
 
+	/*
+	 * Configure the pri_rate and set bit HNS3_TM_RATE_VLD_B of flag
+	 * field in hns3_pri_shapping_cmd to require firmware to recalculate
+	 * shapping parameters. And whether the parameters are recalculated
+	 * depends on the firmware version. But driver still needs to
+	 * calculate it and configure to firmware for better compatibility.
+	 */
+	shap_cfg_cmd->pri_rate = rte_cpu_to_le_32(rate);
+	hns3_set_bit(shap_cfg_cmd->flag, HNS3_TM_RATE_VLD_B, 1);
+
 	return hns3_cmd_send(hw, &desc, 1);
 }
 
@@ -513,12 +543,12 @@ hns3_dcb_pri_tc_base_shaper_cfg(struct hns3_hw *hw)
 	struct hns3_shaper_parameter shaper_parameter;
 	uint32_t ir_u, ir_b, ir_s;
 	uint32_t shaper_para;
+	uint32_t rate;
 	int ret, i;
 
 	for (i = 0; i < hw->dcb_info.num_tc; i++) {
-		ret = hns3_shaper_para_calc(hw,
-					    hw->dcb_info.tc_info[i].bw_limit,
-					    HNS3_SHAPER_LVL_PRI,
+		rate = hw->dcb_info.tc_info[i].bw_limit;
+		ret = hns3_shaper_para_calc(hw, rate, HNS3_SHAPER_LVL_PRI,
 					    &shaper_parameter);
 		if (ret) {
 			hns3_err(hw, "calculate shaper parameter failed: %d",
@@ -531,7 +561,7 @@ hns3_dcb_pri_tc_base_shaper_cfg(struct hns3_hw *hw)
 							 HNS3_SHAPER_BS_S_DEF);
 
 		ret = hns3_dcb_pri_shapping_cfg(hw, HNS3_DCB_SHAP_C_BUCKET, i,
-						shaper_para);
+						shaper_para, rate);
 		if (ret) {
 			hns3_err(hw,
 				 "config priority CIR shaper parameter failed: %d",
@@ -547,7 +577,7 @@ hns3_dcb_pri_tc_base_shaper_cfg(struct hns3_hw *hw)
 							 HNS3_SHAPER_BS_S_DEF);
 
 		ret = hns3_dcb_pri_shapping_cfg(hw, HNS3_DCB_SHAP_P_BUCKET, i,
-						shaper_para);
+						shaper_para, rate);
 		if (ret) {
 			hns3_err(hw,
 				 "config priority PIR shaper parameter failed: %d",
@@ -577,21 +607,31 @@ hns3_dcb_pri_shaper_cfg(struct hns3_hw *hw)
 	return ret;
 }
 
-void
+static int
 hns3_set_rss_size(struct hns3_hw *hw, uint16_t nb_rx_q)
 {
 	struct hns3_rss_conf *rss_cfg = &hw->rss_info;
 	uint16_t rx_qnum_per_tc;
+	uint16_t used_rx_queues;
 	int i;
 
 	rx_qnum_per_tc = nb_rx_q / hw->num_tc;
-	rx_qnum_per_tc = RTE_MIN(hw->rss_size_max, rx_qnum_per_tc);
-	if (hw->alloc_rss_size != rx_qnum_per_tc) {
-		hns3_info(hw, "rss size changes from %u to %u",
-			  hw->alloc_rss_size, rx_qnum_per_tc);
-		hw->alloc_rss_size = rx_qnum_per_tc;
+	if (rx_qnum_per_tc > hw->rss_size_max) {
+		hns3_err(hw, "rx queue number of per tc (%u) is greater than "
+			 "value (%u) hardware supported.",
+			 rx_qnum_per_tc, hw->rss_size_max);
+		return -EINVAL;
 	}
-	hw->used_rx_queues = hw->num_tc * hw->alloc_rss_size;
+
+	used_rx_queues = hw->num_tc * rx_qnum_per_tc;
+	if (used_rx_queues != nb_rx_q) {
+		hns3_err(hw, "rx queue number (%u) configured must be an "
+			 "integral multiple of valid tc number (%u).",
+			 nb_rx_q, hw->num_tc);
+		return -EINVAL;
+	}
+	hw->alloc_rss_size = rx_qnum_per_tc;
+	hw->used_rx_queues = used_rx_queues;
 
 	/*
 	 * When rss size is changed, we need to update rss redirection table
@@ -605,15 +645,29 @@ hns3_set_rss_size(struct hns3_hw *hw, uint16_t nb_rx_q)
 			rss_cfg->rss_indirection_tbl[i] =
 							i % hw->alloc_rss_size;
 	}
+
+	return 0;
 }
 
-void
-hns3_tc_queue_mapping_cfg(struct hns3_hw *hw, uint16_t nb_queue)
+static int
+hns3_tc_queue_mapping_cfg(struct hns3_hw *hw, uint16_t nb_tx_q)
 {
 	struct hns3_tc_queue_info *tc_queue;
+	uint16_t used_tx_queues;
+	uint16_t tx_qnum_per_tc;
 	uint8_t i;
 
-	hw->tx_qnum_per_tc = nb_queue / hw->num_tc;
+	tx_qnum_per_tc = nb_tx_q / hw->num_tc;
+	used_tx_queues = hw->num_tc * tx_qnum_per_tc;
+	if (used_tx_queues != nb_tx_q) {
+		hns3_err(hw, "tx queue number (%u) configured must be an "
+			 "integral multiple of valid tc number (%u).",
+			 nb_tx_q, hw->num_tc);
+		return -EINVAL;
+	}
+
+	hw->used_tx_queues = used_tx_queues;
+	hw->tx_qnum_per_tc = tx_qnum_per_tc;
 	for (i = 0; i < HNS3_MAX_TC_NUM; i++) {
 		tc_queue = &hw->tc_queue[i];
 		if (hw->hw_tc_map & BIT(i) && i < hw->num_tc) {
@@ -629,22 +683,39 @@ hns3_tc_queue_mapping_cfg(struct hns3_hw *hw, uint16_t nb_queue)
 			tc_queue->tc = 0;
 		}
 	}
-	hw->used_tx_queues = hw->num_tc * hw->tx_qnum_per_tc;
+
+	return 0;
 }
 
-static void
+int
+hns3_queue_to_tc_mapping(struct hns3_hw *hw, uint16_t nb_rx_q, uint16_t nb_tx_q)
+{
+	int ret;
+
+	ret = hns3_set_rss_size(hw, nb_rx_q);
+	if (ret)
+		return ret;
+
+	return hns3_tc_queue_mapping_cfg(hw, nb_tx_q);
+}
+
+static int
 hns3_dcb_update_tc_queue_mapping(struct hns3_hw *hw, uint16_t nb_rx_q,
 				 uint16_t nb_tx_q)
 {
 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
 	struct hns3_pf *pf = &hns->pf;
+	int ret;
 
 	hw->num_tc = hw->dcb_info.num_tc;
-	hns3_set_rss_size(hw, nb_rx_q);
-	hns3_tc_queue_mapping_cfg(hw, nb_tx_q);
+	ret = hns3_queue_to_tc_mapping(hw, nb_rx_q, nb_tx_q);
+	if (ret)
+		return ret;
 
 	if (!hns->is_vf)
 		memcpy(pf->prio_tc, hw->dcb_info.prio_tc, HNS3_MAX_USER_PRIO);
+
+	return 0;
 }
 
 int
@@ -665,7 +736,7 @@ hns3_dcb_info_init(struct hns3_hw *hw)
 		hw->dcb_info.pg_dwrr[i] = i ? 0 : BW_MAX_PERCENT;
 		hw->dcb_info.pg_info[i].pg_id = i;
 		hw->dcb_info.pg_info[i].pg_sch_mode = HNS3_SCH_MODE_DWRR;
-		hw->dcb_info.pg_info[i].bw_limit = HNS3_ETHER_MAX_RATE;
+		hw->dcb_info.pg_info[i].bw_limit = hw->max_tm_rate;
 
 		if (i != 0)
 			continue;
@@ -749,12 +820,10 @@ hns3_dcb_schd_mode_cfg(struct hns3_hw *hw)
 	}
 
 	ret = hns3_dcb_lvl34_schd_mode_cfg(hw);
-	if (ret) {
+	if (ret)
 		hns3_err(hw, "config lvl34_schd_mode failed: %d", ret);
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 static int
@@ -770,13 +839,16 @@ hns3_dcb_pri_tc_base_dwrr_cfg(struct hns3_hw *hw)
 
 		ret = hns3_dcb_pri_weight_cfg(hw, i, dwrr);
 		if (ret) {
-			hns3_err(hw, "fail to send priority weight cmd: %d", i);
+			hns3_err(hw,
+			       "fail to send priority weight cmd: %d, ret = %d",
+			       i, ret);
 			return ret;
 		}
 
 		ret = hns3_dcb_qs_weight_cfg(hw, i, BW_MAX_PERCENT);
 		if (ret) {
-			hns3_err(hw, "fail to send qs_weight cmd: %d", i);
+			hns3_err(hw, "fail to send qs_weight cmd: %d, ret = %d",
+				 i, ret);
 			return ret;
 		}
 	}
@@ -789,6 +861,7 @@ hns3_dcb_pri_dwrr_cfg(struct hns3_hw *hw)
 {
 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
 	struct hns3_pf *pf = &hns->pf;
+	uint32_t version;
 	int ret;
 
 	if (pf->tx_sch_mode != HNS3_FLAG_TC_BASE_SCH_MODE)
@@ -803,8 +876,17 @@ hns3_dcb_pri_dwrr_cfg(struct hns3_hw *hw)
 
 	ret = hns3_dcb_ets_tc_dwrr_cfg(hw);
 	if (ret == -EOPNOTSUPP) {
-		hns3_warn(hw, "fw %08x does't support ets tc weight cmd",
-			  hw->fw_version);
+		version = hw->fw_version;
+		hns3_warn(hw,
+			  "fw %lu.%lu.%lu.%lu doesn't support ets tc weight cmd",
+			  hns3_get_field(version, HNS3_FW_VERSION_BYTE3_M,
+					 HNS3_FW_VERSION_BYTE3_S),
+			  hns3_get_field(version, HNS3_FW_VERSION_BYTE2_M,
+					 HNS3_FW_VERSION_BYTE2_S),
+			  hns3_get_field(version, HNS3_FW_VERSION_BYTE1_M,
+					 HNS3_FW_VERSION_BYTE1_S),
+			  hns3_get_field(version, HNS3_FW_VERSION_BYTE0_M,
+					 HNS3_FW_VERSION_BYTE0_S));
 		ret = 0;
 	}
 
@@ -845,12 +927,10 @@ hns3_dcb_dwrr_cfg(struct hns3_hw *hw)
 	}
 
 	ret = hns3_dcb_pri_dwrr_cfg(hw);
-	if (ret) {
+	if (ret)
 		hns3_err(hw, "config pri_dwrr failed: %d", ret);
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 static int
@@ -878,13 +958,35 @@ hns3_q_to_qs_map_cfg(struct hns3_hw *hw, uint16_t q_id, uint16_t qs_id)
 {
 	struct hns3_nq_to_qs_link_cmd *map;
 	struct hns3_cmd_desc desc;
+	uint16_t tmp_qs_id = 0;
+	uint16_t qs_id_l;
+	uint16_t qs_id_h;
 
 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_TM_NQ_TO_QS_LINK, false);
 
 	map = (struct hns3_nq_to_qs_link_cmd *)desc.data;
 
 	map->nq_id = rte_cpu_to_le_16(q_id);
-	map->qset_id = rte_cpu_to_le_16(qs_id | HNS3_DCB_Q_QS_LINK_VLD_MSK);
+
+	/*
+	 * Network engine with revision_id 0x21 uses 0~9 bit of qs_id to
+	 * configure qset_id. So we need to convert qs_id to the follow
+	 * format to support qset_id > 1024.
+	 * qs_id: | 15 | 14 ~ 10 |  9 ~ 0   |
+	 *            /         / \         \
+	 *           /         /   \         \
+	 * qset_id: | 15 ~ 11 |  10 |  9 ~ 0  |
+	 *          | qs_id_h | vld | qs_id_l |
+	 */
+	qs_id_l = hns3_get_field(qs_id, HNS3_DCB_QS_ID_L_MSK,
+				 HNS3_DCB_QS_ID_L_S);
+	qs_id_h = hns3_get_field(qs_id, HNS3_DCB_QS_ID_H_MSK,
+				 HNS3_DCB_QS_ID_H_S);
+	hns3_set_field(tmp_qs_id, HNS3_DCB_QS_ID_L_MSK, HNS3_DCB_QS_ID_L_S,
+		       qs_id_l);
+	hns3_set_field(tmp_qs_id, HNS3_DCB_QS_ID_H_EXT_MSK,
+		       HNS3_DCB_QS_ID_H_EXT_S, qs_id_h);
+	map->qset_id = rte_cpu_to_le_16(tmp_qs_id | HNS3_DCB_Q_QS_LINK_VLD_MSK);
 
 	return hns3_cmd_send(hw, &desc, 1);
 }
@@ -932,12 +1034,10 @@ hns3_pri_q_qs_cfg(struct hns3_hw *hw)
 
 	/* Cfg q -> qs mapping */
 	ret = hns3_q_to_qs_map(hw);
-	if (ret) {
+	if (ret)
 		hns3_err(hw, "nq_to_qs mapping fail: %d", ret);
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 static int
@@ -1285,7 +1385,7 @@ hns3_dcb_cfg_validate(struct hns3_adapter *hns, uint8_t *tc, bool *changed)
 		*changed = true;
 }
 
-static void
+static int
 hns3_dcb_info_cfg(struct hns3_adapter *hns)
 {
 	struct rte_eth_dcb_rx_conf *dcb_rx_conf;
@@ -1293,6 +1393,7 @@ hns3_dcb_info_cfg(struct hns3_adapter *hns)
 	struct hns3_hw *hw = &hns->hw;
 	uint8_t tc_bw, bw_rest;
 	uint8_t i, j;
+	int ret;
 
 	dcb_rx_conf = &hw->data->dev_conf.rx_adv_conf.dcb_rx_conf;
 	pf->local_max_tc = (uint8_t)dcb_rx_conf->nb_tcs;
@@ -1304,7 +1405,7 @@ hns3_dcb_info_cfg(struct hns3_adapter *hns)
 	hw->dcb_info.pg_dwrr[0] = BW_MAX_PERCENT;
 	hw->dcb_info.pg_info[0].pg_id = 0;
 	hw->dcb_info.pg_info[0].pg_sch_mode = HNS3_SCH_MODE_DWRR;
-	hw->dcb_info.pg_info[0].bw_limit = HNS3_ETHER_MAX_RATE;
+	hw->dcb_info.pg_info[0].bw_limit = hw->max_tm_rate;
 	hw->dcb_info.pg_info[0].tc_bit_map = hw->hw_tc_map;
 
 	/* Each tc has same bw for valid tc by default */
@@ -1332,8 +1433,12 @@ hns3_dcb_info_cfg(struct hns3_adapter *hns)
 	for (i = 0; i < HNS3_MAX_USER_PRIO; i++)
 		hw->dcb_info.prio_tc[i] = dcb_rx_conf->dcb_tc[i];
 
-	hns3_dcb_update_tc_queue_mapping(hw, hw->data->nb_rx_queues,
-					 hw->data->nb_tx_queues);
+	ret = hns3_dcb_update_tc_queue_mapping(hw, hw->data->nb_rx_queues,
+					       hw->data->nb_tx_queues);
+	if (ret)
+		hns3_err(hw, "update tc queue mapping failed, ret = %d.", ret);
+
+	return ret;
 }
 
 static int
@@ -1372,9 +1477,8 @@ hns3_dcb_info_update(struct hns3_adapter *hns, uint8_t num_tc)
 		hw->dcb_info.num_tc = 1;
 	}
 	hw->hw_tc_map = bit_map;
-	hns3_dcb_info_cfg(hns);
 
-	return 0;
+	return hns3_dcb_info_cfg(hns);
 }
 
 static int
@@ -1499,6 +1603,7 @@ hns3_dcb_init(struct hns3_hw *hw)
 {
 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
 	struct hns3_pf *pf = &hns->pf;
+	uint16_t default_tqp_num;
 	int ret;
 
 	PMD_INIT_FUNC_TRACE();
@@ -1519,11 +1624,24 @@ hns3_dcb_init(struct hns3_hw *hw)
 
 		ret = hns3_dcb_info_init(hw);
 		if (ret) {
-			hns3_err(hw, "dcb info init failed: %d", ret);
+			hns3_err(hw, "dcb info init failed, ret = %d.", ret);
 			return ret;
 		}
-		hns3_dcb_update_tc_queue_mapping(hw, hw->tqps_num,
-						 hw->tqps_num);
+
+		/*
+		 * The number of queues configured by default cannot exceed
+		 * the maximum number of queues for a single TC.
+		 */
+		default_tqp_num = RTE_MIN(hw->rss_size_max,
+					  hw->tqps_num / hw->dcb_info.num_tc);
+		ret = hns3_dcb_update_tc_queue_mapping(hw, default_tqp_num,
+						       default_tqp_num);
+		if (ret) {
+			hns3_err(hw,
+				 "update tc queue mapping failed, ret = %d.",
+				 ret);
+			return ret;
+		}
 	}
 
 	/*
@@ -1535,7 +1653,7 @@ hns3_dcb_init(struct hns3_hw *hw)
 	 */
 	ret = hns3_dcb_init_hw(hw);
 	if (ret) {
-		hns3_err(hw, "dcb init hardware failed: %d", ret);
+		hns3_err(hw, "dcb init hardware failed, ret = %d.", ret);
 		return ret;
 	}
 
@@ -1550,14 +1668,17 @@ hns3_update_queue_map_configure(struct hns3_adapter *hns)
 	uint16_t nb_tx_q = hw->data->nb_tx_queues;
 	int ret;
 
-	hns3_dcb_update_tc_queue_mapping(hw, nb_rx_q, nb_tx_q);
-	ret = hns3_q_to_qs_map(hw);
+	ret = hns3_dcb_update_tc_queue_mapping(hw, nb_rx_q, nb_tx_q);
 	if (ret) {
-		hns3_err(hw, "failed to map nq to qs! ret = %d", ret);
+		hns3_err(hw, "failed to update tc queue mapping, ret = %d.",
+			 ret);
 		return ret;
 	}
+	ret = hns3_q_to_qs_map(hw);
+	if (ret)
+		hns3_err(hw, "failed to map nq to qs, ret = %d.", ret);
 
-	return 0;
+	return ret;
 }
 
 int
@@ -1569,10 +1690,8 @@ hns3_dcb_cfg_update(struct hns3_adapter *hns)
 
 	if ((uint32_t)mq_mode & ETH_MQ_RX_DCB_FLAG) {
 		ret = hns3_dcb_configure(hns);
-		if (ret) {
+		if (ret)
 			hns3_err(hw, "Failed to config dcb: %d", ret);
-			return ret;
-		}
 	} else {
 		/*
 		 * Update queue map without PFC configuration,

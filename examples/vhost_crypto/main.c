@@ -544,7 +544,7 @@ main(int argc, char *argv[])
 		snprintf(name, 127, "COPPOOL_%u", lo->lcore_id);
 		info->cop_pool = rte_crypto_op_pool_create(name,
 				RTE_CRYPTO_OP_TYPE_SYMMETRIC, NB_MEMPOOL_OBJS,
-				NB_CACHE_OBJS, 0,
+				NB_CACHE_OBJS, VHOST_CRYPTO_MAX_IV_LEN,
 				rte_lcore_to_socket_id(lo->lcore_id));
 
 		if (!info->cop_pool) {
@@ -588,7 +588,7 @@ main(int argc, char *argv[])
 
 		for (j = 0; j < lo->nb_sockets; j++) {
 			ret = rte_vhost_driver_register(lo->socket_files[j],
-				RTE_VHOST_USER_DEQUEUE_ZERO_COPY);
+				RTE_VHOST_USER_ASYNC_COPY);
 			if (ret < 0) {
 				RTE_LOG(ERR, USER1, "socket %s already exists\n",
 					lo->socket_files[j]);
@@ -598,7 +598,8 @@ main(int argc, char *argv[])
 			rte_vhost_driver_callback_register(lo->socket_files[j],
 				&virtio_crypto_device_ops);
 
-			ret = rte_vhost_driver_start(lo->socket_files[j]);
+			ret = rte_vhost_crypto_driver_start(
+					lo->socket_files[j]);
 			if (ret < 0)  {
 				RTE_LOG(ERR, USER1, "failed to start vhost.\n");
 				goto error_exit;

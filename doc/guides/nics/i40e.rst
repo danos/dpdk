@@ -43,6 +43,8 @@ Features of the i40e PMD are:
 - Dynamic Device Personalization (DDP)
 - Queue region configuration
 - Virtual Function Port Representors
+- Malicious Device Drive event catch and notify
+- Generic flow API
 
 Prerequisites
 -------------
@@ -58,6 +60,21 @@ Prerequisites
 - Upgrade the NVM/FW version following the `Intel® Ethernet NVM Update Tool Quick Usage Guide for Linux
   <https://www-ssl.intel.com/content/www/us/en/embedded/products/networking/nvm-update-tool-quick-linux-usage-guide.html>`_ and `Intel® Ethernet NVM Update Tool: Quick Usage Guide for EFI <https://www.intel.com/content/www/us/en/embedded/products/networking/nvm-update-tool-quick-efi-usage-guide.html>`_ if needed.
 
+- For information about supported media, please refer to this document: `Intel® Ethernet Controller X710/XXV710/XL710 Feature Support Matrix
+  <http://www.intel.com/content/dam/www/public/us/en/documents/release-notes/xl710-ethernet-controller-feature-matrix.pdf>`_.
+
+   .. Note::
+
+      * Some adapters based on the Intel(R) Ethernet Controller 700 Series only
+        support Intel Ethernet Optics modules. On these adapters, other modules are not
+        supported and will not function.
+
+      * For connections based on Intel(R) Ethernet Controller 700 Series,
+        support is dependent on your system board. Please see your vendor for details.
+
+      * In all cases Intel recommends using Intel Ethernet Optics; other modules
+        may function but are not validated by Intel. Contact Intel for supported media types.
+
 Recommended Matching List
 -------------------------
 
@@ -66,9 +83,17 @@ avoid the compatibility issues with i40e PMD. Here is the suggested matching
 list which has been tested and verified. The detailed information can refer
 to chapter Tested Platforms/Tested NICs in release notes.
 
+For X710/XL710/XXV710,
+
    +--------------+-----------------------+------------------+
    | DPDK version | Kernel driver version | Firmware version |
    +==============+=======================+==================+
+   |    20.08     |         2.12.6        |       7.30       |
+   +--------------+-----------------------+------------------+
+   |    20.05     |         2.11.27       |       7.30       |
+   +--------------+-----------------------+------------------+
+   |    20.02     |         2.10.19       |       7.20       |
+   +--------------+-----------------------+------------------+
    |    19.11     |         2.9.21        |       7.00       |
    +--------------+-----------------------+------------------+
    |    19.08     |         2.8.43        |       7.00       |
@@ -99,6 +124,30 @@ to chapter Tested Platforms/Tested NICs in release notes.
    +--------------+-----------------------+------------------+
    |    16.04     |         1.4.25        |       5.02       |
    +--------------+-----------------------+------------------+
+
+
+For X722,
+
+   +--------------+-----------------------+------------------+
+   | DPDK version | Kernel driver version | Firmware version |
+   +==============+=======================+==================+
+   |    20.08     |         2.12.6        |       4.11       |
+   +--------------+-----------------------+------------------+
+   |    20.05     |         2.11.27       |       4.11       |
+   +--------------+-----------------------+------------------+
+   |    20.02     |         2.10.19       |       4.11       |
+   +--------------+-----------------------+------------------+
+   |    19.11     |         2.9.21        |       4.10       |
+   +--------------+-----------------------+------------------+
+   |    19.08     |         2.9.21        |       4.10       |
+   +--------------+-----------------------+------------------+
+   |    19.05     |         2.7.29        |       3.33       |
+   +--------------+-----------------------+------------------+
+   |    19.02     |         2.7.26        |       3.33       |
+   +--------------+-----------------------+------------------+
+   |    18.11     |         2.4.6         |       3.33       |
+   +--------------+-----------------------+------------------+
+
 
 Pre-Installation Configuration
 ------------------------------
@@ -459,7 +508,7 @@ which is used to configure hardware by downloading a profile to support
 protocols/filters which are not supported by default. The DDP
 functionality requires a NIC firmware version of 6.0 or greater.
 
-Current implementation supports GTP-C/GTP-U/PPPoE/PPPoL2TP,
+Current implementation supports GTP-C/GTP-U/PPPoE/PPPoL2TP/ESP,
 steering can be used with rte_flow API.
 
 GTPv1 package is released, and it can be downloaded from
@@ -467,6 +516,9 @@ https://downloadcenter.intel.com/download/27587.
 
 PPPoE package is released, and it can be downloaded from
 https://downloadcenter.intel.com/download/28040.
+
+ESP-AH package is released, and it can be downloaded from
+https://downloadcenter.intel.com/download/29446.
 
 Load a profile which supports GTP and store backup profile:
 
@@ -527,6 +579,42 @@ details please refer to :doc:`../testpmd_app_ug/index`.
    testpmd> set port (port_id) queue-region flush (on|off)
    testpmd> show port (port_id) queue-region
 
+Generic flow API
+~~~~~~~~~~~~~~~~~~~
+
+- ``RSS Flow``
+
+  RSS Flow supports to set hash input set, hash function, enable hash
+  and configure queue region.
+  For example:
+  Configure queue region as queue 0, 1, 2, 3.
+
+  .. code-block:: console
+
+    testpmd> flow create 0 ingress pattern end actions rss types end \
+      queues 0 1 2 3 end / end
+
+  Enable hash and set input set for ipv4-tcp.
+
+  .. code-block:: console
+
+    testpmd> flow create 0 ingress pattern eth / ipv4 / tcp / end \
+      actions rss types ipv4-tcp l3-src-only end queues end / end
+
+  Set symmetric hash enable for flow type ipv4-tcp.
+
+  .. code-block:: console
+
+    testpmd> flow create 0 ingress pattern eth / ipv4 / tcp / end \
+      actions rss types ipv4-tcp end queues end func symmetric_toeplitz / end
+
+  Set hash function as simple xor.
+
+  .. code-block:: console
+
+    testpmd> flow create 0 ingress pattern end actions rss types end \
+      queues end func simple_xor / end
+
 Limitations or Known issues
 ---------------------------
 
@@ -581,6 +669,15 @@ Incorrect Rx statistics when packet is oversize
 When a packet is over maximum frame size, the packet is dropped.
 However, the Rx statistics, when calling `rte_eth_stats_get` incorrectly
 shows it as received.
+
+RX/TX statistics may be incorrect when register overflowed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The rx_bytes/tx_bytes statistics register is 48 bit length.
+Although this limitation is enlarged to 64 bit length on the software side,
+but there is no way to detect if the overflow occurred more than once.
+So rx_bytes/tx_bytes statistics data is correct when statistics are
+updated at least once between two overflows.
 
 VF & TC max bandwidth setting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -651,6 +748,13 @@ PMD uses I40E_GL_SWT_L2TAGCTRL to set vlan TPID. If setting TPID in port A
 with DPDK, then the configuration will also impact port B in the NIC with
 kernel driver, which don't want to use the TPID.
 So PMD reports warning to clarify what is changed by writing global register.
+
+Cloud Filter
+~~~~~~~~~~~~
+
+When programming cloud filters for IPv4/6_UDP/TCP/SCTP with SRC port only or DST port only,
+it will make any cloud filter using inner_vlan or tunnel key invalid. Default configuration will be
+recovered only by NIC core reset.
 
 High Performance of Small Packets on 40GbE NIC
 ----------------------------------------------

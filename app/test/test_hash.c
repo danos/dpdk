@@ -67,25 +67,20 @@ struct flow_key {
 	uint16_t port_src;
 	uint16_t port_dst;
 	uint8_t proto;
-} __attribute__((packed));
-
-int hash_logtype_test;
+} __rte_packed;
 
 /*
  * Hash function that always returns the same value, to easily test what
  * happens when a bucket is full.
  */
-static uint32_t pseudo_hash(__attribute__((unused)) const void *keys,
-			    __attribute__((unused)) uint32_t key_len,
-			    __attribute__((unused)) uint32_t init_val)
+static uint32_t pseudo_hash(__rte_unused const void *keys,
+			    __rte_unused uint32_t key_len,
+			    __rte_unused uint32_t init_val)
 {
 	return 3;
 }
 
-RTE_INIT(test_hash_init_log)
-{
-	hash_logtype_test = rte_log_register("test.hash");
-}
+RTE_LOG_REGISTER(hash_logtype_test, test.hash, INFO);
 
 /*
  * Print out result of unit test hash operation.
@@ -235,15 +230,9 @@ static void run_hash_func_tests(void)
 {
 	unsigned i, j, k;
 
-	for (i = 0;
-	     i < sizeof(hashtest_funcs) / sizeof(rte_hash_function);
-	     i++) {
-		for (j = 0;
-		     j < sizeof(hashtest_initvals) / sizeof(uint32_t);
-		     j++) {
-			for (k = 0;
-			     k < sizeof(hashtest_key_lens) / sizeof(uint32_t);
-			     k++) {
+	for (i = 0; i < RTE_DIM(hashtest_funcs); i++) {
+		for (j = 0; j < RTE_DIM(hashtest_initvals); j++) {
+			for (k = 0; k < RTE_DIM(hashtest_key_lens); k++) {
 				run_hash_func_test(hashtest_funcs[i],
 						hashtest_initvals[j],
 						hashtest_key_lens[k]);

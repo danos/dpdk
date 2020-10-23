@@ -14,8 +14,8 @@ General Guidelines
 ------------------
 
 #. Major ABI versions are declared no more frequently than yearly. Compatibility
-   with the major ABI version is mandatory in subsequent releases until a new
-   major ABI version is declared.
+   with the major ABI version is mandatory in subsequent releases until a
+   :ref:`new major ABI version <new_abi_version>` is declared.
 #. Major ABI versions are usually but not always declared aligned with a
    :ref:`LTS release <stable_lts_releases>`.
 #. The ABI version is managed at a project level in DPDK, and is reflected in
@@ -27,19 +27,16 @@ General Guidelines
 #. The removal of symbols is considered an :ref:`ABI breakage <abi_breakages>`,
    once approved these will form part of the next ABI version.
 #. Libraries or APIs marked as :ref:`experimental <experimental_apis>` may
-   change without constraint, as they are not considered part of an ABI version.
-   Experimental libraries have the major ABI version ``0``.
+   be changed or removed without prior notice, as they are not considered part
+   of an ABI version.
 #. Updates to the :ref:`minimum hardware requirements <hw_rqmts>`, which drop
    support for hardware which was previously supported, should be treated as an
    ABI change.
 
 .. note::
 
-   In 2019, the DPDK community stated its intention to move to ABI stable
-   releases, over a number of release cycles. This change begins with
-   maintaining ABI stability through one year of DPDK releases starting from
-   DPDK 19.11. This policy will be reviewed in 2020, with intention of
-   lengthening the stability period.
+   Please note that this policy does not currently apply to the
+   :doc:`Windows build <../windows_gsg/intro>`.
 
 What is an ABI?
 ~~~~~~~~~~~~~~~
@@ -158,6 +155,11 @@ The requirements for changing the ABI are:
    - No backward or forward compatibility is offered for API changes marked as
      ``experimental``, as described in the section on :ref:`Experimental APIs
      and Libraries <experimental_apis>`.
+
+   - In situations in which an ``experimental`` symbol has been stable for some
+     time. When promoting the symbol to become part of the next ABI version, the
+     maintainer may choose to provide an alias to the ``experimental`` tag, so
+     as not to break consuming applications.
 
 #. If a newly proposed API functionally replaces an existing one, when the new
    API becomes non-experimental, then the old one is marked with
@@ -280,6 +282,35 @@ added to the Release Notes:
   these changes. Binaries using this library built prior to ABI version 21 will
   require updating and recompilation.
 
+
+.. _new_abi_version:
+
+New ABI versions
+------------------
+
+A new ABI version may be declared aligned with a given release.
+The requirement to preserve compatibility with the previous major ABI version
+is then dropped for the duration of this release cycle.
+This is commonly known as the *ABI breakage window*,
+and some amended rules apply during this cycle:
+
+ * The requirement to preserve compatibility with the previous major ABI
+   version, as described in the section :ref:`abi_changes` does not apply.
+ * Contributors of compatibility preserving code in previous releases,
+   are now required to remove this compatibility code,
+   as described in the section :ref:`abi_changes`.
+ * Symbol versioning references to the old ABI version are updated
+   to reference the new ABI version,
+   as described in the section :ref:`deprecating_entire_abi`.
+ * Contributors of aliases to experimental in previous releases,
+   as described in section :ref:`aliasing_experimental_symbols`,
+   are now required to remove these aliases.
+ * Finally, the *ABI breakage window* is *not* permission to circumvent
+   the other aspects of the procedures to make ABI changes
+   described in :ref:`abi_changes`, that is, 3 ACKs of the requirement
+   to break the ABI and the observance of a deprecation notice
+   are still considered mandatory.
+
 .. _experimental_apis:
 
 Experimental
@@ -289,7 +320,7 @@ APIs
 ~~~~
 
 APIs marked as ``experimental`` are not considered part of an ABI version and
-may change without warning at any time. Since changes to APIs are most likely
+may be changed or removed without prior notice. Since changes to APIs are most likely
 immediately after their introduction, as users begin to take advantage of those
 new APIs and start finding issues with them, new DPDK APIs will be automatically
 marked as ``experimental`` to allow for a period of stabilization before they
@@ -316,11 +347,14 @@ not required. Though, an API should remain in experimental state for at least
 one release. Thereafter, the normal process of posting patch for review to
 mailing list can be followed.
 
+After the experimental tag has been formally removed, a tree/sub-tree maintainer
+may choose to offer an alias to the experimental tag so as not to break
+applications using the symbol. The alias is then dropped at the declaration of
+next major ABI version.
+
 Libraries
 ~~~~~~~~~
 
 Libraries marked as ``experimental`` are entirely not considered part of an ABI
-version, and may change without warning at any time. Experimental libraries
-always have a major ABI version of ``0`` to indicate they exist outside of
-:ref:`abi_versioning` , with the minor version incremented with each ABI change
-to library.
+version.
+All functions in such libraries may be changed or removed without prior notice.

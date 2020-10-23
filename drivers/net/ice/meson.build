@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright(c) 2018 Intel Corporation
 
-allow_experimental_apis = true
-
 subdir('base')
 objs = [base_objs]
 
@@ -15,8 +13,8 @@ sources = files(
 	'ice_hash.c'
 	)
 
-deps += ['hash']
-includes += include_directories('base')
+deps += ['hash', 'net', 'common_iavf']
+includes += include_directories('base', '../../common/iavf')
 
 if arch_subdir == 'x86'
 	sources += files('ice_rxtx_vec_sse.c')
@@ -24,7 +22,7 @@ if arch_subdir == 'x86'
 	# compile AVX2 version if either:
 	# a. we have AVX supported in minimum instruction set baseline
 	# b. it's not minimum instruction set, but supported by compiler
-	if dpdk_conf.has('RTE_MACHINE_CPUFLAG_AVX2')
+	if cc.get_define('__AVX2__', args: machine_args) != ''
 		sources += files('ice_rxtx_vec_avx2.c')
 	elif cc.has_argument('-mavx2')
 		ice_avx2_lib = static_library('ice_avx2_lib',
@@ -36,5 +34,9 @@ if arch_subdir == 'x86'
 		objs += ice_avx2_lib.extract_objects('ice_rxtx_vec_avx2.c')
 	endif
 endif
+
+sources += files('ice_dcf.c',
+		 'ice_dcf_ethdev.c',
+		 'ice_dcf_parent.c')
 
 install_headers('rte_pmd_ice.h')

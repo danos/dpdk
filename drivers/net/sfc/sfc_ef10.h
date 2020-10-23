@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- * Copyright (c) 2017-2018 Solarflare Communications Inc.
- * All rights reserved.
+ * Copyright(c) 2019-2020 Xilinx, Inc.
+ * Copyright(c) 2017-2019 Solarflare Communications Inc.
  *
  * This software was jointly developed between OKTET Labs (under contract
  * for Solarflare) and Solarflare Communications, Inc.
@@ -9,6 +9,8 @@
 
 #ifndef _SFC_EF10_H
 #define _SFC_EF10_H
+
+#include "sfc_debug.h"
 
 #ifdef __cplusplus
 extern "C" {

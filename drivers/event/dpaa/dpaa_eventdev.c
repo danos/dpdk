@@ -46,6 +46,7 @@
  * Eventqueue = Channel Instance
  * 1 Eventdev can have N Eventqueue
  */
+RTE_LOG_REGISTER(dpaa_logtype_eventdev, pmd.event.dpaa, NOTICE);
 
 #define DISABLE_INTR_MODE "disable_intr"
 
@@ -173,12 +174,12 @@ dpaa_event_dequeue_burst(void *port, struct rte_event ev[],
 	int ret;
 	u16 ch_id;
 	void *buffers[8];
-	u32 num_frames, i, irq = 0;
+	u32 num_frames, i;
 	uint64_t cur_ticks = 0, wait_time_ticks = 0;
 	struct dpaa_port *portal = (struct dpaa_port *)port;
 	struct rte_mbuf *mbuf;
 
-	if (unlikely(!RTE_PER_LCORE(dpaa_io))) {
+	if (unlikely(!DPAA_PER_LCORE_PORTAL)) {
 		/* Affine current thread context to a qman portal */
 		ret = rte_dpaa_portal_init((void *)0);
 		if (ret) {
@@ -222,8 +223,6 @@ dpaa_event_dequeue_burst(void *port, struct rte_event ev[],
 	do {
 		/* Lets dequeue the frames */
 		num_frames = qman_portal_dequeue(ev, nb_events, buffers);
-		if (irq)
-			irq = 0;
 		if (num_frames)
 			break;
 		cur_ticks = rte_get_timer_cycles();
@@ -250,7 +249,7 @@ dpaa_event_dequeue_burst_intr(void *port, struct rte_event ev[],
 	struct dpaa_port *portal = (struct dpaa_port *)port;
 	struct rte_mbuf *mbuf;
 
-	if (unlikely(!RTE_PER_LCORE(dpaa_io))) {
+	if (unlikely(!DPAA_PER_LCORE_PORTAL)) {
 		/* Affine current thread context to a qman portal */
 		ret = rte_dpaa_portal_init((void *)0);
 		if (ret) {
@@ -356,7 +355,8 @@ dpaa_event_dev_info_get(struct rte_eventdev *dev,
 		RTE_EVENT_DEV_CAP_DISTRIBUTED_SCHED |
 		RTE_EVENT_DEV_CAP_BURST_MODE |
 		RTE_EVENT_DEV_CAP_MULTIPLE_QUEUE_PORT |
-		RTE_EVENT_DEV_CAP_NONSEQ_MODE;
+		RTE_EVENT_DEV_CAP_NONSEQ_MODE |
+		RTE_EVENT_DEV_CAP_CARRY_FLOW_ID;
 }
 
 static int

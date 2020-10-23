@@ -10,9 +10,13 @@
 #include <rte_interrupts.h>
 #include <rte_alarm.h>
 
+#include <mlx5_malloc.h>
+
 #include "mlx5.h"
+#include "mlx5_mr.h"
 #include "mlx5_rxtx.h"
 #include "mlx5_utils.h"
+#include "rte_pmd_mlx5.h"
 
 /**
  * Stop traffic on Tx queues.
@@ -48,21 +52,45 @@ mlx5_txq_start(struct rte_eth_dev *dev)
 
 	for (i = 0; i != priv->txqs_n; ++i) {
 		struct mlx5_txq_ctrl *txq_ctrl = mlx5_txq_get(dev, i);
+		struct mlx5_txq_data *txq_data = &txq_ctrl->txq;
+		uint32_t flags = MLX5_MEM_RTE | MLX5_MEM_ZERO;
 
 		if (!txq_ctrl)
 			continue;
-		if (txq_ctrl->type == MLX5_TXQ_TYPE_HAIRPIN) {
-			txq_ctrl->obj = mlx5_txq_obj_new
-				(dev, i, MLX5_TXQ_OBJ_TYPE_DEVX_HAIRPIN);
-		} else {
+		if (txq_ctrl->type == MLX5_TXQ_TYPE_STANDARD)
 			txq_alloc_elts(txq_ctrl);
-			txq_ctrl->obj = mlx5_txq_obj_new
-				(dev, i, MLX5_TXQ_OBJ_TYPE_IBV);
-		}
+		MLX5_ASSERT(!txq_ctrl->obj);
+		txq_ctrl->obj = mlx5_malloc(flags, sizeof(struct mlx5_txq_obj),
+					    0, txq_ctrl->socket);
 		if (!txq_ctrl->obj) {
+			DRV_LOG(ERR, "Port %u Tx queue %u cannot allocate "
+				"memory resources.", dev->data->port_id,
+				txq_data->idx);
 			rte_errno = ENOMEM;
 			goto error;
 		}
+		ret = priv->obj_ops.txq_obj_new(dev, i);
+		if (ret < 0) {
+			mlx5_free(txq_ctrl->obj);
+			txq_ctrl->obj = NULL;
+			goto error;
+		}
+		if (txq_ctrl->type == MLX5_TXQ_TYPE_STANDARD) {
+			size_t size = txq_data->cqe_s * sizeof(*txq_data->fcqs);
+			txq_data->fcqs = mlx5_malloc(flags, size,
+						     RTE_CACHE_LINE_SIZE,
+						     txq_ctrl->socket);
+			if (!txq_data->fcqs) {
+				DRV_LOG(ERR, "Port %u Tx queue %u cannot "
+					"allocate memory (FCQ).",
+					dev->data->port_id, i);
+				rte_errno = ENOMEM;
+				goto error;
+			}
+		}
+		DRV_LOG(DEBUG, "Port %u txq %u updated with %p.",
+			dev->data->port_id, i, (void *)&txq_ctrl->obj);
+		LIST_INSERT_HEAD(&priv->txqsobj, txq_ctrl->obj, next);
 	}
 	return 0;
 error:
@@ -105,54 +133,53 @@ mlx5_rxq_start(struct rte_eth_dev *dev)
 	struct mlx5_priv *priv = dev->data->dev_private;
 	unsigned int i;
 	int ret = 0;
-	enum mlx5_rxq_obj_type obj_type = MLX5_RXQ_OBJ_TYPE_IBV;
-	struct mlx5_rxq_data *rxq = NULL;
 
-	for (i = 0; i < priv->rxqs_n; ++i) {
-		rxq = (*priv->rxqs)[i];
-
-		if (rxq && rxq->lro) {
-			obj_type =  MLX5_RXQ_OBJ_TYPE_DEVX_RQ;
-			break;
-		}
-	}
 	/* Allocate/reuse/resize mempool for Multi-Packet RQ. */
 	if (mlx5_mprq_alloc_mp(dev)) {
 		/* Should not release Rx queues but return immediately. */
 		return -rte_errno;
 	}
+	DRV_LOG(DEBUG, "Port %u device_attr.max_qp_wr is %d.",
+		dev->data->port_id, priv->sh->device_attr.max_qp_wr);
+	DRV_LOG(DEBUG, "Port %u device_attr.max_sge is %d.",
+		dev->data->port_id, priv->sh->device_attr.max_sge);
 	for (i = 0; i != priv->rxqs_n; ++i) {
 		struct mlx5_rxq_ctrl *rxq_ctrl = mlx5_rxq_get(dev, i);
 		struct rte_mempool *mp;
 
 		if (!rxq_ctrl)
 			continue;
-		if (rxq_ctrl->type == MLX5_RXQ_TYPE_HAIRPIN) {
-			rxq_ctrl->obj = mlx5_rxq_obj_new
-				(dev, i, MLX5_RXQ_OBJ_TYPE_DEVX_HAIRPIN);
-			if (!rxq_ctrl->obj)
+		if (rxq_ctrl->type == MLX5_RXQ_TYPE_STANDARD) {
+			/* Pre-register Rx mempool. */
+			mp = mlx5_rxq_mprq_enabled(&rxq_ctrl->rxq) ?
+			     rxq_ctrl->rxq.mprq_mp : rxq_ctrl->rxq.mp;
+			DRV_LOG(DEBUG, "Port %u Rx queue %u registering mp %s"
+				" having %u chunks.", dev->data->port_id,
+				rxq_ctrl->rxq.idx, mp->name, mp->nb_mem_chunks);
+			mlx5_mr_update_mp(dev, &rxq_ctrl->rxq.mr_ctrl, mp);
+			ret = rxq_alloc_elts(rxq_ctrl);
+			if (ret)
 				goto error;
-			continue;
 		}
-		/* Pre-register Rx mempool. */
-		mp = mlx5_rxq_mprq_enabled(&rxq_ctrl->rxq) ?
-		     rxq_ctrl->rxq.mprq_mp : rxq_ctrl->rxq.mp;
-		DRV_LOG(DEBUG,
-			"port %u Rx queue %u registering"
-			" mp %s having %u chunks",
-			dev->data->port_id, rxq_ctrl->rxq.idx,
-			mp->name, mp->nb_mem_chunks);
-		mlx5_mr_update_mp(dev, &rxq_ctrl->rxq.mr_ctrl, mp);
-		ret = rxq_alloc_elts(rxq_ctrl);
-		if (ret)
+		MLX5_ASSERT(!rxq_ctrl->obj);
+		rxq_ctrl->obj = mlx5_malloc(MLX5_MEM_RTE | MLX5_MEM_ZERO,
+					    sizeof(*rxq_ctrl->obj), 0,
+					    rxq_ctrl->socket);
+		if (!rxq_ctrl->obj) {
+			DRV_LOG(ERR,
+				"Port %u Rx queue %u can't allocate resources.",
+				dev->data->port_id, (*priv->rxqs)[i]->idx);
+			rte_errno = ENOMEM;
 			goto error;
-		rxq_ctrl->obj = mlx5_rxq_obj_new(dev, i, obj_type);
-		if (!rxq_ctrl->obj)
+		}
+		ret = priv->obj_ops.rxq_obj_new(dev, i);
+		if (ret) {
+			mlx5_free(rxq_ctrl->obj);
 			goto error;
-		if (obj_type == MLX5_RXQ_OBJ_TYPE_IBV)
-			rxq_ctrl->wqn = rxq_ctrl->obj->wq->wq_num;
-		else if (obj_type == MLX5_RXQ_OBJ_TYPE_DEVX_RQ)
-			rxq_ctrl->wqn = rxq_ctrl->obj->rq->id;
+		}
+		DRV_LOG(DEBUG, "Port %u rxq %u updated with %p.",
+			dev->data->port_id, i, (void *)&rxq_ctrl->obj);
+		LIST_INSERT_HEAD(&priv->rxqsobj, rxq_ctrl->obj, next);
 	}
 	return 0;
 error:
@@ -270,8 +297,15 @@ mlx5_dev_start(struct rte_eth_dev *dev)
 {
 	struct mlx5_priv *priv = dev->data->dev_private;
 	int ret;
+	int fine_inline;
 
 	DRV_LOG(DEBUG, "port %u starting device", dev->data->port_id);
+	fine_inline = rte_mbuf_dynflag_lookup
+		(RTE_PMD_MLX5_FINE_GRANULARITY_INLINE, NULL);
+	if (fine_inline > 0)
+		rte_net_mlx5_dynf_inline_mask = 1UL << fine_inline;
+	else
+		rte_net_mlx5_dynf_inline_mask = 0;
 	if (dev->data->nb_rx_queues > 0) {
 		ret = mlx5_dev_configure_rss_reta(dev);
 		if (ret) {
@@ -280,26 +314,31 @@ mlx5_dev_start(struct rte_eth_dev *dev)
 			return -rte_errno;
 		}
 	}
+	ret = mlx5_txpp_start(dev);
+	if (ret) {
+		DRV_LOG(ERR, "port %u Tx packet pacing init failed: %s",
+			dev->data->port_id, strerror(rte_errno));
+		goto error;
+	}
 	ret = mlx5_txq_start(dev);
 	if (ret) {
 		DRV_LOG(ERR, "port %u Tx queue allocation failed: %s",
 			dev->data->port_id, strerror(rte_errno));
-		return -rte_errno;
+		goto error;
 	}
 	ret = mlx5_rxq_start(dev);
 	if (ret) {
 		DRV_LOG(ERR, "port %u Rx queue allocation failed: %s",
 			dev->data->port_id, strerror(rte_errno));
-		mlx5_txq_stop(dev);
-		return -rte_errno;
+		goto error;
 	}
 	ret = mlx5_hairpin_bind(dev);
 	if (ret) {
 		DRV_LOG(ERR, "port %u hairpin binding failed: %s",
 			dev->data->port_id, strerror(rte_errno));
-		mlx5_txq_stop(dev);
-		return -rte_errno;
+		goto error;
 	}
+	/* Set started flag here for the following steps like control flow. */
 	dev->data->dev_started = 1;
 	ret = mlx5_rx_intr_vec_enable(dev);
 	if (ret) {
@@ -307,36 +346,57 @@ mlx5_dev_start(struct rte_eth_dev *dev)
 			dev->data->port_id);
 		goto error;
 	}
-	mlx5_stats_init(dev);
+	mlx5_os_stats_init(dev);
 	ret = mlx5_traffic_enable(dev);
 	if (ret) {
-		DRV_LOG(DEBUG, "port %u failed to set defaults flows",
+		DRV_LOG(ERR, "port %u failed to set defaults flows",
 			dev->data->port_id);
 		goto error;
 	}
-	/* Set a mask and offset of dynamic metadata flows into Rx queues*/
+	/* Set a mask and offset of dynamic metadata flows into Rx queues. */
 	mlx5_flow_rxq_dynf_metadata_set(dev);
-	ret = mlx5_flow_start(dev, &priv->flows);
+	/* Set flags and context to convert Rx timestamps. */
+	mlx5_rxq_timestamp_set(dev);
+	/* Set a mask and offset of scheduling on timestamp into Tx queues. */
+	mlx5_txq_dynf_timestamp_set(dev);
+	/*
+	 * In non-cached mode, it only needs to start the default mreg copy
+	 * action and no flow created by application exists anymore.
+	 * But it is worth wrapping the interface for further usage.
+	 */
+	ret = mlx5_flow_start_default(dev);
 	if (ret) {
-		DRV_LOG(DEBUG, "port %u failed to set flows",
-			dev->data->port_id);
+		DRV_LOG(DEBUG, "port %u failed to start default actions: %s",
+			dev->data->port_id, strerror(rte_errno));
 		goto error;
 	}
 	rte_wmb();
 	dev->tx_pkt_burst = mlx5_select_tx_function(dev);
 	dev->rx_pkt_burst = mlx5_select_rx_function(dev);
 	/* Enable datapath on secondary process. */
-	mlx5_mp_req_start_rxtx(dev);
-	mlx5_dev_interrupt_handler_install(dev);
+	mlx5_mp_os_req_start_rxtx(dev);
+	if (priv->sh->intr_handle.fd >= 0) {
+		priv->sh->port[priv->dev_port - 1].ih_port_id =
+					(uint32_t)dev->data->port_id;
+	} else {
+		DRV_LOG(INFO, "port %u starts without LSC and RMV interrupts.",
+			dev->data->port_id);
+		dev->data->dev_conf.intr_conf.lsc = 0;
+		dev->data->dev_conf.intr_conf.rmv = 0;
+	}
+	if (priv->sh->intr_handle_devx.fd >= 0)
+		priv->sh->port[priv->dev_port - 1].devx_ih_port_id =
+					(uint32_t)dev->data->port_id;
 	return 0;
 error:
 	ret = rte_errno; /* Save rte_errno before cleanup. */
 	/* Rollback. */
 	dev->data->dev_started = 0;
-	mlx5_flow_stop(dev, &priv->flows);
+	mlx5_flow_stop_default(dev);
 	mlx5_traffic_disable(dev);
 	mlx5_txq_stop(dev);
 	mlx5_rxq_stop(dev);
+	mlx5_txpp_stop(dev); /* Stop last. */
 	rte_errno = ret; /* Restore rte_errno. */
 	return -rte_errno;
 }
@@ -349,7 +409,7 @@ error:
  * @param dev
  *   Pointer to Ethernet device structure.
  */
-void
+int
 mlx5_dev_stop(struct rte_eth_dev *dev)
 {
 	struct mlx5_priv *priv = dev->data->dev_private;
@@ -360,15 +420,22 @@ mlx5_dev_stop(struct rte_eth_dev *dev)
 	dev->tx_pkt_burst = removed_tx_burst;
 	rte_wmb();
 	/* Disable datapath on secondary process. */
-	mlx5_mp_req_stop_rxtx(dev);
+	mlx5_mp_os_req_stop_rxtx(dev);
 	usleep(1000 * priv->rxqs_n);
 	DRV_LOG(DEBUG, "port %u stopping device", dev->data->port_id);
-	mlx5_flow_stop(dev, &priv->flows);
+	mlx5_flow_stop_default(dev);
+	/* Control flows for default traffic can be removed firstly. */
 	mlx5_traffic_disable(dev);
+	/* All RX queue flags will be cleared in the flush interface. */
+	mlx5_flow_list_flush(dev, &priv->flows, true);
 	mlx5_rx_intr_vec_disable(dev);
-	mlx5_dev_interrupt_handler_uninstall(dev);
+	priv->sh->port[priv->dev_port - 1].ih_port_id = RTE_MAX_ETHPORTS;
+	priv->sh->port[priv->dev_port - 1].devx_ih_port_id = RTE_MAX_ETHPORTS;
 	mlx5_txq_stop(dev);
 	mlx5_rxq_stop(dev);
+	mlx5_txpp_stop(dev);
+
+	return 0;
 }
 
 /**
@@ -434,6 +501,15 @@ mlx5_traffic_enable(struct rte_eth_dev *dev)
 			DRV_LOG(INFO, "port %u FDB default rule cannot be"
 				" configured - only Eswitch group 0 flows are"
 				" supported.", dev->data->port_id);
+	}
+	if (!priv->config.lacp_by_user && priv->pf_bond >= 0) {
+		ret = mlx5_flow_lacp_miss(dev);
+		if (ret)
+			DRV_LOG(INFO, "port %u LACP rule cannot be created - "
+				"forward LACP to kernel.", dev->data->port_id);
+		else
+			DRV_LOG(INFO, "LACP traffic will be missed in port %u."
+				, dev->data->port_id);
 	}
 	if (priv->isolated)
 		return 0;
@@ -523,7 +599,7 @@ mlx5_traffic_enable(struct rte_eth_dev *dev)
 	return 0;
 error:
 	ret = rte_errno; /* Save rte_errno before cleanup. */
-	mlx5_flow_list_flush(dev, &priv->ctrl_flows);
+	mlx5_flow_list_flush(dev, &priv->ctrl_flows, false);
 	rte_errno = ret; /* Restore rte_errno. */
 	return -rte_errno;
 }
@@ -540,7 +616,7 @@ mlx5_traffic_disable(struct rte_eth_dev *dev)
 {
 	struct mlx5_priv *priv = dev->data->dev_private;
 
-	mlx5_flow_list_flush(dev, &priv->ctrl_flows);
+	mlx5_flow_list_flush(dev, &priv->ctrl_flows, false);
 }
 
 /**

@@ -99,7 +99,6 @@ __hn_nvs_execute(struct hn_data *hv,
 	/* Silently drop received packets while waiting for response */
 	if (hdr->type == NVS_TYPE_RNDIS) {
 		hn_nvs_ack_rxbuf(chan, xactid);
-		--hv->rxbuf_outstanding;
 		goto retry;
 	}
 
@@ -224,9 +223,15 @@ hn_nvs_conn_rxbuf(struct hn_data *hv)
 		    resp.nvs_sect[0].slotcnt);
 	hv->rxbuf_section_cnt = resp.nvs_sect[0].slotcnt;
 
-	hv->rxbuf_info = rte_calloc("HN_RXBUF_INFO", hv->rxbuf_section_cnt,
-				    sizeof(*hv->rxbuf_info), RTE_CACHE_LINE_SIZE);
-	if (!hv->rxbuf_info) {
+	/*
+	 * Pimary queue's rxbuf_info is not allocated at creation time.
+	 * Now we can allocate it after we figure out the slotcnt.
+	 */
+	hv->primary->rxbuf_info = rte_calloc("HN_RXBUF_INFO",
+			hv->rxbuf_section_cnt,
+			sizeof(*hv->primary->rxbuf_info),
+			RTE_CACHE_LINE_SIZE);
+	if (!hv->primary->rxbuf_info) {
 		PMD_DRV_LOG(ERR,
 			    "could not allocate rxbuf info");
 		return -ENOMEM;
@@ -256,7 +261,6 @@ hn_nvs_disconn_rxbuf(struct hn_data *hv)
 			    error);
 	}
 
-	rte_free(hv->rxbuf_info);
 	/*
 	 * Linger long enough for NVS to disconnect RXBUF.
 	 */

@@ -29,18 +29,25 @@
 
 #define HNS3_FD_AD_DATA_S		32
 #define HNS3_FD_AD_DROP_B		0
-#define HNS3_FD_AD_DIRECT_QID_B	1
+#define HNS3_FD_AD_DIRECT_QID_B		1
 #define HNS3_FD_AD_QID_S		2
-#define HNS3_FD_AD_QID_M		GENMASK(12, 2)
+#define HNS3_FD_AD_QID_M		GENMASK(11, 2)
 #define HNS3_FD_AD_USE_COUNTER_B	12
 #define HNS3_FD_AD_COUNTER_NUM_S	13
-#define HNS3_FD_AD_COUNTER_NUM_M	GENMASK(20, 13)
+#define HNS3_FD_AD_COUNTER_NUM_M	GENMASK(19, 13)
 #define HNS3_FD_AD_NXT_STEP_B		20
 #define HNS3_FD_AD_NXT_KEY_S		21
-#define HNS3_FD_AD_NXT_KEY_M		GENMASK(26, 21)
-#define HNS3_FD_AD_WR_RULE_ID_B	0
+#define HNS3_FD_AD_NXT_KEY_M		GENMASK(25, 21)
+#define HNS3_FD_AD_WR_RULE_ID_B		0
 #define HNS3_FD_AD_RULE_ID_S		1
-#define HNS3_FD_AD_RULE_ID_M		GENMASK(13, 1)
+#define HNS3_FD_AD_RULE_ID_M		GENMASK(12, 1)
+#define HNS3_FD_AD_QUEUE_REGION_EN_B	16
+#define HNS3_FD_AD_QUEUE_REGION_SIZE_S	17
+#define HNS3_FD_AD_QUEUE_REGION_SIZE_M	GENMASK(20, 17)
+#define HNS3_FD_AD_COUNTER_HIGH_BIT	7
+#define HNS3_FD_AD_COUNTER_HIGH_BIT_B	26
+#define HNS3_FD_AD_QUEUE_ID_HIGH_BIT	10
+#define HNS3_FD_AD_QUEUE_ID_HIGH_BIT_B	21
 
 enum HNS3_PORT_TYPE {
 	HOST_PORT,
@@ -120,7 +127,6 @@ static const struct key_info tuple_key_info[] = {
 	{INNER_SCTP_TAG, 32},
 };
 
-#define HNS3_BITS_PER_BYTE	8
 #define MAX_KEY_LENGTH		400
 #define MAX_200B_KEY_LENGTH	200
 #define MAX_META_DATA_LENGTH	16
@@ -424,10 +430,22 @@ static int hns3_fd_ad_config(struct hns3_hw *hw, int loc,
 		     action->write_rule_id_to_bd);
 	hns3_set_field(ad_data, HNS3_FD_AD_RULE_ID_M, HNS3_FD_AD_RULE_ID_S,
 		       action->rule_id);
+	if (action->nb_queues > 1) {
+		hns3_set_bit(ad_data, HNS3_FD_AD_QUEUE_REGION_EN_B, 1);
+		hns3_set_field(ad_data, HNS3_FD_AD_QUEUE_REGION_SIZE_M,
+			       HNS3_FD_AD_QUEUE_REGION_SIZE_S,
+			       rte_log2_u32(action->nb_queues));
+	}
+	/* set extend bit if counter_id is in [128 ~ 255] */
+	if (action->counter_id & BIT(HNS3_FD_AD_COUNTER_HIGH_BIT))
+		hns3_set_bit(ad_data, HNS3_FD_AD_COUNTER_HIGH_BIT_B, 1);
+	/* set extend bit if queue id > 1024 */
+	if (action->queue_id & BIT(HNS3_FD_AD_QUEUE_ID_HIGH_BIT))
+		hns3_set_bit(ad_data, HNS3_FD_AD_QUEUE_ID_HIGH_BIT_B, 1);
 	ad_data <<= HNS3_FD_AD_DATA_S;
 	hns3_set_bit(ad_data, HNS3_FD_AD_DROP_B, action->drop_packet);
-	hns3_set_bit(ad_data, HNS3_FD_AD_DIRECT_QID_B,
-		     action->forward_to_direct_queue);
+	if (action->nb_queues == 1)
+		hns3_set_bit(ad_data, HNS3_FD_AD_DIRECT_QID_B, 1);
 	hns3_set_field(ad_data, HNS3_FD_AD_QID_M, HNS3_FD_AD_QID_S,
 		       action->queue_id);
 	hns3_set_bit(ad_data, HNS3_FD_AD_USE_COUNTER_B, action->use_counter);
@@ -435,7 +453,7 @@ static int hns3_fd_ad_config(struct hns3_hw *hw, int loc,
 		       HNS3_FD_AD_COUNTER_NUM_S, action->counter_id);
 	hns3_set_bit(ad_data, HNS3_FD_AD_NXT_STEP_B, action->use_next_stage);
 	hns3_set_field(ad_data, HNS3_FD_AD_NXT_KEY_M, HNS3_FD_AD_NXT_KEY_S,
-		       action->counter_id);
+		       action->next_input_key);
 
 	req->ad_data = rte_cpu_to_le_64(ad_data);
 	ret = hns3_cmd_send(hw, &desc, 1);
@@ -521,7 +539,8 @@ static inline void hns3_fd_convert_int32(uint32_t key, uint32_t mask,
 	memcpy(val_y, &tmp_y_l, sizeof(tmp_y_l));
 }
 
-static bool hns3_fd_convert_tuple(uint32_t tuple, uint8_t *key_x,
+static bool hns3_fd_convert_tuple(struct hns3_hw *hw,
+				  uint32_t tuple, uint8_t *key_x,
 				  uint8_t *key_y, struct hns3_fdir_rule *rule)
 {
 	struct hns3_fdir_key_conf *key_conf;
@@ -598,6 +617,9 @@ static bool hns3_fd_convert_tuple(uint32_t tuple, uint8_t *key_x,
 		calc_y(*key_y, key_conf->spec.ip_proto,
 		       key_conf->mask.ip_proto);
 		break;
+	default:
+		hns3_warn(hw, "not support tuple of (%d)", tuple);
+		break;
 	}
 	return true;
 }
@@ -619,7 +641,7 @@ static void hns3_fd_convert_meta_data(struct hns3_fd_key_cfg *cfg,
 				      uint8_t *key_x, uint8_t *key_y)
 {
 	uint16_t meta_data = 0;
-	uint16_t port_number;
+	uint32_t port_number;
 	uint8_t cur_pos = 0;
 	uint8_t tuple_size;
 	uint8_t shift_bits;
@@ -637,7 +659,7 @@ static void hns3_fd_convert_meta_data(struct hns3_fd_key_cfg *cfg,
 				     rule->key_conf.spec.tunnel_type ? 1 : 0);
 			cur_pos += tuple_size;
 		} else if (i == VLAN_NUMBER) {
-			uint8_t vlan_tag;
+			uint32_t vlan_tag;
 			uint8_t vlan_num;
 			if (rule->key_conf.spec.tunnel_type == 0)
 				vlan_num = rule->key_conf.vlan_num;
@@ -686,8 +708,8 @@ static int hns3_config_key(struct hns3_adapter *hns,
 	struct hns3_fd_key_cfg *key_cfg;
 	uint8_t *cur_key_x;
 	uint8_t *cur_key_y;
-	uint8_t key_x[MAX_KEY_BYTES] __attribute__((aligned(4)));
-	uint8_t key_y[MAX_KEY_BYTES] __attribute__((aligned(4)));
+	uint8_t key_x[MAX_KEY_BYTES] __rte_aligned(4);
+	uint8_t key_y[MAX_KEY_BYTES] __rte_aligned(4);
 	uint8_t vf_id = rule->vf_id;
 	uint8_t meta_data_region;
 	uint8_t tuple_size;
@@ -705,7 +727,7 @@ static int hns3_config_key(struct hns3_adapter *hns,
 
 		tuple_size = tuple_key_info[i].key_length / HNS3_BITS_PER_BYTE;
 		if (key_cfg->tuple_active & BIT(i)) {
-			tuple_valid = hns3_fd_convert_tuple(i, cur_key_x,
+			tuple_valid = hns3_fd_convert_tuple(hw, i, cur_key_x,
 							    cur_key_y, rule);
 			if (tuple_valid) {
 				cur_key_x += tuple_size;
@@ -743,12 +765,12 @@ static int hns3_config_action(struct hns3_hw *hw, struct hns3_fdir_rule *rule)
 
 	if (rule->action == HNS3_FD_ACTION_DROP_PACKET) {
 		ad_data.drop_packet = true;
-		ad_data.forward_to_direct_queue = false;
 		ad_data.queue_id = 0;
+		ad_data.nb_queues = 0;
 	} else {
 		ad_data.drop_packet = false;
-		ad_data.forward_to_direct_queue = true;
 		ad_data.queue_id = rule->queue_id;
+		ad_data.nb_queues = rule->nb_queues;
 	}
 
 	if (unlikely(rule->flags & HNS3_RULE_FLAG_COUNTER)) {
@@ -893,7 +915,7 @@ static int hns3_insert_fdir_filter(struct hns3_hw *hw,
 	if (ret < 0) {
 		rte_spinlock_unlock(&fdir_info->flows_lock);
 		hns3_err(hw, "Hash table full? err:%d(%s)!", ret,
-			 strerror(ret));
+			 strerror(-ret));
 		return ret;
 	}
 
@@ -945,12 +967,12 @@ int hns3_fdir_filter_program(struct hns3_adapter *hns,
 					  false);
 		if (ret)
 			hns3_err(hw, "Failed to delete fdir: %d src_ip:%x "
-				 "dst_ip:%x src_port:%d dst_port:%d",
+				 "dst_ip:%x src_port:%d dst_port:%d ret = %d",
 				 rule->location,
 				 rule->key_conf.spec.src_ip[IP_ADDR_KEY_ID],
 				 rule->key_conf.spec.dst_ip[IP_ADDR_KEY_ID],
 				 rule->key_conf.spec.src_port,
-				 rule->key_conf.spec.dst_port);
+				 rule->key_conf.spec.dst_port, ret);
 		else
 			hns3_remove_fdir_filter(hw, fdir_info, &rule->key_conf);
 
@@ -986,12 +1008,12 @@ int hns3_fdir_filter_program(struct hns3_adapter *hns,
 	rte_spinlock_unlock(&fdir_info->flows_lock);
 	if (ret) {
 		hns3_err(hw, "Failed to config fdir: %d src_ip:%x dst_ip:%x "
-			 "src_port:%d dst_port:%d",
+			 "src_port:%d dst_port:%d ret = %d",
 			 rule->location,
 			 rule->key_conf.spec.src_ip[IP_ADDR_KEY_ID],
 			 rule->key_conf.spec.dst_ip[IP_ADDR_KEY_ID],
 			 rule->key_conf.spec.src_port,
-			 rule->key_conf.spec.dst_port);
+			 rule->key_conf.spec.dst_port, ret);
 		(void)hns3_remove_fdir_filter(hw, fdir_info, &rule->key_conf);
 	}
 
@@ -1023,7 +1045,7 @@ int hns3_clear_all_fdir_filter(struct hns3_adapter *hns)
 	}
 
 	if (ret) {
-		hns3_err(hw, "Fail to delete FDIR filter!");
+		hns3_err(hw, "Fail to delete FDIR filter, ret = %d", ret);
 		ret = -EIO;
 	}
 	return ret;
@@ -1050,7 +1072,7 @@ int hns3_restore_all_fdir_filter(struct hns3_adapter *hns)
 	}
 
 	if (err) {
-		hns3_err(hw, "Fail to restore FDIR filter!");
+		hns3_err(hw, "Fail to restore FDIR filter, ret = %d", ret);
 		return -EIO;
 	}
 	return 0;

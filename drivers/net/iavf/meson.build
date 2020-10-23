@@ -3,15 +3,16 @@
 
 cflags += ['-Wno-strict-aliasing']
 
-allow_experimental_apis = true
-
-subdir('base')
-objs = [base_objs]
+includes += include_directories('../../common/iavf')
+deps += ['common_iavf']
 
 sources = files(
 	'iavf_ethdev.c',
 	'iavf_rxtx.c',
 	'iavf_vchnl.c',
+	'iavf_generic_flow.c',
+	'iavf_fdir.c',
+	'iavf_hash.c',
 )
 
 if arch_subdir == 'x86'
@@ -20,7 +21,7 @@ if arch_subdir == 'x86'
 	# compile AVX2 version if either:
 	# a. we have AVX supported in minimum instruction set baseline
 	# b. it's not minimum instruction set, but supported by compiler
-	if dpdk_conf.has('RTE_MACHINE_CPUFLAG_AVX2')
+	if cc.get_define('__AVX2__', args: machine_args) != ''
 		cflags += ['-DCC_AVX2_SUPPORT']
 		sources += files('iavf_rxtx_vec_avx2.c')
 	elif cc.has_argument('-mavx2')

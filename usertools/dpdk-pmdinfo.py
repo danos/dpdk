@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright(c) 2016  Neil Horman <nhorman@tuxdriver.com>
 
@@ -7,8 +7,6 @@
 # Utility to dump PMD_INFO_STRING support from an object file
 #
 # -------------------------------------------------------------------------
-from __future__ import print_function
-from __future__ import unicode_literals
 import json
 import io
 import os
@@ -28,7 +26,6 @@ raw_output = False
 pcidb = None
 
 # ===========================================
-
 
 class Vendor:
     """
