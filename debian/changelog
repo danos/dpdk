@@ -1,3 +1,9 @@
+dpdk (20.11~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate 20.11~rc1
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 23 Oct 2020 08:20:40 +0200
+
 dpdk (20.08-1) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
