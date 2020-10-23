@@ -7,7 +7,7 @@
 import re
 import sys
 
-from deb822 import Deb822
+from debian.deb822 import Deb822
 
 gOldVersion = None
 gNewVersion = None
