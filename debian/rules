@@ -109,7 +109,6 @@ override_dh_auto_clean:
 	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
 		debian/control.modules debian/VERSION
 	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
-	rm -f debian/dpdk-igb-uio-dkms.dkms
 	rm -f doc/guides/compressdevs/overview_feature_table.txt \
 		doc/guides/cryptodevs/overview_aead_table.txt \
 		doc/guides/cryptodevs/overview_asym_table.txt \
@@ -142,8 +141,6 @@ override_dh_auto_install-indep:
 
 override_dh_auto_install-arch:
 	dh_auto_install
-	# have the DKMS build include the correct per-arch directory
-	sed "s/@@DEB_HOST_MULTIARCH@@/$(DEB_HOST_MULTIARCH)/g" debian/dpdk-igb-uio-dkms.dkms.in > debian/dpdk-igb-uio-dkms.dkms
 	# Package(s): libdpdk-<NAME><VER> (bare runtime libs and PMDs)
 	# if lib names end in a number, insert a "-"
 	# if libraries are fully experimental set zero as package name suffix, otherwise DPDK_ABI
@@ -165,9 +162,6 @@ override_dh_auto_install-arch:
 	    dh_install -p $${PKG} usr/lib/$(DEB_HOST_MULTIARCH)/*/*/$${LIBF}; \
 	  fi; \
 	done
-	# Package: dpdk-igb-uio-dkms
-	dh_install -p dpdk-igb-uio-dkms kernel/linux/igb_uio/* \
-		usr/src/dpdk-igb-uio-$(DEB_VERSION_UPSTREAM)
 ifneq (,$(KVERS))
 	# Package: dpdk-modules-<kernel version>
 	dh_install -p dpdk-modules-$(KVERS) lib/modules
