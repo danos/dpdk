@@ -88,7 +88,7 @@ build:
 endif
 
 %:
-	dh $@ --with python3,dkms,systemd --buildsystem=meson
+	dh $@ --with python3,dkms --buildsystem=meson
 
 override_dh_gencontrol:
 	dh_gencontrol
