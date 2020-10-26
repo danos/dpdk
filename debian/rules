@@ -96,9 +96,20 @@ override_dh_gencontrol:
 	# so we need to run gencontrol for libdpdk-dev after.
 	# The list of libraries and PMDs is everchanging, so generate the dependency
 	# list for libdpdk-dev to avoid having to maintain it manually.
-	# Same for the recommends list for dpdk, were we want the PMDs and the mempools.
-	dh_gencontrol -p libdpdk-dev -- -V"librte:Depends=`grep -E 'librte-*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
-	dh_gencontrol -p dpdk -- -V"librte:Suggests=`grep -E 'librte-(pmd|mempool).*' ./debian/files | grep -v dbgsym | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	# Various meta packages help users to gain a granular access per lib-subtype.
+	# The recommends list for dpdk has more common libs, all full meta categories
+	# are listed as suggests.
+	dh_gencontrol -p libdpdk-dev          -- -V"librte:All=`grep      -E 'librte-*'           ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-all      -- -V"librte:All=`grep      -E 'librte-*'           ./debian/files | grep -v dbgsym | grep -v 'librte-meta-' | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-baseband -- -V"librte:Baseband=`grep -E 'librte-baseband-.*' ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-bus      -- -V"librte:Bus=`grep      -E 'librte-bus-.*'      ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-compress -- -V"librte:Compress=`grep -E 'librte-compress-.*' ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-crypto   -- -V"librte:Crypto=`grep   -E 'librte-crypto-.*'   ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-event    -- -V"librte:Event=`grep    -E 'librte-event-.*'    ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-mempool  -- -V"librte:Mempool=`grep  -E 'librte-mempool-.*'  ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-net      -- -V"librte:Net=`grep      -E 'librte-net-.*'      ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-raw      -- -V"librte:Raw=`grep      -E 'librte-raw-.*'      ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
+	dh_gencontrol -p librte-meta-allpmds -- -V"librte:Allpmds=`for pmd in $$(find -type d -wholename './debian/librte-*dpdk/pmds-*'); do awk -v "ver=$$(dpkg-parsechangelog --show-field Version)" '/^Package:/ {printf("%s (= %s), \n",$$2,ver)}' "$${pmd}/../../../../../DEBIAN/control"; done | LC_ALL=C sort --stable | xargs`"
 ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
 	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
 		-v`cat debian/VERSION` \
