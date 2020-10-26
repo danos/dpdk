@@ -1,3 +1,6 @@
-librte_pmd_octeontx2_crypto.so.21 librte-pmd-octeontx2-crypto21 #MINVER#
-#MISSING: 20.08# DPDK_18.11@DPDK_20.0 20.0
- DPDK_20.0@DPDK_20.0 19.11
+librte_crypto_octeontx2.so.21 librte-crypto-octeontx2-21 #MINVER#
+ DPDK_21@DPDK_21 20.11~rc1
+ INTERNAL@INTERNAL 20.11~rc1
+ otx2_cpt_af_reg_read@INTERNAL 20.11~rc1
+ otx2_cpt_af_reg_write@INTERNAL 20.11~rc1
+ otx2_cryptodev_driver_id@INTERNAL 20.11~rc1

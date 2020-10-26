@@ -1,3 +1,3 @@
 librte_mempool_ring.so.21 librte-mempool-ring21 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
+ DPDK_21@DPDK_21 20.11~rc1
 # INFO: this library exports no symbols, it is one of the drivers for mempool

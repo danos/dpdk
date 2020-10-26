@@ -1,204 +1,102 @@
 librte_bus_fslmc.so.21 librte-bus-fslmc21 #MINVER#
-#MISSING: 20.08# DPDK_20.0@DPDK_20.0 19.11
  EXPERIMENTAL@EXPERIMENTAL 19.08
  INTERNAL@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_affine_qbman_ethrx_swp@DPDK_20.0 19.11
  dpaa2_affine_qbman_ethrx_swp@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_affine_qbman_swp@DPDK_20.0 19.11
  dpaa2_affine_qbman_swp@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_alloc_dpbp_dev@DPDK_20.0 19.11
  dpaa2_alloc_dpbp_dev@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_alloc_dq_storage@DPDK_20.0 19.11
  dpaa2_alloc_dq_storage@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_dpbp_supported@DPDK_20.0 19.11
  dpaa2_dpbp_supported@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_dqrr_size@DPDK_20.0 19.11
  dpaa2_dqrr_size@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_eqcr_size@DPDK_20.0 19.11
  dpaa2_eqcr_size@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_free_dpbp_dev@DPDK_20.0 19.11
  dpaa2_free_dpbp_dev@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_free_dq_storage@DPDK_20.0 19.11
  dpaa2_free_dq_storage@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_free_eq_descriptors@DPDK_20.0 19.11
  dpaa2_free_eq_descriptors@INTERNAL 20.08
  dpaa2_get_mcp_ptr@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_io_portal@DPDK_20.0 19.11
  dpaa2_io_portal@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_svr_family@DPDK_20.0 19.11
  dpaa2_svr_family@INTERNAL 20.08
-#MISSING: 20.08# dpaa2_virt_mode@DPDK_20.0 19.11
  dpaa2_virt_mode@INTERNAL 20.08
-#MISSING: 20.08# dpbp_disable@DPDK_20.0 19.11
  dpbp_disable@INTERNAL 20.08
-#MISSING: 20.08# dpbp_enable@DPDK_20.0 19.11
  dpbp_enable@INTERNAL 20.08
-#MISSING: 20.08# dpbp_get_attributes@DPDK_20.0 19.11
  dpbp_get_attributes@INTERNAL 20.08
-#MISSING: 20.08# dpbp_get_num_free_bufs@DPDK_20.0 19.11
  dpbp_get_num_free_bufs@INTERNAL 20.08
-#MISSING: 20.08# dpbp_open@DPDK_20.0 19.11
  dpbp_open@INTERNAL 20.08
-#MISSING: 20.08# dpbp_reset@DPDK_20.0 19.11
  dpbp_reset@INTERNAL 20.08
-#MISSING: 20.08# dpci_get_opr@DPDK_20.0 19.11
  dpci_get_opr@INTERNAL 20.08
-#MISSING: 20.08# dpci_set_opr@DPDK_20.0 19.11
  dpci_set_opr@INTERNAL 20.08
-#MISSING: 20.08# dpci_set_rx_queue@DPDK_20.0 19.11
  dpci_set_rx_queue@INTERNAL 20.08
-#MISSING: 20.08# dpcon_get_attributes@DPDK_20.0 19.11
  dpcon_get_attributes@INTERNAL 20.08
-#MISSING: 20.08# dpcon_open@DPDK_20.0 19.11
  dpcon_open@INTERNAL 20.08
-#MISSING: 20.08# dpdmai_close@DPDK_20.0 19.11
  dpdmai_close@INTERNAL 20.08
-#MISSING: 20.08# dpdmai_disable@DPDK_20.0 19.11
  dpdmai_disable@INTERNAL 20.08
-#MISSING: 20.08# dpdmai_enable@DPDK_20.0 19.11
  dpdmai_enable@INTERNAL 20.08
-#MISSING: 20.08# dpdmai_get_attributes@DPDK_20.0 19.11
  dpdmai_get_attributes@INTERNAL 20.08
-#MISSING: 20.08# dpdmai_get_rx_queue@DPDK_20.0 19.11
  dpdmai_get_rx_queue@INTERNAL 20.08
-#MISSING: 20.08# dpdmai_get_tx_queue@DPDK_20.0 19.11
  dpdmai_get_tx_queue@INTERNAL 20.08
-#MISSING: 20.08# dpdmai_open@DPDK_20.0 19.11
  dpdmai_open@INTERNAL 20.08
-#MISSING: 20.08# dpdmai_set_rx_queue@DPDK_20.0 19.11
  dpdmai_set_rx_queue@INTERNAL 20.08
-#MISSING: 20.08# dpio_add_static_dequeue_channel@DPDK_20.0 19.11
  dpio_add_static_dequeue_channel@INTERNAL 20.08
-#MISSING: 20.08# dpio_close@DPDK_20.0 19.11
  dpio_close@INTERNAL 20.08
-#MISSING: 20.08# dpio_disable@DPDK_20.0 19.11
  dpio_disable@INTERNAL 20.08
-#MISSING: 20.08# dpio_enable@DPDK_20.0 19.11
  dpio_enable@INTERNAL 20.08
-#MISSING: 20.08# dpio_get_attributes@DPDK_20.0 19.11
  dpio_get_attributes@INTERNAL 20.08
-#MISSING: 20.08# dpio_open@DPDK_20.0 19.11
  dpio_open@INTERNAL 20.08
-#MISSING: 20.08# dpio_remove_static_dequeue_channel@DPDK_20.0 19.11
  dpio_remove_static_dequeue_channel@INTERNAL 20.08
-#MISSING: 20.08# dpio_reset@DPDK_20.0 19.11
  dpio_reset@INTERNAL 20.08
-#MISSING: 20.08# dpio_set_stashing_destination@DPDK_20.0 19.11
  dpio_set_stashing_destination@INTERNAL 20.08
-#MISSING: 20.08# mc_get_soc_version@DPDK_20.0 19.11
  mc_get_soc_version@INTERNAL 20.08
-#MISSING: 20.08# mc_get_version@DPDK_20.0 19.11
  mc_get_version@INTERNAL 20.08
-#MISSING: 20.08# mc_send_command@DPDK_20.0 19.11
  mc_send_command@INTERNAL 20.08
-#MISSING: 20.08# per_lcore__dpaa2_io@DPDK_20.0 19.11
  per_lcore__dpaa2_io@INTERNAL 20.08
-#MISSING: 20.08# per_lcore_dpaa2_held_bufs@DPDK_20.0 19.11
-#MISSING: 20.08# qbman_check_command_complete@DPDK_20.0 19.11
  qbman_check_command_complete@INTERNAL 20.08
-#MISSING: 20.08# qbman_check_new_result@DPDK_20.0 19.11
  qbman_check_new_result@INTERNAL 20.08
-#MISSING: 20.08# qbman_eq_desc_clear@DPDK_20.0 19.11
  qbman_eq_desc_clear@INTERNAL 20.08
-#MISSING: 20.08# qbman_eq_desc_set_dca@DPDK_20.0 19.11
  qbman_eq_desc_set_dca@INTERNAL 20.08
-#MISSING: 20.08# qbman_eq_desc_set_fq@DPDK_20.0 19.11
  qbman_eq_desc_set_fq@INTERNAL 20.08
-#MISSING: 20.08# qbman_eq_desc_set_no_orp@DPDK_20.0 19.11
  qbman_eq_desc_set_no_orp@INTERNAL 20.08
-#MISSING: 20.08# qbman_eq_desc_set_orp@DPDK_20.0 19.11
  qbman_eq_desc_set_orp@INTERNAL 20.08
-#MISSING: 20.08# qbman_eq_desc_set_qd@DPDK_20.0 19.11
  qbman_eq_desc_set_qd@INTERNAL 20.08
-#MISSING: 20.08# qbman_eq_desc_set_response@DPDK_20.0 19.11
  qbman_eq_desc_set_response@INTERNAL 20.08
-#MISSING: 20.08# qbman_eq_desc_set_token@DPDK_20.0 19.11
  qbman_eq_desc_set_token@INTERNAL 20.08
-#MISSING: 20.08# qbman_fq_query_state@DPDK_20.0 19.11
  qbman_fq_query_state@INTERNAL 20.08
-#MISSING: 20.08# qbman_fq_state_frame_count@DPDK_20.0 19.11
  qbman_fq_state_frame_count@INTERNAL 20.08
-#MISSING: 20.08# qbman_get_dqrr_from_idx@DPDK_20.0 19.11
  qbman_get_dqrr_from_idx@INTERNAL 20.08
-#MISSING: 20.08# qbman_get_dqrr_idx@DPDK_20.0 19.11
  qbman_get_dqrr_idx@INTERNAL 20.08
-#MISSING: 20.08# qbman_pull_desc_clear@DPDK_20.0 19.11
  qbman_pull_desc_clear@INTERNAL 20.08
-#MISSING: 20.08# qbman_pull_desc_set_fq@DPDK_20.0 19.11
  qbman_pull_desc_set_fq@INTERNAL 20.08
-#MISSING: 20.08# qbman_pull_desc_set_numframes@DPDK_20.0 19.11
  qbman_pull_desc_set_numframes@INTERNAL 20.08
-#MISSING: 20.08# qbman_pull_desc_set_storage@DPDK_20.0 19.11
  qbman_pull_desc_set_storage@INTERNAL 20.08
-#MISSING: 20.08# qbman_release_desc_clear@DPDK_20.0 19.11
  qbman_release_desc_clear@INTERNAL 20.08
-#MISSING: 20.08# qbman_release_desc_set_bpid@DPDK_20.0 19.11
  qbman_release_desc_set_bpid@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_DQ_fd@DPDK_20.0 19.11
  qbman_result_DQ_fd@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_DQ_flags@DPDK_20.0 19.11
  qbman_result_DQ_flags@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_DQ_fqd_ctx@DPDK_20.0 19.11
  qbman_result_DQ_fqd_ctx@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_DQ_odpid@DPDK_20.0 19.11
  qbman_result_DQ_odpid@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_DQ_seqnum@DPDK_20.0 19.11
  qbman_result_DQ_seqnum@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_SCN_state@DPDK_20.0 19.11
  qbman_result_SCN_state@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_eqresp_fd@DPDK_20.0 19.11
  qbman_result_eqresp_fd@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_eqresp_rc@DPDK_20.0 19.11
  qbman_result_eqresp_rc@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_eqresp_rspid@DPDK_20.0 19.11
  qbman_result_eqresp_rspid@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_eqresp_set_rspid@DPDK_20.0 19.11
  qbman_result_eqresp_set_rspid@INTERNAL 20.08
-#MISSING: 20.08# qbman_result_has_new_result@DPDK_20.0 19.11
  qbman_result_has_new_result@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_acquire@DPDK_20.0 19.11
  qbman_swp_acquire@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_dqrr_consume@DPDK_20.0 19.11
  qbman_swp_dqrr_consume@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_dqrr_idx_consume@DPDK_20.0 19.11
  qbman_swp_dqrr_idx_consume@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_dqrr_next@DPDK_20.0 19.11
  qbman_swp_dqrr_next@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_enqueue_multiple@DPDK_20.0 19.11
  qbman_swp_enqueue_multiple@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_enqueue_multiple_desc@DPDK_20.0 19.11
  qbman_swp_enqueue_multiple_desc@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_enqueue_multiple_fd@DPDK_20.0 19.11
  qbman_swp_enqueue_multiple_fd@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_interrupt_clear_status@DPDK_20.0 19.11
  qbman_swp_interrupt_clear_status@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_prefetch_dqrr_next@DPDK_20.0 19.11
  qbman_swp_prefetch_dqrr_next@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_pull@DPDK_20.0 19.11
  qbman_swp_pull@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_push_set@DPDK_20.0 19.11
  qbman_swp_push_set@INTERNAL 20.08
-#MISSING: 20.08# qbman_swp_release@DPDK_20.0 19.11
  qbman_swp_release@INTERNAL 20.08
-#MISSING: 20.08# rte_dpaa2_alloc_dpci_dev@DPDK_20.0 19.11
  rte_dpaa2_alloc_dpci_dev@INTERNAL 20.08
-#MISSING: 20.08# rte_dpaa2_free_dpci_dev@DPDK_20.0 19.11
  rte_dpaa2_free_dpci_dev@INTERNAL 20.08
-#MISSING: 20.08# rte_dpaa2_intr_disable@DPDK_20.0 19.11
  rte_dpaa2_intr_disable@INTERNAL 20.08
-#MISSING: 20.08# rte_dpaa2_intr_enable@DPDK_20.0 19.11
  rte_dpaa2_intr_enable@INTERNAL 20.08
-#MISSING: 20.08# rte_dpaa2_memsegs@DPDK_20.0 19.11
-#MISSING: 20.08# rte_fslmc_driver_register@DPDK_20.0 19.11
  rte_fslmc_driver_register@INTERNAL 20.08
-#MISSING: 20.08# rte_fslmc_driver_unregister@DPDK_20.0 19.11
  rte_fslmc_driver_unregister@INTERNAL 20.08
-#MISSING: 20.08# rte_fslmc_get_device_count@DPDK_20.0 19.11
  rte_fslmc_get_device_count@INTERNAL 20.08
-#MISSING: 20.08# rte_fslmc_object_register@DPDK_20.0 19.11
  rte_fslmc_object_register@INTERNAL 20.08
-#MISSING: 20.08# rte_fslmc_vfio_dmamap@DPDK_20.0 19.11
  rte_fslmc_vfio_mem_dmamap@EXPERIMENTAL 19.08
-#MISSING: 20.08# rte_global_active_dqs_list@DPDK_20.0 19.11
  rte_global_active_dqs_list@INTERNAL 20.08
-#MISSING: 20.08# rte_mcp_ptr_list@DPDK_20.0 19.11

@@ -1,12 +1,12 @@
 librte_security.so.21 librte-security21 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
+ DPDK_21@DPDK_21 20.11~rc1
  EXPERIMENTAL@EXPERIMENTAL 18.11
- rte_security_capabilities_get@DPDK_20.0 19.11
- rte_security_capability_get@DPDK_20.0 19.11
+ rte_security_capabilities_get@DPDK_21 20.11~rc1
+ rte_security_capability_get@DPDK_21 20.11~rc1
  rte_security_get_userdata@EXPERIMENTAL 19.08
- rte_security_session_create@DPDK_20.0 19.11
- rte_security_session_destroy@DPDK_20.0 19.11
- rte_security_session_get_size@DPDK_20.0 19.11
+ rte_security_session_create@DPDK_21 20.11~rc1
+ rte_security_session_destroy@DPDK_21 20.11~rc1
+ rte_security_session_get_size@DPDK_21 20.11~rc1
  rte_security_session_stats_get@EXPERIMENTAL 19.08
  rte_security_session_update@EXPERIMENTAL 19.08
- rte_security_set_pkt_metadata@DPDK_20.0 19.11
+ rte_security_set_pkt_metadata@DPDK_21 20.11~rc1

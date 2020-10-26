@@ -1,5 +1,5 @@
 librte_stack.so.21 librte-stack21 #MINVER#
- EXPERIMENTAL@EXPERIMENTAL 19.11
- rte_stack_create@EXPERIMENTAL 19.11
- rte_stack_free@EXPERIMENTAL 19.11
- rte_stack_lookup@EXPERIMENTAL 19.11
+ DPDK_21@DPDK_21 20.11~rc1
+ rte_stack_create@DPDK_21 20.11~rc1
+ rte_stack_free@DPDK_21 20.11~rc1
+ rte_stack_lookup@DPDK_21 20.11~rc1

@@ -1,4 +1,4 @@
-librte_pmd_cxgbe.so.21 librte-pmd-cxgbe21 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
+librte_net_cxgbe.so.21 librte-net-cxgbe21 #MINVER#
+ DPDK_21@DPDK_21 20.11~rc1
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.

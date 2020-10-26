@@ -1,12 +1,6 @@
-librte_pmd_dpaa.so.21 librte-pmd-dpaa21 #MINVER#
-# INFO: this library exports no symbols, essentially it is a driver that
-# registers itself on load and is then only driven by callbacks.
-#
-# This one has some experimental symbols
- DPDK_20.0@DPDK_20.0 19.11
- INTERNAL@INTERNAL 20.08
-#MISSING: 20.08# dpaa_eth_eventq_attach@DPDK_20.0 19.11
- dpaa_eth_eventq_attach@INTERNAL 20.08
-#MISSING: 20.08# dpaa_eth_eventq_detach@DPDK_20.0 19.11
- dpaa_eth_eventq_detach@INTERNAL 20.08
- rte_pmd_dpaa_set_tx_loopback@DPDK_20.0 19.11
+librte_net_dpaa.so.21 librte-net-dpaa21 #MINVER#
+ DPDK_21@DPDK_21 20.11~rc1
+ INTERNAL@INTERNAL 20.11~rc1
+ dpaa_eth_eventq_attach@INTERNAL 20.11~rc1
+ dpaa_eth_eventq_detach@INTERNAL 20.11~rc1
+ rte_pmd_dpaa_set_tx_loopback@DPDK_21 20.11~rc1

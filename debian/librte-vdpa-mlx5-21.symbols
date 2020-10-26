@@ -1,4 +1,4 @@
-librte_pmd_mlx5_vdpa.so.21 librte-pmd-mlx5-vdpa21 #MINVER#
-DPDK_21@DPDK_21 20.11
+librte_vdpa_mlx5.so.21 librte-vdpa-mlx5-21 #MINVER#
+ DPDK_21@DPDK_21 20.11~rc1
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.

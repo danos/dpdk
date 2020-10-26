@@ -1,4 +1,4 @@
-librte_pmd_ring.so.21 librte-pmd-ring21 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- rte_eth_from_ring@DPDK_20.0 19.11
- rte_eth_from_rings@DPDK_20.0 19.11
+librte_net_ring.so.21 librte-net-ring21 #MINVER#
+ DPDK_21@DPDK_21 20.11~rc1
+ rte_eth_from_ring@DPDK_21 20.11~rc1
+ rte_eth_from_rings@DPDK_21 20.11~rc1

@@ -1,2 +1,2 @@
-librte_pmd_qat.so.21 librte-pmd-qat21 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
+librte_common_qat.so.21 librte-common-qat21 #MINVER#
+ DPDK_21@DPDK_21 20.11~rc1
