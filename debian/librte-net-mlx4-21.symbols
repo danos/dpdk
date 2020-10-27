@@ -1,6 +1,4 @@
-librte_net_mlx5.so.21 librte-net-mlx5-21 #MINVER#
+librte_net_mlx4.so.21 librte-net-mlx4-21 #MINVER#
  DPDK_21@DPDK_21 20.11~rc1
- EXPERIMENTAL@EXPERIMENTAL 20.11~rc1
- rte_pmd_mlx5_get_dyn_flag_names@EXPERIMENTAL 20.11~rc1
 # INFO: this library exports no symbols, essentially it is a driver that
 # registers itself on load and is then only driven by callbacks.
