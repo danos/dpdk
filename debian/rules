@@ -84,7 +84,7 @@ build:
 	fi
 	sh debian/prep-modules $(KSRC)
 	cat debian/control.modules >> debian/control
-	dh $@ --with python3,dkms,systemd --buildsystem=meson
+	dh $@ --with python3,dkms --buildsystem=meson
 endif
 
 %:
