@@ -289,7 +289,7 @@ librte_eal.so.21 librte-eal21 #MINVER#
  rte_realloc_socket@EXPERIMENTAL 19.08
  rte_reciprocal_value@DPDK_21 20.11~rc1
  rte_reciprocal_value_u64@DPDK_21 20.11~rc1
- rte_rtm_supported@DPDK_21 20.11~rc1
+ (arch=!ppc64el !arm64 !armhf)rte_rtm_supported@DPDK_21 20.11~rc1
  rte_service_attr_get@DPDK_21 20.11~rc1
  rte_service_attr_reset_all@DPDK_21 20.11~rc1
  rte_service_component_register@DPDK_21 20.11~rc1
