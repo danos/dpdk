@@ -188,11 +188,11 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Allpmds},
          ${misc:Depends},
-Description: Data Plane Development Kit (all pull mode drivers)
+Description: Data Plane Development Kit (all poll mode drivers)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
  .
- This is a metapackage to pull in all pull mode drivers produced by DPDK.
+ This is a metapackage to pull in all poll mode drivers produced by DPDK.
 
 Package: librte-meta-all
 Section: libs
