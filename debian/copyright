@@ -77,24 +77,9 @@ Copyright: 2015-2020 Canonical Ltd.
            2016-2020 Luca Boccassi <bluca@debian.org>
 License: GPL-3
 
-Files: debian/kernel-version
-       debian/prep-modules
-Copyright: 2009-2016 Andreas Beckmann <anbe@debian.org>
-           2010-2016 Russ Allbery <rra@debian.org>
-License: GPL-2.0+
-
 License: GPL-2
  On Debian systems, the complete text of the GNU General
  Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
-
-License: GPL-2.0+
- This package is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- .
- On Debian systems, the complete text of the GNU General Public
- License version 2 can be found in "/usr/share/common-licenses/GPL-2".
 
 License: GPL-3
  On Debian systems, the complete text of the GNU General

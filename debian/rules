@@ -51,44 +51,8 @@ ifneq (,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS)))
     DPDK_CONFIG_OPTIONS ?= $(subst $(comma),$(space),$(patsubst dpdk_config_options=%,%,$(filter dpdk_config_options=%,$(DEB_BUILD_OPTIONS))))
 endif
 
-# kernel_modules can be passed via DEB_BUILD_OPTIONS to enable building the
-# optional binary kernel modules package. By default it will be built against
-# the current kernel, or ksrc can be passed with a path to the target kernel
-# sources instead.
-ifeq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
-DPDK_CONFIG_BUILD_KMOD=false
-KSRC=""
-else
-ifneq (,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
-    KSRC := $(patsubst ksrc=%,%,$(filter ksrc=%,$(DEB_BUILD_OPTIONS)))
-else
-    KSRC := /lib/modules/$(shell LIST=$$(ls /lib/modules/); for dir in $$LIST; do test -d /lib/modules/$$dir/build && echo $$dir; done | sort -V | tail -n1)/build
-endif
-
-KVERS := $(shell perl debian/kernel-version $(KSRC))
-export KVERS
-export MODULE_CFLAGS=-fno-PIE
-
-DPDK_CONFIG_BUILD_KMOD=true
-
-# Since the binary module package is generated at build time depending on the
-# local kernel version, we have to append the new package in d/control.
-# We cannot use a separate control file since that wouldn't work with
-# dpkg-genchanges, and also would require a lot of overrides for debhelpers.
-get_built_using	?= $(filter-out (=),$(shell dpkg-query -f='$${source:Package} (=$${source:Version})' -W $1))
-
-build:
-	@if [ x"$(KVERS)" = x ] ; then \
-	    echo 'No version in $(KSRC)/include/linux/version.h' >&2; \
-	    exit 1; \
-	fi
-	sh debian/prep-modules $(KSRC)
-	cat debian/control.modules >> debian/control
-	dh $@ --with python3,dkms --buildsystem=meson
-endif
-
 %:
-	dh $@ --with python3,dkms --buildsystem=meson
+	dh $@ --with python3 --buildsystem=meson
 
 override_dh_gencontrol:
 	dh_gencontrol
@@ -110,16 +74,8 @@ override_dh_gencontrol:
 	dh_gencontrol -p librte-meta-net      -- -V"librte:Net=`grep      -E 'librte-net-.*'      ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
 	dh_gencontrol -p librte-meta-raw      -- -V"librte:Raw=`grep      -E 'librte-raw-.*'      ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
 	dh_gencontrol -p librte-meta-allpmds -- -V"librte:Allpmds=`for pmd in $$(find -type d -wholename './debian/librte-*dpdk/pmds-*'); do awk -v "ver=$(DEB_VERSION)" '/^Package:/ {printf("%s (= %s), \n",$$2,ver)}' "$${pmd}/../../../../../DEBIAN/control"; done | LC_ALL=C sort --stable | xargs`"
-ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
-	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
-		-v`cat debian/VERSION` \
-		-V'built:using:kernel=$(call get_built_using,linux-headers-$(KVERS))'
-endif
 
 override_dh_auto_clean:
-	rm -rf debian/build debian/tmp debian/dpdk-modules-* \
-		debian/control.modules debian/VERSION
-	sed -i '/Package: dpdk-modules-/,/`tail -n1 debian/control.modules.in`/d' debian/control
 	rm -f doc/guides/compressdevs/overview_feature_table.txt \
 		doc/guides/cryptodevs/overview_aead_table.txt \
 		doc/guides/cryptodevs/overview_asym_table.txt \
@@ -135,9 +91,7 @@ override_dh_auto_configure:
 		--default-library=shared \
 		-Dper_library_versions=false \
 		-Dinclude_subdir_arch=../$(DEB_HOST_MULTIARCH)/dpdk \
-		-Dmachine=$(RTE_MACHINE) \
-		-Dkernel_dir=$(KSRC) \
-		-Denable_kmods=$(DPDK_CONFIG_BUILD_KMOD)
+		-Dmachine=$(RTE_MACHINE)
 
 override_dh_auto_build-indep:
 ifeq (y,$(BUILD_DOCS))
@@ -173,10 +127,6 @@ override_dh_auto_install-arch:
 	    dh_install -p $${PKG} usr/lib/$(DEB_HOST_MULTIARCH)/*/*/$${LIBF}; \
 	  fi; \
 	done
-ifneq (,$(KVERS))
-	# Package: dpdk-modules-<kernel version>
-	dh_install -p dpdk-modules-$(KVERS) lib/modules
-endif
 	# Strip RPATH, hard-coded in test/test/meson.build at the moment
 	chrpath --delete $(CURDIR)/debian/tmp/usr/bin/dpdk-test
 	# Only present on ninja install, so fails on arch: all builds
@@ -184,9 +134,6 @@ endif
 
 override_dh_install:
 	dh_install --exclude=fonts
-
-override_dh_dkms:
-	dh_dkms -V $(DEB_VERSION_UPSTREAM)
 
 override_dh_installinit:
 	dh_installinit --no-start --no-stop-on-upgrade
