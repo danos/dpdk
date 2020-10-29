@@ -1,5 +1,6 @@
 dpdk (20.11~rc1-1) experimental; urgency=medium
 
+  [ Christian Ehrhardt ]
   * New upstream release candidate 20.11~rc1
     For details see https://doc.dpdk.org/guides/rel_notes/release_20_11.html
   * d/update-helper-control.py: bump to new deb822 name
@@ -31,8 +32,17 @@ dpdk (20.11~rc1-1) experimental; urgency=medium
   * d/librte-meta-{all,allpmds}.lintian-overrides: accept long package lists
   * d/rules: remove build artifacts breaking reproducible build
   * d/rules: sort package parsing for reproducible build
+  * d/control: fix typo pull/poll mode driver
 
- -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Fri, 23 Oct 2020 08:20:40 +0200
+  [ Luca Boccassi ]
+  * d/control: remove duplicated Section: libs
+  * d/rules: use DEB_VERSION instead of manual parsing
+  * dpdk-doc: override more false-positives about examples mistaken as
+    docs
+  * dpdk-doc: override warning about repeated path segment
+  * d/copyright: some source files were removed, update it
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 29 Oct 2020 13:22:32 +0000
 
 dpdk (20.08-1) experimental; urgency=medium
 
