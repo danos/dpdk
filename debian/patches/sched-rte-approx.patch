@@ -1,16 +1,67 @@
 --- a/lib/librte_sched/rte_approx.c
 +++ b/lib/librte_sched/rte_approx.c
-@@ -165,3 +165,10 @@ int rte_approx(double alpha, double d, u
+@@ -3,7 +3,7 @@
+  */
+ 
+ #include <stdlib.h>
+-
++#include <rte_log.h>
+ #include "rte_approx.h"
+ 
+ /*
+@@ -165,3 +165,52 @@ int rte_approx(double alpha, double d, u
  	/* Perform approximation */
  	return find_best_rational_approximation(alpha_num, d_num, denum, p, q);
  }
 +
-+int rte_approx_int(uint32_t alpha_num, uint32_t denum, uint32_t *p, uint32_t *q)
++static
++int rte_approx_get(uint32_t numerator, uint32_t denominator, uint32_t burst,
++		   uint32_t *p, uint32_t *q)
 +{
++	uint32_t d = 1;
++
++	/*
++	 * We need to restrict the numerator value returned so that it's
++	 * less than the shaper burst.  If it exceeds it when we add tokens
++	 * the value will be reset to the burst thereby reducing the tokens
++	 * which results in a shaper shortfall.
++	 */
++
++	uint32_t denum = burst;
++	uint32_t alpha = ((uint64_t) numerator * (uint64_t) denum) /
++				denominator;
++	int rv;
++
++	while (alpha < 4 && denum > 1) {
++		denum <<= 1;
++		alpha = ((uint64_t) numerator * (uint64_t) denum) / denominator;
++	}
++
++	/*
++	 * The following is required to avoid find_best_rational_approximation's
++	 * input argument checking.
++	 */
++	alpha = alpha - d;
++
 +	/* Perform approximation */
-+	return find_best_rational_approximation(alpha_num, 1, denum, p, q);
++	rv = find_best_rational_approximation(alpha, d, denum, p, q);
++	if (rv) {
++		RTE_LOG(ERR, SCHED,
++			"numer: %u, denominator: %u, alpha: %u, denum: %u\n",
++			numerator, denominator, alpha, denum);
++	}
++	return rv;
 +}
 +
++int rte_approx_int(uint32_t numerator, uint32_t denominator,
++		   uint32_t *p, uint32_t *q)
++{
++	/*
++	 * The best value proved to be 16383 from the following range tried:
++	 * 13131, 16383, 17467, 32003, 48017, 64007, 93931 and 131317
++	 */
++	return rte_approx_get(numerator, denominator, 16383, p, q);
++}
 --- a/lib/librte_sched/rte_approx.h
 +++ b/lib/librte_sched/rte_approx.h
 @@ -39,6 +39,24 @@ extern "C" {
@@ -48,7 +99,7 @@
  #define RTE_SCHED_BYTERATE_TO_BITRATE_SHIFT   3
  #define RTE_SCHED_GRINDER_PCACHE_SIZE         (64 / RTE_SCHED_QUEUES_PER_PIPE)
  #define RTE_SCHED_PIPE_INVALID                UINT32_MAX
-@@ -661,11 +660,7 @@ rte_sched_pipe_profile_convert(struct rt
+@@ -681,15 +680,18 @@ rte_sched_pipe_profile_convert(struct rt
  		dst->tb_credits_per_period = 1;
  		dst->tb_period = 1;
  	} else {
@@ -61,7 +112,18 @@
  			&dst->tb_credits_per_period, &dst->tb_period);
  	}
  
-@@ -1020,10 +1015,8 @@ rte_sched_subport_config_common(struct r
++	/*
++	 * The period must be less than or equal to the burst otherwise
++	 * we lose a bunch of tokens every period because the maximum
++	 * the token bucket is allowed to be is the burst.
++	 */
+ 	dst->tb_size = src->tb_size;
++	if (dst->tb_credits_per_period > dst->tb_size)
++		dst->tb_size = dst->tb_credits_per_period;
+ 
+ 	/* Traffic Classes */
+ 	dst->tc_period = rte_sched_time_us_to_bytes(src->tc_period,
+@@ -1040,13 +1042,18 @@ rte_sched_subport_config_common(struct r
  		s->tb_credits_per_period = 1;
  		s->tb_period = 1;
  	} else {
@@ -73,4 +135,14 @@
 +			       &s->tb_credits_per_period, &s->tb_period);
  	}
  
++	/*
++	 * The period must be less than or equal to the burst otherwise
++	 * we lose a bunch of tokens every period because the maximum
++	 * the token bucket is allowed to be is the burst.
++	 */
  	s->tb_size = params->tb_size;
++	if (s->tb_credits_per_period > s->tb_size)
++		s->tb_size = s->tb_credits_per_period;
+ 	s->tb_time = port->time;
+ 	s->tb_credits = s->tb_size / 2;
+ 
