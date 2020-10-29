@@ -109,7 +109,7 @@ override_dh_gencontrol:
 	dh_gencontrol -p librte-meta-mempool  -- -V"librte:Mempool=`grep  -E 'librte-mempool-.*'  ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
 	dh_gencontrol -p librte-meta-net      -- -V"librte:Net=`grep      -E 'librte-net-.*'      ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
 	dh_gencontrol -p librte-meta-raw      -- -V"librte:Raw=`grep      -E 'librte-raw-.*'      ./debian/files | grep -v dbgsym                          | tr '_' ' ' | awk '{ print $$1,"(=",$$2 ")" }' | paste -sd ',' - | sed -e 's/,/, /g'`"
-	dh_gencontrol -p librte-meta-allpmds -- -V"librte:Allpmds=`for pmd in $$(find -type d -wholename './debian/librte-*dpdk/pmds-*'); do awk -v "ver=$$(dpkg-parsechangelog --show-field Version)" '/^Package:/ {printf("%s (= %s), \n",$$2,ver)}' "$${pmd}/../../../../../DEBIAN/control"; done | LC_ALL=C sort --stable | xargs`"
+	dh_gencontrol -p librte-meta-allpmds -- -V"librte:Allpmds=`for pmd in $$(find -type d -wholename './debian/librte-*dpdk/pmds-*'); do awk -v "ver=$(DEB_VERSION)" '/^Package:/ {printf("%s (= %s), \n",$$2,ver)}' "$${pmd}/../../../../../DEBIAN/control"; done | LC_ALL=C sort --stable | xargs`"
 ifneq (,$(findstring kernel_modules,$(DEB_BUILD_OPTIONS)))
 	dh_gencontrol -p dpdk-modules-$(KVERS) -- \
 		-v`cat debian/VERSION` \
