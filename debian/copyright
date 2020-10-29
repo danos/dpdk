@@ -15,9 +15,6 @@ Copyright: 2008-2018 Cisco Systems, Inc.
 License: BSD-3-clause
 
 Files:
- kernel/linux/igb_uio/igb_uio.c
- kernel/linux/igb_uio/compat.h
- kernel/linux/Makefile
  kernel/linux/kni/kni_fifo.h
  kernel/linux/kni/kni_dev.h
  kernel/linux/kni/kni_net.c
@@ -28,7 +25,6 @@ Copyright: 2007-2020, Intel Corporation
 License: GPL-2
 
 Files:
- kernel/Makefile
  lib/librte_eal/include/rte_pci_dev_feature_defs.h
  lib/librte_eal/include/rte_pci_dev_features.h
  drivers/bus/dpaa/base/fman/fman.c
