@@ -24,12 +24,6 @@ endif
 # -march=native which is a non portable invariant
 RTE_MACHINE ?= "default"
 
-# now stable with parallel comilation, so support -j
-ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-    PAR := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-    MAKEFLAGS += -j$(PAR)
-endif
-
 ifneq (,$(findstring nodoc,$(DEB_BUILD_PROFILES)))
 BUILD_DOCS=n
 else
