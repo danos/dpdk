@@ -87,7 +87,6 @@ Description: Data Plane Development Kit (runtime)
  This package contains the runtime environment to run DPDK applications.
 
 Package: librte-meta-baseband
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Baseband},
@@ -99,7 +98,6 @@ Description: Data Plane Development Kit (baseband libraries)
  This is a metapackage to pull in all the librte baseband libraries.
 
 Package: librte-meta-bus
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Bus},
@@ -111,7 +109,6 @@ Description: Data Plane Development Kit (bus libraries)
  This is a metapackage to pull in all the librte bus libraries.
 
 Package: librte-meta-compress
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Compress},
@@ -123,7 +120,6 @@ Description: Data Plane Development Kit (compress libraries)
  This is a metapackage to pull in all the librte compress libraries.
 
 Package: librte-meta-crypto
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Crypto},
@@ -135,7 +131,6 @@ Description: Data Plane Development Kit (crypto libraries)
  This is a metapackage to pull in all the librte crypto libraries.
 
 Package: librte-meta-event
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Event},
@@ -147,7 +142,6 @@ Description: Data Plane Development Kit (event libraries)
  This is a metapackage to pull in all the librte event libraries.
 
 Package: librte-meta-mempool
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Mempool},
@@ -159,7 +153,6 @@ Description: Data Plane Development Kit (mempool libraries)
  This is a metapackage to pull in all the librte mempool libraries.
 
 Package: librte-meta-net
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Net},
@@ -171,7 +164,6 @@ Description: Data Plane Development Kit (net libraries)
  This is a metapackage to pull in all the librte net libraries.
 
 Package: librte-meta-raw
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Raw},
@@ -183,7 +175,6 @@ Description: Data Plane Development Kit (raw libraries)
  This is a metapackage to pull in all the librte raw libraries.
 
 Package: librte-meta-allpmds
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:Allpmds},
@@ -195,7 +186,6 @@ Description: Data Plane Development Kit (all poll mode drivers)
  This is a metapackage to pull in all poll mode drivers produced by DPDK.
 
 Package: librte-meta-all
-Section: libs
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Depends: ${librte:All},
