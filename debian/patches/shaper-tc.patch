@@ -43,7 +43,57 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  /*
   * Path through the scheduler hierarchy used by the scheduler enqueue
   * operation to identify the destination queue for the current
-@@ -1794,35 +1800,62 @@ grinder_credits_update(struct rte_sched_
+@@ -639,6 +645,20 @@ rte_sched_port_log_pipe_profile(struct r
+ }
+ 
+ static inline uint64_t
++rte_sched_time_us_to_bytes(uint32_t time_us, uint32_t rate)
++{
++	uint64_t time = time_us;
++
++	time = (time * rate) / 1000000;
++
++	/* Don't allow a zero byte count */
++	if (!time)
++		return 1;
++
++	return time;
++}
++
++static inline uint64_t
+ rte_sched_time_ms_to_bytes(uint32_t time_ms, uint32_t rate)
+ {
+ 	uint64_t time = time_ms;
+@@ -682,12 +702,12 @@ rte_sched_pipe_profile_convert(struct rt
+ 	dst->tb_size = src->tb_size;
+ 
+ 	/* Traffic Classes */
+-	dst->tc_period = rte_sched_time_ms_to_bytes(src->tc_period,
++	dst->tc_period = rte_sched_time_us_to_bytes(src->tc_period,
+ 						rate);
+ 
+ 	for (i = 0; i < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; i++)
+ 		dst->tc_credits_per_period[i]
+-			= rte_sched_time_ms_to_bytes(src->tc_period,
++			= rte_sched_time_us_to_bytes(src->tc_period,
+ 				src->tc_rate[i]);
+ 
+ #ifdef RTE_SCHED_SUBPORT_TC_OV
+@@ -1041,11 +1061,11 @@ rte_sched_subport_config_common(struct r
+ 	s->tb_credits = s->tb_size / 2;
+ 
+ 	/* Traffic Classes (TCs) */
+-	s->tc_period = rte_sched_time_ms_to_bytes(params->tc_period, port->rate);
++	s->tc_period = rte_sched_time_us_to_bytes(params->tc_period, port->rate);
+ 	s->tc_time = port->time + s->tc_period;
+ 	for (i = 0; i < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; i++) {
+ 		s->tc_credits_per_period[i]
+-			= rte_sched_time_ms_to_bytes(params->tc_period,
++			= rte_sched_time_us_to_bytes(params->tc_period,
+ 						     params->tc_rate[i]);
+ 		s->tc_credits[i] = s->tc_credits_per_period[i];
+ 	}
+@@ -1794,35 +1814,62 @@ grinder_credits_update(struct rte_sched_
  	struct rte_sched_pipe_profile *params = grinder->pipe_params;
  	uint64_t n_periods;
  	uint32_t tc;
@@ -116,7 +166,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	}
  }
  
-@@ -1933,19 +1966,19 @@ grinder_credits_check(struct rte_sched_p
+@@ -1933,19 +1980,19 @@ grinder_credits_check(struct rte_sched_p
  	uint32_t tc_index = grinder->tc_index;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
  	uint32_t subport_tb_credits = subport->tb_credits;
@@ -142,7 +192,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (!enough_credits)
  		return 0;
-@@ -1953,8 +1986,8 @@ grinder_credits_check(struct rte_sched_p
+@@ -1953,8 +2000,8 @@ grinder_credits_check(struct rte_sched_p
  	/* Update port credits */
  	subport->tb_credits -= pkt_len;
  	subport->tc_credits[tc_index] -= pkt_len;
@@ -152,7 +202,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	return 1;
  }
-@@ -2006,15 +2039,20 @@ grinder_credits_check(struct rte_sched_p
+@@ -2006,15 +2053,20 @@ grinder_credits_check(struct rte_sched_p
  
  
  static inline int
@@ -175,7 +225,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (pkt_len < 0)
  		pkt_len = 0;
-@@ -2357,7 +2395,8 @@ grinder_prefetch_mbuf(struct rte_sched_p
+@@ -2357,7 +2409,8 @@ grinder_prefetch_mbuf(struct rte_sched_p
  }
  
  static inline uint32_t
@@ -185,7 +235,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  {
  	struct rte_sched_grinder *grinder = port->grinder + pos;
  
-@@ -2399,7 +2438,7 @@ grinder_handle(struct rte_sched_port *po
+@@ -2399,7 +2452,7 @@ grinder_handle(struct rte_sched_port *po
  	{
  		uint32_t result = 0;
  
@@ -194,7 +244,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  		/* Look for next packet within the same TC */
  		if (result && grinder->qmask) {
-@@ -2490,7 +2529,10 @@ rte_sched_port_exceptions(struct rte_sch
+@@ -2490,7 +2543,10 @@ rte_sched_port_exceptions(struct rte_sch
  int
  rte_sched_port_dequeue(struct rte_sched_port *port, struct rte_mbuf **pkts, uint32_t n_pkts)
  {
@@ -206,7 +256,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	port->pkts_out = pkts;
  	port->n_pkts_out = 0;
-@@ -2498,12 +2540,27 @@ rte_sched_port_dequeue(struct rte_sched_
+@@ -2498,12 +2554,27 @@ rte_sched_port_dequeue(struct rte_sched_
  	rte_sched_port_time_resync(port);
  
  	/* Take each queue in the grinder one step further */
