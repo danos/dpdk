@@ -3,4 +3,6 @@ dpdk-doc: package-contains-documentation-outside-usr-share-doc usr/share/dpdk/ex
 dpdk-doc: package-contains-documentation-outside-usr-share-doc usr/share/dpdk/examples/flow_classify/ipv4_rules_file.txt
 dpdk-doc: package-contains-documentation-outside-usr-share-doc usr/share/dpdk/examples/pipeline/examples/packet.txt
 dpdk-doc: package-contains-documentation-outside-usr-share-doc usr/share/dpdk/examples/pipeline/examples/vxlan_table.txt
+dpdk-doc: repeated-path-segment examples usr/share/dpdk/examples/ip_pipeline/examples/
+dpdk-doc: repeated-path-segment examples usr/share/dpdk/examples/pipeline/examples/
 dpdk-doc: script-not-executable
