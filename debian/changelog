@@ -1,3 +1,11 @@
+dpdk (19.11.4-0vyatta4) unstable; urgency=medium
+
+  * net: check segment pointer in raw checksum processing (Bugfix:
+    VRVDR-50540)
+  * Update symbol versions for release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 30 Oct 2020 11:25:12 -0400
+
 dpdk (19.11.4-0vyatta3) unstable; urgency=medium
 
   [ Nicholas Brown ]
