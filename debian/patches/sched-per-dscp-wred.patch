@@ -165,7 +165,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  struct rte_sched_grinder {
  	/* Pipe cache */
  	uint16_t pcache_qmask[RTE_SCHED_GRINDER_PCACHE_SIZE];
-@@ -1125,6 +1114,19 @@ rte_sched_subport_config_v2(struct rte_s
+@@ -1139,6 +1128,19 @@ rte_sched_subport_config_v2(struct rte_s
  					       qsize, red_params);
  }
  
@@ -185,7 +185,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  int
  rte_sched_pipe_config(struct rte_sched_port *port,
  	uint32_t subport_id,
-@@ -1277,6 +1279,55 @@ rte_sched_port_pipe_profile_add(struct r
+@@ -1291,6 +1293,55 @@ rte_sched_port_pipe_profile_add(struct r
  	return 0;
  }
  
@@ -241,7 +241,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  void
  rte_sched_port_pkt_write(struct rte_mbuf *pkt,
  			 uint32_t subport, uint32_t pipe, uint32_t traffic_class,
-@@ -1295,6 +1346,21 @@ rte_sched_port_pkt_write(struct rte_mbuf
+@@ -1309,6 +1360,21 @@ rte_sched_port_pkt_write(struct rte_mbuf
  }
  
  void
@@ -263,7 +263,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  rte_sched_port_pkt_read_tree_path(const struct rte_mbuf *pkt,
  				  uint32_t *subport, uint32_t *pipe,
  				  uint32_t *traffic_class, uint32_t *queue)
-@@ -1371,18 +1437,6 @@ rte_sched_queue_read_stats(struct rte_sc
+@@ -1385,18 +1451,6 @@ rte_sched_queue_read_stats(struct rte_sc
  	return 0;
  }
  
@@ -282,7 +282,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  #ifdef RTE_SCHED_DEBUG
  
  static inline int
-@@ -1469,7 +1523,8 @@ rte_sched_port_update_queue_stats_on_dro
+@@ -1483,7 +1537,8 @@ rte_sched_port_update_queue_stats_on_dro
  #ifdef RTE_SCHED_RED
  
  static inline int
@@ -292,7 +292,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  {
  	struct rte_sched_subport *subport = port->subport +
  		(qindex / rte_sched_port_queues_per_subport(port));
-@@ -1483,12 +1538,32 @@ rte_sched_port_red_drop(struct rte_sched
+@@ -1497,13 +1552,33 @@ rte_sched_port_red_drop(struct rte_sched
  	color = rte_sched_port_pkt_read_color(pkt);
  	red_cfg = &subport->red_config[tc_index][color];
  
@@ -306,6 +306,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 -	qe = port->queue_extra + qindex;
  	red = &qe->red;
  
+-	return rte_red_enqueue(red_cfg, red, qlen, port->time);
 +	if (qe->qred.num_maps) {
 +		int i;
 +		struct rte_sched_port_hierarchy *sched =
@@ -324,9 +325,19 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 +			return 1;
 +	}
 +
- 	return rte_red_enqueue(red_cfg, red, qlen, port->time);
++	return rte_red_enqueue(red_cfg, red, qlen, port->time_cpu_bytes);
  }
  
+ static inline void
+@@ -1512,7 +1587,7 @@ rte_sched_port_set_queue_empty_timestamp
+ 	struct rte_sched_queue_extra *qe = port->queue_extra + qindex;
+ 	struct rte_red *red = &qe->red;
+ 
+-	rte_red_mark_queue_empty(red, port->time);
++	rte_red_mark_queue_empty(red, port->time_cpu_bytes);
+ }
+ 
+ #else
 --- a/lib/librte_sched/rte_sched.h
 +++ b/lib/librte_sched/rte_sched.h
 @@ -116,6 +116,11 @@ extern "C" {
