@@ -2369,7 +2369,7 @@ Description: Data Plane Development Kit (librte-regex-mlx5 runtime library)
  .
  This package contains the runtime libraries for librte-regex-mlx5.
 
-Package: librte-regex-octeontx2-regex21
+Package: librte-regex-octeontx2-21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/regexdevs/octeontx2.html
