@@ -395,6 +395,7 @@ Description: Data Plane Development Kit (librte-bpf runtime library)
 Package: librte-bus-dpaa21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/dpaa.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -522,6 +523,7 @@ Description: Data Plane Development Kit (librte-common-dpaax runtime library)
 Package: librte-common-iavf21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/intel_vf.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -534,6 +536,7 @@ Description: Data Plane Development Kit (librte-common-iavf runtime library)
 Package: librte-common-mlx5-21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/mlx5.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -546,6 +549,7 @@ Description: Data Plane Development Kit (librte-common-mlx5 runtime library)
 Package: librte-common-octeontx21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/octeontx.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -634,6 +638,7 @@ Description: Data Plane Development Kit (librte-compress-isal runtime library)
 Package: librte-compress-octeontx21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/compressdevs/octeontx.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -660,6 +665,7 @@ Description: Data Plane Development Kit (librte-compress-zlib runtime library)
 Package: librte-crypto-aesni-gcm21
 Architecture: amd64
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/cryptodevs/aesni_gcm.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -673,6 +679,7 @@ Description: Data Plane Development Kit (librte-crypto-aesni-gcm runtime library
 Package: librte-crypto-aesni-mb21
 Architecture: amd64
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/cryptodevs/aesni_mb.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -770,6 +777,7 @@ Description: Data Plane Development Kit (librte-crypto-dpaa-sec runtime library)
 Package: librte-crypto-kasumi21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/cryptodevs/kasumi.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -812,6 +820,7 @@ Description: Data Plane Development Kit (librte-crypto-null runtime library)
 Package: librte-crypto-octeontx21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/cryptodevs/octeontx.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -824,7 +833,7 @@ Description: Data Plane Development Kit (librte-crypto-octeontx runtime library)
 Package: librte-crypto-octeontx2-21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: https://doc.dpdk.org/guides/nics/octeontx2.html
+Homepage: https://doc.dpdk.org/guides/cryptodevs/octeontx2.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -852,6 +861,7 @@ Description: Data Plane Development Kit (librte-crypto-openssl runtime library)
 Package: librte-crypto-scheduler21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/cryptodevs/scheduler.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -865,6 +875,7 @@ Description: Data Plane Development Kit (librte-crypto-scheduler runtime library
 Package: librte-crypto-snow3g21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/cryptodevs/snow3g.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -891,6 +902,7 @@ Description: Data Plane Development Kit (librte-crypto-virtio runtime library)
 Package: librte-crypto-zuc21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/cryptodevs/zuc.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -931,6 +943,7 @@ Description: Data Plane Development Kit (librte-eal runtime library)
 Package: librte-efd21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/prog_guide/efd_lib.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1041,6 +1054,7 @@ Description: Data Plane Development Kit (librte-event-dsw runtime library)
 Package: librte-event-octeontx21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/eventdevs/octeontx.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1054,7 +1068,7 @@ Description: Data Plane Development Kit (librte-event-octeontx runtime library)
 Package: librte-event-octeontx2-21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
-Homepage: https://doc.dpdk.org/guides/nics/octeontx2.html
+Homepage: https://doc.dpdk.org/guides/eventdevs/octeontx2.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1068,6 +1082,7 @@ Description: Data Plane Development Kit (events for octeontx2 pmd)
 Package: librte-event-opdl21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/eventdevs/opdl.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1094,6 +1109,7 @@ Description: Data Plane Development Kit (librte-event-skeleton runtime library)
 Package: librte-event-sw21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/eventdevs/dsw.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1368,6 +1384,7 @@ Description: Data Plane Development Kit (librte-mempool-dpaa2 runtime library)
 Package: librte-mempool-octeontx21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/mempool/octeontx.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1395,6 +1412,7 @@ Description: Data Plane Development Kit (librte-mempool-octeontx2 runtime librar
 Package: librte-mempool-ring21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/mempool/ring.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1408,6 +1426,7 @@ Description: Data Plane Development Kit (librte-mempool-ring runtime library)
 Package: librte-mempool-stack21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/mempool/stack.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1435,6 +1454,7 @@ Description: Data Plane Development Kit (librte-meter runtime library)
 Package: librte-metrics21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/prog_guide/metrics_lib.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1793,6 +1813,7 @@ Description: Data Plane Development Kit (librte-net-ice runtime library)
 Package: librte-net-igc21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/igc.html?highlight=igc
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1836,6 +1857,7 @@ Description: Data Plane Development Kit (librte-net-ixgbe runtime library)
 Package: librte-net-kni21
 Architecture: amd64 arm64 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/kni.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1849,6 +1871,7 @@ Description: Data Plane Development Kit (librte-net-kni runtime library)
 Package: librte-net-liquidio21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/liquidio.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -1946,6 +1969,7 @@ Description: Data Plane Development Kit (librte-net-null runtime library)
 Package: librte-net-octeontx21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/octeontx.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -2048,6 +2072,7 @@ Description: Data Plane Development Kit (librte-net-sfc runtime library)
 Package: librte-net-softnic21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/softnic.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -2063,6 +2088,7 @@ Description: Data Plane Development Kit (librte-net-softnic runtime library)
 Package: librte-net-tap21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/tap.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -2076,6 +2102,7 @@ Description: Data Plane Development Kit (librte-net-tap runtime library)
 Package: librte-net-thunderx21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/thunderx.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
@@ -2190,6 +2217,7 @@ Description: Data Plane Development Kit (librte-pci runtime library)
 Package: librte-pdump21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/howto/packet_capture_framework.html
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
