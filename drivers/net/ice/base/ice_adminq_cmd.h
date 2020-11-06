@@ -109,6 +109,9 @@ struct ice_aqc_list_caps_elem {
 #define ICE_AQC_CAPS_MSIX				0x0043
 #define ICE_AQC_CAPS_FD					0x0045
 #define ICE_AQC_CAPS_MAX_MTU				0x0047
+#define ICE_AQC_CAPS_IWARP				0x0051
+#define ICE_AQC_CAPS_PCIE_RESET_AVOIDANCE		0x0076
+#define ICE_AQC_CAPS_NVM_MGMT				0x0080
 
 	u8 major_ver;
 	u8 minor_ver;
@@ -1439,6 +1442,10 @@ struct ice_aqc_get_link_status_data {
 #define ICE_AQ_LINK_TOPO_UNSUPP_MEDIA	BIT(7)
 	u8 link_cfg_err;
 #define ICE_AQ_LINK_CFG_ERR		BIT(0)
+#define ICE_AQ_LINK_ACT_PORT_OPT_INVAL	BIT(2)
+#define ICE_AQ_LINK_FEAT_ID_OR_CONFIG_ID_INVAL	BIT(3)
+#define ICE_AQ_LINK_TOPO_CRITICAL_SDP_ERR	BIT(4)
+#define ICE_AQ_LINK_MODULE_POWER_UNSUPPORTED	BIT(5)
 	u8 link_info;
 #define ICE_AQ_LINK_UP			BIT(0)	/* Link Status */
 #define ICE_AQ_LINK_FAULT		BIT(1)
@@ -1486,7 +1493,7 @@ struct ice_aqc_get_link_status_data {
 #define ICE_AQ_CFG_PACING_TYPE_FIXED	ICE_AQ_CFG_PACING_TYPE_M
 	/* External Device Power Ability */
 	u8 power_desc;
-#define ICE_AQ_PWR_CLASS_M		0x3
+#define ICE_AQ_PWR_CLASS_M		0x3F
 #define ICE_AQ_LINK_PWR_BASET_LOW_HIGH	0
 #define ICE_AQ_LINK_PWR_BASET_HIGH	1
 #define ICE_AQ_LINK_PWR_QSFP_CLASS_1	0
@@ -1628,6 +1635,22 @@ struct ice_aqc_sff_eeprom {
 	__le32 addr_low;
 };
 
+/* SW Set GPIO command (indirect 0x6EF)
+ * SW Get GPIO command (indirect 0x6F0)
+ */
+struct ice_aqc_sw_gpio {
+	__le16 gpio_ctrl_handle;
+#define ICE_AQC_SW_GPIO_CONTROLLER_HANDLE_S	0
+#define ICE_AQC_SW_GPIO_CONTROLLER_HANDLE_M	(0x3FF << ICE_AQC_SW_GPIO_CONTROLLER_HANDLE_S)
+	u8 gpio_num;
+#define ICE_AQC_SW_GPIO_NUMBER_S	0
+#define ICE_AQC_SW_GPIO_NUMBER_M	(0x1F << ICE_AQC_SW_GPIO_NUMBER_S)
+	u8 gpio_params;
+#define ICE_AQC_SW_GPIO_PARAMS_DIRECTION    BIT(1)
+#define ICE_AQC_SW_GPIO_PARAMS_VALUE        BIT(0)
+	u8 rsvd[12];
+};
+
 /* NVM Read command (indirect 0x0701)
  * NVM Erase commands (direct 0x0702)
  * NVM Write commands (indirect 0x0703)
@@ -1654,6 +1677,9 @@ struct ice_aqc_nvm {
 #define ICE_AQC_NVM_REVERT_LAST_ACTIV	BIT(6) /* Write Activate only */
 #define ICE_AQC_NVM_ACTIV_SEL_MASK	MAKEMASK(0x7, 3)
 #define ICE_AQC_NVM_FLASH_ONLY		BIT(7)
+#define ICE_AQC_NVM_POR_FLAG	0	/* Used by NVM Write completion on ARQ */
+#define ICE_AQC_NVM_PERST_FLAG	1
+#define ICE_AQC_NVM_EMPR_FLAG	2
 	__le16 module_typeid;
 	__le16 length;
 #define ICE_AQC_NVM_ERASE_LEN	0xFFFF
@@ -2552,6 +2578,7 @@ struct ice_pkg_ver {
 };
 
 #define ICE_PKG_NAME_SIZE	32
+#define ICE_SEG_ID_SIZE	28
 #define ICE_SEG_NAME_SIZE	28
 
 struct ice_aqc_get_pkg_info {
@@ -2641,8 +2668,8 @@ struct ice_aqc_clear_health_status {
  * @opcode: AQ command opcode
  * @datalen: length in bytes of indirect/external data buffer
  * @retval: return value from firmware
- * @cookie_h: opaque data high-half
- * @cookie_l: opaque data low-half
+ * @cookie_high: opaque data high-half
+ * @cookie_low: opaque data low-half
  * @params: command-specific parameters
  *
  * Descriptor format for commands the driver posts on the Admin Transmit Queue
@@ -2914,6 +2941,8 @@ enum ice_adminq_opc {
 	ice_aqc_opc_set_gpio				= 0x06EC,
 	ice_aqc_opc_get_gpio				= 0x06ED,
 	ice_aqc_opc_sff_eeprom				= 0x06EE,
+	ice_aqc_opc_sw_set_gpio				= 0x06EF,
+	ice_aqc_opc_sw_get_gpio				= 0x06F0,
 
 	/* NVM commands */
 	ice_aqc_opc_nvm_read				= 0x0701,

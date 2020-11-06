@@ -22,6 +22,13 @@
 
 #define VIRTIO_USER_MEM_EVENT_CLB_NAME "virtio_user_mem_event_clb"
 
+const char * const virtio_user_backend_strings[] = {
+	[VIRTIO_USER_BACKEND_UNKNOWN] = "VIRTIO_USER_BACKEND_UNKNOWN",
+	[VIRTIO_USER_BACKEND_VHOST_USER] = "VHOST_USER",
+	[VIRTIO_USER_BACKEND_VHOST_KERNEL] = "VHOST_NET",
+	[VIRTIO_USER_BACKEND_VHOST_VDPA] = "VHOST_VDPA",
+};
+
 static int
 virtio_user_create_queue(struct virtio_user_dev *dev, uint32_t queue_sel)
 {
@@ -516,6 +523,12 @@ virtio_user_dev_init(struct virtio_user_dev *dev, char *path, int queues,
 		 * later.
 		 */
 		dev->device_features = VIRTIO_USER_SUPPORTED_FEATURES;
+
+		/* We cannot assume VHOST_USER_PROTOCOL_F_STATUS is supported
+		 * until it's negotiated
+		 */
+		dev->protocol_features &=
+			~(1ULL << VHOST_USER_PROTOCOL_F_STATUS);
 	}
 
 
@@ -799,11 +812,13 @@ virtio_user_handle_cq(struct virtio_user_dev *dev, uint16_t queue_idx)
 }
 
 int
-virtio_user_send_status_update(struct virtio_user_dev *dev, uint8_t status)
+virtio_user_dev_set_status(struct virtio_user_dev *dev, uint8_t status)
 {
 	int ret;
 	uint64_t arg = status;
 
+	pthread_mutex_lock(&dev->mutex);
+	dev->status = status;
 	if (dev->backend_type == VIRTIO_USER_BACKEND_VHOST_USER)
 		ret = dev->ops->send_request(dev,
 				VHOST_USER_SET_STATUS, &arg);
@@ -811,30 +826,32 @@ virtio_user_send_status_update(struct virtio_user_dev *dev, uint8_t status)
 		ret = dev->ops->send_request(dev,
 				VHOST_USER_SET_STATUS, &status);
 	else
-		return 0;
+		ret = -ENOTSUP;
 
-	if (ret) {
+	if (ret && ret != -ENOTSUP) {
 		PMD_INIT_LOG(ERR, "VHOST_USER_SET_STATUS failed (%d): %s", ret,
 			     strerror(errno));
-		return -1;
 	}
 
-	return 0;
+	pthread_mutex_unlock(&dev->mutex);
+	return ret;
 }
 
 int
-virtio_user_update_status(struct virtio_user_dev *dev)
+virtio_user_dev_update_status(struct virtio_user_dev *dev)
 {
 	uint64_t ret;
 	uint8_t status;
 	int err;
 
+	pthread_mutex_lock(&dev->mutex);
 	if (dev->backend_type == VIRTIO_USER_BACKEND_VHOST_USER) {
 		err = dev->ops->send_request(dev, VHOST_USER_GET_STATUS, &ret);
 		if (!err && ret > UINT8_MAX) {
 			PMD_INIT_LOG(ERR, "Invalid VHOST_USER_GET_STATUS "
 					"response 0x%" PRIx64 "\n", ret);
-			return -1;
+			err = -1;
+			goto error;
 		}
 
 		status = ret;
@@ -842,17 +859,12 @@ virtio_user_update_status(struct virtio_user_dev *dev)
 		err = dev->ops->send_request(dev, VHOST_USER_GET_STATUS,
 				&status);
 	} else {
-		return 0;
+		err = -ENOTSUP;
 	}
 
-	if (err) {
-		PMD_INIT_LOG(ERR, "VHOST_USER_GET_STATUS failed (%d): %s", err,
-			     strerror(errno));
-		return -1;
-	}
-
-	dev->status = status;
-	PMD_INIT_LOG(DEBUG, "Updated Device Status(0x%08x):\n"
+	if (!err) {
+		dev->status = status;
+		PMD_INIT_LOG(DEBUG, "Updated Device Status(0x%08x):\n"
 			"\t-RESET: %u\n"
 			"\t-ACKNOWLEDGE: %u\n"
 			"\t-DRIVER: %u\n"
@@ -868,5 +880,12 @@ virtio_user_update_status(struct virtio_user_dev *dev)
 			!!(dev->status & VIRTIO_CONFIG_STATUS_FEATURES_OK),
 			!!(dev->status & VIRTIO_CONFIG_STATUS_DEV_NEED_RESET),
 			!!(dev->status & VIRTIO_CONFIG_STATUS_FAILED));
-	return 0;
+	} else if (err != -ENOTSUP) {
+		PMD_INIT_LOG(ERR, "VHOST_USER_GET_STATUS failed (%d): %s", err,
+			     strerror(errno));
+	}
+
+error:
+	pthread_mutex_unlock(&dev->mutex);
+	return err;
 }

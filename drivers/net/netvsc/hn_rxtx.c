@@ -40,9 +40,6 @@
 	(sizeof(struct vmbus_chanpkt_hdr) + sizeof(struct hn_nvs_rndis))
 
 #define HN_TXD_CACHE_SIZE	32 /* per cpu tx_descriptor pool cache */
-#define HN_TXCOPY_THRESHOLD	512
-
-#define HN_RXCOPY_THRESHOLD	256
 #define HN_RXQ_EVENT_DEFAULT	2048
 
 struct hn_rxinfo {
@@ -283,10 +280,15 @@ hn_dev_tx_queue_setup(struct rte_eth_dev *dev,
 	PMD_INIT_LOG(DEBUG, "TX descriptor pool %s n=%u size=%zu",
 		     name, nb_desc, sizeof(struct hn_txdesc));
 
-	txq->tx_rndis = rte_calloc("hn_txq_rndis", nb_desc,
-				   HN_RNDIS_PKT_ALIGNED, RTE_CACHE_LINE_SIZE);
-	if (txq->tx_rndis == NULL)
+	txq->tx_rndis_mz = rte_memzone_reserve_aligned(name,
+			nb_desc * HN_RNDIS_PKT_ALIGNED, rte_socket_id(),
+			RTE_MEMZONE_IOVA_CONTIG, HN_RNDIS_PKT_ALIGNED);
+	if (!txq->tx_rndis_mz) {
+		err = -rte_errno;
 		goto error;
+	}
+	txq->tx_rndis = txq->tx_rndis_mz->addr;
+	txq->tx_rndis_iova = txq->tx_rndis_mz->iova;
 
 	txq->txdesc_pool = rte_mempool_create(name, nb_desc,
 					      sizeof(struct hn_txdesc),
@@ -315,7 +317,7 @@ hn_dev_tx_queue_setup(struct rte_eth_dev *dev,
 error:
 	if (txq->txdesc_pool)
 		rte_mempool_free(txq->txdesc_pool);
-	rte_free(txq->tx_rndis);
+	rte_memzone_free(txq->tx_rndis_mz);
 	rte_free(txq);
 	return err;
 }
@@ -366,7 +368,7 @@ hn_dev_tx_queue_release(void *arg)
 	if (txq->txdesc_pool)
 		rte_mempool_free(txq->txdesc_pool);
 
-	rte_free(txq->tx_rndis);
+	rte_memzone_free(txq->tx_rndis_mz);
 	rte_free(txq);
 }
 
@@ -568,7 +570,7 @@ static void hn_rxpkt(struct hn_rx_queue *rxq, struct hn_rx_bufinfo *rxb,
 	 * For large packets, avoid copy if possible but need to keep
 	 * some space available in receive area for later packets.
 	 */
-	if (dlen >= HN_RXCOPY_THRESHOLD &&
+	if (hv->rx_extmbuf_enable && dlen > hv->rx_copybreak &&
 	    (uint32_t)rte_atomic32_read(&rxq->rxbuf_outstanding) <
 			hv->rxbuf_section_cnt / 2) {
 		struct rte_mbuf_ext_shared_info *shinfo;
@@ -1445,12 +1447,8 @@ static int hn_xmit_sg(struct hn_tx_queue *txq,
 	hn_rndis_dump(txd->rndis_pkt);
 
 	/* pass IOVA of rndis header in first segment */
-	addr = rte_malloc_virt2iova(txq->tx_rndis);
-	if (unlikely(addr == RTE_BAD_IOVA)) {
-		PMD_DRV_LOG(ERR, "RNDIS transmit can not get iova");
-		return -EINVAL;
-	}
-	addr = addr + ((char *)txd->rndis_pkt - (char *)txq->tx_rndis);
+	addr = txq->tx_rndis_iova +
+		((char *)txd->rndis_pkt - (char *)txq->tx_rndis);
 
 	sg[0].page = addr / PAGE_SIZE;
 	sg[0].ofs = addr & PAGE_MASK;
@@ -1516,7 +1514,8 @@ hn_xmit_pkts(void *ptxq, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 			break;
 
 		/* For small packets aggregate them in chimney buffer */
-		if (m->pkt_len < HN_TXCOPY_THRESHOLD && pkt_size <= txq->agg_szmax) {
+		if (m->pkt_len <= hv->tx_copybreak &&
+		    pkt_size <= txq->agg_szmax) {
 			/* If this packet will not fit, then flush  */
 			if (txq->agg_pktleft == 0 ||
 			    RTE_ALIGN(pkt_size, txq->agg_align) > txq->agg_szleft) {

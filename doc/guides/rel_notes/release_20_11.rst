@@ -84,6 +84,15 @@ New Features
   ``rte_vect_set_max_simd_bitwidth`` function, or by the user with EAL flag
   ``--force-max-simd-bitwidth``.
 
+* **Added zero copy APIs for rte_ring.**
+
+  For rings with producer/consumer in ``RTE_RING_SYNC_ST``, ``RTE_RING_SYNC_MT_HTS``
+  modes, these APIs split enqueue/dequeue operation into three phases
+  (enqueue/dequeue start, copy data to/from ring, enqueue/dequeue finish).
+  Along with the advantages of the peek APIs, these provide the ability to
+  copy the data to the ring memory directly without the need for temporary
+  storage.
+
 * **Updated CRC modules of the net library.**
 
   * Added runtime selection of the optimal architecture-specific CRC path.
@@ -139,6 +148,12 @@ New Features
   Hairpin Tx part flow rules can be inserted explicitly.
   New API is added to get the hairpin peer ports list.
 
+* **Updated the Amazon ena driver.**
+
+  Updated the ena PMD with new features and improvements, including:
+
+  * Added network interface metrics which can be read using xstats.
+
 * **Updated Broadcom bnxt driver.**
 
   Updated the Broadcom bnxt driver with new features and improvements, including:
@@ -147,6 +162,9 @@ New Features
   * Added support for RSS hash level selection.
   * Updated HWRM structures to 1.10.1.70 version.
   * Added TRUFLOW support for Stingray devices.
+  * Added support for representors on MAIA cores of SR.
+  * Added support for VXLAN decap offload using rte_flow.
+  * Added support to indicate native rte_flow API thread safety.
 
 * **Updated Cisco enic driver.**
 
@@ -160,12 +178,53 @@ New Features
   Added the FEC PMD which provides functions for query FEC capabilities and
   current FEC mode from device. Also, PMD for configuring FEC mode is also provided.
 
+* **Updated Intel iavf driver.**
+
+  Updated iavf PMD with new features and improvements, including:
+
+  * Added support for flexible descriptor metadata extraction.
+  * Added support for outer IP hash of GTPC and GTPU.
+  * Added support of AVX512 instructions in Rx and Tx path.
+
+* **Updated Intel ice driver.**
+
+  * Used write combining stores.
+  * Added ACL filter support for Intel DCF.
+
+* **Updated Mellanox mlx5 driver.**
+
+  Updated Mellanox mlx5 driver with new features and improvements, including:
+
+  * Added vectorized Multi-Packet Rx Queue burst.
+  * Added support for 2 new miniCQE formats: Flow Tag and L3/L4 header.
+  * Added support for PMD level multiple-thread flow insertion.
+  * Added support for matching on fragmented/non-fragmented IPv4/IPv6 packets.
+  * Added support for QinQ packets matching.
+  * Added support for the new VLAN fields ``has_vlan`` in the Ethernet item
+    and ``has_more_vlan`` in the VLAN item.
+  * Updated the supported timeout for Age action to the maximal value supported
+    by rte_flow API.
+  * Added support of Age action query.
+  * Added support of multi-ports hairpin.
+
+  Updated Mellanox mlx5 vDPA driver:
+
+  * Added support of vDPA VirtQ error handling.
+
 * **Updated Solarflare network PMD.**
 
   Updated the Solarflare ``sfc_efx`` driver with changes including:
 
   * Added SR-IOV PF support
-  * Added Alveo SN1000 SmartNICs (EF100 architecture) support
+  * Added Alveo SN1000 SmartNICs (EF100 architecture) support including
+    flow API transfer rules for switch HW offload
+  * Added ARMv8 support
+
+* **Added Wangxun txgbe PMD.**
+
+  Added a new PMD driver for Wangxun 10 Gigabit Ethernet NICs.
+
+  See the :doc:`../nics/txgbe` for more details.
 
 * **Updated Virtio driver.**
 
@@ -180,10 +239,6 @@ New Features
 * **Updated Intel ixgbe driver.**
 
   Updated the Intel ixgbe driver to use write combining stores.
-
-* **Updated Intel ice driver.**
-
-  Updated the Intel ice driver to use write combining stores.
 
 * **Updated Intel qat driver.**
 
@@ -286,6 +341,16 @@ New Features
   Added performance tuning arguments to allow tuning the scheduler for
   better throughtput in high core count use cases.
 
+* **Added a new driver for the Intel Dynamic Load Balancer v1.0 device.**
+
+  Added the new ``dlb`` eventdev driver for the Intel DLB V1.0 device. See the
+  :doc:`../eventdevs/dlb` eventdev guide for more details on this new driver.
+
+* **Added a new driver for the Intel Dynamic Load Balancer v2.0 device.**
+
+  Added the new ``dlb2`` eventdev driver for the Intel DLB V2.0 device. See the
+  :doc:`../eventdevs/dlb2` eventdev guide for more details on this new driver.
+
 * **Updated ioat rawdev driver**
 
   The ioat rawdev driver has been updated and enhanced. Changes include:
@@ -325,6 +390,10 @@ New Features
   * Added new ``RTE_ACL_CLASSIFY_AVX512X32`` vector implementation,
     which can process up to 32 flows in parallel. Requires AVX512 support.
 
+* **Added AVX512 lookup implementation for FIB.**
+
+  Added a AVX512 lookup functions implementation into FIB and FIB6 libraries.
+
 * **Added support to update subport bandwidth dynamically.**
 
    * Added new API ``rte_sched_port_subport_profile_add`` to add new
@@ -345,6 +414,12 @@ New Features
   * Replaced ``--scalar`` command-line option with ``--alg=<value>``, to allow
     the user to select the desired classify method.
 
+* **Updated vhost sample application.**
+
+  Added vhost asynchronous APIs support, which demonstrated how the application
+  leverage IOAT DMA channel with vhost asynchronous APIs.
+  See the :doc:`../sample_app_ug/vhost` for more details.
+
 
 Removed Items
 -------------
@@ -358,12 +433,19 @@ Removed Items
    Also, make sure to start the actual text at the margin.
    =======================================================
 
+* build: Support for the Make build system was removed for compiling DPDK,
+  Meson is now the primary build system.
+  Sample applications can still be built with Make standalone, using pkg-config.
+
 * vhost: Dequeue zero-copy support has been removed.
 
 * kernel: The module ``igb_uio`` has been moved to the git repository
   ``dpdk-kmods`` in a new directory ``linux/igb_uio``.
 
 * Removed Python 2 support since it was EOL'd in January 2020.
+
+* Removed TEP termination sample application.
+
 
 API Changes
 -----------
@@ -422,6 +504,16 @@ API Changes
   the structures ``rte_mbuf`` and ``rte_mbuf_ext_shared_info``.
   The field ``refcnt`` is remaining from the old unions.
 
+* mbuf: Removed the unioned fields ``userdata`` and ``udata64``
+  from the structure ``rte_mbuf``. It is replaced with dynamic fields.
+
+* mbuf: Removed the field ``seqn`` from the structure ``rte_mbuf``.
+  It is replaced with dynamic fields.
+
+* mbuf: Removed the field ``timestamp`` from the structure ``rte_mbuf``.
+  It is replaced with the dynamic field RTE_MBUF_DYNFIELD_TIMESTAMP_NAME
+  which was previously used only for Tx.
+
 * pci: Removed the ``rte_kernel_driver`` enum defined in rte_dev.h and
   replaced with a private enum in the PCI subsystem.
 
@@ -458,6 +550,13 @@ API Changes
   ``rte_eth_dcb_tc_queue_mapping`` from ``uint8_t`` to ``uint16_t``.
   As the data of ``uint8_t`` will be truncated when queue number under
   a TC is greater than 256.
+
+* ethdev: Removed the legacy filter API, including
+  ``rte_eth_dev_filter_supported()`` and ``rte_eth_dev_filter_ctrl()``.
+
+* ethdev: Removed the legacy L2 tunnel configuration API, including
+  ``rte_eth_dev_l2_tunnel_eth_type_conf()`` and
+  ``rte_eth_dev_l2_tunnel_offload_set()``..
 
 * vhost: Moved vDPA APIs from experimental to stable.
 
@@ -528,6 +627,12 @@ API Changes
   interfaces are considered stable as of DPDK 20.11.
 
 * bpf: ``RTE_BPF_XTYPE_NUM`` has been dropped from ``rte_bpf_xtype``.
+
+* gso: Changed ``rte_gso_segment`` behaviour and return value:
+
+  * ``pkt`` is not saved to ``pkts_out[0]`` if not GSOed.
+  * Return 0 instead of 1 for the above case.
+  * ``pkt`` is not freed, no matter whether it is GSOed, leaving to the caller.
 
 * acl: ``RTE_ACL_CLASSIFY_NUM`` enum value has been removed.
   This enum value was not used inside DPDK, while it prevented to add new
@@ -601,6 +706,9 @@ ABI Changes
   * ``rte_event_port_conf``
 
 * sched: Added new fields to ``struct rte_sched_subport_port_params``.
+
+* lpm: Removed fields other than ``tbl24`` and ``tbl8`` from the struct
+  ``rte_lpm``. The removed fields were made internal.
 
 
 Known Issues

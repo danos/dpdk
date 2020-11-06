@@ -71,7 +71,7 @@ practical or possible testpmd supports alternative methods for executing command
 
 .. code-block:: console
 
-   ./testpmd -n4 -r2 ... -- -i --cmdline-file=/home/ubuntu/flow-create-commands.txt
+   ./dpdk-testpmd -n4 -r2 ... -- -i --cmdline-file=/home/ubuntu/flow-create-commands.txt
    Interactive-mode selected
    CLI commands to be read from /home/ubuntu/flow-create-commands.txt
    Configuring Port 0 (socket 0)
@@ -340,7 +340,7 @@ The available information categories are:
 
 * ``icmpecho``: Receives a burst of packets, lookup for ICMP echo requests and, if any, send back ICMP echo replies.
 
-* ``ieee1588``: Demonstrate L2 IEEE1588 V2 PTP timestamping for RX and TX. Requires ``CONFIG_RTE_LIBRTE_IEEE1588=y``.
+* ``ieee1588``: Demonstrate L2 IEEE1588 V2 PTP timestamping for RX and TX.
 
 * ``noisy``: Noisy neighbor simulation.
   Simulate more realistic behavior of a guest machine engaged in receiving
@@ -390,11 +390,6 @@ Example for the io forwarding engine, with some packet drops on the tx side::
      TX-packets: 548595568      TX-dropped: 128           TX-total: 548595696
      ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-.. note::
-
-   Enabling CONFIG_RTE_TEST_PMD_RECORD_CORE_CYCLES appends "CPU cycles/packet" stats, like:
-
-   CPU cycles/packet=xx.dd (total cycles=xxxx / total RX packets=xxxx) at xxx MHz clock
 
 clear fwd
 ~~~~~~~~~
@@ -1077,55 +1072,6 @@ Remove a VLAN ID, from the set of VLAN identifiers filtered for VF(s) for port I
 
    testpmd> rx_vlan rm (vlan_id) port (port_id) vf (vf_mask)
 
-tunnel_filter add
-~~~~~~~~~~~~~~~~~
-
-Add a tunnel filter on a port::
-
-   testpmd> tunnel_filter add (port_id) (outer_mac) (inner_mac) (ip_addr) \
-            (inner_vlan) (vxlan|nvgre|ipingre|vxlan-gpe) (imac-ivlan|imac-ivlan-tenid|\
-            imac-tenid|imac|omac-imac-tenid|oip|iip) (tenant_id) (queue_id)
-
-The available information categories are:
-
-* ``vxlan``: Set tunnel type as VXLAN.
-
-* ``nvgre``: Set tunnel type as NVGRE.
-
-* ``ipingre``: Set tunnel type as IP-in-GRE.
-
-* ``vxlan-gpe``: Set tunnel type as VXLAN-GPE
-
-* ``imac-ivlan``: Set filter type as Inner MAC and VLAN.
-
-* ``imac-ivlan-tenid``: Set filter type as Inner MAC, VLAN and tenant ID.
-
-* ``imac-tenid``: Set filter type as Inner MAC and tenant ID.
-
-* ``imac``: Set filter type as Inner MAC.
-
-* ``omac-imac-tenid``: Set filter type as Outer MAC, Inner MAC and tenant ID.
-
-* ``oip``: Set filter type as Outer IP.
-
-* ``iip``: Set filter type as Inner IP.
-
-Example::
-
-   testpmd> tunnel_filter add 0 68:05:CA:28:09:82 00:00:00:00:00:00 \
-            192.168.2.2 0 ipingre oip 1 1
-
-   Set an IP-in-GRE tunnel on port 0, and the filter type is Outer IP.
-
-tunnel_filter remove
-~~~~~~~~~~~~~~~~~~~~
-
-Remove a tunnel filter on a port::
-
-   testpmd> tunnel_filter rm (port_id) (outer_mac) (inner_mac) (ip_addr) \
-            (inner_vlan) (vxlan|nvgre|ipingre|vxlan-gpe) (imac-ivlan|imac-ivlan-tenid|\
-            imac-tenid|imac|omac-imac-tenid|oip|iip) (tenant_id) (queue_id)
-
 rx_vxlan_port add
 ~~~~~~~~~~~~~~~~~
 
@@ -1622,14 +1568,6 @@ Set VF receive/transmit from a port::
 
    testpmd> set port (port_id) vf (vf_id) (rx|tx) (on|off)
 
-set port - mac address filter (for VF)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Add/Remove unicast or multicast MAC addr filter for a VF::
-
-   testpmd> set port (port_id) vf (vf_id) (mac_addr) \
-            (exact-mac|exact-mac-vlan|hashmac|hashmac-vlan) (on|off)
-
 set port - rx mode(for VF)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1770,13 +1708,6 @@ Enable/disable E-tag stripping on a port::
 Enable/disable E-tag based forwarding on a port::
 
    testpmd> E-tag set forwarding (on|off) port (port_id)
-
-Add an E-tag forwarding filter on a port::
-
-   testpmd> E-tag set filter add e-tag-id (value) dst-pool (pool_id) port (port_id)
-
-Delete an E-tag forwarding filter on a port::
-   testpmd> E-tag set filter del e-tag-id (value) port (port_id)
 
 ddp add
 ~~~~~~~
@@ -2403,17 +2334,6 @@ Where the threshold type can be:
 
 These threshold options are also available from the command-line.
 
-port config - E-tag
-~~~~~~~~~~~~~~~~~~~
-
-Set the value of ether-type for E-tag::
-
-   testpmd> port config (port_id|all) l2-tunnel E-tag ether-type (value)
-
-Enable/disable the E-tag support::
-
-   testpmd> port config (port_id|all) l2-tunnel E-tag (enable|disable)
-
 port config pctype mapping
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2610,16 +2530,16 @@ For example, to set the MAC address of a Link Bonding device (port 10) to 00:00:
 
    testpmd> set bonding mac 10 00:00:00:00:00:01
 
-set bonding xmit_balance_policy
+set bonding balance_xmit_policy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Set the transmission policy for a Link Bonding device when it is in Balance XOR mode::
 
-   testpmd> set bonding xmit_balance_policy (port_id) (l2|l23|l34)
+   testpmd> set bonding balance_xmit_policy (port_id) (l2|l23|l34)
 
 For example, set a Link Bonding device (port 10) to use a balance policy of layer 3+4 (IP addresses & UDP ports)::
 
-   testpmd> set bonding xmit_balance_policy 10 l34
+   testpmd> set bonding balance_xmit_policy 10 l34
 
 
 set bonding mon_period
@@ -3284,285 +3204,7 @@ This section details the available filter functions that are available.
 Note these functions interface the deprecated legacy filtering framework,
 superseded by *rte_flow*. See `Flow rules management`_.
 
-ethertype_filter
-~~~~~~~~~~~~~~~~~~~~
-
-Add or delete a L2 Ethertype filter, which identify packets by their L2 Ethertype mainly assign them to a receive queue::
-
-   ethertype_filter (port_id) (add|del) (mac_addr|mac_ignr) (mac_address) \
-                    ethertype (ether_type) (drop|fwd) queue (queue_id)
-
-The available information parameters are:
-
-* ``port_id``: The port which the Ethertype filter assigned on.
-
-* ``mac_addr``: Compare destination mac address.
-
-* ``mac_ignr``: Ignore destination mac address match.
-
-* ``mac_address``: Destination mac address to match.
-
-* ``ether_type``: The EtherType value want to match,
-  for example 0x0806 for ARP packet. 0x0800 (IPv4) and 0x86DD (IPv6) are invalid.
-
-* ``queue_id``: The receive queue associated with this EtherType filter.
-  It is meaningless when deleting or dropping.
-
-Example, to add/remove an ethertype filter rule::
-
-   testpmd> ethertype_filter 0 add mac_ignr 00:11:22:33:44:55 \
-                             ethertype 0x0806 fwd queue 3
-
-   testpmd> ethertype_filter 0 del mac_ignr 00:11:22:33:44:55 \
-                             ethertype 0x0806 fwd queue 3
-
-2tuple_filter
-~~~~~~~~~~~~~~~~~
-
-Add or delete a 2-tuple filter,
-which identifies packets by specific protocol and destination TCP/UDP port
-and forwards packets into one of the receive queues::
-
-   2tuple_filter (port_id) (add|del) dst_port (dst_port_value) \
-                 protocol (protocol_value) mask (mask_value) \
-                 tcp_flags (tcp_flags_value) priority (prio_value) \
-                 queue (queue_id)
-
-The available information parameters are:
-
-* ``port_id``: The port which the 2-tuple filter assigned on.
-
-* ``dst_port_value``: Destination port in L4.
-
-* ``protocol_value``: IP L4 protocol.
-
-* ``mask_value``: Participates in the match or not by bit for field above, 1b means participate.
-
-* ``tcp_flags_value``: TCP control bits. The non-zero value is invalid, when the pro_value is not set to 0x06 (TCP).
-
-* ``prio_value``: Priority of this filter.
-
-* ``queue_id``: The receive queue associated with this 2-tuple filter.
-
-Example, to add/remove an 2tuple filter rule::
-
-   testpmd> 2tuple_filter 0 add dst_port 32 protocol 0x06 mask 0x03 \
-                          tcp_flags 0x02 priority 3 queue 3
-
-   testpmd> 2tuple_filter 0 del dst_port 32 protocol 0x06 mask 0x03 \
-                          tcp_flags 0x02 priority 3 queue 3
-
-5tuple_filter
-~~~~~~~~~~~~~~~~~
-
-Add or delete a 5-tuple filter,
-which consists of a 5-tuple (protocol, source and destination IP addresses, source and destination TCP/UDP/SCTP port)
-and routes packets into one of the receive queues::
-
-   5tuple_filter (port_id) (add|del) dst_ip (dst_address) src_ip \
-                 (src_address) dst_port (dst_port_value) \
-                 src_port (src_port_value) protocol (protocol_value) \
-                 mask (mask_value) tcp_flags (tcp_flags_value) \
-                 priority (prio_value) queue (queue_id)
-
-The available information parameters are:
-
-* ``port_id``: The port which the 5-tuple filter assigned on.
-
-* ``dst_address``: Destination IP address.
-
-* ``src_address``: Source IP address.
-
-* ``dst_port_value``: TCP/UDP destination port.
-
-* ``src_port_value``: TCP/UDP source port.
-
-* ``protocol_value``: L4 protocol.
-
-* ``mask_value``: Participates in the match or not by bit for field above, 1b means participate
-
-* ``tcp_flags_value``: TCP control bits. The non-zero value is invalid, when the protocol_value is not set to 0x06 (TCP).
-
-* ``prio_value``: The priority of this filter.
-
-* ``queue_id``: The receive queue associated with this 5-tuple filter.
-
-Example, to add/remove an 5tuple filter rule::
-
-   testpmd> 5tuple_filter 0 add dst_ip 2.2.2.5 src_ip 2.2.2.4 \
-            dst_port 64 src_port 32 protocol 0x06 mask 0x1F \
-            flags 0x0 priority 3 queue 3
-
-   testpmd> 5tuple_filter 0 del dst_ip 2.2.2.5 src_ip 2.2.2.4 \
-            dst_port 64 src_port 32 protocol 0x06 mask 0x1F \
-            flags 0x0 priority 3 queue 3
-
-syn_filter
-~~~~~~~~~~
-
-Using the  SYN filter, TCP packets whose *SYN* flag is set can be forwarded to a separate queue::
-
-   syn_filter (port_id) (add|del) priority (high|low) queue (queue_id)
-
-The available information parameters are:
-
-* ``port_id``: The port which the SYN filter assigned on.
-
-* ``high``: This SYN filter has higher priority than other filters.
-
-* ``low``: This SYN filter has lower priority than other filters.
-
-* ``queue_id``: The receive queue associated with this SYN filter
-
-Example::
-
-   testpmd> syn_filter 0 add priority high queue 3
-
-flex_filter
-~~~~~~~~~~~
-
-With flex filter, packets can be recognized by any arbitrary pattern within the first 128 bytes of the packet
-and routed into one of the receive queues::
-
-   flex_filter (port_id) (add|del) len (len_value) bytes (bytes_value) \
-               mask (mask_value) priority (prio_value) queue (queue_id)
-
-The available information parameters are:
-
-* ``port_id``: The port which the Flex filter is assigned on.
-
-* ``len_value``: Filter length in bytes, no greater than 128.
-
-* ``bytes_value``: A string in hexadecimal, means the value the flex filter needs to match.
-
-* ``mask_value``: A string in hexadecimal, bit 1 means corresponding byte participates in the match.
-
-* ``prio_value``: The priority of this filter.
-
-* ``queue_id``: The receive queue associated with this Flex filter.
-
-Example::
-
-   testpmd> flex_filter 0 add len 16 bytes 0x00000000000000000000000008060000 \
-                          mask 000C priority 3 queue 3
-
-   testpmd> flex_filter 0 del len 16 bytes 0x00000000000000000000000008060000 \
-                          mask 000C priority 3 queue 3
-
-
 .. _testpmd_flow_director:
-
-flow_director_filter
-~~~~~~~~~~~~~~~~~~~~
-
-The Flow Director works in receive mode to identify specific flows or sets of flows and route them to specific queues.
-
-Four types of filtering are supported which are referred to as Perfect Match, Signature, Perfect-mac-vlan and
-Perfect-tunnel filters, the match mode is set by the ``--pkt-filter-mode`` command-line parameter:
-
-* Perfect match filters.
-  The hardware checks a match between the masked fields of the received packets and the programmed filters.
-  The masked fields are for IP flow.
-
-* Signature filters.
-  The hardware checks a match between a hash-based signature of the masked fields of the received packet.
-
-* Perfect-mac-vlan match filters.
-  The hardware checks a match between the masked fields of the received packets and the programmed filters.
-  The masked fields are for MAC VLAN flow.
-
-* Perfect-tunnel match filters.
-  The hardware checks a match between the masked fields of the received packets and the programmed filters.
-  The masked fields are for tunnel flow.
-
-* Perfect-raw-flow-type match filters.
-  The hardware checks a match between the masked fields of the received packets and pre-loaded raw (template) packet.
-  The masked fields are specified by input sets.
-
-The Flow Director filters can match the different fields for different type of packet: flow type, specific input set
-per flow type and the flexible payload.
-
-The Flow Director can also mask out parts of all of these fields so that filters
-are only applied to certain fields or parts of the fields.
-
-Note that for raw flow type mode the source and destination fields in the
-raw packet buffer need to be presented in a reversed order with respect
-to the expected received packets.
-For example: IP source and destination addresses or TCP/UDP/SCTP
-source and destination ports
-
-Different NICs may have different capabilities, command show port fdir (port_id) can be used to acquire the information.
-
-# Commands to add flow director filters of different flow types::
-
-   flow_director_filter (port_id) mode IP (add|del|update) \
-                        flow (ipv4-other|ipv4-frag|ipv6-other|ipv6-frag) \
-                        src (src_ip_address) dst (dst_ip_address) \
-                        tos (tos_value) proto (proto_value) ttl (ttl_value) \
-                        vlan (vlan_value) flexbytes (flexbytes_value) \
-                        (drop|fwd) pf|vf(vf_id) queue (queue_id) \
-                        fd_id (fd_id_value)
-
-   flow_director_filter (port_id) mode IP (add|del|update) \
-                        flow (ipv4-tcp|ipv4-udp|ipv6-tcp|ipv6-udp) \
-                        src (src_ip_address) (src_port) \
-                        dst (dst_ip_address) (dst_port) \
-                        tos (tos_value) ttl (ttl_value) \
-                        vlan (vlan_value) flexbytes (flexbytes_value) \
-                        (drop|fwd) queue pf|vf(vf_id) (queue_id) \
-                        fd_id (fd_id_value)
-
-   flow_director_filter (port_id) mode IP (add|del|update) \
-                        flow (ipv4-sctp|ipv6-sctp) \
-                        src (src_ip_address) (src_port) \
-                        dst (dst_ip_address) (dst_port) \
-                        tos (tos_value) ttl (ttl_value) \
-                        tag (verification_tag) vlan (vlan_value) \
-                        flexbytes (flexbytes_value) (drop|fwd) \
-                        pf|vf(vf_id) queue (queue_id) fd_id (fd_id_value)
-
-   flow_director_filter (port_id) mode IP (add|del|update) flow l2_payload \
-                        ether (ethertype) flexbytes (flexbytes_value) \
-                        (drop|fwd) pf|vf(vf_id) queue (queue_id)
-                        fd_id (fd_id_value)
-
-   flow_director_filter (port_id) mode MAC-VLAN (add|del|update) \
-                        mac (mac_address) vlan (vlan_value) \
-                        flexbytes (flexbytes_value) (drop|fwd) \
-                        queue (queue_id) fd_id (fd_id_value)
-
-   flow_director_filter (port_id) mode Tunnel (add|del|update) \
-                        mac (mac_address) vlan (vlan_value) \
-                        tunnel (NVGRE|VxLAN) tunnel-id (tunnel_id_value) \
-                        flexbytes (flexbytes_value) (drop|fwd) \
-                        queue (queue_id) fd_id (fd_id_value)
-
-   flow_director_filter (port_id) mode raw (add|del|update) flow (flow_id) \
-                        (drop|fwd) queue (queue_id) fd_id (fd_id_value) \
-                        packet (packet file name)
-
-For example, to add an ipv4-udp flow type filter::
-
-   testpmd> flow_director_filter 0 mode IP add flow ipv4-udp src 2.2.2.3 32 \
-            dst 2.2.2.5 33 tos 2 ttl 40 vlan 0x1 flexbytes (0x88,0x48) \
-            fwd pf queue 1 fd_id 1
-
-For example, add an ipv4-other flow type filter::
-
-   testpmd> flow_director_filter 0 mode IP add flow ipv4-other src 2.2.2.3 \
-             dst 2.2.2.5 tos 2 proto 20 ttl 40 vlan 0x1 \
-             flexbytes (0x88,0x48) fwd pf queue 1 fd_id 1
-
-flush_flow_director
-~~~~~~~~~~~~~~~~~~~
-
-Flush all flow director filters on a device::
-
-   testpmd> flush_flow_director (port_id)
-
-Example, to flush all flow director filter on port 0::
-
-   testpmd> flush_flow_director 0
 
 flow_director_mask
 ~~~~~~~~~~~~~~~~~~
@@ -3587,22 +3229,6 @@ Example, to set flow director mask on port 0::
             dst_mask 255.255.255.255 \
                 FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF 0xFFFF
 
-flow_director_flex_mask
-~~~~~~~~~~~~~~~~~~~~~~~
-
-set masks of flow director's flexible payload based on certain flow type::
-
-   testpmd> flow_director_flex_mask (port_id) \
-            flow (none|ipv4-other|ipv4-frag|ipv4-tcp|ipv4-udp|ipv4-sctp| \
-                  ipv6-other|ipv6-frag|ipv6-tcp|ipv6-udp|ipv6-sctp| \
-                  l2_payload|all) (mask)
-
-Example, to set flow director's flex mask for all flow type on port 0::
-
-   testpmd> flow_director_flex_mask 0 flow all \
-            (0xff,0xff,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
-
-
 flow_director_flex_payload
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -3614,100 +3240,6 @@ For example, to select the first 16 bytes from the offset 4 (bytes) of packet's 
 
    testpmd> flow_director_flex_payload 0 l4 \
             (4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19)
-
-get_sym_hash_ena_per_port
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Get symmetric hash enable configuration per port::
-
-   get_sym_hash_ena_per_port (port_id)
-
-For example, to get symmetric hash enable configuration of port 1::
-
-   testpmd> get_sym_hash_ena_per_port 1
-
-set_sym_hash_ena_per_port
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Set symmetric hash enable configuration per port to enable or disable::
-
-   set_sym_hash_ena_per_port (port_id) (enable|disable)
-
-For example, to set symmetric hash enable configuration of port 1 to enable::
-
-   testpmd> set_sym_hash_ena_per_port 1 enable
-
-get_hash_global_config
-~~~~~~~~~~~~~~~~~~~~~~
-
-Get the global configurations of hash filters::
-
-   get_hash_global_config (port_id)
-
-For example, to get the global configurations of hash filters of port 1::
-
-   testpmd> get_hash_global_config 1
-
-set_hash_global_config
-~~~~~~~~~~~~~~~~~~~~~~
-
-Set the global configurations of hash filters::
-
-   set_hash_global_config (port_id) (toeplitz|simple_xor|symmetric_toeplitz|default) \
-   (ipv4|ipv4-frag|ipv4-tcp|ipv4-udp|ipv4-sctp|ipv4-other|ipv6|ipv6-frag| \
-   ipv6-tcp|ipv6-udp|ipv6-sctp|ipv6-other|l2_payload|<flow_id>) \
-   (enable|disable)
-
-For example, to enable simple_xor for flow type of ipv6 on port 2::
-
-   testpmd> set_hash_global_config 2 simple_xor ipv6 enable
-
-set_hash_input_set
-~~~~~~~~~~~~~~~~~~
-
-Set the input set for hash::
-
-   set_hash_input_set (port_id) (ipv4-frag|ipv4-tcp|ipv4-udp|ipv4-sctp| \
-   ipv4-other|ipv6-frag|ipv6-tcp|ipv6-udp|ipv6-sctp|ipv6-other| \
-   l2_payload|<flow_id>) (ovlan|ivlan|src-ipv4|dst-ipv4|src-ipv6|dst-ipv6| \
-   ipv4-tos|ipv4-proto|ipv6-tc|ipv6-next-header|udp-src-port|udp-dst-port| \
-   tcp-src-port|tcp-dst-port|sctp-src-port|sctp-dst-port|sctp-veri-tag| \
-   udp-key|gre-key|fld-1st|fld-2nd|fld-3rd|fld-4th|fld-5th|fld-6th|fld-7th| \
-   fld-8th|none) (select|add)
-
-For example, to add source IP to hash input set for flow type of ipv4-udp on port 0::
-
-   testpmd> set_hash_input_set 0 ipv4-udp src-ipv4 add
-
-set_fdir_input_set
-~~~~~~~~~~~~~~~~~~
-
-The Flow Director filters can match the different fields for different type of packet, i.e. specific input set
-on per flow type and the flexible payload. This command can be used to change input set for each flow type.
-
-Set the input set for flow director::
-
-   set_fdir_input_set (port_id) (ipv4-frag|ipv4-tcp|ipv4-udp|ipv4-sctp| \
-   ipv4-other|ipv6|ipv6-frag|ipv6-tcp|ipv6-udp|ipv6-sctp|ipv6-other| \
-   l2_payload|<flow_id>) (ivlan|ethertype|src-ipv4|dst-ipv4|src-ipv6|dst-ipv6| \
-   ipv4-tos|ipv4-proto|ipv4-ttl|ipv6-tc|ipv6-next-header|ipv6-hop-limits| \
-   tudp-src-port|udp-dst-port|cp-src-port|tcp-dst-port|sctp-src-port| \
-   sctp-dst-port|sctp-veri-tag|none) (select|add)
-
-For example to add source IP to FD input set for flow type of ipv4-udp on port 0::
-
-   testpmd> set_fdir_input_set 0 ipv4-udp src-ipv4 add
-
-global_config
-~~~~~~~~~~~~~
-
-Set different GRE key length for input set::
-
-   global_config (port_id) gre-key-len (number in bytes)
-
-For example to set GRE key length for input set to 4 bytes on port 0::
-
-   testpmd> global_config 0 gre-key-len 4
 
 
 .. _testpmd_rte_flow:
@@ -4318,14 +3850,13 @@ This section lists supported actions and their attributes, if any.
 - ``rss``: spread packets among several queues.
 
   - ``func {hash function}``: RSS hash function to apply, allowed tokens are
-    the same as `set_hash_global_config`_.
+    ``toeplitz``, ``simple_xor``, ``symmetric_toeplitz`` and ``default``.
 
   - ``level {unsigned}``: encapsulation level for ``types``.
 
-  - ``types [{RSS hash type} [...]] end``: specific RSS hash types, allowed
-    tokens are the same as `set_hash_input_set`_, except that an empty list
-    does not disable RSS but instead requests unspecified "best-effort"
-    settings.
+  - ``types [{RSS hash type} [...]] end``: specific RSS hash types.
+    Note that an empty list does not disable RSS but instead requests
+    unspecified "best-effort" settings.
 
   - ``key {string}``: RSS hash key, overrides ``key_len``.
 
@@ -4787,7 +4318,7 @@ Creating shared actions
 shared action ID. It is bound to ``rte_flow_shared_action_create()``::
 
    flow shared_action {port_id} create [action_id {shared_action_id}]
-      [ingress] [egress] action {action} / end
+      [ingress] [egress] [transfer] action {action} / end
 
 If successful, it will show::
 
@@ -4937,6 +4468,49 @@ Validate and create a QinQ rule on port 0 to steer traffic to a queue on the hos
    ID      Group   Prio    Attr    Rule
    0       0       0       i-      ETH VLAN VLAN=>VF QUEUE
    1       0       0       i-      ETH VLAN VLAN=>PF QUEUE
+
+Sample VXLAN flow rules
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Before creating VXLAN rule(s), the UDP port should be added for VXLAN packet
+filter on a port::
+
+  testpmd> rx_vxlan_port add 4789 0
+
+Create VXLAN rules on port 0 to steer traffic to PF queues.
+
+::
+
+  testpmd> flow create 0 ingress pattern eth / ipv4 / udp / vxlan /
+         eth dst is 00:11:22:33:44:55 / end actions pf / queue index 1 / end
+  Flow rule #0 created
+
+  testpmd> flow create 0 ingress pattern eth / ipv4 / udp / vxlan vni is 3 /
+         eth dst is 00:11:22:33:44:55 / end actions pf / queue index 2 / end
+  Flow rule #1 created
+
+  testpmd> flow create 0 ingress pattern eth / ipv4 / udp / vxlan /
+         eth dst is 00:11:22:33:44:55 / vlan tci is 10 / end actions pf /
+         queue index 3 / end
+  Flow rule #2 created
+
+  testpmd> flow create 0 ingress pattern eth / ipv4 / udp / vxlan vni is 5 /
+         eth dst is 00:11:22:33:44:55 / vlan tci is 20 / end actions pf /
+         queue index 4 / end
+  Flow rule #3 created
+
+  testpmd> flow create 0 ingress pattern eth dst is 00:00:00:00:01:00 / ipv4 /
+         udp / vxlan vni is 6 /  eth dst is 00:11:22:33:44:55 / end actions pf /
+         queue index 5 / end
+  Flow rule #4 created
+
+  testpmd> flow list 0
+  ID      Group   Prio    Attr    Rule
+  0       0       0       i-      ETH IPV4 UDP VXLAN ETH => QUEUE
+  1       0       0       i-      ETH IPV4 UDP VXLAN ETH => QUEUE
+  2       0       0       i-      ETH IPV4 UDP VXLAN ETH VLAN => QUEUE
+  3       0       0       i-      ETH IPV4 UDP VXLAN ETH VLAN => QUEUE
+  4       0       0       i-      ETH IPV4 UDP VXLAN ETH => QUEUE
 
 Sample VXLAN encapsulation rule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

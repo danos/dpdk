@@ -2,17 +2,10 @@
  * Copyright(c) 2018-2019 Hisilicon Limited.
  */
 
-#include <errno.h>
-#include <inttypes.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
 #include <rte_io.h>
-#include <rte_common.h>
 #include <rte_ethdev.h>
 
 #include "hns3_logs.h"
-#include "hns3_regs.h"
 #include "hns3_ethdev.h"
 #include "hns3_dcb.h"
 
@@ -336,7 +329,7 @@ hns3_dcb_get_shapping_para(uint8_t ir_b, uint8_t ir_u, uint8_t ir_s,
 	return shapping_para;
 }
 
-static int
+int
 hns3_dcb_port_shaper_cfg(struct hns3_hw *hw)
 {
 	struct hns3_port_shapping_cmd *shap_cfg_cmd;

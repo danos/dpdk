@@ -10,6 +10,7 @@
 #include <rte_ethdev_pci.h>
 #include <rte_kvargs.h>
 
+#include "rte_pmd_ark.h"
 #include "ark_global.h"
 #include "ark_logs.h"
 #include "ark_ethdev_tx.h"
@@ -77,6 +78,12 @@ static int  eth_ark_set_mtu(struct rte_eth_dev *dev, uint16_t size);
 
 #define ARK_TX_MAX_QUEUE (4096 * 4)
 #define ARK_TX_MIN_QUEUE (256)
+
+uint64_t ark_timestamp_rx_dynflag;
+int ark_timestamp_dynfield_offset = -1;
+
+int rte_pmd_ark_rx_userdata_dynfield_offset = -1;
+int rte_pmd_ark_tx_userdata_dynfield_offset = -1;
 
 static const char * const valid_arguments[] = {
 	ARK_PKTGEN_ARG,
@@ -245,6 +252,16 @@ eth_ark_dev_init(struct rte_eth_dev *dev)
 	int ret;
 	int port_count = 1;
 	int p;
+	static const struct rte_mbuf_dynfield ark_tx_userdata_dynfield_desc = {
+		.name = RTE_PMD_ARK_TX_USERDATA_DYNFIELD_NAME,
+		.size = sizeof(rte_pmd_ark_tx_userdata_t),
+		.align = __alignof__(rte_pmd_ark_tx_userdata_t),
+	};
+	static const struct rte_mbuf_dynfield ark_rx_userdata_dynfield_desc = {
+		.name = RTE_PMD_ARK_RX_USERDATA_DYNFIELD_NAME,
+		.size = sizeof(rte_pmd_ark_rx_userdata_t),
+		.align = __alignof__(rte_pmd_ark_rx_userdata_t),
+	};
 
 	ark->eth_dev = dev;
 
@@ -254,6 +271,31 @@ eth_ark_dev_init(struct rte_eth_dev *dev)
 	ret = check_for_ext(ark);
 	if (ret)
 		return ret;
+
+	/* Extra mbuf fields for user data */
+	if (RTE_PMD_ARK_TX_USERDATA_ENABLE) {
+		rte_pmd_ark_tx_userdata_dynfield_offset =
+		    rte_mbuf_dynfield_register(&ark_tx_userdata_dynfield_desc);
+		if (rte_pmd_ark_tx_userdata_dynfield_offset < 0) {
+			ARK_PMD_LOG(ERR,
+				    "Failed to register mbuf field for tx userdata\n");
+			return -rte_errno;
+		}
+		ARK_PMD_LOG(INFO, "Registered TX-meta dynamic field at %d\n",
+			    rte_pmd_ark_tx_userdata_dynfield_offset);
+	}
+	if (RTE_PMD_ARK_RX_USERDATA_ENABLE) {
+		rte_pmd_ark_rx_userdata_dynfield_offset =
+		    rte_mbuf_dynfield_register(&ark_rx_userdata_dynfield_desc);
+		if (rte_pmd_ark_rx_userdata_dynfield_offset < 0) {
+			ARK_PMD_LOG(ERR,
+				    "Failed to register mbuf field for rx userdata\n");
+			return -rte_errno;
+		}
+		ARK_PMD_LOG(INFO, "Registered RX-meta dynamic field at %d\n",
+			    rte_pmd_ark_rx_userdata_dynfield_offset);
+	}
+
 	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	rte_eth_copy_pci_info(dev, pci_dev);
 	dev->data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
@@ -513,6 +555,18 @@ static int
 eth_ark_dev_configure(struct rte_eth_dev *dev)
 {
 	struct ark_adapter *ark = dev->data->dev_private;
+	int ret;
+
+	if (dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_TIMESTAMP) {
+		ret = rte_mbuf_dyn_rx_timestamp_register(
+				&ark_timestamp_dynfield_offset,
+				&ark_timestamp_rx_dynflag);
+		if (ret != 0) {
+			ARK_PMD_LOG(ERR,
+				"Failed to register Rx timestamp field/flag\n");
+			return -rte_errno;
+		}
+	}
 
 	eth_ark_dev_set_link_up(dev);
 	if (ark->user_ext.dev_configure)
@@ -742,6 +796,8 @@ eth_ark_dev_info_get(struct rte_eth_dev *dev,
 				ETH_LINK_SPEED_40G |
 				ETH_LINK_SPEED_50G |
 				ETH_LINK_SPEED_100G);
+
+	dev_info->rx_offload_capa = DEV_RX_OFFLOAD_TIMESTAMP;
 
 	return 0;
 }

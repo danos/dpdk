@@ -77,8 +77,6 @@ struct bnxt_rx_ring_info {
 
 uint16_t bnxt_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 			       uint16_t nb_pkts);
-uint16_t bnxt_dummy_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
-			      uint16_t nb_pkts);
 void bnxt_free_rx_rings(struct bnxt *bp);
 int bnxt_init_rx_ring_struct(struct bnxt_rx_queue *rxq, unsigned int socket_id);
 int bnxt_init_one_rx_ring(struct bnxt_rx_queue *rxq);
@@ -94,6 +92,16 @@ int bnxt_rxq_vec_setup(struct bnxt_rx_queue *rxq);
 void bnxt_set_mark_in_mbuf(struct bnxt *bp,
 			   struct rx_pkt_cmpl_hi *rxcmp1,
 			   struct rte_mbuf *mbuf);
+
+typedef uint32_t bnxt_cfa_code_dynfield_t;
+extern int bnxt_cfa_code_dynfield_offset;
+
+static inline bnxt_cfa_code_dynfield_t *
+bnxt_cfa_code_dynfield(struct rte_mbuf *mbuf)
+{
+	return RTE_MBUF_DYNFIELD(mbuf,
+		bnxt_cfa_code_dynfield_offset, bnxt_cfa_code_dynfield_t *);
+}
 
 #define BNXT_RX_META_CFA_CODE_SHIFT		19
 #define BNXT_CFA_CODE_META_SHIFT		16

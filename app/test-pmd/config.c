@@ -3504,6 +3504,10 @@ set_fwd_lcores_mask(uint64_t lcoremask)
 void
 set_fwd_lcores_number(uint16_t nb_lc)
 {
+	if (test_done == 0) {
+		printf("Please stop forwarding first\n");
+		return;
+	}
 	if (nb_lc > nb_cfg_lcores) {
 		printf("nb fwd cores %u > %u (max. number of configured "
 		       "lcores) - ignored\n",
@@ -3955,44 +3959,6 @@ show_tx_pkt_times(void)
 void
 set_tx_pkt_times(unsigned int *tx_times)
 {
-	uint16_t port_id;
-	int offload_found = 0;
-	int offset;
-	int flag;
-
-	static const struct rte_mbuf_dynfield desc_offs = {
-		.name = RTE_MBUF_DYNFIELD_TIMESTAMP_NAME,
-		.size = sizeof(uint64_t),
-		.align = __alignof__(uint64_t),
-	};
-	static const struct rte_mbuf_dynflag desc_flag = {
-		.name = RTE_MBUF_DYNFLAG_TX_TIMESTAMP_NAME,
-	};
-
-	RTE_ETH_FOREACH_DEV(port_id) {
-		struct rte_eth_dev_info dev_info = { 0 };
-		int ret;
-
-		ret = rte_eth_dev_info_get(port_id, &dev_info);
-		if (ret == 0 && dev_info.tx_offload_capa &
-				DEV_TX_OFFLOAD_SEND_ON_TIMESTAMP) {
-			offload_found = 1;
-			break;
-		}
-	}
-	if (!offload_found) {
-		printf("No device supporting Tx timestamp scheduling found, "
-		       "dynamic flag and field not registered\n");
-		return;
-	}
-	offset = rte_mbuf_dynfield_register(&desc_offs);
-	if (offset < 0 && rte_errno != EEXIST)
-		printf("Dynamic timestamp field registration error: %d",
-		       rte_errno);
-	flag = rte_mbuf_dynflag_register(&desc_flag);
-	if (flag < 0 && rte_errno != EEXIST)
-		printf("Dynamic timestamp flag registration error: %d",
-		       rte_errno);
 	tx_pkt_times_inter = tx_times[0];
 	tx_pkt_times_intra = tx_times[1];
 }
@@ -4711,6 +4677,8 @@ flowtype_to_str(uint16_t flow_type)
 	return NULL;
 }
 
+#if defined(RTE_NET_I40E) || defined(RTE_NET_IXGBE)
+
 static inline void
 print_fdir_flex_mask(struct rte_eth_fdir_flex_conf *flex_conf, uint32_t num)
 {
@@ -4750,16 +4718,7 @@ static int
 get_fdir_info(portid_t port_id, struct rte_eth_fdir_info *fdir_info,
 		    struct rte_eth_fdir_stats *fdir_stat)
 {
-	int ret;
-
-	ret = rte_eth_dev_filter_supported(port_id, RTE_ETH_FILTER_FDIR);
-	if (!ret) {
-		rte_eth_dev_filter_ctrl(port_id, RTE_ETH_FILTER_FDIR,
-			       RTE_ETH_FILTER_INFO, fdir_info);
-		rte_eth_dev_filter_ctrl(port_id, RTE_ETH_FILTER_FDIR,
-			       RTE_ETH_FILTER_STATS, fdir_stat);
-		return 0;
-	}
+	int ret = -ENOTSUP;
 
 #ifdef RTE_NET_I40E
 	if (ret == -ENOTSUP) {
@@ -4856,6 +4815,8 @@ fdir_get_infos(portid_t port_id)
 	printf("  %s############################%s\n",
 	       fdir_stats_border, fdir_stats_border);
 }
+
+#endif /* RTE_NET_I40E || RTE_NET_IXGBE */
 
 void
 fdir_set_flex_mask(portid_t port_id, struct rte_eth_fdir_flex_mask *cfg)

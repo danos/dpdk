@@ -8,7 +8,7 @@
 Solarflare libefx-based Poll Mode Driver
 ========================================
 
-The SFC EFX PMD (**librte_pmd_sfc_efx**) provides poll mode driver support
+The SFC EFX PMD (**librte_net_sfc_efx**) provides poll mode driver support
 for **Solarflare SFN7xxx and SFN8xxx** family of 10/40 Gbps adapters,
 **Solarflare XtremeScale X2xxx** family of 10/25/40/50/100 Gbps adapters and
 **Alveo SN1000 SmartNICs** family of 10/25/40/50/100 Gbps adapters.
@@ -144,8 +144,9 @@ Flow API support
 Supported attributes:
 
 - Ingress
+- Transfer
 
-Supported pattern items:
+Supported pattern items (***non-transfer*** rules):
 
 - VOID
 
@@ -173,7 +174,7 @@ Supported pattern items:
 
 - NVGRE (exact match of virtual subnet ID)
 
-Supported actions:
+Supported actions (***non-transfer*** rules):
 
 - VOID
 
@@ -186,6 +187,60 @@ Supported actions:
 - FLAG (supported only with ef10_essb Rx datapath)
 
 - MARK (supported only with ef10_essb Rx datapath)
+
+Supported pattern items (***transfer*** rules):
+
+- PORT_ID (cannot repeat; conflicts with other traffic source items)
+
+- PHY_PORT (cannot repeat; conflicts with other traffic source items)
+
+- PF (cannot repeat; conflicts with other traffic source items)
+
+- VF (cannot repeat; conflicts with other traffic source items)
+
+- ETH
+
+- VLAN (double-tagging is supported)
+
+- IPV4 (source/destination addresses, IP transport protocol,
+  type of service, time to live)
+
+- IPV6 (source/destination addresses, IP transport protocol,
+  traffic class, hop limit)
+
+- TCP (source/destination ports, TCP header length + TCP flags)
+
+- UDP (source/destination ports)
+
+- VXLAN (exact match of VXLAN network identifier)
+
+- GENEVE (exact match of virtual network identifier)
+
+- NVGRE (exact match of virtual subnet ID)
+
+Supported actions (***transfer*** rules):
+
+- OF_POP_VLAN
+
+- OF_PUSH_VLAN
+
+- OF_VLAN_SET_VID
+
+- OF_VLAN_SET_PCP
+
+- FLAG
+
+- MARK
+
+- PHY_PORT
+
+- PF
+
+- VF
+
+- PORT_ID
+
+- DROP
 
 Validating flow rules depends on the firmware variant.
 

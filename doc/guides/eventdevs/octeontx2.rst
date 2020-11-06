@@ -4,7 +4,7 @@
 OCTEON TX2 SSO Eventdev Driver
 ===============================
 
-The OCTEON TX2 SSO PMD (**librte_pmd_octeontx2_event**) provides poll mode
+The OCTEON TX2 SSO PMD (**librte_event_octeontx2**) provides poll mode
 eventdev driver support for the inbuilt event device found in the **Marvell OCTEON TX2**
 SoC family.
 
@@ -44,20 +44,9 @@ Prerequisites and Compilation procedure
 
    See :doc:`../platform/octeontx2` for setup information.
 
-Pre-Installation Configuration
-------------------------------
-
-Compile time Config Options
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The following option can be modified in the ``config`` file.
-
-- ``CONFIG_RTE_LIBRTE_PMD_OCTEONTX2_EVENTDEV`` (default ``y``)
-
-  Toggle compilation of the ``librte_pmd_octeontx2_event`` driver.
 
 Runtime Config Options
-~~~~~~~~~~~~~~~~~~~~~~
+----------------------
 
 - ``Maximum number of in-flight events`` (default ``8192``)
 
@@ -159,7 +148,7 @@ Runtime Config Options
       -w 0002:0e:00.0,npa_lock_mask=0xf
 
 Debugging Options
-~~~~~~~~~~~~~~~~~
+-----------------
 
 .. _table_octeontx2_event_debug_options:
 

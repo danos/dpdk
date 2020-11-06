@@ -1497,6 +1497,29 @@ ulp_mapper_tcam_tbl_entry_write(struct bnxt_ulp_mapper_parms *parms,
 	return rc;
 }
 
+#define BNXT_ULP_WC_TCAM_SLICE_SIZE 80
+/* internal function to post process the key/mask blobs for wildcard tcam tbl */
+static void ulp_mapper_wc_tcam_tbl_post_process(struct ulp_blob *blob,
+						uint32_t len)
+{
+	uint8_t mode[2] = {0x0, 0x0};
+	uint32_t mode_len = len / BNXT_ULP_WC_TCAM_SLICE_SIZE;
+	uint32_t size, idx;
+
+	/* Add the mode bits to the key and mask*/
+	if (mode_len == 2)
+		mode[1] = 2;
+	else if (mode_len > 2)
+		mode[1] = 3;
+
+	size = BNXT_ULP_WC_TCAM_SLICE_SIZE + ULP_BYTE_2_BITS(sizeof(mode));
+	for (idx = 0; idx < mode_len; idx++)
+		ulp_blob_insert(blob, (size * idx), mode,
+				ULP_BYTE_2_BITS(sizeof(mode)));
+	ulp_blob_perform_64B_word_swap(blob);
+	ulp_blob_perform_64B_byte_swap(blob);
+}
+
 static int32_t
 ulp_mapper_tcam_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 			    struct bnxt_ulp_mapper_tbl_info *tbl)
@@ -1533,9 +1556,9 @@ ulp_mapper_tcam_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 		return -EINVAL;
 	}
 
-	if (!ulp_blob_init(&key, tbl->key_bit_size,
+	if (!ulp_blob_init(&key, tbl->blob_key_bit_size,
 			   parms->device_params->byte_order) ||
-	    !ulp_blob_init(&mask, tbl->key_bit_size,
+	    !ulp_blob_init(&mask, tbl->blob_key_bit_size,
 			   parms->device_params->byte_order) ||
 	    !ulp_blob_init(&data, tbl->result_bit_size,
 			   parms->device_params->byte_order) ||
@@ -1543,6 +1566,11 @@ ulp_mapper_tcam_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 			   parms->device_params->byte_order)) {
 		BNXT_TF_DBG(ERR, "blob inits failed.\n");
 		return -EINVAL;
+	}
+
+	if (tbl->resource_type == TF_TCAM_TBL_TYPE_WC_TCAM) {
+		key.byte_order = BNXT_ULP_BYTE_ORDER_BE;
+		mask.byte_order = BNXT_ULP_BYTE_ORDER_BE;
 	}
 
 	/* create the key/mask */
@@ -1570,6 +1598,11 @@ ulp_mapper_tcam_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 		}
 	}
 
+	if (tbl->resource_type == TF_TCAM_TBL_TYPE_WC_TCAM) {
+		ulp_mapper_wc_tcam_tbl_post_process(&key, tbl->key_bit_size);
+		ulp_mapper_wc_tcam_tbl_post_process(&mask, tbl->key_bit_size);
+	}
+
 	if (tbl->srch_b4_alloc == BNXT_ULP_SEARCH_BEFORE_ALLOC_NO) {
 		/*
 		 * No search for re-use is requested, so simply allocate the
@@ -1578,18 +1611,18 @@ ulp_mapper_tcam_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 		aparms.dir		= tbl->direction;
 		aparms.tcam_tbl_type	= tbl->resource_type;
 		aparms.search_enable	= tbl->srch_b4_alloc;
-		aparms.key_sz_in_bits	= tbl->key_bit_size;
 		aparms.key		= ulp_blob_data_get(&key, &tmplen);
-		if (tbl->key_bit_size != tmplen) {
+		aparms.key_sz_in_bits	= tmplen;
+		if (tbl->blob_key_bit_size != tmplen) {
 			BNXT_TF_DBG(ERR, "Key len (%d) != Expected (%d)\n",
-				    tmplen, tbl->key_bit_size);
+				    tmplen, tbl->blob_key_bit_size);
 			return -EINVAL;
 		}
 
 		aparms.mask		= ulp_blob_data_get(&mask, &tmplen);
-		if (tbl->key_bit_size != tmplen) {
+		if (tbl->blob_key_bit_size != tmplen) {
 			BNXT_TF_DBG(ERR, "Mask len (%d) != Expected (%d)\n",
-				    tmplen, tbl->key_bit_size);
+				    tmplen, tbl->blob_key_bit_size);
 			return -EINVAL;
 		}
 
@@ -2690,15 +2723,9 @@ ulp_mapper_flow_destroy(struct bnxt_ulp_context *ulp_ctx,
 		BNXT_TF_DBG(ERR, "Invalid parms, unable to free flow\n");
 		return -EINVAL;
 	}
-	if (bnxt_ulp_cntxt_acquire_fdb_lock(ulp_ctx)) {
-		BNXT_TF_DBG(ERR, "Flow db lock acquire failed\n");
-		return -EINVAL;
-	}
 
 	rc = ulp_mapper_resources_free(ulp_ctx, flow_type, fid);
-	bnxt_ulp_cntxt_release_fdb_lock(ulp_ctx);
 	return rc;
-
 }
 
 /* Function to handle the default global templates that are allocated during
@@ -2762,8 +2789,7 @@ ulp_mapper_glb_template_table_init(struct bnxt_ulp_context *ulp_ctx)
  */
 int32_t
 ulp_mapper_flow_create(struct bnxt_ulp_context *ulp_ctx,
-		       struct bnxt_ulp_mapper_create_parms *cparms,
-		       uint32_t *flowid)
+		       struct bnxt_ulp_mapper_create_parms *cparms)
 {
 	struct bnxt_ulp_mapper_parms parms;
 	struct ulp_regfile regfile;
@@ -2788,6 +2814,8 @@ ulp_mapper_flow_create(struct bnxt_ulp_context *ulp_ctx,
 	parms.flow_type = cparms->flow_type;
 	parms.parent_flow = cparms->parent_flow;
 	parms.parent_fid = cparms->parent_fid;
+	parms.fid = cparms->flow_id;
+	parms.tun_idx = cparms->tun_idx;
 
 	/* Get the device id from the ulp context */
 	if (bnxt_ulp_cntxt_dev_id_get(ulp_ctx, &parms.dev_id)) {
@@ -2828,26 +2856,7 @@ ulp_mapper_flow_create(struct bnxt_ulp_context *ulp_ctx,
 		return -EINVAL;
 	}
 
-	/* Protect flow creation */
-	if (bnxt_ulp_cntxt_acquire_fdb_lock(ulp_ctx)) {
-		BNXT_TF_DBG(ERR, "Flow db lock acquire failed\n");
-		return -EINVAL;
-	}
-
-	/* Allocate a Flow ID for attaching all resources for the flow to.
-	 * Once allocated, all errors have to walk the list of resources and
-	 * free each of them.
-	 */
-	rc = ulp_flow_db_fid_alloc(ulp_ctx,
-				   parms.flow_type,
-				   cparms->func_id,
-				   &parms.fid);
-	if (rc) {
-		BNXT_TF_DBG(ERR, "Unable to allocate flow table entry\n");
-		bnxt_ulp_cntxt_release_fdb_lock(ulp_ctx);
-		return rc;
-	}
-
+	/* Process the action template list from the selected action table*/
 	if (parms.act_tid) {
 		parms.tmpl_type = BNXT_ULP_TEMPLATE_TYPE_ACTION;
 		/* Process the action template tables */
@@ -2878,13 +2887,9 @@ ulp_mapper_flow_create(struct bnxt_ulp_context *ulp_ctx,
 			goto flow_error;
 	}
 
-	*flowid = parms.fid;
-	bnxt_ulp_cntxt_release_fdb_lock(ulp_ctx);
-
 	return rc;
 
 flow_error:
-	bnxt_ulp_cntxt_release_fdb_lock(ulp_ctx);
 	/* Free all resources that were allocated during flow creation */
 	trc = ulp_mapper_flow_destroy(ulp_ctx, BNXT_ULP_FDB_TYPE_REGULAR,
 				      parms.fid);

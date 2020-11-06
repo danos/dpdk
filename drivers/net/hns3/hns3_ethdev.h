@@ -6,7 +6,7 @@
 #define _HNS3_ETHDEV_H_
 
 #include <sys/time.h>
-#include <rte_alarm.h>
+#include <rte_ethdev_driver.h>
 
 #include "hns3_cmd.h"
 #include "hns3_mbx.h"
@@ -39,6 +39,9 @@
 
 #define HNS3_SW_SHIFT_AND_DISCARD_MODE		0
 #define HNS3_HW_SHIFT_AND_DISCARD_MODE		1
+
+#define HNS3_UNLIMIT_PROMISC_MODE       0
+#define HNS3_LIMIT_PROMISC_MODE         1
 
 #define HNS3_UC_MACADDR_NUM		128
 #define HNS3_VF_UC_MACADDR_NUM		48
@@ -166,7 +169,7 @@ enum hns3_media_type {
 
 struct hns3_mac {
 	uint8_t mac_addr[RTE_ETHER_ADDR_LEN];
-	bool default_addr_setted; /* whether default addr(mac_addr) is setted */
+	bool default_addr_setted; /* whether default addr(mac_addr) is set */
 	uint8_t media_type;
 	uint8_t phy_addr;
 	uint8_t link_duplex  : 1; /* ETH_LINK_[HALF/FULL]_DUPLEX */
@@ -375,11 +378,10 @@ struct hns3_reset_data {
 #define HNS3_INTR_MAPPING_VEC_RSV_ONE		0
 #define HNS3_INTR_MAPPING_VEC_ALL		1
 
-#define HNS3_INTR_COALESCE_NON_QL		0
-#define HNS3_INTR_COALESCE_QL			1
-
 #define HNS3_INTR_COALESCE_GL_UINT_2US		0
 #define HNS3_INTR_COALESCE_GL_UINT_1US		1
+
+#define HNS3_INTR_QL_NONE			0
 
 struct hns3_queue_intr {
 	/*
@@ -402,27 +404,14 @@ struct hns3_queue_intr {
 	 */
 	uint8_t mapping_mode;
 	/*
-	 * interrupt coalesce mode.
-	 * value range:
-	 *      HNS3_INTR_COALESCE_NON_QL/HNS3_INTR_COALESCE_QL
-	 *
-	 *  - HNS3_INTR_COALESCE_NON_QL
-	 *     For some versions of hardware network engine, hardware doesn't
-	 *     support QL(quanity limiter) algorithm for interrupt coalesce
-	 *     of queue's interrupt.
-	 *
-	 *  - HNS3_INTR_COALESCE_QL
-	 *     In this mode, hardware support QL(quanity limiter) algorithm for
-	 *     interrupt coalesce of queue's interrupt.
-	 */
-	uint8_t coalesce_mode;
-	/*
 	 * The unit of GL(gap limiter) configuration for interrupt coalesce of
 	 * queue's interrupt.
 	 * value range:
 	 *      HNS3_INTR_COALESCE_GL_UINT_2US/HNS3_INTR_COALESCE_GL_UINT_1US
 	 */
 	uint8_t gl_unit;
+	/* The max QL(quantity limiter) value */
+	uint16_t int_ql_max;
 };
 
 #define HNS3_TSO_SW_CAL_PSEUDO_H_CSUM		0
@@ -527,6 +516,24 @@ struct hns3_hw {
 	 *     is enabled.
 	 */
 	uint8_t vlan_mode;
+	/*
+	 * promisc mode.
+	 * value range:
+	 *      HNS3_UNLIMIT_PROMISC_MODE/HNS3_LIMIT_PROMISC_MODE
+	 *
+	 *  - HNS3_UNLIMIT_PROMISC_MODE
+	 *     In this mode, TX unicast promisc will be configured when promisc
+	 *     is set, driver can receive all the ingress and outgoing traffic.
+	 *     In the words, all the ingress packets, all the packets sent from
+	 *     the PF and other VFs on the same physical port.
+	 *
+	 *  - HNS3_LIMIT_PROMISC_MODE
+	 *     In this mode, TX unicast promisc is shutdown when promisc mode
+	 *     is set. So, driver will only receive all the ingress traffic.
+	 *     The packets sent from the PF and other VFs on the same physical
+	 *     port won't be copied to the function which has set promisc mode.
+	 */
+	uint8_t promisc_mode;
 	uint8_t max_non_tso_bd_num; /* max BD number of one non-TSO packet */
 
 	struct hns3_port_base_vlan_config port_base_vlan_cfg;
@@ -647,16 +654,17 @@ struct hns3_mp_param {
 #define HNS3_L2TBL_NUM	4
 #define HNS3_L3TBL_NUM	16
 #define HNS3_L4TBL_NUM	16
+#define HNS3_OL2TBL_NUM	4
 #define HNS3_OL3TBL_NUM	16
 #define HNS3_OL4TBL_NUM	16
 
 struct hns3_ptype_table {
-	uint32_t l2table[HNS3_L2TBL_NUM];
-	uint32_t l3table[HNS3_L3TBL_NUM];
+	uint32_t l2l3table[HNS3_L2TBL_NUM][HNS3_L3TBL_NUM];
 	uint32_t l4table[HNS3_L4TBL_NUM];
 	uint32_t inner_l2table[HNS3_L2TBL_NUM];
 	uint32_t inner_l3table[HNS3_L3TBL_NUM];
 	uint32_t inner_l4table[HNS3_L4TBL_NUM];
+	uint32_t ol2table[HNS3_OL2TBL_NUM];
 	uint32_t ol3table[HNS3_OL3TBL_NUM];
 	uint32_t ol4table[HNS3_OL4TBL_NUM];
 };
@@ -783,12 +791,8 @@ struct hns3_adapter {
 
 #define HNS3_DEV_PRIVATE_TO_HW(adapter) \
 	(&((struct hns3_adapter *)adapter)->hw)
-#define HNS3_DEV_PRIVATE_TO_ADAPTER(adapter) \
-	((struct hns3_adapter *)adapter)
 #define HNS3_DEV_PRIVATE_TO_PF(adapter) \
 	(&((struct hns3_adapter *)adapter)->pf)
-#define HNS3VF_DEV_PRIVATE_TO_VF(adapter) \
-	(&((struct hns3_adapter *)adapter)->vf)
 #define HNS3_DEV_HW_TO_ADAPTER(hw) \
 	container_of(hw, struct hns3_adapter, hw)
 
@@ -803,6 +807,8 @@ struct hns3_adapter {
 	hns3_set_field((origin), (0x1UL << (shift)), (shift), (val))
 #define hns3_get_bit(origin, shift) \
 	hns3_get_field((origin), (0x1UL << (shift)), (shift))
+
+#define hns3_gen_field_val(mask, shift, val) (((val) << (shift)) & (mask))
 
 /*
  * upper_32_bits - return bits 32-63 of a number

@@ -118,6 +118,36 @@ efx_mcdi_raise_exception(
 	__in_opt	efx_mcdi_req_t *emrp,
 	__in		int rc);
 
+/*
+ * Flags that name portions of extended version information
+ *
+ * The values match their MCDI counterparts.
+ */
+#define	EFX_MCDI_VERSION_BOARD_INFO	(1U << 4)
+
+typedef struct efx_mcdi_version_s {
+	/* Basic version information */
+	uint16_t		emv_version[4];
+	uint32_t		emv_firmware;
+
+	/*
+	 * Extended version information
+	 *
+	 * Valid portions of obtained information are indicated by flags.
+	 */
+	uint32_t		emv_flags;
+
+	/* Information valid if emv_flags has EFX_MCDI_VERSION_BOARD_INFO set */
+	efx_nic_board_info_t	emv_board_info;
+} efx_mcdi_version_t;
+
+LIBEFX_INTERNAL
+extern	__checkReturn	efx_rc_t
+efx_mcdi_get_version(
+	__in		efx_nic_t *enp,
+	__in		uint32_t flags_req,
+	__out		efx_mcdi_version_t *verp);
+
 typedef enum efx_mcdi_boot_e {
 	EFX_MCDI_BOOT_PRIMARY,
 	EFX_MCDI_BOOT_SECONDARY,
@@ -420,6 +450,10 @@ efx_mcdi_phy_module_get_info(
 #define	MCDI_OUT_DWORD_FIELD(_emr, _ofst, _field)			\
 	EFX_DWORD_FIELD(*MCDI_OUT2(_emr, efx_dword_t, _ofst),		\
 			MC_CMD_ ## _field)
+
+#define	MCDI_OUT_INDEXED_DWORD_FIELD(_emr, _ofst, _idx, _field)		\
+	EFX_DWORD_FIELD(*(MCDI_OUT2(_emr, efx_dword_t, _ofst) +		\
+			(_idx)), _field)
 
 #define	MCDI_EV_FIELD(_eqp, _field)					\
 	EFX_QWORD_FIELD(*_eqp, MCDI_EVENT_ ## _field)

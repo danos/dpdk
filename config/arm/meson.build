@@ -22,7 +22,6 @@ flags_common_default = [
 	#	['RTE_ARM64_MEMCPY_STRICT_ALIGN', false],
 
 	['RTE_NET_FM10K', false],
-	['RTE_NET_SFC_EFX', false],
 	['RTE_NET_AVP', false],
 
 	['RTE_SCHED_VECTOR', false],
@@ -63,12 +62,6 @@ flags_armada = [
 	['RTE_MAX_LCORE', 16]]
 
 flags_default_extra = []
-flags_n1sdp_extra = [
-	['RTE_MACHINE', '"n1sdp"'],
-	['RTE_MAX_NUMA_NODES', 1],
-	['RTE_MAX_LCORE', 4],
-	['RTE_EAL_NUMA_AWARE_HUGEPAGES', false],
-	['RTE_LIBRTE_VHOST_NUMA', false]]
 flags_thunderx_extra = [
 	['RTE_MACHINE', '"thunderx"'],
 	['RTE_USE_C11_MEM_MODEL', false]]
@@ -86,6 +79,16 @@ flags_octeontx2_extra = [
 	['RTE_ARM_FEATURE_ATOMICS', true],
 	['RTE_EAL_IGB_UIO', false],
 	['RTE_USE_C11_MEM_MODEL', true]]
+flags_n1generic_extra = [
+	['RTE_MACHINE', '"neoverse-n1"'],
+	['RTE_MAX_LCORE', 64],
+	['RTE_CACHE_LINE_SIZE', 64],
+	['RTE_ARM_FEATURE_ATOMICS', true],
+	['RTE_USE_C11_MEM_MODEL', true],
+	['RTE_MAX_MEM_MB', 1048576],
+	['RTE_MAX_NUMA_NODES', 1],
+	['RTE_EAL_NUMA_AWARE_HUGEPAGES', false],
+	['RTE_LIBRTE_VHOST_NUMA', false]]
 
 machine_args_generic = [
 	['default', ['-march=armv8-a+crc', '-moutline-atomics']],
@@ -97,7 +100,7 @@ machine_args_generic = [
 	['0xd09', ['-mcpu=cortex-a73']],
 	['0xd0a', ['-mcpu=cortex-a75']],
 	['0xd0b', ['-mcpu=cortex-a76']],
-	['0xd0c', ['-march=armv8.2-a+crc+crypto', '-mcpu=neoverse-n1'], flags_n1sdp_extra]]
+	['0xd0c', ['-march=armv8.2-a+crypto', '-mcpu=neoverse-n1'], flags_n1generic_extra]]
 
 machine_args_cavium = [
 	['default', ['-march=armv8-a+crc+crypto','-mcpu=thunderx']],

@@ -44,6 +44,10 @@
 #define ice_struct_size(ptr, field, num) \
 	(sizeof(*(ptr)) + sizeof(*(ptr)->field) * (num))
 
+#ifndef FLEX_ARRAY_SIZE
+#define FLEX_ARRAY_SIZE(_ptr, _mem, cnt) ((cnt) * sizeof(_ptr->_mem[0]))
+#endif /* FLEX_ARRAY_SIZE */
+
 #include "ice_status.h"
 #include "ice_hw_autogen.h"
 #include "ice_devids.h"
@@ -509,11 +513,13 @@ struct ice_orom_info {
 	u8 major;			/* Major version of OROM */
 	u8 patch;			/* Patch version of OROM */
 	u16 build;			/* Build version of OROM */
+	u32 srev;			/* Security revision */
 };
 
 /* NVM version information */
 struct ice_nvm_info {
 	u32 eetrack;
+	u32 srev;
 	u8 major;
 	u8 minor;
 };
@@ -753,19 +759,28 @@ struct ice_dcb_app_priority_table {
 	u8 selector;
 };
 
-#define ICE_MAX_USER_PRIORITY	8
-#define ICE_DCBX_MAX_APPS	32
-#define ICE_LLDPDU_SIZE		1500
-#define ICE_TLV_STATUS_OPER	0x1
-#define ICE_TLV_STATUS_SYNC	0x2
-#define ICE_TLV_STATUS_ERR	0x4
-#define ICE_APP_PROT_ID_FCOE	0x8906
-#define ICE_APP_PROT_ID_ISCSI	0x0cbc
-#define ICE_APP_PROT_ID_FIP	0x8914
-#define ICE_APP_SEL_ETHTYPE	0x1
-#define ICE_APP_SEL_TCPIP	0x2
-#define ICE_CEE_APP_SEL_ETHTYPE	0x0
-#define ICE_CEE_APP_SEL_TCPIP	0x1
+#define ICE_MAX_USER_PRIORITY		8
+#define ICE_DCBX_MAX_APPS		32
+#define ICE_LLDPDU_SIZE			1500
+#define ICE_TLV_STATUS_OPER		0x1
+#define ICE_TLV_STATUS_SYNC		0x2
+#define ICE_TLV_STATUS_ERR		0x4
+#ifndef ICE_APP_PROT_ID_FCOE
+#define ICE_APP_PROT_ID_FCOE		0x8906
+#endif /* ICE_APP_PROT_ID_FCOE */
+#ifndef ICE_APP_PROT_ID_ISCSI
+#define ICE_APP_PROT_ID_ISCSI		0x0cbc
+#endif /* ICE_APP_PROT_ID_ISCSI */
+#ifndef ICE_APP_PROT_ID_ISCSI_860
+#define ICE_APP_PROT_ID_ISCSI_860	0x035c
+#endif /* ICE_APP_PROT_ID_ISCSI_860 */
+#ifndef ICE_APP_PROT_ID_FIP
+#define ICE_APP_PROT_ID_FIP		0x8914
+#endif /* ICE_APP_PROT_ID_FIP */
+#define ICE_APP_SEL_ETHTYPE		0x1
+#define ICE_APP_SEL_TCPIP		0x2
+#define ICE_CEE_APP_SEL_ETHTYPE		0x0
+#define ICE_CEE_APP_SEL_TCPIP		0x1
 
 struct ice_dcbx_cfg {
 	u32 numapps;
@@ -928,13 +943,13 @@ struct ice_hw {
 
 	enum ice_aq_err pkg_dwnld_status;
 
-	/* Driver's package ver - (from the Metadata seg) */
+	/* Driver's package ver - (from the Ice Metadata section) */
 	struct ice_pkg_ver pkg_ver;
 	u8 pkg_name[ICE_PKG_NAME_SIZE];
 
-	/* Driver's Ice package version (from the Ice seg) */
-	struct ice_pkg_ver ice_pkg_ver;
-	u8 ice_pkg_name[ICE_PKG_NAME_SIZE];
+	/* Driver's Ice segment format version and id (from the Ice seg) */
+	struct ice_pkg_ver ice_seg_fmt_ver;
+	u8 ice_seg_id[ICE_SEG_ID_SIZE];
 
 	/* Pointer to the ice segment */
 	struct ice_seg *seg;
@@ -1054,6 +1069,14 @@ enum ice_sw_fwd_act_type {
 	ICE_INVAL_ACT
 };
 
+struct ice_aq_get_set_rss_lut_params {
+	u16 vsi_handle;		/* software VSI handle */
+	u16 lut_size;		/* size of the LUT buffer */
+	u8 lut_type;		/* type of the LUT (i.e. VSI, PF, Global) */
+	u8 *lut;		/* input RSS LUT for set and output RSS LUT for get */
+	u8 global_lut_id;	/* only valid when lut_type is global */
+};
+
 /* Checksum and Shadow RAM pointers */
 #define ICE_SR_NVM_CTRL_WORD			0x00
 #define ICE_SR_PHY_ANALOG_PTR			0x04
@@ -1116,6 +1139,13 @@ enum ice_sw_fwd_act_type {
 #define ICE_SR_IMMEDIATE_VALUES_PTR		0x4E
 #define ICE_SR_LINK_DEFAULT_OVERRIDE_PTR	0x134
 #define ICE_SR_POR_REGISTERS_AUTOLOAD_PTR	0x118
+
+/* CSS Header words */
+#define ICE_NVM_CSS_SREV_L			0x14
+#define ICE_NVM_CSS_SREV_H			0x15
+
+/* Size in bytes of Option ROM trailer */
+#define ICE_NVM_OROM_TRAILER_LENGTH		660
 
 /* Auxiliary field, mask and shift definition for Shadow RAM and NVM Flash */
 #define ICE_SR_VPD_SIZE_WORDS		512

@@ -4,7 +4,7 @@
 BNXT Poll Mode Driver
 =====================
 
-The Broadcom BNXT PMD (**librte_pmd_bnxt**) implements support for adapters
+The Broadcom BNXT PMD (**librte_net_bnxt**) implements support for adapters
 based on Ethernet controllers and SoCs belonging to the Broadcom
 BCM574XX/BCM575XX NetXtreme-E® Family of Ethernet Network Controllers,
 the Broadcom BCM588XX Stingray Family of Smart NIC Adapters, and the Broadcom
@@ -565,9 +565,6 @@ The BNXT PMD supports a PTP client application to communicate with a PTP master
 clock using DPDK IEEE1588 APIs. Note that the PTP client application needs to
 run on PF and vector mode needs to be disabled.
 
-For the PTP time synchronization support, the BNXT PMD must be compiled with
-``CONFIG_RTE_LIBRTE_IEEE1588=y`` (this compilation flag is currently pending).
-
 .. code-block:: console
 
     testpmd> set fwd ieee1588 // enable IEEE 1588 mode
@@ -612,7 +609,7 @@ Basic stats include:
 * oerrors
 
 By default, per-queue stats for 16 queues are supported. For more than 16
-queues, BNXT PMD should be compiled with ``CONFIG_RTE_ETHDEV_QUEUE_STAT_CNTRS``
+queues, BNXT PMD should be compiled with ``RTE_ETHDEV_QUEUE_STAT_CNTRS``
 set to the desired number of queues.
 
 Extended Stats
@@ -705,6 +702,26 @@ Notes
   on the same source or destination MAC address. This allows packets of such
   flows to be directed to one or more queues associated with the VNIC id.
   This implementation is supported only when TRUFLOW functionality is disabled.
+
+- An application can issue a VXLAN decap offload request using rte_flow API
+  either as a single rte_flow request or a combination of two stages.
+  The PMD currently supports the two stage offload design.
+  In this approach the offload request may come as two flow offload requests
+  Flow1 & Flow2.  The match criteria for Flow1 is O_DMAC, O_SMAC, O_DST_IP,
+  O_UDP_DPORT and actions are COUNT, MARK, JUMP. The match criteria for Flow2
+  is O_SRC_IP, O_DST_IP, VNI and inner header fields.
+  Flow1 and Flow2 flow offload requests can come in any order. If Flow2 flow
+  offload request comes first then Flow2 can’t be offloaded as there is
+  no O_DMAC information in Flow2. In this case, Flow2 will be deferred until
+  Flow1 flow offload request arrives. When Flow1 flow offload request is
+  received it will have O_DMAC information. Using Flow1’s O_DMAC, driver
+  creates an L2 context entry in the hardware as part of offloading Flow1.
+  Flow2 will now use Flow1’s O_DMAC to get the L2 context id associated with
+  this O_DMAC and other flow fields that are cached already at the time
+  of deferring Flow2 for offloading. Flow2 that arrive after Flow1 is offloaded
+  will be directly programmed and not cached.
+
+- PMD supports thread-safe rte_flow operations.
 
 Note: A VNIC represents a virtual interface in the hardware. It is a resource
 in the RX path of the chip and is used to setup various target actions such as

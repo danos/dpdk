@@ -1344,6 +1344,11 @@ struct rte_eth_conf {
 #define DEV_RX_OFFLOAD_VLAN_EXTEND	0x00000400
 #define DEV_RX_OFFLOAD_JUMBO_FRAME	0x00000800
 #define DEV_RX_OFFLOAD_SCATTER		0x00002000
+/**
+ * Timestamp is set by the driver in RTE_MBUF_DYNFIELD_TIMESTAMP_NAME
+ * and RTE_MBUF_DYNFLAG_RX_TIMESTAMP_NAME is set in ol_flags.
+ * The mbuf field and flag are registered when the offload is configured.
+ */
 #define DEV_RX_OFFLOAD_TIMESTAMP	0x00004000
 #define DEV_RX_OFFLOAD_SECURITY         0x00008000
 #define DEV_RX_OFFLOAD_KEEP_CRC		0x00010000
@@ -1408,20 +1413,25 @@ struct rte_eth_conf {
 #define DEV_TX_OFFLOAD_IP_TNL_TSO       0x00080000
 /** Device supports outer UDP checksum */
 #define DEV_TX_OFFLOAD_OUTER_UDP_CKSUM  0x00100000
-
-/** Device supports send on timestamp */
+/**
+ * Device sends on time read from RTE_MBUF_DYNFIELD_TIMESTAMP_NAME
+ * if RTE_MBUF_DYNFLAG_TX_TIMESTAMP_NAME is set in ol_flags.
+ * The mbuf field and flag are registered when the offload is configured.
+ */
 #define DEV_TX_OFFLOAD_SEND_ON_TIMESTAMP 0x00200000
-
-
-#define RTE_ETH_DEV_CAPA_RUNTIME_RX_QUEUE_SETUP 0x00000001
-/**< Device supports Rx queue setup after device started*/
-#define RTE_ETH_DEV_CAPA_RUNTIME_TX_QUEUE_SETUP 0x00000002
-/**< Device supports Tx queue setup after device started*/
-
 /*
  * If new Tx offload capabilities are defined, they also must be
  * mentioned in rte_tx_offload_names in rte_ethdev.c file.
  */
+
+/**@{@name Device capabilities
+ * Non-offload capabilities reported in rte_eth_dev_info.dev_capa.
+ */
+/** Device supports Rx queue setup after device started. */
+#define RTE_ETH_DEV_CAPA_RUNTIME_RX_QUEUE_SETUP 0x00000001
+/** Device supports Tx queue setup after device started. */
+#define RTE_ETH_DEV_CAPA_RUNTIME_TX_QUEUE_SETUP 0x00000002
+/**@}*/
 
 /*
  * Fallback default preferred Rx/Tx port parameters.
@@ -4058,47 +4068,6 @@ rte_eth_dev_udp_tunnel_port_delete(uint16_t port_id,
 				   struct rte_eth_udp_tunnel *tunnel_udp);
 
 /**
- * Check whether the filter type is supported on an Ethernet device.
- * All the supported filter types are defined in 'rte_eth_ctrl.h'.
- *
- * @param port_id
- *   The port identifier of the Ethernet device.
- * @param filter_type
- *   Filter type.
- * @return
- *   - (0) if successful.
- *   - (-ENOTSUP) if hardware doesn't support this filter type.
- *   - (-ENODEV) if *port_id* invalid.
- *   - (-EIO) if device is removed.
- */
-__rte_deprecated
-int rte_eth_dev_filter_supported(uint16_t port_id,
-		enum rte_filter_type filter_type);
-
-/**
- * Take operations to assigned filter type on an Ethernet device.
- * All the supported operations and filter types are defined in 'rte_eth_ctrl.h'.
- *
- * @param port_id
- *   The port identifier of the Ethernet device.
- * @param filter_type
- *   Filter type.
- * @param filter_op
- *   Type of operation.
- * @param arg
- *   A pointer to arguments defined specifically for the operation.
- * @return
- *   - (0) if successful.
- *   - (-ENOTSUP) if hardware doesn't support.
- *   - (-ENODEV) if *port_id* invalid.
- *   - (-EIO) if device is removed.
- *   - others depends on the specific operations implementation.
- */
-__rte_deprecated
-int rte_eth_dev_filter_ctrl(uint16_t port_id, enum rte_filter_type filter_type,
-			enum rte_filter_op filter_op, void *arg);
-
-/**
  * Get DCB information on an Ethernet device.
  *
  * @param port_id
@@ -4646,7 +4615,7 @@ int rte_eth_timesync_write_time(uint16_t port_id, const struct timespec *time);
  * rte_eth_read_clock(port, base_clock);
  *
  * Then, convert the raw mbuf timestamp with:
- * base_time_sec + (double)(mbuf->timestamp - base_clock) / freq;
+ * base_time_sec + (double)(*timestamp_dynfield(mbuf) - base_clock) / freq;
  *
  * This simple example will not provide a very good accuracy. One must
  * at least measure multiple times the frequency and do a regression.
@@ -4667,55 +4636,6 @@ int rte_eth_timesync_write_time(uint16_t port_id, const struct timespec *time);
 __rte_experimental
 int
 rte_eth_read_clock(uint16_t port_id, uint64_t *clock);
-
-/**
- * Config l2 tunnel ether type of an Ethernet device for filtering specific
- * tunnel packets by ether type.
- *
- * @param port_id
- *   The port identifier of the Ethernet device.
- * @param l2_tunnel
- *   l2 tunnel configuration.
- *
- * @return
- *   - (0) if successful.
- *   - (-ENODEV) if port identifier is invalid.
- *   - (-EIO) if device is removed.
- *   - (-ENOTSUP) if hardware doesn't support tunnel type.
- */
-int
-rte_eth_dev_l2_tunnel_eth_type_conf(uint16_t port_id,
-				    struct rte_eth_l2_tunnel_conf *l2_tunnel);
-
-/**
- * Enable/disable l2 tunnel offload functions. Include,
- * 1, The ability of parsing a type of l2 tunnel of an Ethernet device.
- *    Filtering, forwarding and offloading this type of tunnel packets depend on
- *    this ability.
- * 2, Stripping the l2 tunnel tag.
- * 3, Insertion of the l2 tunnel tag.
- * 4, Forwarding the packets based on the l2 tunnel tag.
- *
- * @param port_id
- *   The port identifier of the Ethernet device.
- * @param l2_tunnel
- *   l2 tunnel parameters.
- * @param mask
- *   Indicate the offload function.
- * @param en
- *   Enable or disable this function.
- *
- * @return
- *   - (0) if successful.
- *   - (-ENODEV) if port identifier is invalid.
- *   - (-EIO) if device is removed.
- *   - (-ENOTSUP) if hardware doesn't support tunnel type.
- */
-int
-rte_eth_dev_l2_tunnel_offload_set(uint16_t port_id,
-				  struct rte_eth_l2_tunnel_conf *l2_tunnel,
-				  uint32_t mask,
-				  uint8_t en);
 
 /**
 * Get the port id from device name. The device name should be specified
@@ -4883,6 +4803,10 @@ int rte_eth_dev_hairpin_capability_get(uint16_t port_id,
  * burst-oriented optimizations in both synchronous and asynchronous
  * packet processing environments with no overhead in both cases.
  *
+ * @note
+ *   Some drivers using vector instructions require that *nb_pkts* is
+ *   divisible by 4 or 8, depending on the driver implementation.
+ *
  * The rte_eth_rx_burst() function does not provide any error
  * notification to avoid the corresponding overhead. As a hint, the
  * upper-level application might check the status of the device link once
@@ -4899,6 +4823,7 @@ int rte_eth_dev_hairpin_capability_get(uint16_t port_id,
  *   must be large enough to store *nb_pkts* pointers in it.
  * @param nb_pkts
  *   The maximum number of packets to retrieve.
+ *   The value must be divisible by 8 in order to work with any driver.
  * @return
  *   The number of packets actually retrieved, which is the number
  *   of pointers to *rte_mbuf* structures effectively supplied to the

@@ -411,7 +411,9 @@ eth_dev_is_allocated(const struct rte_eth_dev *ethdev)
 static struct rte_eth_dev *
 eth_dev_allocated(const char *name)
 {
-	unsigned i;
+	uint16_t i;
+
+	RTE_BUILD_BUG_ON(RTE_MAX_ETHPORTS >= UINT16_MAX);
 
 	for (i = 0; i < RTE_MAX_ETHPORTS; i++) {
 		if (rte_eth_devices[i].data != NULL &&
@@ -440,7 +442,7 @@ rte_eth_dev_allocated(const char *name)
 static uint16_t
 eth_dev_find_free_port(void)
 {
-	unsigned i;
+	uint16_t i;
 
 	for (i = 0; i < RTE_MAX_ETHPORTS; i++) {
 		/* Using shared name field to find a free port. */
@@ -816,7 +818,7 @@ rte_eth_dev_get_name_by_port(uint16_t port_id, char *name)
 int
 rte_eth_dev_get_port_by_name(const char *name, uint16_t *port_id)
 {
-	uint32_t pid;
+	uint16_t pid;
 
 	if (name == NULL) {
 		RTE_ETHDEV_LOG(ERR, "Null pointer is specified\n");
@@ -1978,9 +1980,8 @@ rte_eth_rx_queue_setup(uint16_t port_id, uint16_t rx_queue_id,
 			return -EINVAL;
 		}
 	} else {
-		const struct rte_eth_rxseg_split *rx_seg =
-			(const struct rte_eth_rxseg_split *)rx_conf->rx_seg;
-		uint16_t n_seg = rx_conf->rx_nseg;
+		const struct rte_eth_rxseg_split *rx_seg;
+		uint16_t n_seg;
 
 		/* Extended multi-segment configuration check. */
 		if (rx_conf == NULL || rx_conf->rx_seg == NULL || rx_conf->rx_nseg == 0) {
@@ -1988,6 +1989,10 @@ rte_eth_rx_queue_setup(uint16_t port_id, uint16_t rx_queue_id,
 				       "Memory pool is null and no extended configuration provided\n");
 			return -EINVAL;
 		}
+
+		rx_seg = (const struct rte_eth_rxseg_split *)rx_conf->rx_seg;
+		n_seg = rx_conf->rx_nseg;
+
 		if (rx_conf->offloads & RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT) {
 			ret = rte_eth_rx_queue_check_split(rx_seg, n_seg,
 							   &mbp_buf_size,
@@ -4290,7 +4295,7 @@ rte_eth_mirror_rule_reset(uint16_t port_id, uint8_t rule_id)
 
 RTE_INIT(eth_dev_init_cb_lists)
 {
-	int i;
+	uint16_t i;
 
 	for (i = 0; i < RTE_MAX_ETHPORTS; i++)
 		TAILQ_INIT(&rte_eth_devices[i].link_intr_cbs);
@@ -4303,7 +4308,7 @@ rte_eth_dev_callback_register(uint16_t port_id,
 {
 	struct rte_eth_dev *dev;
 	struct rte_eth_dev_callback *user_cb;
-	uint32_t next_port; /* size is 32-bit to prevent loop wrap-around */
+	uint16_t next_port;
 	uint16_t last_port;
 
 	if (!cb_fn)
@@ -4366,7 +4371,7 @@ rte_eth_dev_callback_unregister(uint16_t port_id,
 	int ret;
 	struct rte_eth_dev *dev;
 	struct rte_eth_dev_callback *cb, *next;
-	uint32_t next_port; /* size is 32-bit to prevent loop wrap-around */
+	uint16_t next_port;
 	uint16_t last_port;
 
 	if (!cb_fn)
@@ -4757,34 +4762,6 @@ rte_eth_dev_rx_intr_disable(uint16_t port_id,
 								queue_id));
 }
 
-
-int
-rte_eth_dev_filter_supported(uint16_t port_id,
-			     enum rte_filter_type filter_type)
-{
-	struct rte_eth_dev *dev;
-
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-
-	dev = &rte_eth_devices[port_id];
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->filter_ctrl, -ENOTSUP);
-	return (*dev->dev_ops->filter_ctrl)(dev, filter_type,
-				RTE_ETH_FILTER_NOP, NULL);
-}
-
-int
-rte_eth_dev_filter_ctrl(uint16_t port_id, enum rte_filter_type filter_type,
-			enum rte_filter_op filter_op, void *arg)
-{
-	struct rte_eth_dev *dev;
-
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-
-	dev = &rte_eth_devices[port_id];
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->filter_ctrl, -ENOTSUP);
-	return eth_err(port_id, (*dev->dev_ops->filter_ctrl)(dev, filter_type,
-							     filter_op, arg));
-}
 
 const struct rte_eth_rxtx_callback *
 rte_eth_add_rx_callback(uint16_t port_id, uint16_t queue_id,
@@ -5345,62 +5322,6 @@ rte_eth_dev_get_dcb_info(uint16_t port_id,
 	return eth_err(port_id, (*dev->dev_ops->get_dcb_info)(dev, dcb_info));
 }
 
-int
-rte_eth_dev_l2_tunnel_eth_type_conf(uint16_t port_id,
-				    struct rte_eth_l2_tunnel_conf *l2_tunnel)
-{
-	struct rte_eth_dev *dev;
-
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-	if (l2_tunnel == NULL) {
-		RTE_ETHDEV_LOG(ERR, "Invalid l2_tunnel parameter\n");
-		return -EINVAL;
-	}
-
-	if (l2_tunnel->l2_tunnel_type >= RTE_TUNNEL_TYPE_MAX) {
-		RTE_ETHDEV_LOG(ERR, "Invalid tunnel type\n");
-		return -EINVAL;
-	}
-
-	dev = &rte_eth_devices[port_id];
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->l2_tunnel_eth_type_conf,
-				-ENOTSUP);
-	return eth_err(port_id, (*dev->dev_ops->l2_tunnel_eth_type_conf)(dev,
-								l2_tunnel));
-}
-
-int
-rte_eth_dev_l2_tunnel_offload_set(uint16_t port_id,
-				  struct rte_eth_l2_tunnel_conf *l2_tunnel,
-				  uint32_t mask,
-				  uint8_t en)
-{
-	struct rte_eth_dev *dev;
-
-	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-
-	if (l2_tunnel == NULL) {
-		RTE_ETHDEV_LOG(ERR, "Invalid l2_tunnel parameter\n");
-		return -EINVAL;
-	}
-
-	if (l2_tunnel->l2_tunnel_type >= RTE_TUNNEL_TYPE_MAX) {
-		RTE_ETHDEV_LOG(ERR, "Invalid tunnel type\n");
-		return -EINVAL;
-	}
-
-	if (mask == 0) {
-		RTE_ETHDEV_LOG(ERR, "Mask should have a value\n");
-		return -EINVAL;
-	}
-
-	dev = &rte_eth_devices[port_id];
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->l2_tunnel_offload_set,
-				-ENOTSUP);
-	return eth_err(port_id, (*dev->dev_ops->l2_tunnel_offload_set)(dev,
-							l2_tunnel, mask, en));
-}
-
 static void
 eth_dev_adjust_nb_desc(uint16_t *nb_desc,
 		const struct rte_eth_desc_lim *desc_lim)
@@ -5507,7 +5428,7 @@ static struct rte_eth_dev_switch {
 int
 rte_eth_switch_domain_alloc(uint16_t *domain_id)
 {
-	unsigned int i;
+	uint16_t i;
 
 	*domain_id = RTE_ETH_DEV_SWITCH_DOMAIN_ID_INVALID;
 

@@ -1472,13 +1472,15 @@ dpaa2_sec_enqueue_burst(void *qp, struct rte_crypto_op **ops,
 			dpaa2_eqcr_size : nb_ops;
 
 		for (loop = 0; loop < frames_to_send; loop++) {
-			if ((*ops)->sym->m_src->seqn) {
-			 uint8_t dqrr_index = (*ops)->sym->m_src->seqn - 1;
+			if (*dpaa2_seqn((*ops)->sym->m_src)) {
+				uint8_t dqrr_index =
+					*dpaa2_seqn((*ops)->sym->m_src) - 1;
 
-			 flags[loop] = QBMAN_ENQUEUE_FLAG_DCA | dqrr_index;
-			 DPAA2_PER_LCORE_DQRR_SIZE--;
-			 DPAA2_PER_LCORE_DQRR_HELD &= ~(1 << dqrr_index);
-			 (*ops)->sym->m_src->seqn = DPAA2_INVALID_MBUF_SEQN;
+				flags[loop] = QBMAN_ENQUEUE_FLAG_DCA | dqrr_index;
+				DPAA2_PER_LCORE_DQRR_SIZE--;
+				DPAA2_PER_LCORE_DQRR_HELD &= ~(1 << dqrr_index);
+				*dpaa2_seqn((*ops)->sym->m_src) =
+					DPAA2_INVALID_MBUF_SEQN;
 			}
 
 			/*Clear the unused FD fields before sending*/
@@ -2818,12 +2820,6 @@ dpaa2_sec_ipsec_proto_init(struct rte_crypto_cipher_xform *cipher_xform,
 	return 0;
 }
 
-#ifdef RTE_LIBRTE_SECURITY_TEST
-static uint8_t aes_cbc_iv[] = {
-	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
-#endif
-
 static int
 dpaa2_sec_set_ipsec_session(struct rte_cryptodev *dev,
 			    struct rte_security_session_conf *conf,
@@ -3714,7 +3710,7 @@ dpaa2_sec_process_atomic_event(struct qbman_swp *swp __rte_unused,
 
 	ev->event_ptr = sec_fd_to_mbuf(fd);
 	dqrr_index = qbman_get_dqrr_idx(dq);
-	crypto_op->sym->m_src->seqn = dqrr_index + 1;
+	*dpaa2_seqn(crypto_op->sym->m_src) = dqrr_index + 1;
 	DPAA2_PER_LCORE_DQRR_SIZE++;
 	DPAA2_PER_LCORE_DQRR_HELD |= 1 << dqrr_index;
 	DPAA2_PER_LCORE_DQRR_MBUF(dqrr_index) = crypto_op->sym->m_src;

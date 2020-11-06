@@ -5,6 +5,10 @@
 #ifndef _HNS3_DCB_H_
 #define _HNS3_DCB_H_
 
+#include <stdint.h>
+
+#include "hns3_cmd.h"
+
 #define HNS3_ETHER_MAX_RATE		100000
 
 /* MAC Pause */
@@ -204,5 +208,6 @@ int hns3_queue_to_tc_mapping(struct hns3_hw *hw, uint16_t nb_rx_q,
 			     uint16_t nb_tx_q);
 
 int hns3_dcb_cfg_update(struct hns3_adapter *hns);
+int hns3_dcb_port_shaper_cfg(struct hns3_hw *hw);
 
 #endif /* _HNS3_DCB_H_ */

@@ -27,18 +27,31 @@
 
 struct sfc_flow_ops_by_spec {
 	sfc_flow_parse_cb_t	*parse;
+	sfc_flow_verify_cb_t	*verify;
+	sfc_flow_cleanup_cb_t	*cleanup;
 	sfc_flow_insert_cb_t	*insert;
 	sfc_flow_remove_cb_t	*remove;
 };
 
 static sfc_flow_parse_cb_t sfc_flow_parse_rte_to_filter;
+static sfc_flow_parse_cb_t sfc_flow_parse_rte_to_mae;
 static sfc_flow_insert_cb_t sfc_flow_filter_insert;
 static sfc_flow_remove_cb_t sfc_flow_filter_remove;
 
 static const struct sfc_flow_ops_by_spec sfc_flow_ops_filter = {
 	.parse = sfc_flow_parse_rte_to_filter,
+	.verify = NULL,
+	.cleanup = NULL,
 	.insert = sfc_flow_filter_insert,
 	.remove = sfc_flow_filter_remove,
+};
+
+static const struct sfc_flow_ops_by_spec sfc_flow_ops_mae = {
+	.parse = sfc_flow_parse_rte_to_mae,
+	.verify = sfc_mae_flow_verify,
+	.cleanup = sfc_mae_flow_cleanup,
+	.insert = sfc_mae_flow_insert,
+	.remove = sfc_mae_flow_remove,
 };
 
 static const struct sfc_flow_ops_by_spec *
@@ -50,6 +63,9 @@ sfc_flow_get_ops_by_spec(struct rte_flow *flow)
 	switch (spec->type) {
 	case SFC_FLOW_SPEC_FILTER:
 		ops = &sfc_flow_ops_filter;
+		break;
+	case SFC_FLOW_SPEC_MAE:
+		ops = &sfc_flow_ops_mae;
 		break;
 	default:
 		SFC_ASSERT(false);
@@ -1124,12 +1140,15 @@ static const struct sfc_flow_item sfc_flow_items[] = {
  * Protocol-independent flow API support
  */
 static int
-sfc_flow_parse_attr(const struct rte_flow_attr *attr,
+sfc_flow_parse_attr(struct sfc_adapter *sa,
+		    const struct rte_flow_attr *attr,
 		    struct rte_flow *flow,
 		    struct rte_flow_error *error)
 {
 	struct sfc_flow_spec *spec = &flow->spec;
 	struct sfc_flow_spec_filter *spec_filter = &spec->filter;
+	struct sfc_flow_spec_mae *spec_mae = &spec->mae;
+	struct sfc_mae *mae = &sa->mae;
 
 	if (attr == NULL) {
 		rte_flow_error_set(error, EINVAL,
@@ -1167,10 +1186,23 @@ sfc_flow_parse_attr(const struct rte_flow_attr *attr,
 		spec_filter->template.efs_rss_context = EFX_RSS_CONTEXT_DEFAULT;
 		spec_filter->template.efs_priority = EFX_FILTER_PRI_MANUAL;
 	} else {
-		rte_flow_error_set(error, ENOTSUP,
-				   RTE_FLOW_ERROR_TYPE_ATTR_TRANSFER, attr,
-				   "Transfer is not supported");
-		return -rte_errno;
+		if (mae->status != SFC_MAE_STATUS_SUPPORTED) {
+			rte_flow_error_set(error, ENOTSUP,
+					   RTE_FLOW_ERROR_TYPE_ATTR_TRANSFER,
+					   attr, "Transfer is not supported");
+			return -rte_errno;
+		}
+		if (attr->priority > mae->nb_action_rule_prios_max) {
+			rte_flow_error_set(error, ENOTSUP,
+					   RTE_FLOW_ERROR_TYPE_ATTR_PRIORITY,
+					   attr, "Unsupported priority level");
+			return -rte_errno;
+		}
+		spec->type = SFC_FLOW_SPEC_MAE;
+		spec_mae->priority = attr->priority;
+		spec_mae->match_spec = NULL;
+		spec_mae->action_set = NULL;
+		spec_mae->rule_id.id = EFX_MAE_RSRC_ID_INVALID;
 	}
 
 	return 0;
@@ -1256,7 +1288,8 @@ sfc_flow_parse_pattern(const struct sfc_flow_item *flow_items,
 			break;
 
 		default:
-			if (is_ifrm) {
+			if (parse_ctx->type == SFC_FLOW_PARSE_CTX_FILTER &&
+			    is_ifrm) {
 				rte_flow_error_set(error, EINVAL,
 					RTE_FLOW_ERROR_TYPE_ITEM,
 					pattern,
@@ -1647,9 +1680,6 @@ sfc_flow_parse_actions(struct sfc_adapter *sa,
 		return -rte_errno;
 	}
 
-#define SFC_BUILD_SET_OVERFLOW(_action, _set) \
-	RTE_BUILD_BUG_ON(_action >= sizeof(_set) * CHAR_BIT)
-
 	for (; actions->type != RTE_FLOW_ACTION_TYPE_END; actions++) {
 		switch (actions->type) {
 		case RTE_FLOW_ACTION_TYPE_VOID:
@@ -1745,7 +1775,6 @@ sfc_flow_parse_actions(struct sfc_adapter *sa,
 
 		actions_set |= (1UL << actions->type);
 	}
-#undef SFC_BUILD_SET_OVERFLOW
 
 	/* When fate is unknown, drop traffic. */
 	if ((actions_set & fate_actions_mask) == 0) {
@@ -2396,6 +2425,30 @@ fail_bad_value:
 }
 
 static int
+sfc_flow_parse_rte_to_mae(struct rte_eth_dev *dev,
+			  const struct rte_flow_item pattern[],
+			  const struct rte_flow_action actions[],
+			  struct rte_flow *flow,
+			  struct rte_flow_error *error)
+{
+	struct sfc_adapter *sa = sfc_adapter_by_eth_dev(dev);
+	struct sfc_flow_spec *spec = &flow->spec;
+	struct sfc_flow_spec_mae *spec_mae = &spec->mae;
+	int rc;
+
+	rc = sfc_mae_rule_parse_pattern(sa, pattern, spec_mae, error);
+	if (rc != 0)
+		return rc;
+
+	rc = sfc_mae_rule_parse_actions(sa, actions, &spec_mae->action_set,
+					error);
+	if (rc != 0)
+		return rc;
+
+	return 0;
+}
+
+static int
 sfc_flow_parse(struct rte_eth_dev *dev,
 	       const struct rte_flow_attr *attr,
 	       const struct rte_flow_item pattern[],
@@ -2403,10 +2456,11 @@ sfc_flow_parse(struct rte_eth_dev *dev,
 	       struct rte_flow *flow,
 	       struct rte_flow_error *error)
 {
+	struct sfc_adapter *sa = sfc_adapter_by_eth_dev(dev);
 	const struct sfc_flow_ops_by_spec *ops;
 	int rc;
 
-	rc = sfc_flow_parse_attr(attr, flow, error);
+	rc = sfc_flow_parse_attr(sa, attr, flow, error);
 	if (rc != 0)
 		return rc;
 
@@ -2437,8 +2491,14 @@ sfc_flow_zmalloc(struct rte_flow_error *error)
 }
 
 static void
-sfc_flow_free(__rte_unused struct sfc_adapter *sa, struct rte_flow *flow)
+sfc_flow_free(struct sfc_adapter *sa, struct rte_flow *flow)
 {
+	const struct sfc_flow_ops_by_spec *ops;
+
+	ops = sfc_flow_get_ops_by_spec(flow);
+	if (ops != NULL && ops->cleanup != NULL)
+		ops->cleanup(sa, flow);
+
 	rte_free(flow);
 }
 
@@ -2491,6 +2551,36 @@ sfc_flow_remove(struct sfc_adapter *sa, struct rte_flow *flow,
 }
 
 static int
+sfc_flow_verify(struct sfc_adapter *sa, struct rte_flow *flow,
+		struct rte_flow_error *error)
+{
+	const struct sfc_flow_ops_by_spec *ops;
+	int rc = 0;
+
+	ops = sfc_flow_get_ops_by_spec(flow);
+	if (ops == NULL) {
+		rte_flow_error_set(error, ENOTSUP,
+				   RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
+				   "No backend to handle this flow");
+		return -rte_errno;
+	}
+
+	if (ops->verify != NULL) {
+		SFC_ASSERT(sfc_adapter_is_locked(sa));
+		rc = ops->verify(sa, flow);
+	}
+
+	if (rc != 0) {
+		rte_flow_error_set(error, rc,
+			RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
+			"Failed to verify flow validity with FW");
+		return -rte_errno;
+	}
+
+	return 0;
+}
+
+static int
 sfc_flow_validate(struct rte_eth_dev *dev,
 		  const struct rte_flow_attr *attr,
 		  const struct rte_flow_item pattern[],
@@ -2505,9 +2595,15 @@ sfc_flow_validate(struct rte_eth_dev *dev,
 	if (flow == NULL)
 		return -rte_errno;
 
+	sfc_adapter_lock(sa);
+
 	rc = sfc_flow_parse(dev, attr, pattern, actions, flow, error);
+	if (rc == 0)
+		rc = sfc_flow_verify(sa, flow, error);
 
 	sfc_flow_free(sa, flow);
+
+	sfc_adapter_unlock(sa);
 
 	return rc;
 }
@@ -2527,11 +2623,11 @@ sfc_flow_create(struct rte_eth_dev *dev,
 	if (flow == NULL)
 		goto fail_no_mem;
 
+	sfc_adapter_lock(sa);
+
 	rc = sfc_flow_parse(dev, attr, pattern, actions, flow, error);
 	if (rc != 0)
 		goto fail_bad_value;
-
-	sfc_adapter_lock(sa);
 
 	TAILQ_INSERT_TAIL(&sa->flow_list, flow, entries);
 

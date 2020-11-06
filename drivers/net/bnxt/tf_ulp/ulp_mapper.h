@@ -78,6 +78,7 @@ struct bnxt_ulp_mapper_parms {
 	struct bnxt_ulp_device_params           *device_params;
 	uint32_t				parent_fid;
 	uint32_t				parent_flow;
+	uint8_t					tun_idx;
 };
 
 struct bnxt_ulp_mapper_create_parms {
@@ -93,10 +94,12 @@ struct bnxt_ulp_mapper_create_parms {
 	uint32_t			dir_attr;
 	enum bnxt_ulp_fdb_type		flow_type;
 
+	uint32_t			flow_id;
 	/* if set then create it as a child flow with parent as parent_fid */
 	uint32_t			parent_fid;
 	/* if set then create a parent flow */
 	uint32_t			parent_flow;
+	uint8_t				tun_idx;
 };
 
 /* Function to initialize any dynamic mapper data. */
@@ -113,8 +116,7 @@ ulp_mapper_deinit(struct bnxt_ulp_context *ulp_ctx);
  */
 int32_t
 ulp_mapper_flow_create(struct bnxt_ulp_context	*ulp_ctx,
-		       struct bnxt_ulp_mapper_create_parms *parms,
-		       uint32_t *flowid);
+		       struct bnxt_ulp_mapper_create_parms *parms);
 
 /* Function that frees all resources associated with the flow. */
 int32_t

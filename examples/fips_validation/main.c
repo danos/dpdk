@@ -927,10 +927,14 @@ prepare_gmac_xform(struct rte_crypto_sym_xform *xform)
 
 	if (rte_cryptodev_sym_capability_check_auth(cap,
 			auth_xform->key.length,
-			auth_xform->digest_length, 0) != 0) {
-		RTE_LOG(ERR, USER1, "PMD %s key length %u IV length %u\n",
+			auth_xform->digest_length,
+			auth_xform->iv.length) != 0) {
+
+		RTE_LOG(ERR, USER1,
+			"PMD %s key length %u Digest length %u IV length %u\n",
 				info.device_name, auth_xform->key.length,
-				auth_xform->digest_length);
+				auth_xform->digest_length,
+				auth_xform->iv.length);
 		return -EPERM;
 	}
 
@@ -1128,6 +1132,7 @@ get_writeback_data(struct fips_val *val)
 
 	if (data_len) {
 		RTE_LOG(ERR, USER1, "Error -1: write back data\n");
+		free(wb_data);
 		return -1;
 	}
 
@@ -1520,7 +1525,9 @@ fips_mct_aes_test(void)
 				return ret;
 			}
 
-			get_writeback_data(&val);
+			ret = get_writeback_data(&val);
+			if (ret < 0)
+				return ret;
 
 			if (info.op == FIPS_TEST_DEC_AUTH_VERIF)
 				memcpy(prev_in, vec.ct.val, AES_BLOCK_SIZE);
@@ -1649,7 +1656,9 @@ fips_mct_sha_test(void)
 				return ret;
 			}
 
-			get_writeback_data(&val);
+			ret = get_writeback_data(&val);
+			if (ret < 0)
+				return ret;
 
 			memcpy(md[0].val, md[1].val, md[1].len);
 			md[0].len = md[1].len;

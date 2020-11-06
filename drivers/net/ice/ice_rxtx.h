@@ -96,6 +96,10 @@ struct ice_tx_entry {
 	uint16_t last_id;
 };
 
+struct ice_vec_tx_entry {
+	struct rte_mbuf *mbuf;
+};
+
 struct ice_tx_queue {
 	uint16_t nb_tx_desc; /* number of TX descriptors */
 	rte_iova_t tx_ring_dma; /* TX ring DMA address */
@@ -230,6 +234,8 @@ int ice_rx_descriptor_status(void *rx_queue, uint16_t offset);
 int ice_tx_descriptor_status(void *tx_queue, uint16_t offset);
 void ice_set_default_ptype_table(struct rte_eth_dev *dev);
 const uint32_t *ice_dev_supported_ptypes_get(struct rte_eth_dev *dev);
+void ice_select_rxd_to_pkt_fields_handler(struct ice_rx_queue *rxq,
+					  uint32_t rxdid);
 
 int ice_rx_vec_dev_check(struct rte_eth_dev *dev);
 int ice_tx_vec_dev_check(struct rte_eth_dev *dev);
@@ -248,6 +254,13 @@ uint16_t ice_recv_scattered_pkts_vec_avx2(void *rx_queue,
 					  uint16_t nb_pkts);
 uint16_t ice_xmit_pkts_vec_avx2(void *tx_queue, struct rte_mbuf **tx_pkts,
 				uint16_t nb_pkts);
+uint16_t ice_recv_pkts_vec_avx512(void *rx_queue, struct rte_mbuf **rx_pkts,
+				  uint16_t nb_pkts);
+uint16_t ice_recv_scattered_pkts_vec_avx512(void *rx_queue,
+					    struct rte_mbuf **rx_pkts,
+					    uint16_t nb_pkts);
+uint16_t ice_xmit_pkts_vec_avx512(void *tx_queue, struct rte_mbuf **tx_pkts,
+				  uint16_t nb_pkts);
 int ice_fdir_programming(struct ice_pf *pf, struct ice_fltr_desc *fdir_desc);
 int ice_tx_done_cleanup(void *txq, uint32_t free_cnt);
 

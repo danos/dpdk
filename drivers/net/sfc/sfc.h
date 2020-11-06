@@ -27,6 +27,7 @@
 #include "sfc_log.h"
 #include "sfc_filter.h"
 #include "sfc_sriov.h"
+#include "sfc_mae.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -233,6 +234,7 @@ struct sfc_adapter {
 	struct sfc_intr			intr;
 	struct sfc_port			port;
 	struct sfc_filter		filter;
+	struct sfc_mae			mae;
 
 	struct sfc_flow_list		flow_list;
 
@@ -401,6 +403,14 @@ int sfc_port_reset_mac_stats(struct sfc_adapter *sa);
 int sfc_set_rx_mode(struct sfc_adapter *sa);
 int sfc_set_rx_mode_unchecked(struct sfc_adapter *sa);
 
+struct sfc_hw_switch_id;
+
+int sfc_hw_switch_id_init(struct sfc_adapter *sa,
+			  struct sfc_hw_switch_id **idp);
+void sfc_hw_switch_id_fini(struct sfc_adapter *sa,
+			   struct sfc_hw_switch_id *idp);
+bool sfc_hw_switch_ids_equal(const struct sfc_hw_switch_id *left,
+			     const struct sfc_hw_switch_id *right);
 
 #ifdef __cplusplus
 }

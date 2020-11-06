@@ -780,6 +780,33 @@ typedef struct efx_proxy_ops_s {
 
 #endif /* EFSYS_OPT_MCDI_PROXY_AUTH_SERVER */
 
+#if EFSYS_OPT_MAE
+
+typedef struct efx_mae_field_cap_s {
+	uint32_t			emfc_support;
+	boolean_t			emfc_mask_affects_class;
+	boolean_t			emfc_match_affects_class;
+} efx_mae_field_cap_t;
+
+typedef struct efx_mae_s {
+	uint32_t			em_max_n_action_prios;
+	/*
+	 * The number of MAE field IDs recognised by the FW implementation.
+	 * Any field ID greater than or equal to this value is unsupported.
+	 */
+	uint32_t			em_max_nfields;
+	/** Action rule match field capabilities. */
+	efx_mae_field_cap_t		*em_action_rule_field_caps;
+	size_t				em_action_rule_field_caps_size;
+	uint32_t			em_max_n_outer_prios;
+	uint32_t			em_encap_types_supported;
+	/** Outer rule match field capabilities. */
+	efx_mae_field_cap_t		*em_outer_rule_field_caps;
+	size_t				em_outer_rule_field_caps_size;
+} efx_mae_t;
+
+#endif /* EFSYS_OPT_MAE */
+
 #define	EFX_DRV_VER_MAX		20
 
 typedef struct efx_drv_cfg_s {
@@ -886,6 +913,9 @@ struct efx_nic_s {
 #if EFSYS_OPT_MCDI_PROXY_AUTH_SERVER
 	const efx_proxy_ops_t	*en_epop;
 #endif	/* EFSYS_OPT_MCDI_PROXY_AUTH_SERVER */
+#if EFSYS_OPT_MAE
+	efx_mae_t		*en_maep;
+#endif	/* EFSYS_OPT_MAE */
 };
 
 #define	EFX_FAMILY_IS_EF10(_enp) \
@@ -1663,6 +1693,62 @@ efx_pci_xilinx_cap_tbl_find(
 	__inout				efsys_dma_addr_t *entry_offsetp);
 
 #endif /* EFSYS_OPT_PCI */
+
+#if EFSYS_OPT_MAE
+
+struct efx_mae_match_spec_s {
+	efx_mae_rule_type_t		emms_type;
+	uint32_t			emms_prio;
+	union emms_mask_value_pairs {
+		uint8_t			action[MAE_FIELD_MASK_VALUE_PAIRS_LEN];
+		uint8_t			outer[MAE_ENC_FIELD_PAIRS_LEN];
+	} emms_mask_value_pairs;
+};
+
+typedef enum efx_mae_action_e {
+	/* These actions are strictly ordered. */
+	EFX_MAE_ACTION_VLAN_POP,
+	EFX_MAE_ACTION_VLAN_PUSH,
+
+	/*
+	 * These actions are not strictly ordered and can
+	 * be passed by a client in any order (before DELIVER).
+	 * However, these enumerants must be kept compactly
+	 * in the end of the enumeration (before DELIVER).
+	 */
+	EFX_MAE_ACTION_FLAG,
+	EFX_MAE_ACTION_MARK,
+
+	/* DELIVER is always the last action. */
+	EFX_MAE_ACTION_DELIVER,
+
+	EFX_MAE_NACTIONS
+} efx_mae_action_t;
+
+/* MAE VLAN_POP action can handle 1 or 2 tags. */
+#define	EFX_MAE_VLAN_POP_MAX_NTAGS	(2)
+
+/* MAE VLAN_PUSH action can handle 1 or 2 tags. */
+#define	EFX_MAE_VLAN_PUSH_MAX_NTAGS	(2)
+
+typedef struct efx_mae_action_vlan_push_s {
+	uint16_t			emavp_tpid_be;
+	uint16_t			emavp_tci_be;
+} efx_mae_action_vlan_push_t;
+
+struct efx_mae_actions_s {
+	/* Bitmap of actions in spec, indexed by action type */
+	uint32_t			ema_actions;
+
+	unsigned int			ema_n_vlan_tags_to_pop;
+	unsigned int			ema_n_vlan_tags_to_push;
+	efx_mae_action_vlan_push_t	ema_vlan_push_descs[
+	    EFX_MAE_VLAN_PUSH_MAX_NTAGS];
+	uint32_t			ema_mark_value;
+	efx_mport_sel_t			ema_deliver_mport;
+};
+
+#endif /* EFSYS_OPT_MAE */
 
 #ifdef	__cplusplus
 }

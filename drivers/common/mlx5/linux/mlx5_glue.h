@@ -131,7 +131,6 @@ struct mlx5dv_var { uint32_t page_id; uint32_t length; off_t mmap_off;
 #define IBV_ACCESS_RELAXED_ORDERING 0
 #endif
 
-/* LIB_GLUE_VERSION must be updated every time this structure is modified. */
 struct mlx5_glue {
 	const char *version;
 	int (*fork_init)(void);
@@ -224,6 +223,7 @@ struct mlx5_glue {
 	void *(*dr_create_domain)(struct ibv_context *ctx,
 				  enum mlx5dv_dr_domain_type domain);
 	int (*dr_destroy_domain)(void *domain);
+	int (*dr_sync_domain)(void *domain, uint32_t flags);
 	struct ibv_cq_ex *(*dv_create_cq)
 		(struct ibv_context *context,
 		 struct ibv_cq_init_attr_ex *cq_attr,
@@ -344,6 +344,9 @@ struct mlx5_glue {
 			(void *domain,
 			 size_t num_dest,
 			 struct mlx5dv_dr_action_dest_attr *dests[]);
+	void *(*dr_action_create_flow_hit)(struct mlx5dv_devx_obj *devx_obj,
+					   uint32_t offset,
+					   uint8_t reg_c_index);
 };
 
 extern const struct mlx5_glue *mlx5_glue;

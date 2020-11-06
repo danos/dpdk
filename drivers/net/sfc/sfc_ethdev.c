@@ -93,6 +93,7 @@ sfc_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 	struct sfc_adapter_shared *sas = sfc_adapter_shared_by_eth_dev(dev);
 	struct sfc_adapter *sa = sfc_adapter_by_eth_dev(dev);
 	struct sfc_rss *rss = &sas->rss;
+	struct sfc_mae *mae = &sa->mae;
 	uint64_t txq_offloads_def = 0;
 
 	sfc_log_init(sa, "entry");
@@ -186,6 +187,12 @@ sfc_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
 
 	dev_info->dev_capa = RTE_ETH_DEV_CAPA_RUNTIME_RX_QUEUE_SETUP |
 			     RTE_ETH_DEV_CAPA_RUNTIME_TX_QUEUE_SETUP;
+
+	if (mae->status == SFC_MAE_STATUS_SUPPORTED) {
+		dev_info->switch_info.name = dev->device->driver->name;
+		dev_info->switch_info.domain_id = mae->switch_domain_id;
+		dev_info->switch_info.port_id = mae->switch_port_id;
+	}
 
 	return 0;
 }
@@ -1745,33 +1752,6 @@ sfc_dev_filter_ctrl(struct rte_eth_dev *dev, enum rte_filter_type filter_type,
 	sfc_log_init(sa, "entry");
 
 	switch (filter_type) {
-	case RTE_ETH_FILTER_NONE:
-		sfc_err(sa, "Global filters configuration not supported");
-		break;
-	case RTE_ETH_FILTER_MACVLAN:
-		sfc_err(sa, "MACVLAN filters not supported");
-		break;
-	case RTE_ETH_FILTER_ETHERTYPE:
-		sfc_err(sa, "EtherType filters not supported");
-		break;
-	case RTE_ETH_FILTER_FLEXIBLE:
-		sfc_err(sa, "Flexible filters not supported");
-		break;
-	case RTE_ETH_FILTER_SYN:
-		sfc_err(sa, "SYN filters not supported");
-		break;
-	case RTE_ETH_FILTER_NTUPLE:
-		sfc_err(sa, "NTUPLE filters not supported");
-		break;
-	case RTE_ETH_FILTER_TUNNEL:
-		sfc_err(sa, "Tunnel filters not supported");
-		break;
-	case RTE_ETH_FILTER_FDIR:
-		sfc_err(sa, "Flow Director filters not supported");
-		break;
-	case RTE_ETH_FILTER_HASH:
-		sfc_err(sa, "Hash filters not supported");
-		break;
 	case RTE_ETH_FILTER_GENERIC:
 		if (filter_op != RTE_ETH_FILTER_GET) {
 			rc = EINVAL;

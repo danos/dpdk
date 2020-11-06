@@ -2,25 +2,10 @@
  * Copyright(c) 2018-2019 Hisilicon Limited.
  */
 
-#include <errno.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <inttypes.h>
-#include <unistd.h>
-#include <rte_atomic.h>
+#include <rte_alarm.h>
 #include <rte_bus_pci.h>
-#include <rte_common.h>
-#include <rte_cycles.h>
-#include <rte_dev.h>
-#include <rte_eal.h>
-#include <rte_ether.h>
-#include <rte_ethdev_driver.h>
 #include <rte_ethdev_pci.h>
-#include <rte_interrupts.h>
 #include <rte_io.h>
-#include <rte_log.h>
 #include <rte_pci.h>
 
 #include "hns3_ethdev.h"
@@ -2291,6 +2276,10 @@ hns3_init_ring_with_vector(struct hns3_hw *hw)
 		hns3_set_queue_intr_gl(hw, i, HNS3_RING_GL_TX,
 				       HNS3_TQP_INTR_GL_DEFAULT);
 		hns3_set_queue_intr_rl(hw, i, HNS3_TQP_INTR_RL_DEFAULT);
+		/*
+		 * QL(quantity limiter) is not used currently, just set 0 to
+		 * close it.
+		 */
 		hns3_set_queue_intr_ql(hw, i, HNS3_TQP_INTR_QL_DEFAULT);
 
 		ret = hns3_bind_ring_with_vector(hw, vec, false,
@@ -2952,6 +2941,7 @@ hns3_set_default_dev_specifications(struct hns3_hw *hw)
 	hw->rss_ind_tbl_size = HNS3_RSS_IND_TBL_SIZE;
 	hw->rss_key_size = HNS3_RSS_KEY_SIZE;
 	hw->max_tm_rate = HNS3_ETHER_MAX_RATE;
+	hw->intr.int_ql_max = HNS3_INTR_QL_NONE;
 }
 
 static void
@@ -2965,6 +2955,7 @@ hns3_parse_dev_specifications(struct hns3_hw *hw, struct hns3_cmd_desc *desc)
 	hw->rss_ind_tbl_size = rte_le_to_cpu_16(req0->rss_ind_tbl_size);
 	hw->rss_key_size = rte_le_to_cpu_16(req0->rss_key_size);
 	hw->max_tm_rate = rte_le_to_cpu_32(req0->max_tm_rate);
+	hw->intr.int_ql_max = rte_le_to_cpu_16(req0->intr_ql_max);
 }
 
 static int
@@ -3031,12 +3022,12 @@ hns3_get_capability(struct hns3_hw *hw)
 	if (revision < PCI_REVISION_ID_HIP09_A) {
 		hns3_set_default_dev_specifications(hw);
 		hw->intr.mapping_mode = HNS3_INTR_MAPPING_VEC_RSV_ONE;
-		hw->intr.coalesce_mode = HNS3_INTR_COALESCE_NON_QL;
 		hw->intr.gl_unit = HNS3_INTR_COALESCE_GL_UINT_2US;
 		hw->tso_mode = HNS3_TSO_SW_CAL_PSEUDO_H_CSUM;
 		hw->vlan_mode = HNS3_SW_SHIFT_AND_DISCARD_MODE;
 		hw->min_tx_pkt_len = HNS3_HIP08_MIN_TX_PKT_LEN;
 		pf->tqp_config_mode = HNS3_FIXED_MAX_TQP_NUM_MODE;
+		hw->rss_info.ipv6_sctp_offload_supported = false;
 		return 0;
 	}
 
@@ -3049,12 +3040,12 @@ hns3_get_capability(struct hns3_hw *hw)
 	}
 
 	hw->intr.mapping_mode = HNS3_INTR_MAPPING_VEC_ALL;
-	hw->intr.coalesce_mode = HNS3_INTR_COALESCE_QL;
 	hw->intr.gl_unit = HNS3_INTR_COALESCE_GL_UINT_1US;
 	hw->tso_mode = HNS3_TSO_HW_CAL_PSEUDO_H_CSUM;
 	hw->vlan_mode = HNS3_HW_SHIFT_AND_DISCARD_MODE;
 	hw->min_tx_pkt_len = HNS3_HIP09_MIN_TX_PKT_LEN;
 	pf->tqp_config_mode = HNS3_FLEX_MAX_TQP_NUM_MODE;
+	hw->rss_info.ipv6_sctp_offload_supported = true;
 
 	return 0;
 }
@@ -3444,8 +3435,8 @@ hns3_is_rx_buf_ok(struct hns3_hw *hw, struct hns3_pkt_buf_alloc *buf_alloc,
 		hi_thrd = shared_buf - pf->dv_buf_size;
 
 		if (tc_num <= NEED_RESERVE_TC_NUM)
-			hi_thrd = hi_thrd * BUF_RESERVE_PERCENT
-					/ BUF_MAX_PERCENT;
+			hi_thrd = hi_thrd * BUF_RESERVE_PERCENT /
+				  BUF_MAX_PERCENT;
 
 		if (tc_num)
 			hi_thrd = hi_thrd / tc_num;
@@ -4330,6 +4321,7 @@ static int
 hns3_cfg_mac_speed_dup(struct hns3_hw *hw, uint32_t speed, uint8_t duplex)
 {
 	struct hns3_mac *mac = &hw->mac;
+	uint32_t cur_speed = mac->link_speed;
 	int ret;
 
 	duplex = hns3_check_speed_dup(duplex, speed);
@@ -4341,6 +4333,13 @@ hns3_cfg_mac_speed_dup(struct hns3_hw *hw, uint32_t speed, uint8_t duplex)
 		return ret;
 
 	mac->link_speed = speed;
+	ret = hns3_dcb_port_shaper_cfg(hw);
+	if (ret) {
+		hns3_err(hw, "failed to configure port shaper, ret = %d.", ret);
+		mac->link_speed = cur_speed;
+		return ret;
+	}
+
 	mac->link_duplex = duplex;
 
 	return 0;
@@ -4750,7 +4749,13 @@ hns3_do_start(struct hns3_adapter *hns, bool reset_queue)
 
 err_config_mac_mode:
 	hns3_dev_release_mbufs(hns);
-	hns3_reset_all_tqps(hns);
+	/*
+	 * Here is exception handling, hns3_reset_all_tqps will have the
+	 * corresponding error message if it is handled incorrectly, so it is
+	 * not necessary to check hns3_reset_all_tqps return value, here keep
+	 * ret as the error code causing the exception.
+	 */
+	(void)hns3_reset_all_tqps(hns);
 	return ret;
 }
 
@@ -6094,6 +6099,7 @@ hns3_dev_init(struct rte_eth_dev *eth_dev)
 
 	hns3_set_rxtx_function(eth_dev);
 	eth_dev->dev_ops = &hns3_eth_dev_ops;
+	eth_dev->rx_queue_count = hns3_rx_queue_count;
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
 		ret = hns3_mp_init_secondary();
 		if (ret) {
@@ -6235,7 +6241,7 @@ static const struct rte_pci_id pci_id_hns3_map[] = {
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HNS3_DEV_ID_50GE_RDMA) },
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HNS3_DEV_ID_100G_RDMA_MACSEC) },
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HNS3_DEV_ID_200G_RDMA) },
-	{ .vendor_id = 0, /* sentinel */ },
+	{ .vendor_id = 0, }, /* sentinel */
 };
 
 static struct rte_pci_driver rte_hns3_pmd = {

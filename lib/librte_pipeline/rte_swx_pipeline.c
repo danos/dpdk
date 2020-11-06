@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <sys/queue.h>
 #include <arpa/inet.h>
 
@@ -22,7 +23,17 @@ do {                                                                           \
 } while (0)
 
 #define CHECK_NAME(name, err_code)                                             \
-	CHECK((name) && (name)[0], err_code)
+	CHECK((name) &&                                                        \
+	      (name)[0] &&                                                     \
+	      (strnlen((name), RTE_SWX_NAME_SIZE) < RTE_SWX_NAME_SIZE),        \
+	      err_code)
+
+#define CHECK_INSTRUCTION(instr, err_code)                                     \
+	CHECK((instr) &&                                                       \
+	      (instr)[0] &&                                                    \
+	      (strnlen((instr), RTE_SWX_INSTRUCTION_SIZE) <                    \
+	       RTE_SWX_INSTRUCTION_SIZE),                                      \
+	      err_code)
 
 #ifndef TRACE_LEVEL
 #define TRACE_LEVEL 0
@@ -480,7 +491,7 @@ struct instr_dst_src {
 	struct instr_operand dst;
 	union {
 		struct instr_operand src;
-		uint32_t src_val;
+		uint64_t src_val;
 	};
 };
 
@@ -508,7 +519,7 @@ struct instr_jmp {
 
 	union {
 		struct instr_operand b;
-		uint32_t b_val;
+		uint64_t b_val;
 	};
 };
 
@@ -1635,12 +1646,12 @@ rte_swx_pipeline_extern_type_member_func_register(struct rte_swx_pipeline *p,
 
 	CHECK(p, EINVAL);
 
-	CHECK(extern_type_name, EINVAL);
+	CHECK_NAME(extern_type_name, EINVAL);
 	type = extern_type_find(p, extern_type_name);
 	CHECK(type, EINVAL);
 	CHECK(type->n_funcs < RTE_SWX_EXTERN_TYPE_MEMBER_FUNCS_MAX, ENOSPC);
 
-	CHECK(name, EINVAL);
+	CHECK_NAME(name, EINVAL);
 	CHECK(!extern_type_member_func_find(type, name), EEXIST);
 
 	CHECK(member_func, EINVAL);
@@ -3189,7 +3200,8 @@ instr_mov_translate(struct rte_swx_pipeline *p,
 {
 	char *dst = tokens[1], *src = tokens[2];
 	struct field *fdst, *fsrc;
-	uint32_t dst_struct_id, src_struct_id, src_val;
+	uint64_t src_val;
+	uint32_t dst_struct_id, src_struct_id;
 
 	CHECK(n_tokens == 3, EINVAL);
 
@@ -3214,17 +3226,17 @@ instr_mov_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* MOV_I. */
-	src_val = strtoul(src, &src, 0);
+	src_val = strtoull(src, &src, 0);
 	CHECK(!src[0], EINVAL);
 
 	if (dst[0] == 'h')
-		src_val = htonl(src_val);
+		src_val = hton64(src_val) >> (64 - fdst->n_bits);
 
 	instr->type = INSTR_MOV_I;
 	instr->mov.dst.struct_id = (uint8_t)dst_struct_id;
 	instr->mov.dst.n_bits = fdst->n_bits;
 	instr->mov.dst.offset = fdst->offset / 8;
-	instr->mov.src_val = (uint32_t)src_val;
+	instr->mov.src_val = src_val;
 	return 0;
 }
 
@@ -3264,7 +3276,7 @@ instr_mov_i_exec(struct rte_swx_pipeline *p)
 	struct thread *t = &p->threads[p->thread_id];
 	struct instruction *ip = t->ip;
 
-	TRACE("[Thread %2u] mov m.f %x\n",
+	TRACE("[Thread %2u] mov m.f %" PRIx64 "\n",
 	      p->thread_id,
 	      ip->mov.src_val);
 
@@ -3451,7 +3463,8 @@ instr_alu_add_translate(struct rte_swx_pipeline *p,
 {
 	char *dst = tokens[1], *src = tokens[2];
 	struct field *fdst, *fsrc;
-	uint32_t dst_struct_id, src_struct_id, src_val;
+	uint64_t src_val;
+	uint32_t dst_struct_id, src_struct_id;
 
 	CHECK(n_tokens == 3, EINVAL);
 
@@ -3479,7 +3492,7 @@ instr_alu_add_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* ADD_MI, ADD_HI. */
-	src_val = strtoul(src, &src, 0);
+	src_val = strtoull(src, &src, 0);
 	CHECK(!src[0], EINVAL);
 
 	instr->type = INSTR_ALU_ADD_MI;
@@ -3489,7 +3502,7 @@ instr_alu_add_translate(struct rte_swx_pipeline *p,
 	instr->alu.dst.struct_id = (uint8_t)dst_struct_id;
 	instr->alu.dst.n_bits = fdst->n_bits;
 	instr->alu.dst.offset = fdst->offset / 8;
-	instr->alu.src_val = (uint32_t)src_val;
+	instr->alu.src_val = src_val;
 	return 0;
 }
 
@@ -3503,7 +3516,8 @@ instr_alu_sub_translate(struct rte_swx_pipeline *p,
 {
 	char *dst = tokens[1], *src = tokens[2];
 	struct field *fdst, *fsrc;
-	uint32_t dst_struct_id, src_struct_id, src_val;
+	uint64_t src_val;
+	uint32_t dst_struct_id, src_struct_id;
 
 	CHECK(n_tokens == 3, EINVAL);
 
@@ -3531,7 +3545,7 @@ instr_alu_sub_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* SUB_MI, SUB_HI. */
-	src_val = strtoul(src, &src, 0);
+	src_val = strtoull(src, &src, 0);
 	CHECK(!src[0], EINVAL);
 
 	instr->type = INSTR_ALU_SUB_MI;
@@ -3541,7 +3555,7 @@ instr_alu_sub_translate(struct rte_swx_pipeline *p,
 	instr->alu.dst.struct_id = (uint8_t)dst_struct_id;
 	instr->alu.dst.n_bits = fdst->n_bits;
 	instr->alu.dst.offset = fdst->offset / 8;
-	instr->alu.src_val = (uint32_t)src_val;
+	instr->alu.src_val = src_val;
 	return 0;
 }
 
@@ -3632,7 +3646,8 @@ instr_alu_shl_translate(struct rte_swx_pipeline *p,
 {
 	char *dst = tokens[1], *src = tokens[2];
 	struct field *fdst, *fsrc;
-	uint32_t dst_struct_id, src_struct_id, src_val;
+	uint64_t src_val;
+	uint32_t dst_struct_id, src_struct_id;
 
 	CHECK(n_tokens == 3, EINVAL);
 
@@ -3660,7 +3675,7 @@ instr_alu_shl_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* SHL_MI, SHL_HI. */
-	src_val = strtoul(src, &src, 0);
+	src_val = strtoull(src, &src, 0);
 	CHECK(!src[0], EINVAL);
 
 	instr->type = INSTR_ALU_SHL_MI;
@@ -3670,7 +3685,7 @@ instr_alu_shl_translate(struct rte_swx_pipeline *p,
 	instr->alu.dst.struct_id = (uint8_t)dst_struct_id;
 	instr->alu.dst.n_bits = fdst->n_bits;
 	instr->alu.dst.offset = fdst->offset / 8;
-	instr->alu.src_val = (uint32_t)src_val;
+	instr->alu.src_val = src_val;
 	return 0;
 }
 
@@ -3684,7 +3699,8 @@ instr_alu_shr_translate(struct rte_swx_pipeline *p,
 {
 	char *dst = tokens[1], *src = tokens[2];
 	struct field *fdst, *fsrc;
-	uint32_t dst_struct_id, src_struct_id, src_val;
+	uint64_t src_val;
+	uint32_t dst_struct_id, src_struct_id;
 
 	CHECK(n_tokens == 3, EINVAL);
 
@@ -3712,7 +3728,7 @@ instr_alu_shr_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* SHR_MI, SHR_HI. */
-	src_val = strtoul(src, &src, 0);
+	src_val = strtoull(src, &src, 0);
 	CHECK(!src[0], EINVAL);
 
 	instr->type = INSTR_ALU_SHR_MI;
@@ -3722,7 +3738,7 @@ instr_alu_shr_translate(struct rte_swx_pipeline *p,
 	instr->alu.dst.struct_id = (uint8_t)dst_struct_id;
 	instr->alu.dst.n_bits = fdst->n_bits;
 	instr->alu.dst.offset = fdst->offset / 8;
-	instr->alu.src_val = (uint32_t)src_val;
+	instr->alu.src_val = src_val;
 	return 0;
 }
 
@@ -3736,7 +3752,8 @@ instr_alu_and_translate(struct rte_swx_pipeline *p,
 {
 	char *dst = tokens[1], *src = tokens[2];
 	struct field *fdst, *fsrc;
-	uint32_t dst_struct_id, src_struct_id, src_val;
+	uint64_t src_val;
+	uint32_t dst_struct_id, src_struct_id;
 
 	CHECK(n_tokens == 3, EINVAL);
 
@@ -3761,17 +3778,17 @@ instr_alu_and_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* AND_I. */
-	src_val = strtoul(src, &src, 0);
+	src_val = strtoull(src, &src, 0);
 	CHECK(!src[0], EINVAL);
 
 	if (dst[0] == 'h')
-		src_val = htonl(src_val);
+		src_val = hton64(src_val) >> (64 - fdst->n_bits);
 
 	instr->type = INSTR_ALU_AND_I;
 	instr->alu.dst.struct_id = (uint8_t)dst_struct_id;
 	instr->alu.dst.n_bits = fdst->n_bits;
 	instr->alu.dst.offset = fdst->offset / 8;
-	instr->alu.src_val = (uint32_t)src_val;
+	instr->alu.src_val = src_val;
 	return 0;
 }
 
@@ -3785,7 +3802,8 @@ instr_alu_or_translate(struct rte_swx_pipeline *p,
 {
 	char *dst = tokens[1], *src = tokens[2];
 	struct field *fdst, *fsrc;
-	uint32_t dst_struct_id, src_struct_id, src_val;
+	uint64_t src_val;
+	uint32_t dst_struct_id, src_struct_id;
 
 	CHECK(n_tokens == 3, EINVAL);
 
@@ -3810,17 +3828,17 @@ instr_alu_or_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* OR_I. */
-	src_val = strtoul(src, &src, 0);
+	src_val = strtoull(src, &src, 0);
 	CHECK(!src[0], EINVAL);
 
 	if (dst[0] == 'h')
-		src_val = htonl(src_val);
+		src_val = hton64(src_val) >> (64 - fdst->n_bits);
 
 	instr->type = INSTR_ALU_OR_I;
 	instr->alu.dst.struct_id = (uint8_t)dst_struct_id;
 	instr->alu.dst.n_bits = fdst->n_bits;
 	instr->alu.dst.offset = fdst->offset / 8;
-	instr->alu.src_val = (uint32_t)src_val;
+	instr->alu.src_val = src_val;
 	return 0;
 }
 
@@ -3834,7 +3852,8 @@ instr_alu_xor_translate(struct rte_swx_pipeline *p,
 {
 	char *dst = tokens[1], *src = tokens[2];
 	struct field *fdst, *fsrc;
-	uint32_t dst_struct_id, src_struct_id, src_val;
+	uint64_t src_val;
+	uint32_t dst_struct_id, src_struct_id;
 
 	CHECK(n_tokens == 3, EINVAL);
 
@@ -3859,17 +3878,17 @@ instr_alu_xor_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* XOR_I. */
-	src_val = strtoul(src, &src, 0);
+	src_val = strtoull(src, &src, 0);
 	CHECK(!src[0], EINVAL);
 
 	if (dst[0] == 'h')
-		src_val = htonl(src_val);
+		src_val = hton64(src_val) >> (64 - fdst->n_bits);
 
 	instr->type = INSTR_ALU_XOR_I;
 	instr->alu.dst.struct_id = (uint8_t)dst_struct_id;
 	instr->alu.dst.n_bits = fdst->n_bits;
 	instr->alu.dst.offset = fdst->offset / 8;
-	instr->alu.src_val = (uint32_t)src_val;
+	instr->alu.src_val = src_val;
 	return 0;
 }
 
@@ -4765,7 +4784,8 @@ instr_jmp_eq_translate(struct rte_swx_pipeline *p,
 {
 	char *a = tokens[2], *b = tokens[3];
 	struct field *fa, *fb;
-	uint32_t a_struct_id, b_struct_id, b_val;
+	uint64_t b_val;
+	uint32_t a_struct_id, b_struct_id;
 
 	CHECK(n_tokens == 4, EINVAL);
 
@@ -4793,18 +4813,18 @@ instr_jmp_eq_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* JMP_EQ_I. */
-	b_val = strtoul(b, &b, 0);
+	b_val = strtoull(b, &b, 0);
 	CHECK(!b[0], EINVAL);
 
 	if (a[0] == 'h')
-		b_val = htonl(b_val);
+		b_val = hton64(b_val) >> (64 - fa->n_bits);
 
 	instr->type = INSTR_JMP_EQ_I;
 	instr->jmp.ip = NULL; /* Resolved later. */
 	instr->jmp.a.struct_id = (uint8_t)a_struct_id;
 	instr->jmp.a.n_bits = fa->n_bits;
 	instr->jmp.a.offset = fa->offset / 8;
-	instr->jmp.b_val = (uint32_t)b_val;
+	instr->jmp.b_val = b_val;
 	return 0;
 }
 
@@ -4818,7 +4838,8 @@ instr_jmp_neq_translate(struct rte_swx_pipeline *p,
 {
 	char *a = tokens[2], *b = tokens[3];
 	struct field *fa, *fb;
-	uint32_t a_struct_id, b_struct_id, b_val;
+	uint64_t b_val;
+	uint32_t a_struct_id, b_struct_id;
 
 	CHECK(n_tokens == 4, EINVAL);
 
@@ -4846,18 +4867,18 @@ instr_jmp_neq_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* JMP_NEQ_I. */
-	b_val = strtoul(b, &b, 0);
+	b_val = strtoull(b, &b, 0);
 	CHECK(!b[0], EINVAL);
 
 	if (a[0] == 'h')
-		b_val = htonl(b_val);
+		b_val = hton64(b_val) >> (64 - fa->n_bits);
 
 	instr->type = INSTR_JMP_NEQ_I;
 	instr->jmp.ip = NULL; /* Resolved later. */
 	instr->jmp.a.struct_id = (uint8_t)a_struct_id;
 	instr->jmp.a.n_bits = fa->n_bits;
 	instr->jmp.a.offset = fa->offset / 8;
-	instr->jmp.b_val = (uint32_t)b_val;
+	instr->jmp.b_val = b_val;
 	return 0;
 }
 
@@ -4871,7 +4892,8 @@ instr_jmp_lt_translate(struct rte_swx_pipeline *p,
 {
 	char *a = tokens[2], *b = tokens[3];
 	struct field *fa, *fb;
-	uint32_t a_struct_id, b_struct_id, b_val;
+	uint64_t b_val;
+	uint32_t a_struct_id, b_struct_id;
 
 	CHECK(n_tokens == 4, EINVAL);
 
@@ -4902,7 +4924,7 @@ instr_jmp_lt_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* JMP_LT_MI, JMP_LT_HI. */
-	b_val = strtoul(b, &b, 0);
+	b_val = strtoull(b, &b, 0);
 	CHECK(!b[0], EINVAL);
 
 	instr->type = INSTR_JMP_LT_MI;
@@ -4913,7 +4935,7 @@ instr_jmp_lt_translate(struct rte_swx_pipeline *p,
 	instr->jmp.a.struct_id = (uint8_t)a_struct_id;
 	instr->jmp.a.n_bits = fa->n_bits;
 	instr->jmp.a.offset = fa->offset / 8;
-	instr->jmp.b_val = (uint32_t)b_val;
+	instr->jmp.b_val = b_val;
 	return 0;
 }
 
@@ -4927,7 +4949,8 @@ instr_jmp_gt_translate(struct rte_swx_pipeline *p,
 {
 	char *a = tokens[2], *b = tokens[3];
 	struct field *fa, *fb;
-	uint32_t a_struct_id, b_struct_id, b_val;
+	uint64_t b_val;
+	uint32_t a_struct_id, b_struct_id;
 
 	CHECK(n_tokens == 4, EINVAL);
 
@@ -4958,7 +4981,7 @@ instr_jmp_gt_translate(struct rte_swx_pipeline *p,
 	}
 
 	/* JMP_GT_MI, JMP_GT_HI. */
-	b_val = strtoul(b, &b, 0);
+	b_val = strtoull(b, &b, 0);
 	CHECK(!b[0], EINVAL);
 
 	instr->type = INSTR_JMP_GT_MI;
@@ -4969,7 +4992,7 @@ instr_jmp_gt_translate(struct rte_swx_pipeline *p,
 	instr->jmp.a.struct_id = (uint8_t)a_struct_id;
 	instr->jmp.a.n_bits = fa->n_bits;
 	instr->jmp.a.offset = fa->offset / 8;
-	instr->jmp.b_val = (uint32_t)b_val;
+	instr->jmp.b_val = b_val;
 	return 0;
 }
 
@@ -5280,8 +5303,6 @@ instr_return_exec(struct rte_swx_pipeline *p)
 	t->ip = t->ret;
 }
 
-#define RTE_SWX_INSTRUCTION_TOKENS_MAX 16
-
 static int
 instr_translate(struct rte_swx_pipeline *p,
 		struct action *action,
@@ -5301,6 +5322,7 @@ instr_translate(struct rte_swx_pipeline *p,
 			break;
 
 		CHECK(n_tokens < RTE_SWX_INSTRUCTION_TOKENS_MAX, EINVAL);
+		CHECK_NAME(token, EINVAL);
 
 		tokens[n_tokens] = token;
 		n_tokens++;
@@ -5938,7 +5960,7 @@ instruction_config(struct rte_swx_pipeline *p,
 	CHECK(n_instructions, EINVAL);
 	CHECK(instructions, EINVAL);
 	for (i = 0; i < n_instructions; i++)
-		CHECK(instructions[i], EINVAL);
+		CHECK_INSTRUCTION(instructions[i], EINVAL);
 
 	/* Memory allocation. */
 	instr = calloc(n_instructions, sizeof(struct instruction));
@@ -6442,7 +6464,7 @@ rte_swx_pipeline_table_config(struct rte_swx_pipeline *p,
 		struct action *a;
 		uint32_t action_data_size;
 
-		CHECK(action_name, EINVAL);
+		CHECK_NAME(action_name, EINVAL);
 
 		a = action_find(p, action_name);
 		CHECK(a, EINVAL);
@@ -6452,7 +6474,7 @@ rte_swx_pipeline_table_config(struct rte_swx_pipeline *p,
 			action_data_size_max = action_data_size;
 	}
 
-	CHECK(params->default_action_name, EINVAL);
+	CHECK_NAME(params->default_action_name, EINVAL);
 	for (i = 0; i < p->n_actions; i++)
 		if (!strcmp(params->action_names[i],
 			    params->default_action_name))
@@ -6463,6 +6485,9 @@ rte_swx_pipeline_table_config(struct rte_swx_pipeline *p,
 	      !params->default_action_data, EINVAL);
 
 	/* Table type checks. */
+	if (recommended_table_type_name)
+		CHECK_NAME(recommended_table_type_name, EINVAL);
+
 	if (params->n_fields) {
 		enum rte_swx_table_match_type match_type;
 

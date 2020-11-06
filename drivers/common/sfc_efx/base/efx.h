@@ -1593,6 +1593,8 @@ typedef struct efx_nic_cfg_s {
 	uint32_t		enc_mac_stats_nstats;
 	boolean_t		enc_fec_counters;
 	boolean_t		enc_hlb_counters;
+	/* NIC support for Match-Action Engine (MAE). */
+	boolean_t		enc_mae_supported;
 	/* Firmware support for "FLAG" and "MARK" filter actions */
 	boolean_t		enc_filter_action_flag_supported;
 	boolean_t		enc_filter_action_mark_supported;
@@ -1601,11 +1603,13 @@ typedef struct efx_nic_cfg_s {
 	uint32_t		enc_assigned_port;
 } efx_nic_cfg_t;
 
-#define	EFX_VPORT_PCI_FUNCTION_IS_PF(configp) \
-	((configp)->evc_function == 0xffff)
+#define	EFX_PCI_VF_INVALID 0xffff
 
-#define	EFX_PCI_FUNCTION_IS_PF(_encp)	((_encp)->enc_vf == 0xffff)
-#define	EFX_PCI_FUNCTION_IS_VF(_encp)	((_encp)->enc_vf != 0xffff)
+#define	EFX_VPORT_PCI_FUNCTION_IS_PF(configp) \
+	((configp)->evc_function == EFX_PCI_VF_INVALID)
+
+#define	EFX_PCI_FUNCTION_IS_PF(_encp)	((_encp)->enc_vf == EFX_PCI_VF_INVALID)
+#define	EFX_PCI_FUNCTION_IS_VF(_encp)	((_encp)->enc_vf != EFX_PCI_VF_INVALID)
 
 #define	EFX_PCI_FUNCTION(_encp)	\
 	(EFX_PCI_FUNCTION_IS_PF(_encp) ? (_encp)->enc_pf : (_encp)->enc_vf)
@@ -1642,6 +1646,22 @@ extern	__checkReturn		efx_rc_t
 efx_nic_get_fw_version(
 	__in			efx_nic_t *enp,
 	__out			efx_nic_fw_info_t *enfip);
+
+#define	EFX_NIC_BOARD_INFO_SERIAL_LEN	(64)
+#define	EFX_NIC_BOARD_INFO_NAME_LEN	(16)
+
+typedef struct efx_nic_board_info_s {
+	/* The following two fields are NUL-terminated ASCII strings. */
+	char			enbi_serial[EFX_NIC_BOARD_INFO_SERIAL_LEN];
+	char			enbi_name[EFX_NIC_BOARD_INFO_NAME_LEN];
+	uint32_t		enbi_revision;
+} efx_nic_board_info_t;
+
+LIBEFX_API
+extern	__checkReturn	efx_rc_t
+efx_nic_get_board_info(
+	__in		efx_nic_t *enp,
+	__out		efx_nic_board_info_t *board_infop);
 
 /* Driver resource limits (minimum required/maximum usable). */
 typedef struct efx_drv_limits_s {
@@ -3869,7 +3889,7 @@ typedef enum efx_vport_type_e {
 #define		EFX_VPORT_ID_INVALID	0
 
 typedef struct efx_vport_config_s {
-	/* Either VF index or 0xffff for PF */
+	/* Either VF index or EFX_PCI_VF_INVALID for PF */
 	uint16_t	evc_function;
 	/* VLAN ID of the associated function */
 	uint16_t	evc_vid;
@@ -4033,6 +4053,315 @@ efx_proxy_auth_privilege_modify(
 	__in		uint32_t remove_privileges_mask);
 
 #endif /* EFSYS_OPT_MCDI_PROXY_AUTH_SERVER */
+
+#if EFSYS_OPT_MAE
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_init(
+	__in				efx_nic_t *enp);
+
+LIBEFX_API
+extern					void
+efx_mae_fini(
+	__in				efx_nic_t *enp);
+
+typedef struct efx_mae_limits_s {
+	uint32_t			eml_max_n_action_prios;
+	uint32_t			eml_max_n_outer_prios;
+	uint32_t			eml_encap_types_supported;
+} efx_mae_limits_t;
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_get_limits(
+	__in				efx_nic_t *enp,
+	__out				efx_mae_limits_t *emlp);
+
+typedef enum efx_mae_rule_type_e {
+	EFX_MAE_RULE_ACTION = 0,
+	EFX_MAE_RULE_OUTER,
+
+	EFX_MAE_RULE_NTYPES
+} efx_mae_rule_type_t;
+
+typedef struct efx_mae_match_spec_s	efx_mae_match_spec_t;
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_match_spec_init(
+	__in				efx_nic_t *enp,
+	__in				efx_mae_rule_type_t type,
+	__in				uint32_t prio,
+	__out				efx_mae_match_spec_t **specp);
+
+LIBEFX_API
+extern					void
+efx_mae_match_spec_fini(
+	__in				efx_nic_t *enp,
+	__in				efx_mae_match_spec_t *spec);
+
+typedef enum efx_mae_field_id_e {
+	EFX_MAE_FIELD_INGRESS_MPORT_SELECTOR = 0,
+	EFX_MAE_FIELD_ETHER_TYPE_BE,
+	EFX_MAE_FIELD_ETH_SADDR_BE,
+	EFX_MAE_FIELD_ETH_DADDR_BE,
+	EFX_MAE_FIELD_VLAN0_TCI_BE,
+	EFX_MAE_FIELD_VLAN0_PROTO_BE,
+	EFX_MAE_FIELD_VLAN1_TCI_BE,
+	EFX_MAE_FIELD_VLAN1_PROTO_BE,
+	EFX_MAE_FIELD_SRC_IP4_BE,
+	EFX_MAE_FIELD_DST_IP4_BE,
+	EFX_MAE_FIELD_IP_PROTO,
+	EFX_MAE_FIELD_IP_TOS,
+	EFX_MAE_FIELD_IP_TTL,
+	EFX_MAE_FIELD_SRC_IP6_BE,
+	EFX_MAE_FIELD_DST_IP6_BE,
+	EFX_MAE_FIELD_L4_SPORT_BE,
+	EFX_MAE_FIELD_L4_DPORT_BE,
+	EFX_MAE_FIELD_TCP_FLAGS_BE,
+	EFX_MAE_FIELD_ENC_ETHER_TYPE_BE,
+	EFX_MAE_FIELD_ENC_ETH_SADDR_BE,
+	EFX_MAE_FIELD_ENC_ETH_DADDR_BE,
+	EFX_MAE_FIELD_ENC_VLAN0_TCI_BE,
+	EFX_MAE_FIELD_ENC_VLAN0_PROTO_BE,
+	EFX_MAE_FIELD_ENC_VLAN1_TCI_BE,
+	EFX_MAE_FIELD_ENC_VLAN1_PROTO_BE,
+	EFX_MAE_FIELD_ENC_SRC_IP4_BE,
+	EFX_MAE_FIELD_ENC_DST_IP4_BE,
+	EFX_MAE_FIELD_ENC_IP_PROTO,
+	EFX_MAE_FIELD_ENC_IP_TOS,
+	EFX_MAE_FIELD_ENC_IP_TTL,
+	EFX_MAE_FIELD_ENC_SRC_IP6_BE,
+	EFX_MAE_FIELD_ENC_DST_IP6_BE,
+	EFX_MAE_FIELD_ENC_L4_SPORT_BE,
+	EFX_MAE_FIELD_ENC_L4_DPORT_BE,
+	EFX_MAE_FIELD_ENC_VNET_ID_BE,
+	EFX_MAE_FIELD_OUTER_RULE_ID,
+
+	EFX_MAE_FIELD_NIDS
+} efx_mae_field_id_t;
+
+/* MPORT selector. Used to refer to MPORTs in match/action rules. */
+typedef struct efx_mport_sel_s {
+	uint32_t sel;
+} efx_mport_sel_t;
+
+#define	EFX_MPORT_NULL			(0U)
+
+/*
+ * Get MPORT selector of a physical port.
+ *
+ * The resulting MPORT selector is opaque to the caller and can be
+ * passed as an argument to efx_mae_match_spec_mport_set()
+ * and efx_mae_action_set_populate_deliver().
+ */
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_mport_by_phy_port(
+	__in				uint32_t phy_port,
+	__out				efx_mport_sel_t *mportp);
+
+/*
+ * Get MPORT selector of a PCIe function.
+ *
+ * The resulting MPORT selector is opaque to the caller and can be
+ * passed as an argument to efx_mae_match_spec_mport_set()
+ * and efx_mae_action_set_populate_deliver().
+ */
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_mport_by_pcie_function(
+	__in				uint32_t pf,
+	__in				uint32_t vf,
+	__out				efx_mport_sel_t *mportp);
+
+/*
+ * Fields which have BE postfix in their named constants are expected
+ * to be passed by callers in big-endian byte order. They will appear
+ * in the MCDI buffer, which is a part of the match specification, in
+ * the very same byte order, that is, no conversion will be performed.
+ *
+ * Fields which don't have BE postfix in their named constants are in
+ * host byte order. MCDI expects them to be little-endian, so the API
+ * will take care to carry out conversion to little-endian byte order.
+ * At the moment, the only field in host byte order is MPORT selector.
+ */
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_match_spec_field_set(
+	__in				efx_mae_match_spec_t *spec,
+	__in				efx_mae_field_id_t field_id,
+	__in				size_t value_size,
+	__in_bcount(value_size)		const uint8_t *value,
+	__in				size_t mask_size,
+	__in_bcount(mask_size)		const uint8_t *mask);
+
+/* If the mask argument is NULL, the API will use full mask by default. */
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_match_spec_mport_set(
+	__in				efx_mae_match_spec_t *spec,
+	__in				const efx_mport_sel_t *valuep,
+	__in_opt			const efx_mport_sel_t *maskp);
+
+LIBEFX_API
+extern	__checkReturn			boolean_t
+efx_mae_match_specs_equal(
+	__in				const efx_mae_match_spec_t *left,
+	__in				const efx_mae_match_spec_t *right);
+
+/*
+ * Make sure that match fields known by EFX have proper masks set
+ * in the match specification as per requirements of SF-122526-TC.
+ *
+ * In the case efx_mae_field_id_t lacks named identifiers for any
+ * fields which the FW maintains with support status MATCH_ALWAYS,
+ * the validation result may not be accurate.
+ */
+LIBEFX_API
+extern	__checkReturn			boolean_t
+efx_mae_match_spec_is_valid(
+	__in				efx_nic_t *enp,
+	__in				const efx_mae_match_spec_t *spec);
+
+typedef struct efx_mae_actions_s efx_mae_actions_t;
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_spec_init(
+	__in				efx_nic_t *enp,
+	__out				efx_mae_actions_t **specp);
+
+LIBEFX_API
+extern					void
+efx_mae_action_set_spec_fini(
+	__in				efx_nic_t *enp,
+	__in				efx_mae_actions_t *spec);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_populate_vlan_pop(
+	__in				efx_mae_actions_t *spec);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_populate_vlan_push(
+	__in				efx_mae_actions_t *spec,
+	__in				uint16_t tpid_be,
+	__in				uint16_t tci_be);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_populate_flag(
+	__in				efx_mae_actions_t *spec);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_populate_mark(
+	__in				efx_mae_actions_t *spec,
+	__in				uint32_t mark_value);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_populate_deliver(
+	__in				efx_mae_actions_t *spec,
+	__in				const efx_mport_sel_t *mportp);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_populate_drop(
+	__in				efx_mae_actions_t *spec);
+
+LIBEFX_API
+extern	__checkReturn			boolean_t
+efx_mae_action_set_specs_equal(
+	__in				const efx_mae_actions_t *left,
+	__in				const efx_mae_actions_t *right);
+
+/*
+ * Conduct a comparison to check whether two match specifications
+ * of equal rule type (action / outer) and priority would map to
+ * the very same rule class from the firmware's standpoint.
+ */
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_match_specs_class_cmp(
+	__in				efx_nic_t *enp,
+	__in				const efx_mae_match_spec_t *left,
+	__in				const efx_mae_match_spec_t *right,
+	__out				boolean_t *have_same_classp);
+
+#define	EFX_MAE_RSRC_ID_INVALID	UINT32_MAX
+
+/* Rule ID */
+typedef struct efx_mae_rule_id_s {
+	uint32_t id;
+} efx_mae_rule_id_t;
+
+LIBEFX_API
+extern	__checkReturn		efx_rc_t
+efx_mae_outer_rule_insert(
+	__in			efx_nic_t *enp,
+	__in			const efx_mae_match_spec_t *spec,
+	__in			efx_tunnel_protocol_t encap_type,
+	__out			efx_mae_rule_id_t *or_idp);
+
+LIBEFX_API
+extern	__checkReturn		efx_rc_t
+efx_mae_outer_rule_remove(
+	__in			efx_nic_t *enp,
+	__in			const efx_mae_rule_id_t *or_idp);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_match_spec_outer_rule_id_set(
+	__in				efx_mae_match_spec_t *spec,
+	__in				const efx_mae_rule_id_t *or_idp);
+
+/* Action set ID */
+typedef struct efx_mae_aset_id_s {
+	uint32_t id;
+} efx_mae_aset_id_t;
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_alloc(
+	__in				efx_nic_t *enp,
+	__in				const efx_mae_actions_t *spec,
+	__out				efx_mae_aset_id_t *aset_idp);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_set_free(
+	__in				efx_nic_t *enp,
+	__in				const efx_mae_aset_id_t *aset_idp);
+
+/* Action set list ID */
+typedef struct efx_mae_aset_list_id_s {
+	uint32_t id;
+} efx_mae_aset_list_id_t;
+
+/*
+ * Either action set list ID or action set ID must be passed to this API,
+ * but not both.
+ */
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_rule_insert(
+	__in				efx_nic_t *enp,
+	__in				const efx_mae_match_spec_t *spec,
+	__in				const efx_mae_aset_list_id_t *asl_idp,
+	__in				const efx_mae_aset_id_t *as_idp,
+	__out				efx_mae_rule_id_t *ar_idp);
+
+LIBEFX_API
+extern	__checkReturn			efx_rc_t
+efx_mae_action_rule_remove(
+	__in				efx_nic_t *enp,
+	__in				const efx_mae_rule_id_t *ar_idp);
+
+#endif /* EFSYS_OPT_MAE */
 
 #ifdef	__cplusplus
 }
