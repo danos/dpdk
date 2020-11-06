@@ -139,3 +139,21 @@
  	s->tb_time = port->time;
  	s->tb_credits = s->tb_size / 2;
  
+--- a/app/test/meson.build
++++ b/app/test/meson.build
+@@ -101,6 +101,7 @@ test_sources = files('commands.c',
+ 	'test_rib6.c',
+ 	'test_ring.c',
+ 	'test_ring_perf.c',
++	'test_rte_approx_int.c',
+ 	'test_rwlock.c',
+ 	'test_sched.c',
+ 	'test_service_cores.c',
+@@ -208,6 +209,7 @@ fast_test_names = [
+         'rwlock_rda_autotest',
+         'rwlock_rds_wrm_autotest',
+         'rwlock_rde_wro_autotest',
++        'sched_approxtest',
+         'sched_autotest',
+         'spinlock_autotest',
+         'stack_autotest',
