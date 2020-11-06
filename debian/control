@@ -588,7 +588,7 @@ Description: Data Plane Development Kit (librte-common-qat runtime library)
  This package contains the runtime libraries for librte-common-qat.
 
 Package: librte-common-sfc-efx21
-Architecture: amd64
+Architecture: amd64 arm64
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/sfc_efx.html
 Pre-Depends: ${misc:Pre-Depends},
@@ -2056,7 +2056,7 @@ Description: Data Plane Development Kit (librte-net-ring runtime library)
  This package contains the runtime libraries for librte-net-ring.
 
 Package: librte-net-sfc21
-Architecture: amd64
+Architecture: amd64 arm64
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/sfc_efx.html
 Pre-Depends: ${misc:Pre-Depends},
