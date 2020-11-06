@@ -1,0 +1,193 @@
+--- a/app/test/Makefile
++++ b/app/test/Makefile
+@@ -171,6 +171,7 @@ SRCS-$(CONFIG_RTE_LIBRTE_NET) += test_cr
+ 
+ ifeq ($(CONFIG_RTE_LIBRTE_SCHED),y)
+ SRCS-y += test_red.c
++SRCS-y += test_rte_approx_int.c
+ SRCS-y += test_sched.c
+ endif
+ 
+--- a/app/test/autotest_data.py
++++ b/app/test/autotest_data.py
+@@ -303,6 +303,12 @@ parallel_test_list = [
+         "Report":  None,
+     },
+     {
++        "Name":    "Sched approxtest",
++        "Command": "sched_approxtest",
++        "Func":    default_autotest,
++        "Report":  None,
++    },
++    {
+         "Name":    "Eventdev selftest octeontx",
+         "Command": "eventdev_selftest_octeontx",
+         "Func":    default_autotest,
+--- a/app/test/meson.build
++++ b/app/test/meson.build
+@@ -101,6 +101,7 @@ test_sources = files('commands.c',
+ 	'test_rib6.c',
+ 	'test_ring.c',
+ 	'test_ring_perf.c',
++	'test_rte_approx_int.c',
+ 	'test_rwlock.c',
+ 	'test_sched.c',
+ 	'test_service_cores.c',
+@@ -210,6 +211,7 @@ fast_tests = [
+         ['rwlock_rda_autotest', true],
+         ['rwlock_rds_wrm_autotest', true],
+         ['rwlock_rde_wro_autotest', true],
++        ['sched_approxtest', true],
+         ['sched_autotest', true],
+         ['spinlock_autotest', true],
+         ['stack_autotest', false],
+--- /dev/null
++++ b/app/test/test_rte_approx_int.c
+@@ -0,0 +1,139 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2020 Intel Corporation
++ */
++
++#include <stdlib.h>
++#include <stdint.h>
++#include <stdio.h>
++
++#include "test.h"
++
++#include <rte_approx.h>
++
++uint32_t linerates[] = {
++	1250000000, // 10Gbit/sec in bytes/sec
++	625000000,  // 5Gbit/sec in bytes/sec
++	312500000,  // 2.5Gbit/sec in bytes/sec
++	125000000,  // 1Gbit/sec in bytes/sec
++	12500000,   // 100Mbit/sec in bytes/sec
++	1250000,    // 10Mbit/sec in bytes/sec
++};
++
++uint32_t shape_incs[] = {
++	12500000,   // 100M bits/sec
++	1250000,    // 10M bits/sec
++	625000,     // 5M bits/sec
++	62500,      // 500000 bits/sec
++	12500,      // 100000 bits/sec
++	6250,       // 50000 bits/sec
++	1000,       // 8000 bits/sec
++};
++
++#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
++
++static int
++test_func(uint32_t line_rate, uint32_t shape_rate, uint32_t burst)
++{
++	uint32_t creds;
++	uint32_t period;
++	uint32_t burst_tolerance;
++	int err;
++
++	err = rte_approx_int(shape_rate, line_rate, &creds, &period);
++	if (err) {
++		printf("rte_approx_int failed at shape rate: %u line rate: "
++		       "%u\n",
++		       shape_rate, line_rate);
++		return -1;
++	}
++
++	burst_tolerance = burst * 120 / 100;
++	if (burst != 0 && creds > burst_tolerance) {
++		printf("credits %u > burst-tolerance %u at shape rate: %u "
++		       "line rate: %u\n",
++		       creds, burst_tolerance, shape_rate, line_rate);
++		return -1;
++	}
++
++	double bas_perc = (double)(shape_rate)/(double)line_rate;
++	double comp = (double)creds/(double)period;
++
++	if (bas_perc < comp) {
++		printf("shape/line: %lf < credits/period %lf at shape rate: "
++		       "%u line rate: %u\n",
++		       bas_perc, comp, shape_rate, line_rate);
++		return -1;
++	}
++	return 0;
++}
++
++static int
++test_rte_approx_int(void)
++{
++	uint32_t i, j, k;
++	uint32_t shape_rate, burst;
++	int err;
++
++	/* Test rate - 1 / rate ie maximum possible */
++	printf("\n\nTesting maximum shape rates...\n\n");
++	for (i = 0; i < ARRAY_SIZE(linerates); i++) {
++		err = test_func(linerates[i], linerates[i] - 1, 0);
++		if (err) {
++			printf("Max-rate test failed at line rate %u\n",
++			       linerates[i]);
++			return -1;
++		}
++	}
++
++	printf("\n\nTesting other shape rates...\n\n");
++
++	for (i = 0; i < ARRAY_SIZE(shape_incs); i++) {
++		shape_rate = shape_incs[i];
++		for (j = 0; j < ARRAY_SIZE(linerates); j++) {
++			while (shape_rate < linerates[j]) {
++				/* 1 to 10ms for each shape/linerate combo */
++				for (k = 1; k < 11; k++) {
++					burst = shape_rate * k / 1000;
++					if (burst < 1522)
++						burst = 1522;
++
++					err = test_func(linerates[j],
++							shape_rate, burst);
++					if (err) {
++						printf("Other rate test failed line: %u, shape: %u, burst: %u\n",
++						       linerates[j], shape_rate,
++						       burst);
++						return -1;
++					}
++				}
++				shape_rate += shape_incs[i];
++			}
++		}
++	}
++
++	printf("\n\nTesting small shape/large line rates...\n\n");
++
++	for (i = 0; i < 3; i++) {
++		shape_rate = shape_incs[4];
++		for (j = 1; j < 10; j++) {
++			burst = shape_rate / 1000;
++			if (burst < 1522)
++                              burst = 1522;
++
++			err = test_func(linerates[i], shape_rate, burst);
++			if (err) {
++				printf("Low shape rate test failed line: %u, shape: %u, burst: %u\n",
++				       linerates[i], shape_rate, burst);
++				return -1;
++			}
++			/* 37500 is 300kbits increments */
++			shape_rate += j * 37500;
++		}
++	}
++	return 0;
++}
++
++REGISTER_TEST_COMMAND(sched_approxtest, test_rte_approx_int);
++
++
++
+--- a/lib/librte_sched/rte_sched_version.map
++++ b/lib/librte_sched/rte_sched_version.map
+@@ -44,4 +44,5 @@ EXPERIMENTAL {
+ 	global:
+ 
+ 	rte_sched_port_pipe_profile_add;
++	rte_approx_int;
+ };

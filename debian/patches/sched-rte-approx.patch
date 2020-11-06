@@ -64,7 +64,7 @@
 +}
 --- a/lib/librte_sched/rte_approx.h
 +++ b/lib/librte_sched/rte_approx.h
-@@ -39,6 +39,24 @@ extern "C" {
+@@ -39,6 +39,25 @@ extern "C" {
   */
  int rte_approx(double alpha, double d, uint32_t *p, uint32_t *q);
  
@@ -84,7 +84,8 @@
 + * @return
 + *   0 upon success, error code otherwise
 + */
-+int rte_approx_int(uint32_t alpha_num, uint32_t denum, uint32_t *p, uint32_t *q);
++int __rte_experimental
++rte_approx_int(uint32_t alpha_num, uint32_t denum, uint32_t *p, uint32_t *q);
 +
  #ifdef __cplusplus
  }
