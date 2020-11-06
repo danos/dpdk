@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include <rte_atomic.h>
 #include <rte_ethdev_driver.h>
 #include <rte_bus_pci.h>
 #include <rte_mbuf.h>
@@ -86,9 +85,13 @@ mlx5_dev_configure(struct rte_eth_dev *dev)
 		return -rte_errno;
 	}
 
-	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
-		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
-
+	if ((dev->data->dev_conf.txmode.offloads &
+			DEV_TX_OFFLOAD_SEND_ON_TIMESTAMP) &&
+			rte_mbuf_dyn_tx_timestamp_register(NULL, NULL) != 0) {
+		DRV_LOG(ERR, "port %u cannot register Tx timestamp field/flag",
+			dev->data->port_id);
+		return -rte_errno;
+	}
 	memcpy(priv->rss_conf.rss_key,
 	       use_app_rss_key ?
 	       dev->data->dev_conf.rx_adv_conf.rss_conf.rss_key :
@@ -306,6 +309,10 @@ mlx5_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *info)
 	info->max_tx_queues = max;
 	info->max_mac_addrs = MLX5_MAX_UC_MAC_ADDRESSES;
 	info->rx_queue_offload_capa = mlx5_get_rx_queue_offloads(dev);
+	info->rx_seg_capa.max_nseg = MLX5_MAX_RXQ_NSEG;
+	info->rx_seg_capa.multi_pools = 1;
+	info->rx_seg_capa.offset_allowed = 1;
+	info->rx_seg_capa.offset_align_log2 = 0;
 	info->rx_offload_capa = (mlx5_get_rx_port_offloads() |
 				 info->rx_queue_offload_capa);
 	info->tx_offload_capa = mlx5_get_tx_port_offloads(dev);
@@ -421,7 +428,8 @@ mlx5_dev_supported_ptypes_get(struct rte_eth_dev *dev)
 
 	if (dev->rx_pkt_burst == mlx5_rx_burst ||
 	    dev->rx_pkt_burst == mlx5_rx_burst_mprq ||
-	    dev->rx_pkt_burst == mlx5_rx_burst_vec)
+	    dev->rx_pkt_burst == mlx5_rx_burst_vec ||
+	    dev->rx_pkt_burst == mlx5_rx_burst_mprq_vec)
 		return ptypes;
 	return NULL;
 }
@@ -480,11 +488,22 @@ mlx5_select_rx_function(struct rte_eth_dev *dev)
 
 	MLX5_ASSERT(dev != NULL);
 	if (mlx5_check_vec_rx_support(dev) > 0) {
-		rx_pkt_burst = mlx5_rx_burst_vec;
-		DRV_LOG(DEBUG, "port %u selected Rx vectorized function",
-			dev->data->port_id);
+		if (mlx5_mprq_enabled(dev)) {
+			rx_pkt_burst = mlx5_rx_burst_mprq_vec;
+			DRV_LOG(DEBUG, "port %u selected vectorized"
+				" MPRQ Rx function", dev->data->port_id);
+		} else {
+			rx_pkt_burst = mlx5_rx_burst_vec;
+			DRV_LOG(DEBUG, "port %u selected vectorized"
+				" SPRQ Rx function", dev->data->port_id);
+		}
 	} else if (mlx5_mprq_enabled(dev)) {
 		rx_pkt_burst = mlx5_rx_burst_mprq;
+		DRV_LOG(DEBUG, "port %u selected MPRQ Rx function",
+			dev->data->port_id);
+	} else {
+		DRV_LOG(DEBUG, "port %u selected SPRQ Rx function",
+			dev->data->port_id);
 	}
 	return rx_pkt_burst;
 }

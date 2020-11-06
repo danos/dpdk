@@ -67,8 +67,7 @@ virtio_user_reset_queues_packed(struct rte_eth_dev *dev)
 static int
 virtio_user_server_reconnect(struct virtio_user_dev *dev)
 {
-	int ret;
-	int connectfd;
+	int ret, connectfd, old_status;
 	struct rte_eth_dev *eth_dev = &rte_eth_devices[dev->port_id];
 	struct virtio_hw *hw = eth_dev->data->dev_private;
 	uint64_t protocol_features;
@@ -78,6 +77,14 @@ virtio_user_server_reconnect(struct virtio_user_dev *dev)
 		return -1;
 
 	dev->vhostfd = connectfd;
+	old_status = vtpci_get_status(hw);
+
+	vtpci_reset(hw);
+
+	vtpci_set_status(hw, VIRTIO_CONFIG_STATUS_ACK);
+
+	vtpci_set_status(hw, VIRTIO_CONFIG_STATUS_DRIVER);
+
 	if (dev->ops->send_request(dev, VHOST_USER_GET_FEATURES,
 				   &dev->device_features) < 0) {
 		PMD_INIT_LOG(ERR, "get_features failed: %s",
@@ -92,6 +99,9 @@ virtio_user_server_reconnect(struct virtio_user_dev *dev)
 					&protocol_features))
 			return -1;
 
+		/* Offer VHOST_USER_PROTOCOL_F_STATUS */
+		dev->protocol_features |=
+			(1ULL << VHOST_USER_PROTOCOL_F_STATUS);
 		dev->protocol_features &= protocol_features;
 
 		if (dev->ops->send_request(dev,
@@ -113,14 +123,17 @@ virtio_user_server_reconnect(struct virtio_user_dev *dev)
 
 	/* For packed ring, resetting queues is required in reconnection. */
 	if (vtpci_packed_queue(hw) &&
-	   (vtpci_get_status(hw) & VIRTIO_CONFIG_STATUS_DRIVER_OK)) {
+	   (old_status & VIRTIO_CONFIG_STATUS_DRIVER_OK)) {
 		PMD_INIT_LOG(NOTICE, "Packets on the fly will be dropped"
 				" when packed ring reconnecting.");
 		virtio_user_reset_queues_packed(eth_dev);
 	}
 
-	ret = virtio_user_start_device(dev);
-	if (ret < 0)
+	vtpci_set_status(hw, VIRTIO_CONFIG_STATUS_FEATURES_OK);
+
+	/* Start the device */
+	vtpci_set_status(hw, VIRTIO_CONFIG_STATUS_DRIVER_OK);
+	if (!dev->started)
 		return -1;
 
 	if (dev->queue_pairs > 1) {
@@ -168,6 +181,11 @@ virtio_user_delayed_handler(void *param)
 		if (dev->vhostfd >= 0) {
 			close(dev->vhostfd);
 			dev->vhostfd = -1;
+			/* Until the featuers are negotiated again, don't assume
+			 * the backend supports VHOST_USER_PROTOCOL_F_STATUS
+			 */
+			dev->protocol_features &=
+				~(1ULL << VHOST_USER_PROTOCOL_F_STATUS);
 		}
 		eth_dev->intr_handle->fd = dev->listenfd;
 		rte_intr_callback_register(eth_dev->intr_handle,
@@ -278,8 +296,8 @@ virtio_user_set_status(struct virtio_hw *hw, uint8_t status)
 		virtio_user_start_device(dev);
 	else if (status == VIRTIO_CONFIG_STATUS_RESET)
 		virtio_user_reset(hw);
-	dev->status = status;
-	virtio_user_send_status_update(dev, status);
+
+	virtio_user_dev_set_status(dev, status);
 }
 
 static uint8_t
@@ -287,7 +305,7 @@ virtio_user_get_status(struct virtio_hw *hw)
 {
 	struct virtio_user_dev *dev = virtio_user_get_dev(hw);
 
-	virtio_user_update_status(dev);
+	virtio_user_dev_update_status(dev);
 
 	return dev->status;
 }
@@ -560,6 +578,9 @@ virtio_user_backend_type(const char *path)
 	struct stat sb;
 
 	if (stat(path, &sb) == -1) {
+		if (errno == ENOENT)
+			return VIRTIO_USER_BACKEND_VHOST_USER;
+
 		PMD_INIT_LOG(ERR, "Stat fails: %s (%s)\n", path,
 			     strerror(errno));
 		return VIRTIO_USER_BACKEND_UNKNOWN;
@@ -697,7 +718,8 @@ virtio_user_pmd_probe(struct rte_vdev_device *dev)
 			path);
 		goto end;
 	}
-
+	PMD_INIT_LOG(INFO, "Backend type detected: %s",
+		     virtio_user_backend_strings[backend_type]);
 
 	if (rte_kvargs_count(kvlist, VIRTIO_USER_ARG_INTERFACE_NAME) == 1) {
 		if (backend_type != VIRTIO_USER_BACKEND_VHOST_KERNEL) {

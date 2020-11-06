@@ -544,6 +544,11 @@ init_vring_queue(struct virtio_net *dev, uint32_t vring_idx)
 	}
 
 	vq = dev->virtqueue[vring_idx];
+	if (!vq) {
+		VHOST_LOG_CONFIG(ERR, "Virtqueue not allocated (%d)\n",
+				vring_idx);
+		return;
+	}
 
 	memset(vq, 0, sizeof(struct vhost_virtqueue));
 
@@ -570,6 +575,12 @@ reset_vring_queue(struct virtio_net *dev, uint32_t vring_idx)
 	}
 
 	vq = dev->virtqueue[vring_idx];
+	if (!vq) {
+		VHOST_LOG_CONFIG(ERR, "Virtqueue not allocated (%d)\n",
+				vring_idx);
+		return;
+	}
+
 	callfd = vq->callfd;
 	init_vring_queue(dev, vring_idx);
 	vq->callfd = callfd;
@@ -579,22 +590,29 @@ int
 alloc_vring_queue(struct virtio_net *dev, uint32_t vring_idx)
 {
 	struct vhost_virtqueue *vq;
+	uint32_t i;
 
-	vq = rte_malloc(NULL, sizeof(struct vhost_virtqueue), 0);
-	if (vq == NULL) {
-		VHOST_LOG_CONFIG(ERR,
-			"Failed to allocate memory for vring:%u.\n", vring_idx);
-		return -1;
+	/* Also allocate holes, if any, up to requested vring index. */
+	for (i = 0; i <= vring_idx; i++) {
+		if (dev->virtqueue[i])
+			continue;
+
+		vq = rte_malloc(NULL, sizeof(struct vhost_virtqueue), 0);
+		if (vq == NULL) {
+			VHOST_LOG_CONFIG(ERR,
+				"Failed to allocate memory for vring:%u.\n", i);
+			return -1;
+		}
+
+		dev->virtqueue[i] = vq;
+		init_vring_queue(dev, vring_idx);
+		rte_spinlock_init(&vq->access_lock);
+		vq->avail_wrap_counter = 1;
+		vq->used_wrap_counter = 1;
+		vq->signalled_used_valid = false;
 	}
 
-	dev->virtqueue[vring_idx] = vq;
-	init_vring_queue(dev, vring_idx);
-	rte_spinlock_init(&vq->access_lock);
-	vq->avail_wrap_counter = 1;
-	vq->used_wrap_counter = 1;
-	vq->signalled_used_valid = false;
-
-	dev->nr_vring += 1;
+	dev->nr_vring = RTE_MAX(dev->nr_vring, vring_idx + 1);
 
 	return 0;
 }
@@ -1253,7 +1271,12 @@ rte_vhost_avail_entries(int vid, uint16_t queue_id)
 	if (!dev)
 		return 0;
 
+	if (queue_id >= VHOST_MAX_VRING)
+		return 0;
+
 	vq = dev->virtqueue[queue_id];
+	if (!vq)
+		return 0;
 
 	rte_spinlock_lock(&vq->access_lock);
 
@@ -1340,7 +1363,12 @@ rte_vhost_enable_guest_notification(int vid, uint16_t queue_id, int enable)
 	if (!dev)
 		return -1;
 
+	if (queue_id >= VHOST_MAX_VRING)
+		return -1;
+
 	vq = dev->virtqueue[queue_id];
+	if (!vq)
+		return -1;
 
 	rte_spinlock_lock(&vq->access_lock);
 
@@ -1450,6 +1478,9 @@ int rte_vhost_get_vring_base(int vid, uint16_t queue_id,
 	if (dev == NULL || last_avail_idx == NULL || last_used_idx == NULL)
 		return -1;
 
+	if (queue_id >= VHOST_MAX_VRING)
+		return -1;
+
 	vq = dev->virtqueue[queue_id];
 	if (!vq)
 		return -1;
@@ -1476,6 +1507,9 @@ int rte_vhost_set_vring_base(int vid, uint16_t queue_id,
 	if (!dev)
 		return -1;
 
+	if (queue_id >= VHOST_MAX_VRING)
+		return -1;
+
 	vq = dev->virtqueue[queue_id];
 	if (!vq)
 		return -1;
@@ -1500,15 +1534,23 @@ rte_vhost_get_vring_base_from_inflight(int vid,
 				       uint16_t *last_used_idx)
 {
 	struct rte_vhost_inflight_info_packed *inflight_info;
+	struct vhost_virtqueue *vq;
 	struct virtio_net *dev = get_device(vid);
 
 	if (dev == NULL || last_avail_idx == NULL || last_used_idx == NULL)
 		return -1;
 
+	if (queue_id >= VHOST_MAX_VRING)
+		return -1;
+
+	vq = dev->virtqueue[queue_id];
+	if (!vq)
+		return -1;
+
 	if (!vq_is_packed(dev))
 		return -1;
 
-	inflight_info = dev->virtqueue[queue_id]->inflight_packed;
+	inflight_info = vq->inflight_packed;
 	if (!inflight_info)
 		return -1;
 
@@ -1545,6 +1587,9 @@ int rte_vhost_async_channel_register(int vid, uint16_t queue_id,
 		return -1;
 
 	f.intval = features;
+
+	if (queue_id >= VHOST_MAX_VRING)
+		return -1;
 
 	vq = dev->virtqueue[queue_id];
 
@@ -1625,6 +1670,9 @@ int rte_vhost_async_channel_unregister(int vid, uint16_t queue_id)
 	int ret = -1;
 
 	if (dev == NULL)
+		return ret;
+
+	if (queue_id >= VHOST_MAX_VRING)
 		return ret;
 
 	vq = dev->virtqueue[queue_id];

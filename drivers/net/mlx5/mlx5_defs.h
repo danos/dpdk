@@ -11,9 +11,6 @@
 
 #include "mlx5_autoconf.h"
 
-/* Reported driver name. */
-#define MLX5_DRIVER_NAME "net_mlx5"
-
 /* Maximum number of simultaneous VLAN filters. */
 #define MLX5_MAX_VLAN_IDS 128
 
@@ -165,6 +162,8 @@
 #define MLX5_XMETA_MODE_LEGACY 0
 #define MLX5_XMETA_MODE_META16 1
 #define MLX5_XMETA_MODE_META32 2
+/* Provide info on patrial hw miss. Implies MLX5_XMETA_MODE_META16 */
+#define MLX5_XMETA_MODE_MISS_INFO 3
 
 /* MLX5_TX_DB_NC supported values. */
 #define MLX5_TXDB_CACHED 0
@@ -196,6 +195,9 @@
 /* Hairpin TX/RX queue configuration parameters. */
 #define MLX5_HAIRPIN_QUEUE_STRIDE 6
 #define MLX5_HAIRPIN_JUMBO_LOG_SIZE (14 + 2)
+
+/* Maximum number of shared actions supported by rte_flow */
+#define MLX5_MAX_SHARED_ACTIONS 2
 
 /* Definition of static_assert found in /usr/include/assert.h */
 #ifndef HAVE_STATIC_ASSERT

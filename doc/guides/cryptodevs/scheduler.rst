@@ -13,14 +13,14 @@ crypto ops among them in a certain manner.
    Cryptodev Scheduler Overview
 
 
-The Cryptodev Scheduler PMD library (**librte_pmd_crypto_scheduler**) acts as
+The Cryptodev Scheduler PMD library (**librte_crypto_scheduler**) acts as
 a software crypto PMD and shares the same API provided by librte_cryptodev.
 The PMD supports attaching multiple crypto PMDs, software or hardware, as
 workers, and distributes the crypto workload to them with certain behavior.
 The behaviors are categorizes as different "modes". Basically, a scheduling
 mode defines certain actions for scheduling crypto ops to its workers.
 
-The librte_pmd_crypto_scheduler library exports a C API which provides an API
+The librte_crypto_scheduler library exports a C API which provides an API
 for attaching/detaching workers, set/get scheduling modes, and enable/disable
 crypto ops reordering.
 
@@ -30,14 +30,6 @@ Limitations
 * Sessionless crypto operation is not supported
 * OOP crypto operation is not supported when the crypto op reordering feature
   is enabled.
-
-
-Installation
-------------
-
-To build DPDK with CRYTPO_SCHEDULER_PMD the user is required to set
-CONFIG_RTE_LIBRTE_PMD_CRYPTO_SCHEDULER=y in config/common_base, and
-recompile DPDK
 
 
 Initialization

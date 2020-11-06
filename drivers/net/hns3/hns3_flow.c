@@ -2,8 +2,6 @@
  * Copyright(c) 2018-2019 Hisilicon Limited.
  */
 
-#include <stdbool.h>
-#include <sys/queue.h>
 #include <rte_flow_driver.h>
 #include <rte_io.h>
 #include <rte_malloc.h>
@@ -1367,13 +1365,18 @@ hns3_parse_rss_filter(struct rte_eth_dev *dev,
 					  act, "no valid queues");
 	}
 
+	if (rss->queue_num > RTE_DIM(rss_conf->queue))
+		return rte_flow_error_set(error, ENOTSUP,
+					  RTE_FLOW_ERROR_TYPE_ACTION_CONF, act,
+					  "queue number configured exceeds "
+					  "queue buffer size driver supported");
+
 	for (n = 0; n < rss->queue_num; n++) {
-		if (rss->queue[n] < dev->data->nb_rx_queues)
+		if (rss->queue[n] < hw->alloc_rss_size)
 			continue;
 		return rte_flow_error_set(error, EINVAL,
-					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
-					  act,
-					  "queue id > max number of queues");
+					  RTE_FLOW_ERROR_TYPE_ACTION_CONF, act,
+					  "queue id must be less than queue number allocated to a TC");
 	}
 
 	if (!(rss->types & HNS3_ETH_RSS_SUPPORT) && rss->types)
@@ -1394,13 +1397,19 @@ hns3_parse_rss_filter(struct rte_eth_dev *dev,
 		return rte_flow_error_set(error, ENOTSUP,
 					  RTE_FLOW_ERROR_TYPE_ACTION_CONF, act,
 					  "RSS hash key must be exactly 40 bytes");
-	if (rss->queue_num > RTE_DIM(rss_conf->queue))
-		return rte_flow_error_set(error, ENOTSUP,
-					  RTE_FLOW_ERROR_TYPE_ACTION_CONF, act,
-					  "too many queues for RSS context");
 
+	/*
+	 * For Kunpeng920 and Kunpeng930 NIC hardware, it is not supported to
+	 * use dst port/src port fields to RSS hash for the following packet
+	 * types.
+	 * - IPV4 FRAG | IPV4 NONFRAG | IPV6 FRAG | IPV6 NONFRAG
+	 * Besides, for Kunpeng920, The NIC hardware is not supported to use
+	 * src/dst port fields to RSS hash for IPV6 SCTP packet type.
+	 */
 	if (rss->types & (ETH_RSS_L4_DST_ONLY | ETH_RSS_L4_SRC_ONLY) &&
-	    (rss->types & ETH_RSS_IP))
+	   (rss->types & ETH_RSS_IP ||
+	   (!hw->rss_info.ipv6_sctp_offload_supported &&
+	   rss->types & ETH_RSS_NONFRAG_IPV6_SCTP)))
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
 					  &rss->types,
@@ -1440,9 +1449,8 @@ hns3_disable_rss(struct hns3_hw *hw)
 static void
 hns3_parse_rss_key(struct hns3_hw *hw, struct rte_flow_action_rss *rss_conf)
 {
-	if (rss_conf->key == NULL ||
-	    rss_conf->key_len < HNS3_RSS_KEY_SIZE) {
-		hns3_info(hw, "Default RSS hash key to be set");
+	if (rss_conf->key == NULL || rss_conf->key_len < HNS3_RSS_KEY_SIZE) {
+		hns3_warn(hw, "Default RSS hash key to be set");
 		rss_conf->key = hns3_hash_key;
 		rss_conf->key_len = HNS3_RSS_KEY_SIZE;
 	}
@@ -1483,10 +1491,8 @@ hns3_hw_rss_hash_set(struct hns3_hw *hw, struct rte_flow_action_rss *rss_config)
 	struct hns3_rss_tuple_cfg *tuple;
 	int ret;
 
-	/* Parse hash key */
 	hns3_parse_rss_key(hw, rss_config);
 
-	/* Parse hash algorithm */
 	ret = hns3_parse_rss_algorithm(hw, &rss_config->func,
 				       &hw->rss_info.hash_algo);
 	if (ret)
@@ -1515,20 +1521,18 @@ hns3_update_indir_table(struct rte_eth_dev *dev,
 	struct hns3_adapter *hns = dev->data->dev_private;
 	struct hns3_hw *hw = &hns->hw;
 	uint16_t indir_tbl[HNS3_RSS_IND_TBL_SIZE];
-	uint16_t j, allow_rss_queues;
+	uint16_t j;
 	uint32_t i;
 
-	allow_rss_queues = RTE_MIN(dev->data->nb_rx_queues, hw->rss_size_max);
 	/* Fill in redirection table */
 	memcpy(indir_tbl, hw->rss_info.rss_indirection_tbl,
 	       sizeof(hw->rss_info.rss_indirection_tbl));
 	for (i = 0, j = 0; i < HNS3_RSS_IND_TBL_SIZE; i++, j++) {
 		j %= num;
-		if (conf->queue[j] >= allow_rss_queues) {
-			hns3_err(hw, "Invalid queue id(%u) to be set in "
-				     "redirection table, max number of rss "
-				     "queues: %u", conf->queue[j],
-				 allow_rss_queues);
+		if (conf->queue[j] >= hw->alloc_rss_size) {
+			hns3_err(hw, "queue id(%u) set to redirection table "
+				 "exceeds queue number(%u) allocated to a TC.",
+				 conf->queue[j], hw->alloc_rss_size);
 			return -EINVAL;
 		}
 		indir_tbl[i] = conf->queue[j];
@@ -1597,11 +1601,8 @@ hns3_config_rss_filter(struct rte_eth_dev *dev,
 		return 0;
 	}
 
-	/* Get rx queues num */
-	num = dev->data->nb_rx_queues;
-
 	/* Set rx queues to use */
-	num = RTE_MIN(num, rss_flow_conf.queue_num);
+	num = RTE_MIN(dev->data->nb_rx_queues, rss_flow_conf.queue_num);
 	if (rss_flow_conf.queue_num > num)
 		hns3_warn(hw, "Config queue numbers %u are beyond the scope of truncated",
 			  rss_flow_conf.queue_num);
@@ -1638,7 +1639,6 @@ rss_config_err:
 	return ret;
 }
 
-/* Remove the rss filter */
 static int
 hns3_clear_rss_filter(struct rte_eth_dev *dev)
 {
@@ -1674,7 +1674,6 @@ hns3_clear_rss_filter(struct rte_eth_dev *dev)
 	return ret;
 }
 
-/* Restore the rss filter */
 int
 hns3_restore_rss_filter(struct rte_eth_dev *dev)
 {
@@ -1696,7 +1695,6 @@ hns3_flow_parse_rss(struct rte_eth_dev *dev,
 	struct hns3_hw *hw = &hns->hw;
 	bool ret;
 
-	/* Action rss same */
 	ret = hns3_action_rss_same(&hw->rss_info.conf, &conf->conf);
 	if (ret) {
 		hns3_err(hw, "Enter duplicate RSS configuration : %d", ret);
@@ -1854,6 +1852,7 @@ hns3_flow_create(struct rte_eth_dev *dev, const struct rte_flow_attr *attr,
 			ret = -ENOMEM;
 			goto err_fdir;
 		}
+
 		memcpy(&fdir_rule_ptr->fdir_conf, &fdir_rule,
 			sizeof(struct hns3_fdir_rule));
 		TAILQ_INSERT_TAIL(&process_list->fdir_list,

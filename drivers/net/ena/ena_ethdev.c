@@ -27,7 +27,7 @@
 #include <ena_eth_io_defs.h>
 
 #define DRV_MODULE_VER_MAJOR	2
-#define DRV_MODULE_VER_MINOR	1
+#define DRV_MODULE_VER_MINOR	2
 #define DRV_MODULE_VER_SUBMINOR	0
 
 #define ENA_IO_TXQ_IDX(q)	(2 * (q))
@@ -140,8 +140,8 @@ static const struct ena_stats ena_stats_rx_strings[] = {
 /** Vendor ID used by Amazon devices */
 #define PCI_VENDOR_ID_AMAZON 0x1D0F
 /** Amazon devices */
-#define PCI_DEVICE_ID_ENA_VF	0xEC20
-#define PCI_DEVICE_ID_ENA_LLQ_VF	0xEC21
+#define PCI_DEVICE_ID_ENA_VF		0xEC20
+#define PCI_DEVICE_ID_ENA_VF_RSERV0	0xEC21
 
 #define	ENA_TX_OFFLOAD_MASK	(\
 	PKT_TX_L4_MASK |         \
@@ -155,7 +155,7 @@ static const struct ena_stats ena_stats_rx_strings[] = {
 
 static const struct rte_pci_id pci_id_ena_map[] = {
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_AMAZON, PCI_DEVICE_ID_ENA_VF) },
-	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_AMAZON, PCI_DEVICE_ID_ENA_LLQ_VF) },
+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_AMAZON, PCI_DEVICE_ID_ENA_VF_RSERV0) },
 	{ .device_id = 0 },
 };
 
@@ -296,21 +296,23 @@ static inline void ena_rx_mbuf_prepare(struct rte_mbuf *mbuf,
 	else if (ena_rx_ctx->l4_proto == ENA_ETH_IO_L4_PROTO_UDP)
 		packet_type |= RTE_PTYPE_L4_UDP;
 
-	if (ena_rx_ctx->l3_proto == ENA_ETH_IO_L3_PROTO_IPV4)
+	if (ena_rx_ctx->l3_proto == ENA_ETH_IO_L3_PROTO_IPV4) {
 		packet_type |= RTE_PTYPE_L3_IPV4;
-	else if (ena_rx_ctx->l3_proto == ENA_ETH_IO_L3_PROTO_IPV6)
+		if (unlikely(ena_rx_ctx->l3_csum_err))
+			ol_flags |= PKT_RX_IP_CKSUM_BAD;
+		else
+			ol_flags |= PKT_RX_IP_CKSUM_GOOD;
+	} else if (ena_rx_ctx->l3_proto == ENA_ETH_IO_L3_PROTO_IPV6) {
 		packet_type |= RTE_PTYPE_L3_IPV6;
+	}
 
-	if (!ena_rx_ctx->l4_csum_checked)
+	if (!ena_rx_ctx->l4_csum_checked || ena_rx_ctx->frag)
 		ol_flags |= PKT_RX_L4_CKSUM_UNKNOWN;
 	else
-		if (unlikely(ena_rx_ctx->l4_csum_err) && !ena_rx_ctx->frag)
+		if (unlikely(ena_rx_ctx->l4_csum_err))
 			ol_flags |= PKT_RX_L4_CKSUM_BAD;
 		else
-			ol_flags |= PKT_RX_L4_CKSUM_UNKNOWN;
-
-	if (unlikely(ena_rx_ctx->l3_csum_err))
-		ol_flags |= PKT_RX_IP_CKSUM_BAD;
+			ol_flags |= PKT_RX_L4_CKSUM_GOOD;
 
 	mbuf->ol_flags = ol_flags;
 	mbuf->packet_type = packet_type;
@@ -2724,7 +2726,7 @@ static int ena_xstats_get(struct rte_eth_dev *dev,
 		return 0;
 
 	for (stat = 0; stat < ENA_STATS_ARRAY_GLOBAL; stat++, count++) {
-		stat_offset = ena_stats_rx_strings[stat].stat_offset;
+		stat_offset = ena_stats_global_strings[stat].stat_offset;
 		stats_begin = &adapter->dev_stats;
 
 		xstats[count].id = count;

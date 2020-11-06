@@ -41,17 +41,22 @@ The public API headers are grouped by topics:
   [vhost]              (@ref rte_vhost.h),
   [vdpa]               (@ref rte_vdpa.h),
   [KNI]                (@ref rte_kni.h),
+  [ark]                (@ref rte_pmd_ark.h),
   [ixgbe]              (@ref rte_pmd_ixgbe.h),
   [i40e]               (@ref rte_pmd_i40e.h),
   [ice]                (@ref rte_pmd_ice.h),
+  [iavf]               (@ref rte_pmd_iavf.h),
   [ioat]               (@ref rte_ioat_rawdev.h),
   [bnxt]               (@ref rte_pmd_bnxt.h),
   [dpaa]               (@ref rte_pmd_dpaa.h),
   [dpaa2]              (@ref rte_pmd_dpaa2.h),
+  [mlx5]               (@ref rte_pmd_mlx5.h),
   [dpaa2_mempool]      (@ref rte_dpaa2_mempool.h),
   [dpaa2_cmdif]        (@ref rte_pmd_dpaa2_cmdif.h),
   [dpaa2_qdma]         (@ref rte_pmd_dpaa2_qdma.h),
-  [crypto_scheduler]   (@ref rte_cryptodev_scheduler.h)
+  [crypto_scheduler]   (@ref rte_cryptodev_scheduler.h),
+  [dlb]                (@ref rte_pmd_dlb.h),
+  [dlb2]               (@ref rte_pmd_dlb2.h)
 
 - **memory**:
   [memseg]             (@ref rte_memory.h),

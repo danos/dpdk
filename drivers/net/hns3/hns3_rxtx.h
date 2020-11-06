@@ -5,6 +5,9 @@
 #ifndef _HNS3_RXTX_H_
 #define _HNS3_RXTX_H_
 
+#include <stdint.h>
+#include <rte_mbuf_core.h>
+
 #define	HNS3_MIN_RING_DESC	64
 #define	HNS3_MAX_RING_DESC	32768
 #define HNS3_DEFAULT_RING_DESC  1024
@@ -470,14 +473,10 @@ struct hns3_queue_info {
 };
 
 #define HNS3_TX_CKSUM_OFFLOAD_MASK ( \
-	PKT_TX_OUTER_IPV6 | \
-	PKT_TX_OUTER_IPV4 | \
 	PKT_TX_OUTER_IP_CKSUM | \
-	PKT_TX_IPV6 | \
-	PKT_TX_IPV4 | \
 	PKT_TX_IP_CKSUM | \
-	PKT_TX_L4_MASK | \
-	PKT_TX_TUNNEL_MASK)
+	PKT_TX_TCP_SEG | \
+	PKT_TX_L4_MASK)
 
 enum hns3_cksum_status {
 	HNS3_CKSUM_NONE = 0,
@@ -580,14 +579,14 @@ static inline uint32_t
 hns3_rx_calc_ptype(struct hns3_rx_queue *rxq, const uint32_t l234_info,
 		   const uint32_t ol_info)
 {
-	const struct hns3_ptype_table *const ptype_tbl = rxq->ptype_tbl;
+	const struct hns3_ptype_table * const ptype_tbl = rxq->ptype_tbl;
 	uint32_t l2id, l3id, l4id;
-	uint32_t ol3id, ol4id;
+	uint32_t ol3id, ol4id, ol2id;
 
 	ol4id = hns3_get_field(ol_info, HNS3_RXD_OL4ID_M, HNS3_RXD_OL4ID_S);
 	ol3id = hns3_get_field(ol_info, HNS3_RXD_OL3ID_M, HNS3_RXD_OL3ID_S);
-	l2id = hns3_get_field(l234_info, HNS3_RXD_STRP_TAGP_M,
-			      HNS3_RXD_STRP_TAGP_S);
+	ol2id = hns3_get_field(ol_info, HNS3_RXD_OVLAN_M, HNS3_RXD_OVLAN_S);
+	l2id = hns3_get_field(l234_info, HNS3_RXD_VLAN_M, HNS3_RXD_VLAN_S);
 	l3id = hns3_get_field(l234_info, HNS3_RXD_L3ID_M, HNS3_RXD_L3ID_S);
 	l4id = hns3_get_field(l234_info, HNS3_RXD_L4ID_M, HNS3_RXD_L4ID_S);
 
@@ -595,9 +594,10 @@ hns3_rx_calc_ptype(struct hns3_rx_queue *rxq, const uint32_t l234_info,
 		return ptype_tbl->inner_l2table[l2id] |
 			ptype_tbl->inner_l3table[l3id] |
 			ptype_tbl->inner_l4table[l4id] |
-			ptype_tbl->ol3table[ol3id] | ptype_tbl->ol4table[ol4id];
+			ptype_tbl->ol3table[ol3id] |
+			ptype_tbl->ol4table[ol4id] | ptype_tbl->ol2table[ol2id];
 	else
-		return ptype_tbl->l2table[l2id] | ptype_tbl->l3table[l3id] |
+		return ptype_tbl->l2l3table[l2id][l3id] |
 			ptype_tbl->l4table[l4id];
 }
 
@@ -620,6 +620,7 @@ int hns3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t nb_desc,
 			struct rte_mempool *mp);
 int hns3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t nb_desc,
 			unsigned int socket, const struct rte_eth_txconf *conf);
+uint32_t hns3_rx_queue_count(struct rte_eth_dev *dev, uint16_t rx_queue_id);
 int hns3_dev_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id);
 int hns3_dev_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id);
 int hns3_dev_tx_queue_start(struct rte_eth_dev *dev, uint16_t tx_queue_id);

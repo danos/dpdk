@@ -465,17 +465,28 @@ typedef int (*eth_get_module_eeprom_t)(struct rte_eth_dev *dev,
 				       struct rte_dev_eeprom_info *info);
 /**< @internal Retrieve plugin module eeprom data */
 
-typedef int (*eth_l2_tunnel_eth_type_conf_t)
-	(struct rte_eth_dev *dev, struct rte_eth_l2_tunnel_conf *l2_tunnel);
-/**< @internal config l2 tunnel ether type */
+/**
+ * Feature filter types
+ */
+enum rte_filter_type {
+	RTE_ETH_FILTER_NONE = 0,
+	RTE_ETH_FILTER_ETHERTYPE,
+	RTE_ETH_FILTER_FLEXIBLE,
+	RTE_ETH_FILTER_SYN,
+	RTE_ETH_FILTER_NTUPLE,
+	RTE_ETH_FILTER_TUNNEL,
+	RTE_ETH_FILTER_FDIR,
+	RTE_ETH_FILTER_HASH,
+	RTE_ETH_FILTER_L2_TUNNEL,
+	RTE_ETH_FILTER_GENERIC,
+};
 
-typedef int (*eth_l2_tunnel_offload_set_t)
-	(struct rte_eth_dev *dev,
-	 struct rte_eth_l2_tunnel_conf *l2_tunnel,
-	 uint32_t mask,
-	 uint8_t en);
-/**< @internal enable/disable the l2 tunnel offload functions */
-
+/**
+ * Generic operations on filters
+ */
+enum rte_filter_op {
+	RTE_ETH_FILTER_GET,      /**< get flow API ops */
+};
 
 typedef int (*eth_filter_ctrl_t)(struct rte_eth_dev *dev,
 				 enum rte_filter_type filter_type,
@@ -831,10 +842,6 @@ struct eth_dev_ops {
 
 	eth_udp_tunnel_port_add_t  udp_tunnel_port_add; /** Add UDP tunnel port. */
 	eth_udp_tunnel_port_del_t  udp_tunnel_port_del; /** Del UDP tunnel port. */
-	eth_l2_tunnel_eth_type_conf_t l2_tunnel_eth_type_conf;
-	/** Config ether type of l2 tunnel. */
-	eth_l2_tunnel_offload_set_t   l2_tunnel_offload_set;
-	/** Enable/disable l2 tunnel offload functions. */
 
 	eth_set_queue_rate_limit_t set_queue_rate_limit; /**< Set queue rate limit. */
 
@@ -1341,6 +1348,92 @@ __rte_internal
 int
 rte_eth_hairpin_queue_peer_unbind(uint16_t cur_port, uint16_t cur_queue,
 				  uint32_t direction);
+
+
+/*
+ * Legacy ethdev API used internally by drivers.
+ */
+
+/**
+ * Define all structures for Ethertype Filter type.
+ */
+
+#define RTE_ETHTYPE_FLAGS_MAC    0x0001 /**< If set, compare mac */
+#define RTE_ETHTYPE_FLAGS_DROP   0x0002 /**< If set, drop packet when match */
+
+/**
+ * A structure used to define the ethertype filter entry
+ * to support RTE_ETH_FILTER_ETHERTYPE data representation.
+ */
+struct rte_eth_ethertype_filter {
+	struct rte_ether_addr mac_addr;   /**< Mac address to match. */
+	uint16_t ether_type;          /**< Ether type to match */
+	uint16_t flags;               /**< Flags from RTE_ETHTYPE_FLAGS_* */
+	uint16_t queue;               /**< Queue assigned to when match*/
+};
+
+/**
+ * A structure used to define the TCP syn filter entry
+ * to support RTE_ETH_FILTER_SYN data representation.
+ */
+struct rte_eth_syn_filter {
+	/** 1 - higher priority than other filters, 0 - lower priority. */
+	uint8_t hig_pri;
+	uint16_t queue;      /**< Queue assigned to when match */
+};
+
+/**
+ * filter type of tunneling packet
+ */
+#define ETH_TUNNEL_FILTER_OMAC  0x01 /**< filter by outer MAC addr */
+#define ETH_TUNNEL_FILTER_OIP   0x02 /**< filter by outer IP Addr */
+#define ETH_TUNNEL_FILTER_TENID 0x04 /**< filter by tenant ID */
+#define ETH_TUNNEL_FILTER_IMAC  0x08 /**< filter by inner MAC addr */
+#define ETH_TUNNEL_FILTER_IVLAN 0x10 /**< filter by inner VLAN ID */
+#define ETH_TUNNEL_FILTER_IIP   0x20 /**< filter by inner IP addr */
+
+#define RTE_TUNNEL_FILTER_IMAC_IVLAN (ETH_TUNNEL_FILTER_IMAC | \
+					ETH_TUNNEL_FILTER_IVLAN)
+#define RTE_TUNNEL_FILTER_IMAC_IVLAN_TENID (ETH_TUNNEL_FILTER_IMAC | \
+					ETH_TUNNEL_FILTER_IVLAN | \
+					ETH_TUNNEL_FILTER_TENID)
+#define RTE_TUNNEL_FILTER_IMAC_TENID (ETH_TUNNEL_FILTER_IMAC | \
+					ETH_TUNNEL_FILTER_TENID)
+#define RTE_TUNNEL_FILTER_OMAC_TENID_IMAC (ETH_TUNNEL_FILTER_OMAC | \
+					ETH_TUNNEL_FILTER_TENID | \
+					ETH_TUNNEL_FILTER_IMAC)
+
+/**
+ *  Select IPv4 or IPv6 for tunnel filters.
+ */
+enum rte_tunnel_iptype {
+	RTE_TUNNEL_IPTYPE_IPV4 = 0, /**< IPv4. */
+	RTE_TUNNEL_IPTYPE_IPV6,     /**< IPv6. */
+};
+
+/**
+ * Tunneling Packet filter configuration.
+ */
+struct rte_eth_tunnel_filter_conf {
+	struct rte_ether_addr outer_mac;    /**< Outer MAC address to match. */
+	struct rte_ether_addr inner_mac;    /**< Inner MAC address to match. */
+	uint16_t inner_vlan;            /**< Inner VLAN to match. */
+	enum rte_tunnel_iptype ip_type; /**< IP address type. */
+	/**
+	 * Outer destination IP address to match if ETH_TUNNEL_FILTER_OIP
+	 * is set in filter_type, or inner destination IP address to match
+	 * if ETH_TUNNEL_FILTER_IIP is set in filter_type.
+	 */
+	union {
+		uint32_t ipv4_addr;     /**< IPv4 address in big endian. */
+		uint32_t ipv6_addr[4];  /**< IPv6 address in big endian. */
+	} ip_addr;
+	/** Flags from ETH_TUNNEL_FILTER_XX - see above. */
+	uint16_t filter_type;
+	enum rte_eth_tunnel_type tunnel_type; /**< Tunnel Type. */
+	uint32_t tenant_id;     /**< Tenant ID to match. VNI, GRE key... */
+	uint16_t queue_id;      /**< Queue assigned to if match. */
+};
 
 #ifdef __cplusplus
 }

@@ -65,6 +65,7 @@ volatile bool force_quit;
 #define CDEV_QUEUE_DESC 2048
 #define CDEV_MAP_ENTRIES 16384
 #define CDEV_MP_CACHE_SZ 64
+#define CDEV_MP_CACHE_MULTIPLIER 1.5 /* from rte_mempool.c */
 #define MAX_QUEUE_PAIRS 1
 
 #define BURST_TX_DRAIN_US 100 /* TX drain every ~100us */
@@ -426,7 +427,8 @@ prepare_one_packet(struct rte_mbuf *pkt, struct ipsec_traffic *t)
 	 * with the security session.
 	 */
 
-	if (pkt->ol_flags & PKT_RX_SEC_OFFLOAD) {
+	if (pkt->ol_flags & PKT_RX_SEC_OFFLOAD &&
+			rte_security_dynfield_is_registered()) {
 		struct ipsec_sa *sa;
 		struct ipsec_mbuf_metadata *priv;
 		struct rte_security_ctx *ctx = (struct rte_security_ctx *)
@@ -436,10 +438,8 @@ prepare_one_packet(struct rte_mbuf *pkt, struct ipsec_traffic *t)
 		/* Retrieve the userdata registered. Here, the userdata
 		 * registered is the SA pointer.
 		 */
-
-		sa = (struct ipsec_sa *)
-				rte_security_get_userdata(ctx, pkt->udata64);
-
+		sa = (struct ipsec_sa *)rte_security_get_userdata(ctx,
+				*rte_security_dynfield(pkt));
 		if (sa == NULL) {
 			/* userdata could not be retrieved */
 			return;
@@ -2350,6 +2350,8 @@ session_pool_init(struct socket_ctx *ctx, int32_t socket_id, size_t sess_sz)
 			"sess_mp_%u", socket_id);
 	nb_sess = (get_nb_crypto_sessions() + CDEV_MP_CACHE_SZ *
 		rte_lcore_count());
+	nb_sess = RTE_MAX(nb_sess, CDEV_MP_CACHE_SZ *
+			CDEV_MP_CACHE_MULTIPLIER);
 	sess_mp = rte_cryptodev_sym_session_pool_create(
 			mp_name, nb_sess, sess_sz, CDEV_MP_CACHE_SZ, 0,
 			socket_id);
@@ -2374,6 +2376,8 @@ session_priv_pool_init(struct socket_ctx *ctx, int32_t socket_id,
 			"sess_mp_priv_%u", socket_id);
 	nb_sess = (get_nb_crypto_sessions() + CDEV_MP_CACHE_SZ *
 		rte_lcore_count());
+	nb_sess = RTE_MAX(nb_sess, CDEV_MP_CACHE_SZ *
+			CDEV_MP_CACHE_MULTIPLIER);
 	sess_mp = rte_mempool_create(mp_name,
 			nb_sess,
 			sess_sz,

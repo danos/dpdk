@@ -2,12 +2,9 @@
  * Copyright(c) 2018-2019 Hisilicon Limited.
  */
 
-#include <stdbool.h>
 #include <rte_ethdev.h>
 #include <rte_io.h>
 #include <rte_malloc.h>
-#include <rte_memcpy.h>
-#include <rte_spinlock.h>
 
 #include "hns3_ethdev.h"
 #include "hns3_logs.h"
@@ -61,8 +58,10 @@ enum hns3_tuple_field {
 	HNS3_RSS_FIELD_IPV6_UDP_EN_IP_D,
 	HNS3_RSS_FIELD_IPV6_UDP_EN_IP_S,
 
-	/* IPV6_UDP ENABLE FIELD */
-	HNS3_RSS_FIELD_IPV6_SCTP_EN_IP_D = 50,
+	/* IPV6_SCTP ENABLE FIELD */
+	HNS3_RSS_FILED_IPV6_SCTP_EN_SCTP_D = 48,
+	HNS3_RSS_FILED_IPV6_SCTP_EN_SCTP_S,
+	HNS3_RSS_FIELD_IPV6_SCTP_EN_IP_D,
 	HNS3_RSS_FIELD_IPV6_SCTP_EN_IP_S,
 	HNS3_RSS_FIELD_IPV6_SCTP_EN_SCTP_VER,
 
@@ -133,6 +132,10 @@ static const struct {
 	  BIT_ULL(HNS3_RSS_FIELD_IPV6_SCTP_EN_IP_S) },
 	{ ETH_RSS_NONFRAG_IPV6_SCTP | ETH_RSS_L3_DST_ONLY,
 	  BIT_ULL(HNS3_RSS_FIELD_IPV6_SCTP_EN_IP_D) },
+	{ ETH_RSS_NONFRAG_IPV6_SCTP | ETH_RSS_L4_SRC_ONLY,
+	  BIT_ULL(HNS3_RSS_FILED_IPV6_SCTP_EN_SCTP_S) },
+	{ ETH_RSS_NONFRAG_IPV6_SCTP | ETH_RSS_L4_DST_ONLY,
+	  BIT_ULL(HNS3_RSS_FILED_IPV6_SCTP_EN_SCTP_D) },
 	{ ETH_RSS_NONFRAG_IPV6_OTHER | ETH_RSS_L3_SRC_ONLY,
 	  BIT_ULL(HNS3_RSS_FIELD_IPV6_NONFRAG_IP_S) },
 	{ ETH_RSS_NONFRAG_IPV6_OTHER | ETH_RSS_L3_DST_ONLY,
@@ -177,6 +180,8 @@ static const struct {
 	  BIT_ULL(HNS3_RSS_FIELD_IPV6_UDP_EN_UDP_D) },
 	{ ETH_RSS_NONFRAG_IPV6_SCTP, BIT_ULL(HNS3_RSS_FIELD_IPV6_SCTP_EN_IP_S) |
 	  BIT_ULL(HNS3_RSS_FIELD_IPV6_SCTP_EN_IP_D) |
+	  BIT_ULL(HNS3_RSS_FILED_IPV6_SCTP_EN_SCTP_D) |
+	  BIT_ULL(HNS3_RSS_FILED_IPV6_SCTP_EN_SCTP_S) |
 	  BIT_ULL(HNS3_RSS_FIELD_IPV6_SCTP_EN_SCTP_VER) },
 	{ ETH_RSS_NONFRAG_IPV6_OTHER,
 	  BIT_ULL(HNS3_RSS_FIELD_IPV6_NONFRAG_IP_S) |
@@ -502,7 +507,7 @@ hns3_dev_rss_reta_update(struct rte_eth_dev *dev,
 	struct hns3_rss_conf *rss_cfg = &hw->rss_info;
 	uint16_t i, indir_size = HNS3_RSS_IND_TBL_SIZE; /* Table size is 512 */
 	uint16_t indirection_tbl[HNS3_RSS_IND_TBL_SIZE];
-	uint16_t idx, shift, allow_rss_queues;
+	uint16_t idx, shift;
 	int ret;
 
 	if (reta_size != indir_size || reta_size > ETH_RSS_RETA_SIZE_512) {
@@ -514,16 +519,15 @@ hns3_dev_rss_reta_update(struct rte_eth_dev *dev,
 	rte_spinlock_lock(&hw->lock);
 	memcpy(indirection_tbl, rss_cfg->rss_indirection_tbl,
 	       sizeof(rss_cfg->rss_indirection_tbl));
-	allow_rss_queues = RTE_MIN(dev->data->nb_rx_queues, hw->rss_size_max);
 	for (i = 0; i < reta_size; i++) {
 		idx = i / RTE_RETA_GROUP_SIZE;
 		shift = i % RTE_RETA_GROUP_SIZE;
-		if (reta_conf[idx].reta[shift] >= allow_rss_queues) {
+		if (reta_conf[idx].reta[shift] >= hw->alloc_rss_size) {
 			rte_spinlock_unlock(&hw->lock);
-			hns3_err(hw, "Invalid queue id(%u) to be set in "
-				 "redirection table, max number of rss "
-				 "queues: %u", reta_conf[idx].reta[shift],
-				 allow_rss_queues);
+			hns3_err(hw, "queue id(%u) set to redirection table "
+				 "exceeds queue number(%u) allocated to a TC",
+				 reta_conf[idx].reta[shift],
+				 hw->alloc_rss_size);
 			return -EINVAL;
 		}
 

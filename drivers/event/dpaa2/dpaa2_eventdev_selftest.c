@@ -19,6 +19,7 @@
 #include <rte_random.h>
 #include <rte_bus_vdev.h>
 #include <rte_test.h>
+#include <rte_fslmc.h>
 
 #include "dpaa2_eventdev.h"
 #include "dpaa2_eventdev_logs.h"
@@ -46,17 +47,6 @@ struct event_attr {
 	uint8_t port;
 	uint8_t seq;
 };
-
-static uint32_t seqn_list_index;
-static int seqn_list[NUM_PACKETS];
-
-static void
-seqn_list_init(void)
-{
-	RTE_BUILD_BUG_ON(NUM_PACKETS < MAX_EVENTS);
-	memset(seqn_list, 0, sizeof(seqn_list));
-	seqn_list_index = 0;
-}
 
 struct test_core_param {
 	rte_atomic32_t *total_events;
@@ -285,7 +275,8 @@ check_excess_events(uint8_t port)
 		valid_event = rte_event_dequeue_burst(evdev, port, &ev, 1, 0);
 
 		RTE_TEST_ASSERT_SUCCESS(valid_event,
-				"Unexpected valid event=%d", ev.mbuf->seqn);
+				"Unexpected valid event=%d",
+				*dpaa2_seqn(ev.mbuf));
 	}
 	return 0;
 }
@@ -516,7 +507,7 @@ launch_workers_and_wait(int (*main_worker)(void *),
 		return 0;
 
 	rte_atomic32_set(&atomic_total_events, total_events);
-	seqn_list_init();
+	RTE_BUILD_BUG_ON(NUM_PACKETS < MAX_EVENTS);
 
 	param = malloc(sizeof(struct test_core_param) * nb_workers);
 	if (!param)

@@ -2,29 +2,10 @@
  * Copyright(c) 2018-2019 Hisilicon Limited.
  */
 
-#include <errno.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <string.h>
-#include <inttypes.h>
-#include <unistd.h>
-#include <arpa/inet.h>
 #include <linux/pci_regs.h>
-
 #include <rte_alarm.h>
-#include <rte_atomic.h>
-#include <rte_bus_pci.h>
-#include <rte_byteorder.h>
-#include <rte_common.h>
-#include <rte_cycles.h>
-#include <rte_dev.h>
-#include <rte_eal.h>
-#include <rte_ether.h>
-#include <rte_ethdev_driver.h>
 #include <rte_ethdev_pci.h>
-#include <rte_interrupts.h>
 #include <rte_io.h>
-#include <rte_log.h>
 #include <rte_pci.h>
 #include <rte_vfio.h>
 
@@ -610,6 +591,7 @@ hns3vf_set_promisc_mode(struct hns3_hw *hw, bool en_bc_pmc,
 	req->msg[1] = en_bc_pmc ? 1 : 0;
 	req->msg[2] = en_uc_pmc ? 1 : 0;
 	req->msg[3] = en_mc_pmc ? 1 : 0;
+	req->msg[4] = hw->promisc_mode == HNS3_LIMIT_PROMISC_MODE ? 1 : 0;
 
 	ret = hns3_cmd_send(hw, &desc, 1);
 	if (ret)
@@ -756,6 +738,10 @@ hns3vf_init_ring_with_vector(struct hns3_hw *hw)
 		hns3_set_queue_intr_gl(hw, i, HNS3_RING_GL_TX,
 				       HNS3_TQP_INTR_GL_DEFAULT);
 		hns3_set_queue_intr_rl(hw, i, HNS3_TQP_INTR_RL_DEFAULT);
+		/*
+		 * QL(quantity limiter) is not used currently, just set 0 to
+		 * close it.
+		 */
 		hns3_set_queue_intr_ql(hw, i, HNS3_TQP_INTR_QL_DEFAULT);
 
 		ret = hns3vf_bind_ring_with_vector(hw, vec, false,
@@ -1148,6 +1134,7 @@ hns3vf_set_default_dev_specifications(struct hns3_hw *hw)
 	hw->max_non_tso_bd_num = HNS3_MAX_NON_TSO_BD_PER_PKT;
 	hw->rss_ind_tbl_size = HNS3_RSS_IND_TBL_SIZE;
 	hw->rss_key_size = HNS3_RSS_KEY_SIZE;
+	hw->intr.int_ql_max = HNS3_INTR_QL_NONE;
 }
 
 static void
@@ -1160,6 +1147,7 @@ hns3vf_parse_dev_specifications(struct hns3_hw *hw, struct hns3_cmd_desc *desc)
 	hw->max_non_tso_bd_num = req0->max_non_tso_bd_num;
 	hw->rss_ind_tbl_size = rte_le_to_cpu_16(req0->rss_ind_tbl_size);
 	hw->rss_key_size = rte_le_to_cpu_16(req0->rss_key_size);
+	hw->intr.int_ql_max = rte_le_to_cpu_16(req0->intr_ql_max);
 }
 
 static int
@@ -1209,10 +1197,11 @@ hns3vf_get_capability(struct hns3_hw *hw)
 	if (revision < PCI_REVISION_ID_HIP09_A) {
 		hns3vf_set_default_dev_specifications(hw);
 		hw->intr.mapping_mode = HNS3_INTR_MAPPING_VEC_RSV_ONE;
-		hw->intr.coalesce_mode = HNS3_INTR_COALESCE_NON_QL;
 		hw->intr.gl_unit = HNS3_INTR_COALESCE_GL_UINT_2US;
 		hw->tso_mode = HNS3_TSO_SW_CAL_PSEUDO_H_CSUM;
 		hw->min_tx_pkt_len = HNS3_HIP08_MIN_TX_PKT_LEN;
+		hw->rss_info.ipv6_sctp_offload_supported = false;
+		hw->promisc_mode = HNS3_UNLIMIT_PROMISC_MODE;
 		return 0;
 	}
 
@@ -1225,10 +1214,11 @@ hns3vf_get_capability(struct hns3_hw *hw)
 	}
 
 	hw->intr.mapping_mode = HNS3_INTR_MAPPING_VEC_ALL;
-	hw->intr.coalesce_mode = HNS3_INTR_COALESCE_QL;
 	hw->intr.gl_unit = HNS3_INTR_COALESCE_GL_UINT_1US;
 	hw->tso_mode = HNS3_TSO_HW_CAL_PSEUDO_H_CSUM;
 	hw->min_tx_pkt_len = HNS3_HIP09_MIN_TX_PKT_LEN;
+	hw->rss_info.ipv6_sctp_offload_supported = true;
+	hw->promisc_mode = HNS3_LIMIT_PROMISC_MODE;
 
 	return 0;
 }
@@ -2617,7 +2607,7 @@ hns3vf_reinit_dev(struct hns3_adapter *hns)
 	if (hw->reset.level == HNS3_VF_FULL_RESET) {
 		rte_intr_disable(&pci_dev->intr_handle);
 		ret = hns3vf_set_bus_master(pci_dev, true);
-		if (ret) {
+		if (ret < 0) {
 			hns3_err(hw, "failed to set pci bus, ret = %d", ret);
 			return ret;
 		}
@@ -2741,6 +2731,7 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
 
 	hns3_set_rxtx_function(eth_dev);
 	eth_dev->dev_ops = &hns3vf_eth_dev_ops;
+	eth_dev->rx_queue_count = hns3_rx_queue_count;
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
 		ret = hns3_mp_init_secondary();
 		if (ret) {
@@ -2877,7 +2868,7 @@ eth_hns3vf_pci_remove(struct rte_pci_device *pci_dev)
 static const struct rte_pci_id pci_id_hns3vf_map[] = {
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HNS3_DEV_ID_100G_VF) },
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HNS3_DEV_ID_100G_RDMA_PFC_VF) },
-	{ .vendor_id = 0, /* sentinel */ },
+	{ .vendor_id = 0, }, /* sentinel */
 };
 
 static struct rte_pci_driver rte_hns3vf_pmd = {

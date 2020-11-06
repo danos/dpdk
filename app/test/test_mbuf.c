@@ -1621,7 +1621,6 @@ test_get_rx_ol_flag_name(void)
 		VAL_NAME(PKT_RX_FDIR_FLX),
 		VAL_NAME(PKT_RX_QINQ_STRIPPED),
 		VAL_NAME(PKT_RX_LRO),
-		VAL_NAME(PKT_RX_TIMESTAMP),
 		VAL_NAME(PKT_RX_SEC_OFFLOAD),
 		VAL_NAME(PKT_RX_SEC_OFFLOAD_FAILED),
 		VAL_NAME(PKT_RX_OUTER_L4_CKSUM_BAD),
@@ -2608,9 +2607,13 @@ test_mbuf_dyn(struct rte_mempool *pktmbuf_pool)
 
 	offset3 = rte_mbuf_dynfield_register_offset(&dynfield3,
 				offsetof(struct rte_mbuf, dynfield1[1]));
-	if (offset3 != offsetof(struct rte_mbuf, dynfield1[1]))
-		GOTO_FAIL("failed to register dynamic field 3, offset=%d: %s",
-			offset3, strerror(errno));
+	if (offset3 != offsetof(struct rte_mbuf, dynfield1[1])) {
+		if (rte_errno == EBUSY)
+			printf("mbuf test error skipped: dynfield is busy\n");
+		else
+			GOTO_FAIL("failed to register dynamic field 3, offset="
+				"%d: %s", offset3, strerror(errno));
+	}
 
 	printf("dynfield: offset=%d, offset2=%d, offset3=%d\n",
 		offset, offset2, offset3);

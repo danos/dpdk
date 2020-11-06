@@ -47,7 +47,7 @@
  * Each HW Rx descriptor has many Rx buffers. The number of buffers
  * in one HW Rx descriptor is equal to size of contiguous block
  * provided by Rx buffers memory pool. The contiguous block size
- * depends on CONFIG_RTE_DRIVER_MEMPOOL_BUCKET_SIZE_KB and rte_mbuf
+ * depends on RTE_DRIVER_MEMPOOL_BUCKET_SIZE_KB and rte_mbuf
  * data size specified on the memory pool creation. Typical rte_mbuf
  * data size is about 2k which makes a bit less than 32 buffers in
  * contiguous block with default bucket size equal to 64k.
@@ -125,7 +125,7 @@ sfc_ef10_essb_next_mbuf(const struct sfc_ef10_essb_rxq *rxq,
 	struct rte_mbuf *m;
 
 	m = (struct rte_mbuf *)((uintptr_t)mbuf + rxq->buf_stride);
-	MBUF_RAW_ALLOC_CHECK(m);
+	__rte_mbuf_raw_sanity_check(m);
 	return m;
 }
 
@@ -136,7 +136,7 @@ sfc_ef10_essb_mbuf_by_index(const struct sfc_ef10_essb_rxq *rxq,
 	struct rte_mbuf *m;
 
 	m = (struct rte_mbuf *)((uintptr_t)mbuf + idx * rxq->buf_stride);
-	MBUF_RAW_ALLOC_CHECK(m);
+	__rte_mbuf_raw_sanity_check(m);
 	return m;
 }
 

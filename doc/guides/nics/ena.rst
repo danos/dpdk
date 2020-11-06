@@ -79,22 +79,6 @@ The driver supports multi-queue for both Tx and Rx.
 Configuration information
 -------------------------
 
-**DPDK Configuration Parameters**
-
-  The following configuration options are available for the ENA PMD:
-
-   * **CONFIG_RTE_LIBRTE_ENA_PMD** (default y): Enables or disables inclusion
-     of the ENA PMD driver in the DPDK compilation.
-
-   * **CONFIG_RTE_LIBRTE_ENA_DEBUG_RX** (default n): Enables or disables debug
-     logging of RX logic within the ENA PMD driver.
-
-   * **CONFIG_RTE_LIBRTE_ENA_DEBUG_TX** (default n): Enables or disables debug
-     logging of TX logic within the ENA PMD driver.
-
-   * **CONFIG_RTE_LIBRTE_ENA_COM_DEBUG** (default n): Enables or disables debug
-     logging of low level tx/rx logic in ena_com(base) within the ENA PMD driver.
-
 **Runtime Configuration Parameters**
 
    * **large_llq_hdr** (default 0)
@@ -134,7 +118,7 @@ Supported ENA adapters
 Current ENA PMD supports the following ENA adapters including:
 
 * ``1d0f:ec20`` - ENA VF
-* ``1d0f:ec21`` - ENA VF with LLQ support
+* ``1d0f:ec21`` - ENA VF RSERV0
 
 Supported Operating Systems
 ---------------------------
@@ -242,7 +226,7 @@ Usage example
 
 Follow instructions available in the document
 :ref:`compiling and testing a PMD for a NIC <pmd_build_and_test>` to launch
-**testpmd** with Amazon ENA devices managed by librte_pmd_ena.
+**testpmd** with Amazon ENA devices managed by librte_net_ena.
 
 Example output:
 

@@ -24,6 +24,10 @@
 #include <rte_flow.h>
 #include <rte_hexdump.h>
 #include <rte_vxlan.h>
+#include <rte_gre.h>
+#include <rte_mpls.h>
+#include <rte_gtp.h>
+#include <rte_geneve.h>
 
 #include "testpmd.h"
 
@@ -114,6 +118,7 @@ enum index {
 	SHARED_ACTION_CREATE_ID,
 	SHARED_ACTION_INGRESS,
 	SHARED_ACTION_EGRESS,
+	SHARED_ACTION_TRANSFER,
 	SHARED_ACTION_SPEC,
 
 	/* Shared action destroy arguments */
@@ -782,6 +787,7 @@ static const enum index next_sa_create_attr[] = {
 	SHARED_ACTION_CREATE_ID,
 	SHARED_ACTION_INGRESS,
 	SHARED_ACTION_EGRESS,
+	SHARED_ACTION_TRANSFER,
 	SHARED_ACTION_SPEC,
 	ZERO,
 };
@@ -3204,7 +3210,9 @@ static const struct token token_list[] = {
 	[ITEM_ECPRI_MSG_IQ_DATA_PCID] = {
 		.name = "pc_id",
 		.help = "Physical Channel ID",
-		.next = NEXT(item_ecpri, NEXT_ENTRY(UNSIGNED), item_param),
+		.next = NEXT(NEXT_ENTRY(ITEM_ECPRI_MSG_IQ_DATA_PCID,
+				ITEM_ECPRI_COMMON, ITEM_NEXT),
+				NEXT_ENTRY(UNSIGNED), item_param),
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_ecpri,
 				hdr.type0.pc_id)),
 	},
@@ -3218,7 +3226,9 @@ static const struct token token_list[] = {
 	[ITEM_ECPRI_MSG_RTC_CTRL_RTCID] = {
 		.name = "rtc_id",
 		.help = "Real-Time Control Data ID",
-		.next = NEXT(item_ecpri, NEXT_ENTRY(UNSIGNED), item_param),
+		.next = NEXT(NEXT_ENTRY(ITEM_ECPRI_MSG_RTC_CTRL_RTCID,
+				ITEM_ECPRI_COMMON, ITEM_NEXT),
+				NEXT_ENTRY(UNSIGNED), item_param),
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_ecpri,
 				hdr.type2.rtc_id)),
 	},
@@ -3232,7 +3242,9 @@ static const struct token token_list[] = {
 	[ITEM_ECPRI_MSG_DLY_MSR_MSRID] = {
 		.name = "msr_id",
 		.help = "Measurement ID",
-		.next = NEXT(item_ecpri, NEXT_ENTRY(UNSIGNED), item_param),
+		.next = NEXT(NEXT_ENTRY(ITEM_ECPRI_MSG_DLY_MSR_MSRID,
+				ITEM_ECPRI_COMMON, ITEM_NEXT),
+				NEXT_ENTRY(UNSIGNED), item_param),
 		.args = ARGS(ARGS_ENTRY_HTON(struct rte_flow_item_ecpri,
 				hdr.type5.msr_id)),
 	},
@@ -4280,6 +4292,12 @@ static const struct token token_list[] = {
 		.next = NEXT(next_sa_create_attr),
 		.call = parse_sa,
 	},
+	[SHARED_ACTION_TRANSFER] = {
+		.name = "transfer",
+		.help = "affect rule to transfer",
+		.next = NEXT(next_sa_create_attr),
+		.call = parse_sa,
+	},
 	[SHARED_ACTION_SPEC] = {
 		.name = "action",
 		.help = "specify action to share",
@@ -4514,6 +4532,9 @@ parse_sa(struct context *ctx, const struct token *token,
 		return len;
 	case SHARED_ACTION_INGRESS:
 		out->args.vc.attr.ingress = 1;
+		return len;
+	case SHARED_ACTION_TRANSFER:
+		out->args.vc.attr.transfer = 1;
 		return len;
 	default:
 		return -1;
@@ -4850,30 +4871,15 @@ parse_vc_action_rss(struct context *ctx, const struct token *token,
 			.func = RTE_ETH_HASH_FUNCTION_DEFAULT,
 			.level = 0,
 			.types = rss_hf,
-			.key_len = sizeof(action_rss_data->key),
+			.key_len = 0,
 			.queue_num = RTE_MIN(nb_rxq, ACTION_RSS_QUEUE_NUM),
-			.key = action_rss_data->key,
+			.key = NULL,
 			.queue = action_rss_data->queue,
 		},
-		.key = "testpmd's default RSS hash key, "
-			"override it for better balancing",
 		.queue = { 0 },
 	};
 	for (i = 0; i < action_rss_data->conf.queue_num; ++i)
 		action_rss_data->queue[i] = i;
-	if (!port_id_is_invalid(ctx->port, DISABLED_WARN) &&
-	    ctx->port != (portid_t)RTE_PORT_ALL) {
-		struct rte_eth_dev_info info;
-		int ret2;
-
-		ret2 = rte_eth_dev_info_get(ctx->port, &info);
-		if (ret2 != 0)
-			return ret2;
-
-		action_rss_data->conf.key_len =
-			RTE_MIN(sizeof(action_rss_data->key),
-				info.hash_key_size);
-	}
 	action->conf = &action_rss_data->conf;
 	return ret;
 }
@@ -7282,6 +7288,7 @@ cmd_flow_parsed(const struct buffer *in)
 				&((const struct rte_flow_shared_action_conf) {
 					.ingress = in->args.vc.attr.ingress,
 					.egress = in->args.vc.attr.egress,
+					.transfer = in->args.vc.attr.transfer,
 				}),
 				in->args.vc.actions);
 		break;
@@ -7370,42 +7377,42 @@ cmdline_parse_inst_t cmd_flow = {
 static void
 update_fields(uint8_t *buf, struct rte_flow_item *item, uint16_t next_proto)
 {
-	struct rte_flow_item_ipv4 *ipv4;
-	struct rte_flow_item_eth *eth;
-	struct rte_flow_item_ipv6 *ipv6;
-	struct rte_flow_item_vxlan *vxlan;
-	struct rte_flow_item_vxlan_gpe *gpe;
+	struct rte_ipv4_hdr *ipv4;
+	struct rte_ether_hdr *eth;
+	struct rte_ipv6_hdr *ipv6;
+	struct rte_vxlan_hdr *vxlan;
+	struct rte_vxlan_gpe_hdr *gpe;
 	struct rte_flow_item_nvgre *nvgre;
 	uint32_t ipv6_vtc_flow;
 
 	switch (item->type) {
 	case RTE_FLOW_ITEM_TYPE_ETH:
-		eth = (struct rte_flow_item_eth *)buf;
+		eth = (struct rte_ether_hdr *)buf;
 		if (next_proto)
-			eth->type = rte_cpu_to_be_16(next_proto);
+			eth->ether_type = rte_cpu_to_be_16(next_proto);
 		break;
 	case RTE_FLOW_ITEM_TYPE_IPV4:
-		ipv4 = (struct rte_flow_item_ipv4 *)buf;
-		ipv4->hdr.version_ihl = 0x45;
-		if (next_proto && ipv4->hdr.next_proto_id == 0)
-			ipv4->hdr.next_proto_id = (uint8_t)next_proto;
+		ipv4 = (struct rte_ipv4_hdr *)buf;
+		ipv4->version_ihl = 0x45;
+		if (next_proto && ipv4->next_proto_id == 0)
+			ipv4->next_proto_id = (uint8_t)next_proto;
 		break;
 	case RTE_FLOW_ITEM_TYPE_IPV6:
-		ipv6 = (struct rte_flow_item_ipv6 *)buf;
-		if (next_proto && ipv6->hdr.proto == 0)
-			ipv6->hdr.proto = (uint8_t)next_proto;
-		ipv6_vtc_flow = rte_be_to_cpu_32(ipv6->hdr.vtc_flow);
+		ipv6 = (struct rte_ipv6_hdr *)buf;
+		if (next_proto && ipv6->proto == 0)
+			ipv6->proto = (uint8_t)next_proto;
+		ipv6_vtc_flow = rte_be_to_cpu_32(ipv6->vtc_flow);
 		ipv6_vtc_flow &= 0x0FFFFFFF; /*< reset version bits. */
 		ipv6_vtc_flow |= 0x60000000; /*< set ipv6 version. */
-		ipv6->hdr.vtc_flow = rte_cpu_to_be_32(ipv6_vtc_flow);
+		ipv6->vtc_flow = rte_cpu_to_be_32(ipv6_vtc_flow);
 		break;
 	case RTE_FLOW_ITEM_TYPE_VXLAN:
-		vxlan = (struct rte_flow_item_vxlan *)buf;
-		vxlan->flags = 0x08;
+		vxlan = (struct rte_vxlan_hdr *)buf;
+		vxlan->vx_flags = 0x08;
 		break;
 	case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
-		gpe = (struct rte_flow_item_vxlan_gpe *)buf;
-		gpe->flags = 0x0C;
+		gpe = (struct rte_vxlan_gpe_hdr *)buf;
+		gpe->vx_flags = 0x0C;
 		break;
 	case RTE_FLOW_ITEM_TYPE_NVGRE:
 		nvgre = (struct rte_flow_item_nvgre *)buf;
@@ -7614,36 +7621,36 @@ cmd_set_raw_parsed(const struct buffer *in)
 			item->spec = flow_item_default_mask(item);
 		switch (item->type) {
 		case RTE_FLOW_ITEM_TYPE_ETH:
-			size = sizeof(struct rte_flow_item_eth);
+			size = sizeof(struct rte_ether_hdr);
 			break;
 		case RTE_FLOW_ITEM_TYPE_VLAN:
-			size = sizeof(struct rte_flow_item_vlan);
+			size = sizeof(struct rte_vlan_hdr);
 			proto = RTE_ETHER_TYPE_VLAN;
 			break;
 		case RTE_FLOW_ITEM_TYPE_IPV4:
-			size = sizeof(struct rte_flow_item_ipv4);
+			size = sizeof(struct rte_ipv4_hdr);
 			proto = RTE_ETHER_TYPE_IPV4;
 			break;
 		case RTE_FLOW_ITEM_TYPE_IPV6:
-			size = sizeof(struct rte_flow_item_ipv6);
+			size = sizeof(struct rte_ipv6_hdr);
 			proto = RTE_ETHER_TYPE_IPV6;
 			break;
 		case RTE_FLOW_ITEM_TYPE_UDP:
-			size = sizeof(struct rte_flow_item_udp);
+			size = sizeof(struct rte_udp_hdr);
 			proto = 0x11;
 			break;
 		case RTE_FLOW_ITEM_TYPE_TCP:
-			size = sizeof(struct rte_flow_item_tcp);
+			size = sizeof(struct rte_tcp_hdr);
 			proto = 0x06;
 			break;
 		case RTE_FLOW_ITEM_TYPE_VXLAN:
-			size = sizeof(struct rte_flow_item_vxlan);
+			size = sizeof(struct rte_vxlan_hdr);
 			break;
 		case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
-			size = sizeof(struct rte_flow_item_vxlan_gpe);
+			size = sizeof(struct rte_vxlan_gpe_hdr);
 			break;
 		case RTE_FLOW_ITEM_TYPE_GRE:
-			size = sizeof(struct rte_flow_item_gre);
+			size = sizeof(struct rte_gre_hdr);
 			proto = 0x2F;
 			break;
 		case RTE_FLOW_ITEM_TYPE_GRE_KEY:
@@ -7651,7 +7658,7 @@ cmd_set_raw_parsed(const struct buffer *in)
 			proto = 0x0;
 			break;
 		case RTE_FLOW_ITEM_TYPE_MPLS:
-			size = sizeof(struct rte_flow_item_mpls);
+			size = sizeof(struct rte_mpls_hdr);
 			proto = 0x0;
 			break;
 		case RTE_FLOW_ITEM_TYPE_NVGRE:
@@ -7659,14 +7666,14 @@ cmd_set_raw_parsed(const struct buffer *in)
 			proto = 0x2F;
 			break;
 		case RTE_FLOW_ITEM_TYPE_GENEVE:
-			size = sizeof(struct rte_flow_item_geneve);
+			size = sizeof(struct rte_geneve_hdr);
 			break;
 		case RTE_FLOW_ITEM_TYPE_L2TPV3OIP:
-			size = sizeof(struct rte_flow_item_l2tpv3oip);
+			size = sizeof(rte_be32_t);
 			proto = 0x73;
 			break;
 		case RTE_FLOW_ITEM_TYPE_ESP:
-			size = sizeof(struct rte_flow_item_esp);
+			size = sizeof(struct rte_esp_hdr);
 			proto = 0x32;
 			break;
 		case RTE_FLOW_ITEM_TYPE_AH:
@@ -7674,7 +7681,7 @@ cmd_set_raw_parsed(const struct buffer *in)
 			proto = 0x33;
 			break;
 		case RTE_FLOW_ITEM_TYPE_GTP:
-			size = sizeof(struct rte_flow_item_gtp);
+			size = sizeof(struct rte_gtp_hdr);
 			break;
 		case RTE_FLOW_ITEM_TYPE_PFCP:
 			size = sizeof(struct rte_flow_item_pfcp);
@@ -7831,7 +7838,7 @@ cmdline_parse_token_string_t cmd_show_set_raw_cmd_what =
 			cmd_what, "raw_encap#raw_decap");
 cmdline_parse_token_num_t cmd_show_set_raw_cmd_index =
 	TOKEN_NUM_INITIALIZER(struct cmd_show_set_raw_result,
-			cmd_index, UINT16);
+			cmd_index, RTE_UINT16);
 cmdline_parse_token_string_t cmd_show_set_raw_cmd_all =
 	TOKEN_STRING_INITIALIZER(struct cmd_show_set_raw_result,
 			cmd_all, "all");

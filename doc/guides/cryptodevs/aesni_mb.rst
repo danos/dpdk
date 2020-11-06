@@ -5,7 +5,7 @@ AESN-NI Multi Buffer Crypto Poll Mode Driver
 ============================================
 
 
-The AESNI MB PMD (**librte_pmd_aesni_mb**) provides poll mode crypto driver
+The AESNI MB PMD (**librte_crypto_aesni_mb**) provides poll mode crypto driver
 support for utilizing Intel multi buffer library, see the white paper
 `Fast Multi-buffer IPsec Implementations on Intel® Architecture Processors
 <https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/fast-multi-buffer-ipsec-implementations-ia-processors-paper.pdf>`_.
@@ -141,8 +141,6 @@ In order to enable this virtual crypto PMD, user must:
 
 * Build the multi buffer library (explained in Installation section).
 
-* Set CONFIG_RTE_LIBRTE_PMD_AESNI_MB=y in config/common_base.
-
 To use the PMD in an application, user must:
 
 * Call rte_vdev_init("crypto_aesni_mb") within the application.
@@ -162,7 +160,7 @@ Example:
 
 .. code-block:: console
 
-    ./l2fwd-crypto -l 1 -n 4 --vdev="crypto_aesni_mb,socket_id=0,max_nb_sessions=128" \
+    ./dpdk-l2fwd-crypto -l 1 -n 4 --vdev="crypto_aesni_mb,socket_id=0,max_nb_sessions=128" \
     -- -p 1 --cdev SW --chain CIPHER_HASH --cipher_algo "aes-cbc" --auth_algo "sha1-hmac"
 
 Extra notes

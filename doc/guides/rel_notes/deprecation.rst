@@ -84,32 +84,12 @@ Deprecation Notices
 * mbuf: Some fields will be converted to dynamic API in DPDK 20.11
   in order to reserve more space for the dynamic fields, as explained in
   `this presentation <https://www.youtube.com/watch?v=Ttl6MlhmzWY>`_.
-  The following static fields will be moved as dynamic:
-
-  - ``timestamp``
-  - ``userdata`` / ``udata64``
-  - ``seqn``
-
   As a consequence, the layout of the ``struct rte_mbuf`` will be re-arranged,
   avoiding impact on vectorized implementation of the driver datapaths,
   while evaluating performance gains of a better use of the first cache line.
 
-
-* ethdev: the legacy filter API, including
-  ``rte_eth_dev_filter_supported()``, ``rte_eth_dev_filter_ctrl()`` as well
-  as filter types MACVLAN, ETHERTYPE, FLEXIBLE, SYN, NTUPLE, TUNNEL, FDIR,
-  HASH and L2_TUNNEL, is superseded by the generic flow API (rte_flow) in
-  PMDs that implement the latter.
-  The legacy API will be removed in DPDK 20.11.
-
 * ethdev: The flow director API, including ``rte_eth_conf.fdir_conf`` field,
   and the related structures (``rte_fdir_*`` and ``rte_eth_fdir_*``),
-  will be removed in DPDK 20.11.
-
-* ethdev: The legacy L2 tunnel filtering API is deprecated as the rest of
-  the legacy filtering API.
-  The functions ``rte_eth_dev_l2_tunnel_eth_type_conf`` and
-  ``rte_eth_dev_l2_tunnel_offload_set`` which were not marked as deprecated,
   will be removed in DPDK 20.11.
 
 * ethdev: New offload flags ``DEV_RX_OFFLOAD_FLOW_MARK`` will be added in 19.11.
@@ -138,12 +118,6 @@ Deprecation Notices
   will be limited to maximum 256 queues.
   Also compile time flag ``RTE_ETHDEV_QUEUE_STAT_CNTRS`` will be removed.
 
-* cryptodev: support for using IV with all sizes is added, J0 still can
-  be used but only when IV length in following structs ``rte_crypto_auth_xform``,
-  ``rte_crypto_aead_xform`` is set to zero. When IV length is greater or equal
-  to one it means it represents IV, when is set to zero it means J0 is used
-  directly, in this case 16 bytes of J0 need to be passed.
-
 * sched: To allow more traffic classes, flexible mapping of pipe queues to
   traffic classes, and subport level configuration of pipes and queues
   changes will be made to macros, data structures and API functions defined
@@ -152,11 +126,6 @@ Deprecation Notices
 
 * metrics: The function ``rte_metrics_init`` will have a non-void return
   in order to notify errors instead of calling ``rte_exit``.
-
-* power: ``rte_power_set_env`` function will no longer return 0 on attempt
-  to set new power environment if power environment was already initialized.
-  In this case the function will return -1 unless the environment is unset first
-  (using ``rte_power_unset_env``). Other function usage scenarios will not change.
 
 * cmdline: ``cmdline`` structure will be made opaque to hide platform-specific
   content. On Linux and FreeBSD, supported prior to DPDK 20.11,

@@ -4,6 +4,7 @@
 
 #include <unistd.h>
 
+#include "rte_pmd_ark.h"
 #include "ark_ethdev_rx.h"
 #include "ark_global.h"
 #include "ark_logs.h"
@@ -271,8 +272,13 @@ eth_ark_recv_pkts(void *rx_queue,
 		mbuf->port = meta->port;
 		mbuf->pkt_len = meta->pkt_len;
 		mbuf->data_len = meta->pkt_len;
-		mbuf->timestamp = meta->timestamp;
-		mbuf->udata64 = meta->user_data;
+		/* set timestamp if enabled at least on one device */
+		if (ark_timestamp_rx_dynflag > 0) {
+			*RTE_MBUF_DYNFIELD(mbuf, ark_timestamp_dynfield_offset,
+				rte_mbuf_timestamp_t *) = meta->timestamp;
+			mbuf->ol_flags |= ark_timestamp_rx_dynflag;
+		}
+		rte_pmd_ark_mbuf_rx_userdata_set(mbuf, meta->user_data);
 
 		if (ARK_DEBUG_CORE) {	/* debug sanity checks */
 			if ((meta->pkt_len > (1024 * 16)) ||
@@ -301,8 +307,6 @@ eth_ark_recv_pkts(void *rx_queue,
 				mbuf->pkt_len = 63;
 				meta->pkt_len = 63;
 			}
-			/* seqn is only set under debug */
-			mbuf->seqn = cons_index;
 		}
 
 		if (unlikely(meta->pkt_len > ARK_RX_MAX_NOCHAIN))
@@ -359,8 +363,6 @@ eth_ark_rx_jumbo(struct ark_rx_queue *queue,
 		mbuf_prev = mbuf;
 		mbuf->data_len = data_len;
 		mbuf->data_off = 0;
-		if (ARK_DEBUG_CORE)
-			mbuf->seqn = cons_index;	/* for debug only */
 
 		cons_index += 1;
 	}
@@ -666,8 +668,8 @@ dump_mbuf_data(struct rte_mbuf *mbuf, uint16_t lo, uint16_t hi)
 {
 	uint16_t i, j;
 
-	ARK_PMD_LOG(DEBUG, " MBUF: %p len %d, off: %d, seq: %" PRIU32 "\n",
-		    mbuf, mbuf->pkt_len, mbuf->data_off, mbuf->seqn);
+	ARK_PMD_LOG(DEBUG, " MBUF: %p len %d, off: %d\n",
+		    mbuf, mbuf->pkt_len, mbuf->data_off);
 	for (i = lo; i < hi; i += 16) {
 		uint8_t *dp = RTE_PTR_ADD(mbuf->buf_addr, i);
 

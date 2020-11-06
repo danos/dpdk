@@ -1491,7 +1491,7 @@ virtio_dev_rx_async_submit_split(struct virtio_net *dev,
 	struct iovec *dst_iovec = vec_pool + (VHOST_MAX_ASYNC_VEC >> 1);
 	struct rte_vhost_iov_iter *src_it = it_pool;
 	struct rte_vhost_iov_iter *dst_it = it_pool + 1;
-	uint16_t n_free_slot, slot_idx;
+	uint16_t n_free_slot, slot_idx = 0;
 	uint16_t pkt_err = 0;
 	uint16_t segs_await = 0;
 	struct async_inflight_info *pkts_info = vq->async_pkts_info;
@@ -1714,7 +1714,6 @@ virtio_dev_rx_async_submit(struct virtio_net *dev, uint16_t queue_id,
 {
 	struct vhost_virtqueue *vq;
 	uint32_t nb_tx = 0;
-	bool drawback = false;
 
 	VHOST_LOG_DATA(DEBUG, "(%d) %s\n", dev->vid, __func__);
 	if (unlikely(!is_valid_virt_queue_idx(queue_id, 0, dev->nr_vring))) {
@@ -1727,13 +1726,8 @@ virtio_dev_rx_async_submit(struct virtio_net *dev, uint16_t queue_id,
 
 	rte_spinlock_lock(&vq->access_lock);
 
-	if (unlikely(vq->enabled == 0))
+	if (unlikely(vq->enabled == 0 || !vq->async_registered))
 		goto out_access_unlock;
-
-	if (unlikely(!vq->async_registered)) {
-		drawback = true;
-		goto out_access_unlock;
-	}
 
 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM))
 		vhost_user_iotlb_rd_lock(vq);
@@ -1759,9 +1753,6 @@ out:
 
 out_access_unlock:
 	rte_spinlock_unlock(&vq->access_lock);
-
-	if (drawback)
-		return rte_vhost_enqueue_burst(dev->vid, queue_id, pkts, count);
 
 	return nb_tx;
 }

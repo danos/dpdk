@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <rte_memory.h>
 /*
  * Not needed by this file; included to work around the lack of off_t
  * definition for mlx5dv.h with unpatched rdma-core versions.
@@ -16,7 +15,6 @@
 #include <sys/types.h>
 
 #include "mlx5_glue.h"
-#include "../mlx5_malloc.h"
 
 static int
 mlx5_glue_fork_init(void)
@@ -186,7 +184,7 @@ mlx5_glue_destroy_flow_action(void *action)
 		res = ibv_destroy_flow_action(attr->action);
 		break;
 	}
-	mlx5_free(action);
+	free(action);
 	return res;
 #endif
 #else
@@ -494,6 +492,19 @@ mlx5_glue_dr_destroy_domain(void *domain)
 #endif
 }
 
+static int
+mlx5_glue_dr_sync_domain(void *domain, uint32_t flags)
+{
+#ifdef HAVE_MLX5DV_DR
+	return mlx5dv_dr_domain_sync(domain, flags);
+#else
+	(void)domain;
+	(void)flags;
+	errno = ENOTSUP;
+	return errno;
+#endif
+}
+
 static struct ibv_cq_ex *
 mlx5_glue_dv_create_cq(struct ibv_context *context,
 		       struct ibv_cq_init_attr_ex *cq_attr,
@@ -619,7 +630,7 @@ mlx5_glue_dv_create_flow_action_counter(void *counter_obj, uint32_t offset)
 	struct mlx5dv_flow_action_attr *action;
 
 	(void)offset;
-	action = mlx5_malloc(0, sizeof(*action), 0, SOCKET_ID_ANY);
+	action = malloc(sizeof(*action));
 	if (!action)
 		return NULL;
 	action->type = MLX5DV_FLOW_ACTION_COUNTERS_DEVX;
@@ -643,7 +654,7 @@ mlx5_glue_dv_create_flow_action_dest_ibv_qp(void *qp)
 #else
 	struct mlx5dv_flow_action_attr *action;
 
-	action = mlx5_malloc(0, sizeof(*action), 0, SOCKET_ID_ANY);
+	action = malloc(sizeof(*action));
 	if (!action)
 		return NULL;
 	action->type = MLX5DV_FLOW_ACTION_DEST_IBV_QP;
@@ -688,7 +699,7 @@ mlx5_glue_dv_create_flow_action_modify_header
 
 	(void)domain;
 	(void)flags;
-	action = mlx5_malloc(0, sizeof(*action), 0, SOCKET_ID_ANY);
+	action = malloc(sizeof(*action));
 	if (!action)
 		return NULL;
 	action->type = MLX5DV_FLOW_ACTION_IBV_FLOW_ACTION;
@@ -728,7 +739,7 @@ mlx5_glue_dv_create_flow_action_packet_reformat
 	(void)flags;
 	struct mlx5dv_flow_action_attr *action;
 
-	action = mlx5_malloc(0, sizeof(*action), 0, SOCKET_ID_ANY);
+	action = malloc(sizeof(*action));
 	if (!action)
 		return NULL;
 	action->type = MLX5DV_FLOW_ACTION_IBV_FLOW_ACTION;
@@ -758,7 +769,7 @@ mlx5_glue_dv_create_flow_action_tag(uint32_t tag)
 #else /* HAVE_MLX5DV_DR */
 	struct mlx5dv_flow_action_attr *action;
 
-	action = mlx5_malloc(0, sizeof(*action), 0, SOCKET_ID_ANY);
+	action = malloc(sizeof(*action));
 	if (!action)
 		return NULL;
 	action->type = MLX5DV_FLOW_ACTION_TAG;
@@ -1270,6 +1281,21 @@ mlx5_glue_dv_free_pp(struct mlx5dv_pp *pp)
 #endif
 }
 
+static void *
+mlx5_glue_dr_action_create_flow_hit(struct mlx5dv_devx_obj *devx_obj,
+				    uint32_t offset, uint8_t reg_c_index)
+{
+#ifdef HAVE_MLX5DV_DR_ACTION_FLOW_HIT
+	return mlx5dv_dr_action_create_flow_hit(devx_obj, offset, reg_c_index);
+#else
+	(void)(devx_obj);
+	(void)(offset);
+	(void)(reg_c_index);
+	errno = ENOTSUP;
+	return NULL;
+#endif
+}
+
 __rte_cache_aligned
 const struct mlx5_glue *mlx5_glue = &(const struct mlx5_glue) {
 	.version = MLX5_GLUE_VERSION,
@@ -1331,6 +1357,7 @@ const struct mlx5_glue *mlx5_glue = &(const struct mlx5_glue) {
 	.dr_destroy_flow_tbl = mlx5_glue_dr_destroy_flow_tbl,
 	.dr_create_domain = mlx5_glue_dr_create_domain,
 	.dr_destroy_domain = mlx5_glue_dr_destroy_domain,
+	.dr_sync_domain = mlx5_glue_dr_sync_domain,
 	.dv_create_cq = mlx5_glue_dv_create_cq,
 	.dv_create_wq = mlx5_glue_dv_create_wq,
 	.dv_query_device = mlx5_glue_dv_query_device,
@@ -1388,4 +1415,5 @@ const struct mlx5_glue *mlx5_glue = &(const struct mlx5_glue) {
 	.dv_free_var = mlx5_glue_dv_free_var,
 	.dv_alloc_pp = mlx5_glue_dv_alloc_pp,
 	.dv_free_pp = mlx5_glue_dv_free_pp,
+	.dr_action_create_flow_hit = mlx5_glue_dr_action_create_flow_hit,
 };
