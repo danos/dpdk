@@ -39,6 +39,7 @@ dpdk (20.11~rc3-1) experimental; urgency=medium
     - d/control, d/*.symbols: add new drivers in 20.11~rc3 dlb, dlb2, txgbe
     - d/control, d/librte-regex-octeontx2*: regex-octeontx2 dropped the
       superfluous regex suffix
+    - d/t/control: remove test-dkms since we do not have dkms packages anymore
 
   [ Luca Boccassi ]
   * d/control: remove duplicated Section: libs
