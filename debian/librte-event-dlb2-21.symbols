@@ -1,0 +1,4 @@
+librte_event_dlb2.so.21 librte-event-dlb2-21 #MINVER#
+ DPDK_21@DPDK_21 20.11~rc1
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

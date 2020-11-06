@@ -968,6 +968,34 @@ Description: Data Plane Development Kit (librte-eventdev runtime library)
  .
  This package contains the runtime libraries for librte-eventdev.
 
+Package: librte-event-dlb21
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/eventdevs/dlb.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-event-dlb runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte-event-dlb.
+
+Package: librte-event-dlb2-21
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/eventdevs/dlb2.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-event-dlb2 runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte-event-dlb2.
+
 Package: librte-event-dpaa21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
@@ -2057,6 +2085,20 @@ Description: Data Plane Development Kit (librte-net-thunderx runtime library)
  in user-space and communicate directly with dedicated network interfaces.
  .
  This package contains the runtime libraries for librte-net-thunderx.
+
+Package: librte-net-txgbe21
+Architecture: amd64 arm64 armhf i386 ppc64el
+Multi-Arch: same
+Homepage: https://doc.dpdk.org/guides/nics/txgbe.html
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Conflicts: libdpdk0,
+Description: Data Plane Development Kit (librte-net-txgbe runtime library)
+ DPDK is a set of libraries for fast packet processing. Applications run
+ in user-space and communicate directly with dedicated network interfaces.
+ .
+ This package contains the runtime libraries for librte-net-txgbe.
 
 Package: librte-net-vdev-netvsc21
 Architecture: amd64 arm64 armhf i386 ppc64el
