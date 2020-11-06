@@ -27,5 +27,6 @@ librte_hash.so.21 librte-hash21 #MINVER#
  rte_hash_lookup_with_hash_bulk_data@EXPERIMENTAL 20.08
  rte_hash_lookup_with_hash_data@DPDK_21 20.11~rc1
  rte_hash_max_key_id@EXPERIMENTAL 20.08
+ rte_hash_rcu_qsbr_add@EXPERIMENTAL 20.11~rc3
  rte_hash_reset@DPDK_21 20.11~rc1
  rte_hash_set_cmp_func@DPDK_21 20.11~rc1

@@ -3,6 +3,8 @@ librte_security.so.21 librte-security21 #MINVER#
  EXPERIMENTAL@EXPERIMENTAL 18.11
  rte_security_capabilities_get@DPDK_21 20.11~rc1
  rte_security_capability_get@DPDK_21 20.11~rc1
+ rte_security_dynfield_offset@EXPERIMENTAL 20.11~rc3
+ rte_security_dynfield_register@EXPERIMENTAL 20.11~rc3
  rte_security_get_userdata@EXPERIMENTAL 19.08
  rte_security_session_create@DPDK_21 20.11~rc1
  rte_security_session_destroy@DPDK_21 20.11~rc1

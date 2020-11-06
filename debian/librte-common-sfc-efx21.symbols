@@ -74,6 +74,34 @@ librte_common_sfc_efx.so.21 librte-common-sfc-efx21 #MINVER#
  efx_mac_stats_update@INTERNAL 20.11~rc1
  efx_mac_stats_upload@INTERNAL 20.11~rc1
  efx_mac_up@INTERNAL 20.11~rc1
+ efx_mae_action_rule_insert@INTERNAL 20.11~rc3
+ efx_mae_action_rule_remove@INTERNAL 20.11~rc3
+ efx_mae_action_set_alloc@INTERNAL 20.11~rc3
+ efx_mae_action_set_free@INTERNAL 20.11~rc3
+ efx_mae_action_set_populate_deliver@INTERNAL 20.11~rc3
+ efx_mae_action_set_populate_drop@INTERNAL 20.11~rc3
+ efx_mae_action_set_populate_flag@INTERNAL 20.11~rc3
+ efx_mae_action_set_populate_mark@INTERNAL 20.11~rc3
+ efx_mae_action_set_populate_vlan_pop@INTERNAL 20.11~rc3
+ efx_mae_action_set_populate_vlan_push@INTERNAL 20.11~rc3
+ efx_mae_action_set_spec_fini@INTERNAL 20.11~rc3
+ efx_mae_action_set_spec_init@INTERNAL 20.11~rc3
+ efx_mae_action_set_specs_equal@INTERNAL 20.11~rc3
+ efx_mae_fini@INTERNAL 20.11~rc3
+ efx_mae_get_limits@INTERNAL 20.11~rc3
+ efx_mae_init@INTERNAL 20.11~rc3
+ efx_mae_match_spec_field_set@INTERNAL 20.11~rc3
+ efx_mae_match_spec_fini@INTERNAL 20.11~rc3
+ efx_mae_match_spec_init@INTERNAL 20.11~rc3
+ efx_mae_match_spec_is_valid@INTERNAL 20.11~rc3
+ efx_mae_match_spec_mport_set@INTERNAL 20.11~rc3
+ efx_mae_match_spec_outer_rule_id_set@INTERNAL 20.11~rc3
+ efx_mae_match_specs_class_cmp@INTERNAL 20.11~rc3
+ efx_mae_match_specs_equal@INTERNAL 20.11~rc3
+ efx_mae_mport_by_pcie_function@INTERNAL 20.11~rc3
+ efx_mae_mport_by_phy_port@INTERNAL 20.11~rc3
+ efx_mae_outer_rule_insert@INTERNAL 20.11~rc3
+ efx_mae_outer_rule_remove@INTERNAL 20.11~rc3
  efx_mcdi_fini@INTERNAL 20.11~rc1
  efx_mcdi_get_proxy_handle@INTERNAL 20.11~rc1
  efx_mcdi_get_timeout@INTERNAL 20.11~rc1
@@ -93,6 +121,7 @@ librte_common_sfc_efx.so.21 librte-common-sfc-efx21 #MINVER#
  efx_nic_destroy@INTERNAL 20.11~rc1
  efx_nic_fini@INTERNAL 20.11~rc1
  efx_nic_get_bar_region@INTERNAL 20.11~rc1
+ efx_nic_get_board_info@INTERNAL 20.11~rc3
  efx_nic_get_fw_subvariant@INTERNAL 20.11~rc1
  efx_nic_get_fw_version@INTERNAL 20.11~rc1
  efx_nic_get_vi_pool@INTERNAL 20.11~rc1

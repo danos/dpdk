@@ -18,6 +18,8 @@ librte_mbuf.so.21 librte-mbuf21 #MINVER#
  rte_mbuf_best_mempool_ops@DPDK_21 20.11~rc1
  rte_mbuf_check@EXPERIMENTAL 19.08
  rte_mbuf_dyn_dump@EXPERIMENTAL 19.11
+ rte_mbuf_dyn_rx_timestamp_register@EXPERIMENTAL 20.11~rc3
+ rte_mbuf_dyn_tx_timestamp_register@EXPERIMENTAL 20.11~rc3
  rte_mbuf_dynfield_lookup@EXPERIMENTAL 19.11
  rte_mbuf_dynfield_register@EXPERIMENTAL 19.11
  rte_mbuf_dynfield_register_offset@EXPERIMENTAL 19.11

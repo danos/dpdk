@@ -30,8 +30,6 @@ librte_ethdev.so.21 librte-ethdev21 #MINVER#
  rte_eth_dev_create@INTERNAL 20.11~rc1
  rte_eth_dev_default_mac_addr_set@DPDK_21 20.11~rc1
  rte_eth_dev_destroy@INTERNAL 20.11~rc1
- rte_eth_dev_filter_ctrl@DPDK_21 20.11~rc1
- rte_eth_dev_filter_supported@DPDK_21 20.11~rc1
  rte_eth_dev_flow_ctrl_get@DPDK_21 20.11~rc1
  rte_eth_dev_flow_ctrl_set@DPDK_21 20.11~rc1
  rte_eth_dev_fw_version_get@DPDK_21 20.11~rc1
@@ -54,8 +52,6 @@ librte_ethdev.so.21 librte-ethdev21 #MINVER#
  rte_eth_dev_is_rx_hairpin_queue@INTERNAL 20.11~rc1
  rte_eth_dev_is_tx_hairpin_queue@INTERNAL 20.11~rc1
  rte_eth_dev_is_valid_port@DPDK_21 20.11~rc1
- rte_eth_dev_l2_tunnel_eth_type_conf@DPDK_21 20.11~rc1
- rte_eth_dev_l2_tunnel_offload_set@DPDK_21 20.11~rc1
  rte_eth_dev_logtype@DPDK_21 20.11~rc1
  rte_eth_dev_mac_addr_add@DPDK_21 20.11~rc1
  rte_eth_dev_mac_addr_remove@DPDK_21 20.11~rc1

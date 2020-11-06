@@ -1,6 +1,7 @@
 librte_eventdev.so.21 librte-eventdev21 #MINVER#
  DPDK_21@DPDK_21 20.11~rc1
  EXPERIMENTAL@EXPERIMENTAL 20.08
+ INTERNAL@INTERNAL 20.11~rc3
  __rte_eventdev_trace_close@EXPERIMENTAL 20.08
  __rte_eventdev_trace_configure@EXPERIMENTAL 20.08
  __rte_eventdev_trace_crypto_adapter_create@EXPERIMENTAL 20.08
@@ -93,6 +94,7 @@ librte_eventdev.so.21 librte-eventdev21 #MINVER#
  rte_event_eth_tx_adapter_stop@DPDK_21 20.11~rc1
  rte_event_pmd_allocate@DPDK_21 20.11~rc1
  rte_event_pmd_release@DPDK_21 20.11~rc1
+ rte_event_pmd_selftest_seqn_dynfield_offset@INTERNAL 20.11~rc3
  rte_event_port_attr_get@DPDK_21 20.11~rc1
  rte_event_port_default_conf_get@DPDK_21 20.11~rc1
  rte_event_port_link@DPDK_21 20.11~rc1

@@ -62,6 +62,7 @@ librte_eal.so.21 librte-eal21 #MINVER#
  rte_class_unregister@EXPERIMENTAL 18.08
  rte_cpu_get_flag_enabled@DPDK_21 20.11~rc1
  rte_cpu_get_flag_name@DPDK_21 20.11~rc1
+ rte_cpu_get_intrinsics_support@EXPERIMENTAL 20.11~rc3
  rte_cpu_is_supported@DPDK_21 20.11~rc1
  rte_ctrl_thread_create@DPDK_21 20.11~rc1
  rte_cycles_vmware_tsc_map@DPDK_21 20.11~rc1

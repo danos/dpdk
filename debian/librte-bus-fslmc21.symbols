@@ -13,6 +13,7 @@ librte_bus_fslmc.so.21 librte-bus-fslmc21 #MINVER#
  dpaa2_free_eq_descriptors@INTERNAL 20.08
  dpaa2_get_mcp_ptr@INTERNAL 20.08
  dpaa2_io_portal@INTERNAL 20.08
+ dpaa2_seqn_dynfield_offset@INTERNAL 20.11~rc3
  dpaa2_svr_family@INTERNAL 20.08
  dpaa2_virt_mode@INTERNAL 20.08
  dpbp_disable@INTERNAL 20.08
