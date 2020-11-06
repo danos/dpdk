@@ -1,4 +1,4 @@
-dpdk (20.11~rc1-1) experimental; urgency=medium
+dpdk (20.11~rc3-1) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
   * New upstream release candidate 20.11~rc1
@@ -33,6 +33,12 @@ dpdk (20.11~rc1-1) experimental; urgency=medium
   * d/rules: remove build artifacts breaking reproducible build
   * d/rules: sort package parsing for reproducible build
   * d/control: fix typo pull/poll mode driver
+  * New upstream release candidate 20.11~rc3
+    - d/*.symbols: symbol changes in 20.11~rc1
+    - d/control: add more per lib/driver homepage links
+    - d/control, d/*.symbols: add new drivers in 20.11~rc3 dlb, dlb2, txgbe
+    - d/control, d/librte-regex-octeontx2*: regex-octeontx2 dropped the
+      superfluous regex suffix
 
   [ Luca Boccassi ]
   * d/control: remove duplicated Section: libs
