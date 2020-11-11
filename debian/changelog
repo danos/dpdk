@@ -50,7 +50,7 @@ dpdk (20.11~rc3-1) experimental; urgency=medium
   * dpdk-doc: override warning about repeated path segment
   * d/copyright: some source files were removed, update it
 
- -- Luca Boccassi <bluca@debian.org>  Thu, 29 Oct 2020 13:22:32 +0000
+ -- Luca Boccassi <bluca@debian.org>  Wed, 11 Nov 2020 11:54:30 +0000
 
 dpdk (20.08-1) experimental; urgency=medium
 
