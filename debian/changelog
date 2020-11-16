@@ -1,3 +1,20 @@
+dpdk (19.11.4-0vyatta5) unstable; urgency=medium
+
+  [ aroberts ]
+  * Use the time_cpu_bytes instead of port time for TCs
+  * Exit the dequeue loop if all pipes have been checked and there's no
+    tokens
+  * Allow the TCs to calculate bytes per us unit
+  * Make sure the calculated rational numbers aren't too high.
+  * Replace wred uses of port->time with port->time_cpu_bytes
+  * Use the exact time and port->time which can be inaccurate
+  * UT: add new rte_approx_int unit-test
+
+  [ Charles (Chas) Williams ]
+  * Update symbols versions for release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 16 Nov 2020 09:08:09 -0500
+
 dpdk (19.11.4-0vyatta4) unstable; urgency=medium
 
   * net: check segment pointer in raw checksum processing (Bugfix:
