@@ -30,7 +30,57 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	/* Weighted Round Robin (WRR) */
  	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
-@@ -1794,35 +1794,62 @@ grinder_credits_update(struct rte_sched_
+@@ -639,6 +639,20 @@ rte_sched_port_log_pipe_profile(struct r
+ }
+ 
+ static inline uint64_t
++rte_sched_time_us_to_bytes(uint32_t time_us, uint32_t rate)
++{
++	uint64_t time = time_us;
++
++	time = (time * rate) / 1000000;
++
++	/* Don't allow a zero byte count */
++	if (!time)
++		return 1;
++
++	return time;
++}
++
++static inline uint64_t
+ rte_sched_time_ms_to_bytes(uint32_t time_ms, uint32_t rate)
+ {
+ 	uint64_t time = time_ms;
+@@ -682,12 +696,12 @@ rte_sched_pipe_profile_convert(struct rt
+ 	dst->tb_size = src->tb_size;
+ 
+ 	/* Traffic Classes */
+-	dst->tc_period = rte_sched_time_ms_to_bytes(src->tc_period,
++	dst->tc_period = rte_sched_time_us_to_bytes(src->tc_period,
+ 						rate);
+ 
+ 	for (i = 0; i < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; i++)
+ 		dst->tc_credits_per_period[i]
+-			= rte_sched_time_ms_to_bytes(src->tc_period,
++			= rte_sched_time_us_to_bytes(src->tc_period,
+ 				src->tc_rate[i]);
+ 
+ #ifdef RTE_SCHED_SUBPORT_TC_OV
+@@ -1041,11 +1055,11 @@ rte_sched_subport_config_common(struct r
+ 	s->tb_credits = s->tb_size / 2;
+ 
+ 	/* Traffic Classes (TCs) */
+-	s->tc_period = rte_sched_time_ms_to_bytes(params->tc_period, port->rate);
++	s->tc_period = rte_sched_time_us_to_bytes(params->tc_period, port->rate);
+ 	s->tc_time = port->time + s->tc_period;
+ 	for (i = 0; i < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; i++) {
+ 		s->tc_credits_per_period[i]
+-			= rte_sched_time_ms_to_bytes(params->tc_period,
++			= rte_sched_time_us_to_bytes(params->tc_period,
+ 						     params->tc_rate[i]);
+ 		s->tc_credits[i] = s->tc_credits_per_period[i];
+ 	}
+@@ -1794,35 +1808,62 @@ grinder_credits_update(struct rte_sched_
  	struct rte_sched_pipe_profile *params = grinder->pipe_params;
  	uint64_t n_periods;
  	uint32_t tc;
@@ -103,7 +153,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	}
  }
  
-@@ -1933,19 +1960,19 @@ grinder_credits_check(struct rte_sched_p
+@@ -1933,19 +1974,19 @@ grinder_credits_check(struct rte_sched_p
  	uint32_t tc_index = grinder->tc_index;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
  	uint32_t subport_tb_credits = subport->tb_credits;
@@ -129,7 +179,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (!enough_credits)
  		return 0;
-@@ -1953,8 +1980,8 @@ grinder_credits_check(struct rte_sched_p
+@@ -1953,8 +1994,8 @@ grinder_credits_check(struct rte_sched_p
  	/* Update port credits */
  	subport->tb_credits -= pkt_len;
  	subport->tc_credits[tc_index] -= pkt_len;
