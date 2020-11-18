@@ -9,7 +9,7 @@
  #include "rte_approx.h"
  
  /*
-@@ -165,3 +165,52 @@ int rte_approx(double alpha, double d, u
+@@ -165,3 +165,53 @@ int rte_approx(double alpha, double d, u
  	/* Perform approximation */
  	return find_best_rational_approximation(alpha_num, d_num, denum, p, q);
  }
@@ -53,8 +53,9 @@
 +	return rv;
 +}
 +
-+int rte_approx_int(uint32_t numerator, uint32_t denominator,
-+		   uint32_t *p, uint32_t *q)
++int __rte_experimental
++rte_approx_int(uint32_t numerator, uint32_t denominator,
++	       uint32_t *p, uint32_t *q)
 +{
 +	/*
 +	 * The best value proved to be 16383 from the following range tried:
