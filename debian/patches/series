@@ -40,6 +40,7 @@ sched-add-64-bit-counter-retrieval-API.patch
 sched-meson.patch
 sched-fix-broken-strict-priority-of-tcs.patch
 sched-rte-approx.patch
+sched-rte-approx-unit-test.patch
 
 # Bonding
 bonding-polled-slave-muxstate.patch
