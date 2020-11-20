@@ -269,19 +269,32 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  		struct rte_sched_port_hierarchy *sched =
  			(struct rte_sched_port_hierarchy *) &pkt->hash.sched;
  		uint64_t dscp_mask;
-@@ -1556,6 +1566,12 @@ rte_sched_port_red_drop(struct rte_sched
+@@ -1556,9 +1566,15 @@ rte_sched_port_red_drop(struct rte_sched
  		/* If we haven't found a dscp match then force a drop */
  		if (i >= qe->qred.num_maps)
  			return 1;
 +
-+		ret = rte_red_enqueue(red_cfg, red, qlen, port->time);
++		ret = rte_red_enqueue(red_cfg, red, qlen, port->time_cpu_bytes);
 +		if (ret)
 +			qe->stats.n_pkts_red_dscp_dropped[i]++;
 +
 +		return ret;
  	}
  
- 	return rte_red_enqueue(red_cfg, red, qlen, port->time);
+-	return rte_red_enqueue(red_cfg, red, qlen, port->time);
++	return rte_red_enqueue(red_cfg, red, qlen, port->time_cpu_bytes);
+ }
+ 
+ static inline void
+@@ -1567,7 +1583,7 @@ rte_sched_port_set_queue_empty_timestamp
+ 	struct rte_sched_queue_extra *qe = port->queue_extra + qindex;
+ 	struct rte_red *red = &qe->red;
+ 
+-	rte_red_mark_queue_empty(red, port->time);
++	rte_red_mark_queue_empty(red, port->time_cpu_bytes);
+ }
+ 
+ #else
 @@ -1607,6 +1623,25 @@ debug_check_queue_slab(struct rte_sched_
  
  #endif /* RTE_SCHED_DEBUG */
@@ -308,7 +321,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  static inline uint32_t
  rte_sched_port_enqueue_qptrs_prefetch0(struct rte_sched_port *port,
  				       struct rte_mbuf *pkt)
-@@ -2608,3 +2643,9 @@ rte_sched_port_dequeue(struct rte_sched_
+@@ -2609,3 +2644,9 @@ rte_sched_port_dequeue(struct rte_sched_
  
  	return count;
  }
@@ -408,7 +421,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  #endif
 --- a/lib/librte_sched/rte_sched_version.map
 +++ b/lib/librte_sched/rte_sched_version.map
-@@ -10,11 +10,13 @@ DPDK_2.0 {
+@@ -10,11 +10,13 @@ DPDK_20.0 {
  	rte_red_log2_1_minus_Wq;
  	rte_red_max_threshold;
  	rte_red_pow2_frac_inv;

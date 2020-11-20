@@ -30,17 +30,30 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	/* Weighted Round Robin (WRR) */
  	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
-@@ -1794,6 +1794,7 @@ grinder_credits_update(struct rte_sched_
+@@ -1794,35 +1794,61 @@ grinder_credits_update(struct rte_sched_
  	struct rte_sched_pipe_profile *params = grinder->pipe_params;
  	uint64_t n_periods;
  	uint32_t tc;
 +	uint64_t lapsed;
  
  	/* Subport TB */
- 	n_periods = (port->time - subport->tb_time) / subport->tb_period;
-@@ -1810,19 +1811,43 @@ grinder_credits_update(struct rte_sched_
+-	n_periods = (port->time - subport->tb_time) / subport->tb_period;
++	n_periods = (port->time_cpu_bytes - subport->tb_time) /
++				subport->tb_period;
+ 	subport->tb_credits += n_periods * subport->tb_credits_per_period;
+ 	subport->tb_credits = rte_sched_min_val_2_u32(subport->tb_credits, subport->tb_size);
+ 	subport->tb_time += n_periods * subport->tb_period;
+ 
+ 	/* Pipe TB */
+-	n_periods = (port->time - pipe->tb_time) / params->tb_period;
++	n_periods = (port->time_cpu_bytes - pipe->tb_time) / params->tb_period;
+ 	pipe->tb_credits += n_periods * params->tb_credits_per_period;
+ 	pipe->tb_credits = rte_sched_min_val_2_u32(pipe->tb_credits, params->tb_size);
+ 	pipe->tb_time += n_periods * params->tb_period;
+ 
  	/* Subport TCs */
- 	if (unlikely(port->time >= subport->tc_time)) {
+-	if (unlikely(port->time >= subport->tc_time)) {
++	if (unlikely(port->time_cpu_bytes >= subport->tc_time)) {
  		for (tc = 0; tc < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; tc++) {
 -			subport->tc_credits[tc] =
 -				subport->tc_credits_per_period[tc];
@@ -56,7 +69,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 +		 * the time + tc_period so we'll replenish the tc tokens early
 +		 * in the next tc_period to compensate.
 +		 */
-+		lapsed = port->time - subport->tc_time;
++		lapsed = port->time_cpu_bytes - subport->tc_time;
 +		if (lapsed < subport->tc_period)
 +			subport->tc_time += subport->tc_period;
 +		else
@@ -64,7 +77,8 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	}
  
  	/* Pipe TCs */
- 	if (unlikely(port->time >= pipe->tc_time)) {
+-	if (unlikely(port->time >= pipe->tc_time)) {
++	if (unlikely(port->time_cpu_bytes >= pipe->tc_time)) {
  		for (tc = 0; tc < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; tc++) {
 -			pipe->tc_credits[tc] =
 -				params->tc_credits_per_period[tc];
@@ -80,7 +94,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 +		 * the time + tc_period so we'll replenish the tc tokens early
 +		 * in the next tc_period to compensate.
 +		 */
-+		lapsed = port->time - pipe->tc_time;
++		lapsed = port->time_cpu_bytes - pipe->tc_time;
 +		if (lapsed < params->tc_period)
 +			pipe->tc_time += params->tc_period;
 +		else
@@ -88,7 +102,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	}
  }
  
-@@ -1933,19 +1958,19 @@ grinder_credits_check(struct rte_sched_p
+@@ -1933,19 +1959,19 @@ grinder_credits_check(struct rte_sched_p
  	uint32_t tc_index = grinder->tc_index;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
  	uint32_t subport_tb_credits = subport->tb_credits;
@@ -114,7 +128,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (!enough_credits)
  		return 0;
-@@ -1953,8 +1978,8 @@ grinder_credits_check(struct rte_sched_p
+@@ -1953,8 +1979,8 @@ grinder_credits_check(struct rte_sched_p
  	/* Update port credits */
  	subport->tb_credits -= pkt_len;
  	subport->tc_credits[tc_index] -= pkt_len;
