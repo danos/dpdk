@@ -34,6 +34,7 @@ sched-per-dscp-wred-stats.patch
 sched-add-64-bit-counter-retrieval-API.patch
 sched-meson.patch
 sched-fix-broken-strict-priority-of-tcs.patch
+sched-rte-approx.patch
 
 # Bonding
 bonding-polled-slave-muxstate.patch
