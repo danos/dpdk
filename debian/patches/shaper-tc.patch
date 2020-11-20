@@ -30,7 +30,20 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	/* Weighted Round Robin (WRR) */
  	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
-@@ -1794,35 +1794,61 @@ grinder_credits_update(struct rte_sched_
+@@ -138,6 +138,12 @@ enum grinder_state {
+ 	e_GRINDER_READ_MBUF
+ };
+ 
++enum token_state {
++	TOKENS_UNDEFINED = 0,
++	TOKENS_USED,
++	TOKENS_AVAIL
++};
++
+ /*
+  * Path through the scheduler hierarchy used by the scheduler enqueue
+  * operation to identify the destination queue for the current
+@@ -1794,35 +1800,61 @@ grinder_credits_update(struct rte_sched_
  	struct rte_sched_pipe_profile *params = grinder->pipe_params;
  	uint64_t n_periods;
  	uint32_t tc;
@@ -102,7 +115,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  	}
  }
  
-@@ -1933,19 +1959,19 @@ grinder_credits_check(struct rte_sched_p
+@@ -1933,19 +1965,19 @@ grinder_credits_check(struct rte_sched_p
  	uint32_t tc_index = grinder->tc_index;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
  	uint32_t subport_tb_credits = subport->tb_credits;
@@ -128,7 +141,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (!enough_credits)
  		return 0;
-@@ -1953,8 +1979,8 @@ grinder_credits_check(struct rte_sched_p
+@@ -1953,8 +1985,8 @@ grinder_credits_check(struct rte_sched_p
  	/* Update port credits */
  	subport->tb_credits -= pkt_len;
  	subport->tc_credits[tc_index] -= pkt_len;
@@ -138,6 +151,90 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	return 1;
  }
+@@ -2006,15 +2038,20 @@ grinder_credits_check(struct rte_sched_p
+ 
+ 
+ static inline int
+-grinder_schedule(struct rte_sched_port *port, uint32_t pos)
++grinder_schedule(struct rte_sched_port *port, uint32_t pos,
++		 enum token_state *token_state)
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+ 	struct rte_sched_queue *queue = grinder->queue[grinder->qpos];
+ 	struct rte_mbuf *pkt = grinder->pkt;
+ 	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
+ 
+-	if (!grinder_credits_check(port, pos))
++	if (!grinder_credits_check(port, pos)) {
++		*token_state = TOKENS_USED;
+ 		return 0;
++	}
++
++	*token_state = TOKENS_AVAIL;
+ 
+ 	if (pkt_len < 0)
+ 		pkt_len = 0;
+@@ -2357,7 +2394,8 @@ grinder_prefetch_mbuf(struct rte_sched_p
+ }
+ 
+ static inline uint32_t
+-grinder_handle(struct rte_sched_port *port, uint32_t pos)
++grinder_handle(struct rte_sched_port *port, uint32_t pos,
++	       enum token_state *token_state)
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
+ 
+@@ -2399,7 +2437,7 @@ grinder_handle(struct rte_sched_port *po
+ 	{
+ 		uint32_t result = 0;
+ 
+-		result = grinder_schedule(port, pos);
++		result = grinder_schedule(port, pos, token_state);
+ 
+ 		/* Look for next packet within the same TC */
+ 		if (result && grinder->qmask) {
+@@ -2490,7 +2528,10 @@ rte_sched_port_exceptions(struct rte_sch
+ int
+ rte_sched_port_dequeue(struct rte_sched_port *port, struct rte_mbuf **pkts, uint32_t n_pkts)
+ {
+-	uint32_t i, count;
++	uint32_t i, count, j;
++	enum token_state token_state;
++	uint32_t npipes = port->n_subports_per_port *
++				port->n_pipes_per_subport;
+ 
+ 	port->pkts_out = pkts;
+ 	port->n_pkts_out = 0;
+@@ -2498,12 +2539,27 @@ rte_sched_port_dequeue(struct rte_sched_
+ 	rte_sched_port_time_resync(port);
+ 
+ 	/* Take each queue in the grinder one step further */
+-	for (i = 0, count = 0; ; i++)  {
+-		count += grinder_handle(port, i & (RTE_SCHED_PORT_N_GRINDERS - 1));
++	for (i = 0, count = 0, j = 0; ; i++)  {
++		token_state = TOKENS_UNDEFINED;
++		count += grinder_handle(port, i & (RTE_SCHED_PORT_N_GRINDERS - 1),
++					&token_state);
+ 		if ((count == n_pkts) ||
+ 		    rte_sched_port_exceptions(port, i >= RTE_SCHED_PORT_N_GRINDERS)) {
+ 			break;
+ 		}
++		/* We need to look at all pipes */
++		if ((i+1) < npipes)
++			continue;
++		/*
++		 * If we've been through all the pipes and none have any
++		 * tokens leave the loop.
++		 */
++		if (token_state == TOKENS_USED) {
++			if (j++ >= npipes)
++				break;
++		} else if (token_state == TOKENS_AVAIL) {
++			j = 0;
++		}
+ 	}
+ 
+ 	return count;
 --- a/lib/librte_sched/rte_sched.h
 +++ b/lib/librte_sched/rte_sched.h
 @@ -127,14 +127,14 @@ extern "C" {
