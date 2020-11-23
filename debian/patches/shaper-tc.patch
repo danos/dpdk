@@ -93,7 +93,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  						     params->tc_rate[i]);
  		s->tc_credits[i] = s->tc_credits_per_period[i];
  	}
-@@ -1794,35 +1814,61 @@ grinder_credits_update(struct rte_sched_
+@@ -1794,35 +1814,63 @@ grinder_credits_update(struct rte_sched_
  	struct rte_sched_pipe_profile *params = grinder->pipe_params;
  	uint64_t n_periods;
  	uint32_t tc;
@@ -136,7 +136,8 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 +		if (lapsed < subport->tc_period)
 +			subport->tc_time += subport->tc_period;
 +		else
-+			subport->tc_time = port->time + subport->tc_period;
++			subport->tc_time = port->time_cpu_bytes +
++						subport->tc_period;
  	}
  
  	/* Pipe TCs */
@@ -161,11 +162,12 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 +		if (lapsed < params->tc_period)
 +			pipe->tc_time += params->tc_period;
 +		else
-+			pipe->tc_time = port->time + params->tc_period;
++			pipe->tc_time = port->time_cpu_bytes +
++						params->tc_period;
  	}
  }
  
-@@ -1933,19 +1979,19 @@ grinder_credits_check(struct rte_sched_p
+@@ -1933,19 +1981,19 @@ grinder_credits_check(struct rte_sched_p
  	uint32_t tc_index = grinder->tc_index;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
  	uint32_t subport_tb_credits = subport->tb_credits;
@@ -191,7 +193,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (!enough_credits)
  		return 0;
-@@ -1953,8 +1999,8 @@ grinder_credits_check(struct rte_sched_p
+@@ -1953,8 +2001,8 @@ grinder_credits_check(struct rte_sched_p
  	/* Update port credits */
  	subport->tb_credits -= pkt_len;
  	subport->tc_credits[tc_index] -= pkt_len;
@@ -201,7 +203,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	return 1;
  }
-@@ -2006,15 +2052,20 @@ grinder_credits_check(struct rte_sched_p
+@@ -2006,15 +2054,20 @@ grinder_credits_check(struct rte_sched_p
  
  
  static inline int
@@ -224,7 +226,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (pkt_len < 0)
  		pkt_len = 0;
-@@ -2357,7 +2408,8 @@ grinder_prefetch_mbuf(struct rte_sched_p
+@@ -2357,7 +2410,8 @@ grinder_prefetch_mbuf(struct rte_sched_p
  }
  
  static inline uint32_t
@@ -234,7 +236,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  {
  	struct rte_sched_grinder *grinder = port->grinder + pos;
  
-@@ -2399,7 +2451,7 @@ grinder_handle(struct rte_sched_port *po
+@@ -2399,7 +2453,7 @@ grinder_handle(struct rte_sched_port *po
  	{
  		uint32_t result = 0;
  
@@ -243,7 +245,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  		/* Look for next packet within the same TC */
  		if (result && grinder->qmask) {
-@@ -2490,7 +2542,10 @@ rte_sched_port_exceptions(struct rte_sch
+@@ -2490,7 +2544,10 @@ rte_sched_port_exceptions(struct rte_sch
  int
  rte_sched_port_dequeue(struct rte_sched_port *port, struct rte_mbuf **pkts, uint32_t n_pkts)
  {
@@ -255,7 +257,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	port->pkts_out = pkts;
  	port->n_pkts_out = 0;
-@@ -2498,12 +2553,27 @@ rte_sched_port_dequeue(struct rte_sched_
+@@ -2498,12 +2555,27 @@ rte_sched_port_dequeue(struct rte_sched_
  	rte_sched_port_time_resync(port);
  
  	/* Take each queue in the grinder one step further */
