@@ -1,3 +1,9 @@
+dpdk (18.11.5-1vyatta18) unstable; urgency=medium
+
+  * debian: do not the patch symbol files in debian/
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 23 Nov 2020 10:22:12 -0500
+
 dpdk (18.11.5-1vyatta17) unstable; urgency=medium
 
   [ aroberts ]
