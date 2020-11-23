@@ -38,6 +38,7 @@ sched-rte-approx-unit-test.patch
 
 # ACL enhancements
 rte-acl-ht.patch
+rte-acl-copy.patch
 
 # Bonding
 bonding-polled-slave-muxstate.patch

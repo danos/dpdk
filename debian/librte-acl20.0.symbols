@@ -5,6 +5,7 @@ librte_acl.so.20.0 librte-acl20.0 #MINVER#
  rte_acl_classify@DPDK_20.0 19.11
  rte_acl_classify_alg@DPDK_20.0 19.11
  rte_acl_classify_scalar@DPDK_20.0 19.11
+ rte_acl_copy_rules@DPDK_20.0 19.11
  rte_acl_create@DPDK_20.0 19.11
  rte_acl_del_rule@DPDK_20.0 19.11
  rte_acl_dump@DPDK_20.0 19.11
