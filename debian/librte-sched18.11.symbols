@@ -30,6 +30,7 @@ librte_sched.so.18.11 librte-sched18.11 #MINVER#
  rte_sched_port_get_memory_footprint@DPDK_2.0 16.04
  rte_sched_port_get_memory_footprint_v2@DPDK_17.11 17.11-0vyatta1~
  rte_sched_port_pipe_profile_add@EXPERIMENTAL 18.05
+ rte_approx_int@EXPERIMENTAL 18.05
  rte_sched_port_pkt_read_color@DPDK_2.1 16.04
  rte_sched_port_pkt_read_tree_path@DPDK_2.1 16.04
  rte_sched_port_pkt_write@DPDK_2.1 16.04
