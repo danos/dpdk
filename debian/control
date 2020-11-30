@@ -30,7 +30,7 @@ Build-Depends: chrpath,
                texlive-fonts-recommended <!nodoc>,
                texlive-latex-extra <!nodoc>,
                zlib1g-dev,
-Standards-Version: 4.5.0
+Standards-Version: 4.5.1
 Rules-Requires-Root: no
 Section: libs
 Homepage: https://www.dpdk.org
