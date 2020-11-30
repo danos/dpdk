@@ -622,7 +622,7 @@ mlx5_rx_queue_start_primary(struct rte_eth_dev *dev, uint16_t idx)
 	rte_io_wmb();
 	*rxq->cq_db = rte_cpu_to_be_32(rxq->cq_ci);
 	rte_io_wmb();
-	/* Reset RQ consumer before moving queue ro READY state. */
+	/* Reset RQ consumer before moving queue to READY state. */
 	*rxq->rq_db = rte_cpu_to_be_32(0);
 	rte_io_wmb();
 	ret = priv->obj_ops.rxq_obj_modify(rxq_ctrl->obj, MLX5_RXQ_MOD_RST2RDY);
@@ -902,6 +902,9 @@ mlx5_rx_intr_vec_enable(struct rte_eth_dev *dev)
 	unsigned int count = 0;
 	struct rte_intr_handle *intr_handle = dev->intr_handle;
 
+	/* Representor shares dev->intr_handle with PF. */
+	if (priv->representor)
+		return 0;
 	if (!dev->data->dev_conf.intr_conf.rxq)
 		return 0;
 	mlx5_rx_intr_vec_disable(dev);
@@ -982,6 +985,9 @@ mlx5_rx_intr_vec_disable(struct rte_eth_dev *dev)
 	unsigned int rxqs_n = priv->rxqs_n;
 	unsigned int n = RTE_MIN(rxqs_n, (uint32_t)RTE_MAX_RXTX_INTR_VEC_ID);
 
+	/* Representor shares dev->intr_handle with PF. */
+	if (priv->representor)
+		return;
 	if (!dev->data->dev_conf.intr_conf.rxq)
 		return;
 	if (!intr_handle->intr_vec)
@@ -1424,8 +1430,11 @@ mlx5_rxq_new(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 	const struct rte_eth_rxseg_split *qs_seg = rx_seg;
 	unsigned int tail_len;
 
-	tmpl = mlx5_malloc(MLX5_MEM_RTE | MLX5_MEM_ZERO, sizeof(*tmpl) +
-			   desc_n * sizeof(struct rte_mbuf *), 0, socket);
+	tmpl = mlx5_malloc(MLX5_MEM_RTE | MLX5_MEM_ZERO,
+		sizeof(*tmpl) + desc_n * sizeof(struct rte_mbuf *) +
+		(!!mprq_en) *
+		(desc >> mprq_stride_nums) * sizeof(struct mlx5_mprq_buf *),
+		0, socket);
 	if (!tmpl) {
 		rte_errno = ENOMEM;
 		return NULL;
@@ -1503,7 +1512,7 @@ mlx5_rxq_new(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 			dev->data->port_id, idx, mb_len, max_rx_pkt_len,
 			RTE_PKTMBUF_HEADROOM);
 		rte_errno = ENOSPC;
-		return NULL;
+		goto error;
 	}
 	tmpl->type = MLX5_RXQ_TYPE_STANDARD;
 	if (mlx5_mr_btree_init(&tmpl->rxq.mr_ctrl.cache_bh,
@@ -1781,8 +1790,10 @@ mlx5_rxq_release(struct rte_eth_dev *dev, uint16_t idx)
 		mlx5_free(rxq_ctrl->obj);
 		rxq_ctrl->obj = NULL;
 	}
-	if (rxq_ctrl->type == MLX5_RXQ_TYPE_STANDARD)
+	if (rxq_ctrl->type == MLX5_RXQ_TYPE_STANDARD) {
 		rxq_free_elts(rxq_ctrl);
+		dev->data->rx_queue_state[idx] = RTE_ETH_QUEUE_STATE_STOPPED;
+	}
 	if (!__atomic_load_n(&rxq_ctrl->refcnt, __ATOMIC_RELAXED)) {
 		if (rxq_ctrl->type == MLX5_RXQ_TYPE_STANDARD)
 			mlx5_mr_btree_free(&rxq_ctrl->rxq.mr_ctrl.cache_bh);
@@ -1990,6 +2001,50 @@ mlx5_ind_table_obj_verify(struct rte_eth_dev *dev)
 }
 
 /**
+ * Setup an indirection table structure fields.
+ *
+ * @param dev
+ *   Pointer to Ethernet device.
+ * @param ind_table
+ *   Indirection table to modify.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_ind_table_obj_setup(struct rte_eth_dev *dev,
+			 struct mlx5_ind_table_obj *ind_tbl)
+{
+	struct mlx5_priv *priv = dev->data->dev_private;
+	uint32_t queues_n = ind_tbl->queues_n;
+	uint16_t *queues = ind_tbl->queues;
+	unsigned int i, j;
+	int ret = 0, err;
+	const unsigned int n = rte_is_power_of_2(queues_n) ?
+			       log2above(queues_n) :
+			       log2above(priv->config.ind_table_max_size);
+
+	for (i = 0; i != queues_n; ++i) {
+		if (!mlx5_rxq_get(dev, queues[i])) {
+			ret = -rte_errno;
+			goto error;
+		}
+	}
+	ret = priv->obj_ops.ind_table_new(dev, n, ind_tbl);
+	if (ret)
+		goto error;
+	__atomic_fetch_add(&ind_tbl->refcnt, 1, __ATOMIC_RELAXED);
+	return 0;
+error:
+	err = rte_errno;
+	for (j = 0; j < i; j++)
+		mlx5_rxq_release(dev, ind_tbl->queues[j]);
+	rte_errno = err;
+	DEBUG("Port %u cannot setup indirection table.", dev->data->port_id);
+	return ret;
+}
+
+/**
  * Create an indirection table.
  *
  * @param dev
@@ -2010,10 +2065,6 @@ mlx5_ind_table_obj_new(struct rte_eth_dev *dev, const uint16_t *queues,
 {
 	struct mlx5_priv *priv = dev->data->dev_private;
 	struct mlx5_ind_table_obj *ind_tbl;
-	const unsigned int n = rte_is_power_of_2(queues_n) ?
-			       log2above(queues_n) :
-			       log2above(priv->config.ind_table_max_size);
-	unsigned int i, j;
 	int ret;
 
 	ind_tbl = mlx5_malloc(MLX5_MEM_ZERO, sizeof(*ind_tbl) +
@@ -2023,27 +2074,83 @@ mlx5_ind_table_obj_new(struct rte_eth_dev *dev, const uint16_t *queues,
 		return NULL;
 	}
 	ind_tbl->queues_n = queues_n;
-	for (i = 0; i != queues_n; ++i) {
-		struct mlx5_rxq_ctrl *rxq = mlx5_rxq_get(dev, queues[i]);
-		if (!rxq)
-			goto error;
-		ind_tbl->queues[i] = queues[i];
+	ind_tbl->queues = (uint16_t *)(ind_tbl + 1);
+	memcpy(ind_tbl->queues, queues, queues_n * sizeof(*queues));
+	ret = mlx5_ind_table_obj_setup(dev, ind_tbl);
+	if (ret < 0) {
+		mlx5_free(ind_tbl);
+		return NULL;
 	}
-	ret = priv->obj_ops.ind_table_new(dev, n, ind_tbl);
-	if (ret < 0)
-		goto error;
-	__atomic_fetch_add(&ind_tbl->refcnt, 1, __ATOMIC_RELAXED);
 	if (!standalone)
 		LIST_INSERT_HEAD(&priv->ind_tbls, ind_tbl, next);
 	return ind_tbl;
+}
+
+/**
+ * Modify an indirection table.
+ *
+ * @param dev
+ *   Pointer to Ethernet device.
+ * @param ind_table
+ *   Indirection table to modify.
+ * @param queues
+ *   Queues replacement for the indirection table.
+ * @param queues_n
+ *   Number of queues in the array.
+ * @param standalone
+ *   Indirection table for Standalone queue.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_ind_table_obj_modify(struct rte_eth_dev *dev,
+			  struct mlx5_ind_table_obj *ind_tbl,
+			  uint16_t *queues, const uint32_t queues_n,
+			  bool standalone)
+{
+	struct mlx5_priv *priv = dev->data->dev_private;
+	unsigned int i, j;
+	int ret = 0, err;
+	const unsigned int n = rte_is_power_of_2(queues_n) ?
+			       log2above(queues_n) :
+			       log2above(priv->config.ind_table_max_size);
+
+	MLX5_ASSERT(standalone);
+	RTE_SET_USED(standalone);
+	if (__atomic_load_n(&ind_tbl->refcnt, __ATOMIC_RELAXED) > 1) {
+		/*
+		 * Modification of indirection ntables having more than 1
+		 * reference unsupported. Intended for standalone indirection
+		 * tables only.
+		 */
+		DEBUG("Port %u cannot modify indirection table (refcnt> 1).",
+		      dev->data->port_id);
+		rte_errno = EINVAL;
+		return -rte_errno;
+	}
+	for (i = 0; i != queues_n; ++i) {
+		if (!mlx5_rxq_get(dev, queues[i])) {
+			ret = -rte_errno;
+			goto error;
+		}
+	}
+	MLX5_ASSERT(priv->obj_ops.ind_table_modify);
+	ret = priv->obj_ops.ind_table_modify(dev, n, queues, queues_n, ind_tbl);
+	if (ret)
+		goto error;
+	for (j = 0; j < ind_tbl->queues_n; j++)
+		mlx5_rxq_release(dev, ind_tbl->queues[j]);
+	ind_tbl->queues_n = queues_n;
+	ind_tbl->queues = queues;
+	return 0;
 error:
-	ret = rte_errno;
+	err = rte_errno;
 	for (j = 0; j < i; j++)
 		mlx5_rxq_release(dev, ind_tbl->queues[j]);
-	rte_errno = ret;
-	mlx5_free(ind_tbl);
-	DEBUG("Port %u cannot create indirection table.", dev->data->port_id);
-	return NULL;
+	rte_errno = err;
+	DEBUG("Port %u cannot setup indirection table.", dev->data->port_id);
+	return ret;
 }
 
 /**
@@ -2131,6 +2238,14 @@ mlx5_hrxq_modify(struct rte_eth_dev *dev, uint32_t hrxq_idx,
 					    queues, queues_n)) {
 		ind_tbl = hrxq->ind_table;
 	} else {
+		if (hrxq->standalone) {
+			/*
+			 * Replacement of indirection table unsupported for
+			 * stanalone hrxq objects (used by shared RSS).
+			 */
+			rte_errno = ENOTSUP;
+			return -rte_errno;
+		}
 		ind_tbl = mlx5_ind_table_obj_get(dev, queues, queues_n);
 		if (!ind_tbl)
 			ind_tbl = mlx5_ind_table_obj_new(dev, queues, queues_n,
@@ -2148,6 +2263,7 @@ mlx5_hrxq_modify(struct rte_eth_dev *dev, uint32_t hrxq_idx,
 		goto error;
 	}
 	if (ind_tbl != hrxq->ind_table) {
+		MLX5_ASSERT(!hrxq->standalone);
 		mlx5_ind_table_obj_release(dev, hrxq->ind_table,
 					   hrxq->standalone);
 		hrxq->ind_table = ind_tbl;
@@ -2157,8 +2273,10 @@ mlx5_hrxq_modify(struct rte_eth_dev *dev, uint32_t hrxq_idx,
 	return 0;
 error:
 	err = rte_errno;
-	if (ind_tbl != hrxq->ind_table)
+	if (ind_tbl != hrxq->ind_table) {
+		MLX5_ASSERT(!hrxq->standalone);
 		mlx5_ind_table_obj_release(dev, ind_tbl, hrxq->standalone);
+	}
 	rte_errno = err;
 	return -rte_errno;
 }
@@ -2172,7 +2290,10 @@ __mlx5_hrxq_remove(struct rte_eth_dev *dev, struct mlx5_hrxq *hrxq)
 	mlx5_glue->destroy_flow_action(hrxq->action);
 #endif
 	priv->obj_ops.hrxq_destroy(hrxq);
-	mlx5_ind_table_obj_release(dev, hrxq->ind_table, hrxq->standalone);
+	if (!hrxq->standalone) {
+		mlx5_ind_table_obj_release(dev, hrxq->ind_table,
+					   hrxq->standalone);
+	}
 	mlx5_ipool_free(priv->sh->ipool[MLX5_IPOOL_HRXQ], hrxq->idx);
 }
 
@@ -2206,25 +2327,27 @@ __mlx5_hrxq_create(struct rte_eth_dev *dev,
 	struct mlx5_priv *priv = dev->data->dev_private;
 	const uint8_t *rss_key = rss_desc->key;
 	uint32_t rss_key_len =  rss_desc->key_len;
+	bool standalone = !!rss_desc->shared_rss;
 	const uint16_t *queues =
-		rss_desc->standalone ? rss_desc->const_q : rss_desc->queue;
+		standalone ? rss_desc->const_q : rss_desc->queue;
 	uint32_t queues_n = rss_desc->queue_num;
 	struct mlx5_hrxq *hrxq = NULL;
 	uint32_t hrxq_idx = 0;
-	struct mlx5_ind_table_obj *ind_tbl;
+	struct mlx5_ind_table_obj *ind_tbl = rss_desc->ind_tbl;
 	int ret;
 
 	queues_n = rss_desc->hash_fields ? queues_n : 1;
-	ind_tbl = mlx5_ind_table_obj_get(dev, queues, queues_n);
+	if (!ind_tbl)
+		ind_tbl = mlx5_ind_table_obj_get(dev, queues, queues_n);
 	if (!ind_tbl)
 		ind_tbl = mlx5_ind_table_obj_new(dev, queues, queues_n,
-						 rss_desc->standalone);
+						 standalone);
 	if (!ind_tbl)
 		return NULL;
 	hrxq = mlx5_ipool_zmalloc(priv->sh->ipool[MLX5_IPOOL_HRXQ], &hrxq_idx);
 	if (!hrxq)
 		goto error;
-	hrxq->standalone = rss_desc->standalone;
+	hrxq->standalone = standalone;
 	hrxq->idx = hrxq_idx;
 	hrxq->ind_table = ind_tbl;
 	hrxq->rss_key_len = rss_key_len;
@@ -2235,7 +2358,8 @@ __mlx5_hrxq_create(struct rte_eth_dev *dev,
 		goto error;
 	return hrxq;
 error:
-	mlx5_ind_table_obj_release(dev, ind_tbl, rss_desc->standalone);
+	if (!rss_desc->ind_tbl)
+		mlx5_ind_table_obj_release(dev, ind_tbl, standalone);
 	if (hrxq)
 		mlx5_ipool_free(priv->sh->ipool[MLX5_IPOOL_HRXQ], hrxq_idx);
 	return NULL;
@@ -2289,7 +2413,7 @@ uint32_t mlx5_hrxq_get(struct rte_eth_dev *dev,
 		.data = rss_desc,
 	};
 
-	if (rss_desc->standalone) {
+	if (rss_desc->shared_rss) {
 		hrxq = __mlx5_hrxq_create(dev, rss_desc);
 	} else {
 		entry = mlx5_cache_register(&priv->hrxqs, &ctx);
@@ -2317,6 +2441,8 @@ int mlx5_hrxq_release(struct rte_eth_dev *dev, uint32_t hrxq_idx)
 	struct mlx5_hrxq *hrxq;
 
 	hrxq = mlx5_ipool_get(priv->sh->ipool[MLX5_IPOOL_HRXQ], hrxq_idx);
+	if (!hrxq)
+		return 0;
 	if (!hrxq->standalone)
 		return mlx5_cache_unregister(&priv->hrxqs, &hrxq->entry);
 	__mlx5_hrxq_remove(dev, hrxq);
@@ -2339,11 +2465,8 @@ mlx5_drop_action_create(struct rte_eth_dev *dev)
 	struct mlx5_hrxq *hrxq = NULL;
 	int ret;
 
-	if (priv->drop_queue.hrxq) {
-		__atomic_fetch_add(&priv->drop_queue.hrxq->refcnt, 1,
-				   __ATOMIC_RELAXED);
+	if (priv->drop_queue.hrxq)
 		return priv->drop_queue.hrxq;
-	}
 	hrxq = mlx5_malloc(MLX5_MEM_ZERO, sizeof(*hrxq), 0, SOCKET_ID_ANY);
 	if (!hrxq) {
 		DRV_LOG(WARNING,
@@ -2362,7 +2485,6 @@ mlx5_drop_action_create(struct rte_eth_dev *dev)
 	ret = priv->obj_ops.drop_action_create(dev);
 	if (ret < 0)
 		goto error;
-	__atomic_store_n(&hrxq->refcnt, 1, __ATOMIC_RELAXED);
 	return hrxq;
 error:
 	if (hrxq) {
@@ -2386,14 +2508,14 @@ mlx5_drop_action_destroy(struct rte_eth_dev *dev)
 	struct mlx5_priv *priv = dev->data->dev_private;
 	struct mlx5_hrxq *hrxq = priv->drop_queue.hrxq;
 
-	if (__atomic_sub_fetch(&hrxq->refcnt, 1, __ATOMIC_RELAXED) == 0) {
-		priv->obj_ops.drop_action_destroy(dev);
-		mlx5_free(priv->drop_queue.rxq);
-		mlx5_free(hrxq->ind_table);
-		mlx5_free(hrxq);
-		priv->drop_queue.rxq = NULL;
-		priv->drop_queue.hrxq = NULL;
-	}
+	if (!priv->drop_queue.hrxq)
+		return;
+	priv->obj_ops.drop_action_destroy(dev);
+	mlx5_free(priv->drop_queue.rxq);
+	mlx5_free(hrxq->ind_table);
+	mlx5_free(hrxq);
+	priv->drop_queue.rxq = NULL;
+	priv->drop_queue.hrxq = NULL;
 }
 
 /**

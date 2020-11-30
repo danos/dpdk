@@ -454,14 +454,14 @@ F: app/test/test_eventdev.c
 F: examples/l3fwd/l3fwd_event*
 
 Eventdev Ethdev Rx Adapter API
-M: Nikhil Rao <nikhil.rao@intel.com>
+M: Jay Jayatheerthan <jay.jayatheerthan@intel.com>
 T: git://dpdk.org/next/dpdk-next-eventdev
 F: lib/librte_eventdev/*eth_rx_adapter*
 F: app/test/test_event_eth_rx_adapter.c
 F: doc/guides/prog_guide/event_ethernet_rx_adapter.rst
 
 Eventdev Ethdev Tx Adapter API
-M: Nikhil Rao <nikhil.rao@intel.com>
+M: Jay Jayatheerthan <jay.jayatheerthan@intel.com>
 T: git://dpdk.org/next/dpdk-next-eventdev
 F: lib/librte_eventdev/*eth_tx_adapter*
 F: app/test/test_event_eth_tx_adapter.c
@@ -785,10 +785,8 @@ M: Matan Azrad <matan@nvidia.com>
 F: drivers/net/vdev_netvsc/
 F: doc/guides/nics/vdev_netvsc.rst
 
-Microsoft Hyper-V netvsc - EXPERIMENTAL
+Microsoft Hyper-V netvsc
 M: Stephen Hemminger <sthemmin@microsoft.com>
-M: K. Y. Srinivasan <kys@microsoft.com>
-M: Haiyang Zhang <haiyangz@microsoft.com>
 M: Long Li <longli@microsoft.com>
 F: drivers/net/netvsc/
 F: doc/guides/nics/netvsc.rst
@@ -1258,12 +1256,14 @@ F: drivers/raw/dpaa2_cmdif/
 F: doc/guides/rawdevs/dpaa2_cmdif.rst
 
 Marvell OCTEON TX2 DMA
-M: Satha Rao <skoteshwar@marvell.com>
+M: Radha Mohan Chintakuntla <radhac@marvell.com>
+M: Veerasenareddy Burru <vburru@marvell.com>
 F: drivers/raw/octeontx2_dma/
 F: doc/guides/rawdevs/octeontx2_dma.rst
 
 Marvell OCTEON TX2 EP
-M: Mahipal Challa <mchalla@marvell.com>
+M: Radha Mohan Chintakuntla <radhac@marvell.com>
+M: Veerasenareddy Burru <vburru@marvell.com>
 F: drivers/raw/octeontx2_ep/
 F: doc/guides/rawdevs/octeontx2_ep.rst
 

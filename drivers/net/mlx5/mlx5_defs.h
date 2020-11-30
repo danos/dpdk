@@ -50,7 +50,7 @@
 
 /* Switch port ID parameters for bonding configurations. */
 #define MLX5_PORT_ID_BONDING_PF_MASK 0xf
-#define MLX5_PORT_ID_BONDING_PF_SHIFT 0xf
+#define MLX5_PORT_ID_BONDING_PF_SHIFT 12
 
 /* Alarm timeout. */
 #define MLX5_ALARM_TIMEOUT_US 100000
@@ -203,14 +203,5 @@
 #ifndef HAVE_STATIC_ASSERT
 #define static_assert _Static_assert
 #endif
-
-/*
- * Defines the amount of retries to allocate the first UAR in the page.
- * OFED 5.0.x and Upstream rdma_core before v29 returned the NULL as
- * UAR base address if UAR was not the first object in the UAR page.
- * It caused the PMD failure and we should try to get another UAR
- * till we get the first one with non-NULL base address returned.
- */
-#define MLX5_ALLOC_UAR_RETRY 32
 
 #endif /* RTE_PMD_MLX5_DEFS_H_ */

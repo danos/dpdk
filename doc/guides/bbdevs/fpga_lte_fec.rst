@@ -81,7 +81,7 @@ Bind PF UIO driver(s)
 Install the DPDK igb_uio driver, bind it with the PF PCI device ID and use
 ``lspci`` to confirm the PF device is under use by ``igb_uio`` DPDK UIO driver.
 
-The igb_uio driver may be bound to the PF PCI device using one of three methods:
+The igb_uio driver may be bound to the PF PCI device using one of two methods:
 
 
 1. PCI functions (physical or virtual, depending on the use case) can be bound to
@@ -102,20 +102,6 @@ the UIO driver by repeating this command for every function.
   ./usertools/dpdk-devbind.py -b igb_uio 0000:06:00.0
 
 where the PCI device ID (example: 0000:06:00.0) is obtained using lspci -vd1172:
-
-
-3. A third way to bind is to use ``dpdk-setup.sh`` tool
-
-.. code-block:: console
-
-  cd <dpdk-top-level-directory>
-  ./usertools/dpdk-setup.sh
-
-  select 'Bind Ethernet/Crypto/Baseband device to IGB UIO module'
-  or
-  select 'Bind Ethernet/Crypto/Baseband device to VFIO module' depending on driver required
-  enter PCI device ID
-  select 'Display current Ethernet/Crypto/Baseband device settings' to confirm binding
 
 
 In the same way the FPGA LTE FEC PF can be bound with vfio, but vfio driver does not
@@ -305,3 +291,22 @@ of these tests will depend on the FPGA LTE FEC capabilities:
    - ``turbo_enc_c2_k5952_r0_e17868_crc24b.data``
    - ``turbo_enc_c3_k4800_r2_e14412_crc24b.data``
    - ``turbo_enc_c4_k4800_r2_e14412_crc24b.data``
+
+
+Alternate Baseband Device configuration tool
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On top of the embedded configuration feature supported in test-bbdev using "- -init-device"
+option, there is also a tool available to perform that device configuration using a companion
+application.
+The ``pf_bb_config`` application notably enables then to run bbdev-test from the VF
+and not only limited to the PF as captured above.
+
+See for more details: https://github.com/intel/pf-bb-config
+
+Specifically for the BBDEV FPGA LTE FEC PMD, the command below can be used:
+
+.. code-block:: console
+
+  ./pf_bb_config FPGA_LTE -c fpga_lte/fpga_lte_config_vf.cfg
+  ./test-bbdev.py -e="-c 0xff0 -a${VF_PCI_ADDR}" -c validation -n 64 -b 32 -l 1 -v ./turbo_dec_default.data

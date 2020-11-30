@@ -1247,7 +1247,6 @@ flow_verbs_validate(struct rte_eth_dev *dev,
 	uint64_t last_item = 0;
 	uint8_t next_protocol = 0xff;
 	uint16_t ether_type = 0;
-	char errstr[32];
 
 	if (items == NULL)
 		return -1;
@@ -1398,12 +1397,16 @@ flow_verbs_validate(struct rte_eth_dev *dev,
 				return ret;
 			last_item = MLX5_FLOW_LAYER_MPLS;
 			break;
-		default:
-			snprintf(errstr, sizeof(errstr), "item type %d not supported",
-				 items->type);
+		case RTE_FLOW_ITEM_TYPE_ICMP:
+		case RTE_FLOW_ITEM_TYPE_ICMP6:
 			return rte_flow_error_set(error, ENOTSUP,
 						  RTE_FLOW_ERROR_TYPE_ITEM,
-						  NULL, errstr);
+						  NULL, "ICMP/ICMP6 "
+						  "item not supported");
+		default:
+			return rte_flow_error_set(error, ENOTSUP,
+						  RTE_FLOW_ERROR_TYPE_ITEM,
+						  NULL, "item not supported");
 		}
 		item_flags |= last_item;
 	}
@@ -1698,10 +1701,9 @@ flow_verbs_translate(struct rte_eth_dev *dev,
 	struct mlx5_priv *priv = dev->data->dev_private;
 	struct mlx5_flow_workspace *wks = mlx5_flow_get_thread_workspace();
 	struct mlx5_flow_rss_desc *rss_desc;
-	char errstr[32];
 
 	MLX5_ASSERT(wks);
-	rss_desc = &wks->rss_desc[!!wks->flow_nested_idx];
+	rss_desc = &wks->rss_desc;
 	if (priority == MLX5_FLOW_PRIO_RSVD)
 		priority = priv->config.flow_prio - 1;
 	for (; actions->type != RTE_FLOW_ACTION_TYPE_END; actions++) {
@@ -1846,11 +1848,9 @@ flow_verbs_translate(struct rte_eth_dev *dev,
 			item_flags |= MLX5_FLOW_LAYER_MPLS;
 			break;
 		default:
-			snprintf(errstr, sizeof(errstr), "item type %d not supported",
-				 items->type);
 			return rte_flow_error_set(error, ENOTSUP,
 						  RTE_FLOW_ERROR_TYPE_ITEM,
-						  NULL, errstr);
+						  NULL, "item not supported");
 		}
 	}
 	dev_flow->handle->layers = item_flags;
@@ -1956,7 +1956,7 @@ flow_verbs_apply(struct rte_eth_dev *dev, struct rte_flow *flow,
 	struct mlx5_flow_workspace *wks = mlx5_flow_get_thread_workspace();
 
 	MLX5_ASSERT(wks);
-	for (idx = wks->flow_idx - 1; idx >= wks->flow_nested_idx; idx--) {
+	for (idx = wks->flow_idx - 1; idx >= 0; idx--) {
 		dev_flow = &wks->flows[idx];
 		handle = dev_flow->handle;
 		if (handle->fate_action == MLX5_FLOW_FATE_DROP) {
@@ -1964,15 +1964,14 @@ flow_verbs_apply(struct rte_eth_dev *dev, struct rte_flow *flow,
 			hrxq = priv->drop_queue.hrxq;
 		} else {
 			uint32_t hrxq_idx;
-			struct mlx5_flow_rss_desc *rss_desc =
-				&wks->rss_desc[!!wks->flow_nested_idx];
+			struct mlx5_flow_rss_desc *rss_desc = &wks->rss_desc;
 
 			MLX5_ASSERT(rss_desc->queue_num);
 			rss_desc->key_len = MLX5_RSS_HASH_KEY_LEN;
 			rss_desc->hash_fields = dev_flow->hash_fields;
 			rss_desc->tunnel = !!(handle->layers &
 					      MLX5_FLOW_LAYER_TUNNEL);
-			rss_desc->standalone = false;
+			rss_desc->shared_rss = 0;
 			hrxq_idx = mlx5_hrxq_get(dev, rss_desc);
 			hrxq = mlx5_ipool_get(priv->sh->ipool[MLX5_IPOOL_HRXQ],
 					      hrxq_idx);

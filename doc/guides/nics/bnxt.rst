@@ -25,30 +25,6 @@ device memory to userspace, registering interrupts, etc.
 VFIO is more secure than UIO, relying on IOMMU protection.
 UIO requires the IOMMU disabled or configured to pass-through mode.
 
-Operating Systems supported:
-
-* Red Hat Enterprise Linux release 8.1 (Ootpa)
-* Red Hat Enterprise Linux release 8.0 (Ootpa)
-* Red Hat Enterprise Linux Server release 7.7 (Maipo)
-* Red Hat Enterprise Linux Server release 7.6 (Maipo)
-* Red Hat Enterprise Linux Server release 7.5 (Maipo)
-* Red Hat Enterprise Linux Server release 7.4 (Maipo)
-* Red Hat Enterprise Linux Server release 7.3 (Maipo)
-* Red Hat Enterprise Linux Server release 7.2 (Maipo)
-* CentOS Linux release 8.0
-* CentOS Linux release 7.7
-* CentOS Linux release 7.6.1810
-* CentOS Linux release 7.5.1804
-* CentOS Linux release 7.4.1708
-* Fedora 31
-* FreeBSD 12.1
-* Suse 15SP1
-* Ubuntu 19.04
-* Ubuntu 18.04
-* Ubuntu 16.10
-* Ubuntu 16.04
-* Ubuntu 14.04
-
 The BNXT PMD supports operating with:
 
 * Linux vfio-pci
@@ -258,8 +234,8 @@ The BNXT PMD supports hardware-based packet filtering:
 Unicast MAC Filter
 ^^^^^^^^^^^^^^^^^^
 
-The application adds (or removes) MAC addresses to enable (or disable)
-whitelist filtering to accept packets.
+The application can add (or remove) MAC addresses to enable (or disable)
+filtering on MAC address used to accept packets.
 
 .. code-block:: console
 
@@ -269,8 +245,8 @@ whitelist filtering to accept packets.
 Multicast MAC Filter
 ^^^^^^^^^^^^^^^^^^^^
 
-Application adds (or removes) Multicast addresses to enable (or disable)
-whitelist filtering to accept packets.
+The application can add (or remove) Multicast addresses that enable (or disable)
+filtering on multicast MAC address used to accept packets.
 
 .. code-block:: console
 
@@ -278,7 +254,7 @@ whitelist filtering to accept packets.
     testpmd> mcast_addr (add|remove) (port_id) (XX:XX:XX:XX:XX:XX)
 
 Application adds (or removes) Multicast addresses to enable (or disable)
-whitelist filtering to accept packets.
+allowlist filtering to accept packets.
 
 Note that the BNXT PMD supports up to 16 MC MAC filters. if the user adds more
 than 16 MC MACs, the BNXT PMD puts the port into the Allmulticast mode.
@@ -683,7 +659,9 @@ The feature uses a newly implemented control-plane firmware interface which
 optimizes flow insertions and deletions.
 
 This is a tech preview feature, and is disabled by default. It can be enabled
-using bnxt devargs. For ex: "-w 0000:0d:00.0,host-based-truflow=1”.
+using bnxt devargs. For ex: "-a 0000:0d:00.0,host-based-truflow=1”.
+
+This feature is currently supported on Whitney+ and Stingray devices.
 
 Notes
 -----
@@ -745,7 +723,7 @@ when the PMD is initialized on a PF or trusted-VF. The user can specify the list
 of VF IDs of the VFs for which the representors are needed by using the
 ``devargs`` option ``representor``.::
 
-  -w DBDF,representor=[0,1,4]
+  -a DBDF,representor=[0,1,4]
 
 Note that currently hot-plugging of representor ports is not supported so all
 the required representors must be specified on the creation of the PF or the
@@ -770,12 +748,12 @@ same host domain, additional dev args have been added to the PMD.
 
 The sample command line with the new ``devargs`` looks like this::
 
-  -w 0000:06:02.0,host-based-truflow=1,representor=[1],rep-based-pf=8,\
+  -a 0000:06:02.0,host-based-truflow=1,representor=[1],rep-based-pf=8,\
 	rep-is-pf=1,rep-q-r2f=1,rep-fc-r2f=0,rep-q-f2r=1,rep-fc-f2r=1
 
 .. code-block:: console
 
-	testpmd -l1-4 -n2 -w 0008:01:00.0,host-based-truflow=1,\
+	testpmd -l1-4 -n2 -a 0008:01:00.0,host-based-truflow=1,\
 	representor=[0], rep-based-pf=8,rep-is-pf=0,rep-q-r2f=1,rep-fc-r2f=1,\
 	rep-q-f2r=0,rep-fc-f2r=1 --log-level="pmd.*",8 -- -i --rxq=3 --txq=3
 
@@ -913,6 +891,9 @@ is stopped.
 
 Note that TX (or RX) vector mode can be enabled independently from RX (or TX)
 vector mode.
+
+Also vector mode is allowed when jumbo is enabled
+as long as the MTU setting does not require scattered Rx.
 
 Appendix
 --------

@@ -154,6 +154,7 @@ txq_sync_cq(struct mlx5_txq_data *txq)
 	/* Resync CQE and WQE (WQ in reset state). */
 	rte_io_wmb();
 	*txq->cq_db = rte_cpu_to_be_32(txq->cq_ci);
+	txq->cq_pi = txq->cq_ci;
 	rte_io_wmb();
 }
 
@@ -388,7 +389,6 @@ mlx5_tx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 	DRV_LOG(DEBUG, "port %u adding Tx queue %u to list",
 		dev->data->port_id, idx);
 	(*priv->txqs)[idx] = &txq_ctrl->txq;
-	dev->data->tx_queue_state[idx] = RTE_ETH_QUEUE_STATE_STARTED;
 	return 0;
 }
 
@@ -1235,7 +1235,7 @@ mlx5_txq_release(struct rte_eth_dev *dev, uint16_t idx)
 	if (!(*priv->txqs)[idx])
 		return 0;
 	txq_ctrl = container_of((*priv->txqs)[idx], struct mlx5_txq_ctrl, txq);
-	if (__atomic_sub_fetch(&txq_ctrl->refcnt, 1, __ATOMIC_RELAXED) != 0)
+	if (__atomic_sub_fetch(&txq_ctrl->refcnt, 1, __ATOMIC_RELAXED) > 1)
 		return 1;
 	if (txq_ctrl->obj) {
 		priv->obj_ops.txq_obj_release(txq_ctrl->obj);
@@ -1249,8 +1249,8 @@ mlx5_txq_release(struct rte_eth_dev *dev, uint16_t idx)
 			txq_ctrl->txq.fcqs = NULL;
 		}
 		txq_free_elts(txq_ctrl);
+		dev->data->tx_queue_state[idx] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
-	dev->data->tx_queue_state[idx] = RTE_ETH_QUEUE_STATE_STOPPED;
 	if (!__atomic_load_n(&txq_ctrl->refcnt, __ATOMIC_RELAXED)) {
 		if (txq_ctrl->type == MLX5_TXQ_TYPE_STANDARD)
 			mlx5_mr_btree_free(&txq_ctrl->txq.mr_ctrl.cache_bh);

@@ -186,7 +186,7 @@ static pthread_mutex_t mlx5_dev_ctx_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 #ifdef HAVE_IBV_FLOW_DV_SUPPORT
-	{
+	[MLX5_IPOOL_DECAP_ENCAP] = {
 		.size = sizeof(struct mlx5_flow_dv_encap_decap_resource),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -197,7 +197,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_encap_decap_ipool",
 	},
-	{
+	[MLX5_IPOOL_PUSH_VLAN] = {
 		.size = sizeof(struct mlx5_flow_dv_push_vlan_action_resource),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -208,7 +208,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_push_vlan_ipool",
 	},
-	{
+	[MLX5_IPOOL_TAG] = {
 		.size = sizeof(struct mlx5_flow_dv_tag_resource),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -219,7 +219,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_tag_ipool",
 	},
-	{
+	[MLX5_IPOOL_PORT_ID] = {
 		.size = sizeof(struct mlx5_flow_dv_port_id_action_resource),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -230,7 +230,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_port_id_ipool",
 	},
-	{
+	[MLX5_IPOOL_JUMP] = {
 		.size = sizeof(struct mlx5_flow_tbl_data_entry),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -241,7 +241,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_jump_ipool",
 	},
-	{
+	[MLX5_IPOOL_SAMPLE] = {
 		.size = sizeof(struct mlx5_flow_dv_sample_resource),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -252,7 +252,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_sample_ipool",
 	},
-	{
+	[MLX5_IPOOL_DEST_ARRAY] = {
 		.size = sizeof(struct mlx5_flow_dv_dest_array_resource),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -263,8 +263,19 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_dest_array_ipool",
 	},
+	[MLX5_IPOOL_TUNNEL_ID] = {
+		.size = sizeof(struct mlx5_flow_tunnel),
+		.need_lock = 1,
+		.release_mem_en = 1,
+		.type = "mlx5_tunnel_offload",
+	},
+	[MLX5_IPOOL_TNL_TBL_ID] = {
+		.size = 0,
+		.need_lock = 1,
+		.type = "mlx5_flow_tnl_tbl_ipool",
+	},
 #endif
-	{
+	[MLX5_IPOOL_MTR] = {
 		.size = sizeof(struct mlx5_flow_meter),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -275,7 +286,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_meter_ipool",
 	},
-	{
+	[MLX5_IPOOL_MCP] = {
 		.size = sizeof(struct mlx5_flow_mreg_copy_resource),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -286,7 +297,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_mcp_ipool",
 	},
-	{
+	[MLX5_IPOOL_HRXQ] = {
 		.size = (sizeof(struct mlx5_hrxq) + MLX5_RSS_HASH_KEY_LEN),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -297,7 +308,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_hrxq_ipool",
 	},
-	{
+	[MLX5_IPOOL_MLX5_FLOW] = {
 		/*
 		 * MLX5_IPOOL_MLX5_FLOW size varies for DV and VERBS flows.
 		 * It set in run time according to PCI function configuration.
@@ -312,7 +323,7 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_flow_handle_ipool",
 	},
-	{
+	[MLX5_IPOOL_RTE_FLOW] = {
 		.size = sizeof(struct rte_flow),
 		.trunk_size = 4096,
 		.need_lock = 1,
@@ -321,22 +332,12 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "rte_flow_ipool",
 	},
-	{
+	[MLX5_IPOOL_RSS_EXPANTION_FLOW_ID] = {
 		.size = 0,
 		.need_lock = 1,
 		.type = "mlx5_flow_rss_id_ipool",
 	},
-	{
-		.size = 0,
-		.need_lock = 1,
-		.type = "mlx5_flow_tnl_flow_ipool",
-	},
-	{
-		.size = 0,
-		.need_lock = 1,
-		.type = "mlx5_flow_tnl_tbl_ipool",
-	},
-	{
+	[MLX5_IPOOL_RSS_SHARED_ACTIONS] = {
 		.size = sizeof(struct mlx5_shared_action_rss),
 		.trunk_size = 64,
 		.grow_trunk = 3,
@@ -347,7 +348,6 @@ static const struct mlx5_indexed_pool_config mlx5_ipool_cfg[] = {
 		.free = mlx5_free,
 		.type = "mlx5_shared_action_rss",
 	},
-
 };
 
 
@@ -419,7 +419,7 @@ mlx5_flow_aso_age_mng_close(struct mlx5_dev_ctx_shared *sh)
 		}
 		mlx5_free(sh->aso_age_mng->pools);
 	}
-	memset(&sh->aso_age_mng, 0, sizeof(sh->aso_age_mng));
+	mlx5_free(sh->aso_age_mng);
 }
 
 /**
@@ -915,6 +915,7 @@ mlx5_alloc_shared_dev_ctx(const struct mlx5_dev_spawn_data *spawn,
 		goto error;
 	}
 	sh->refcnt = 1;
+	sh->bond_dev = UINT16_MAX;
 	sh->max_port = spawn->max_port;
 	strncpy(sh->ibdev_name, mlx5_os_get_ctx_device_name(sh->ctx),
 		sizeof(sh->ibdev_name) - 1);
@@ -2034,7 +2035,7 @@ static const struct rte_pci_id mlx5_pci_id_map[] = {
 	},
 	{
 		RTE_PCI_DEVICE(PCI_VENDOR_ID_MELLANOX,
-				PCI_DEVICE_ID_MELLANOX_CONNECTX6DXVF)
+				PCI_DEVICE_ID_MELLANOX_CONNECTXVF)
 	},
 	{
 		RTE_PCI_DEVICE(PCI_VENDOR_ID_MELLANOX,

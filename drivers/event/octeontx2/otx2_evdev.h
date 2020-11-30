@@ -79,6 +79,7 @@
 #define SSOW_LF_GWS_OP_GWC_INVAL            (0xe00ull)
 
 #define OTX2_SSOW_GET_BASE_ADDR(_GW)        ((_GW) - SSOW_LF_GWS_OP_GET_WORK)
+#define OTX2_SSOW_TT_FROM_TAG(x)	    (((x) >> 32) & SSO_TT_EMPTY)
 
 #define NSEC2USEC(__ns)			((__ns) / 1E3)
 #define USEC2NSEC(__us)                 ((__us) * 1E3)
@@ -147,7 +148,6 @@ struct otx2_sso_evdev {
 	uint64_t *timer_adptr_sz;
 	/* Dev args */
 	uint8_t dual_ws;
-	uint8_t selftest;
 	uint32_t xae_cnt;
 	uint8_t qos_queue_cnt;
 	struct otx2_sso_qos *qos_parse_data;
@@ -215,6 +215,18 @@ static inline struct otx2_sso_evdev *
 sso_pmd_priv(const struct rte_eventdev *event_dev)
 {
 	return event_dev->data->dev_private;
+}
+
+struct otx2_ssogws_cookie {
+	const struct rte_eventdev *event_dev;
+	bool configured;
+};
+
+static inline struct otx2_ssogws_cookie *
+ssogws_get_cookie(void *ws)
+{
+	return (struct otx2_ssogws_cookie *)
+		((uint8_t *)ws - RTE_CACHE_LINE_SIZE);
 }
 
 static const union mbuf_initializer mbuf_init = {

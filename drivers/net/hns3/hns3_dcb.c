@@ -50,13 +50,13 @@ hns3_shaper_para_calc(struct hns3_hw *hw, uint32_t ir, uint8_t shaper_level,
 	/* Calc tick */
 	if (shaper_level >= HNS3_SHAPER_LVL_CNT) {
 		hns3_err(hw,
-			 "shaper_level(%d) is greater than HNS3_SHAPER_LVL_CNT(%d)",
+			 "shaper_level(%u) is greater than HNS3_SHAPER_LVL_CNT(%d)",
 			 shaper_level, HNS3_SHAPER_LVL_CNT);
 		return -EINVAL;
 	}
 
 	if (ir > hw->max_tm_rate) {
-		hns3_err(hw, "rate(%d) exceeds the max rate(%d) driver "
+		hns3_err(hw, "rate(%u) exceeds the max rate(%u) driver "
 			 "supported.", ir, hw->max_tm_rate);
 		return -EINVAL;
 	}
@@ -1138,7 +1138,7 @@ hns3_pause_param_setup_hw(struct hns3_hw *hw, uint16_t pause_time)
 		 pause_time <= PAUSE_TIME_DIV_BY * HNS3_DEFAULT_PAUSE_TRANS_GAP)
 		pause_trans_gap = pause_time / PAUSE_TIME_DIV_BY - 1;
 	else {
-		hns3_warn(hw, "pause_time(%d) is adjusted to 4", pause_time);
+		hns3_warn(hw, "pause_time(%u) is adjusted to 4", pause_time);
 		pause_time = PAUSE_TIME_MIN_VALUE;
 		pause_trans_gap = pause_time / PAUSE_TIME_DIV_BY - 1;
 	}
@@ -1351,6 +1351,8 @@ hns3_dcb_cfg_validate(struct hns3_adapter *hns, uint8_t *tc, bool *changed)
 {
 	struct rte_eth_dcb_rx_conf *dcb_rx_conf;
 	struct hns3_hw *hw = &hns->hw;
+	uint16_t nb_rx_q = hw->data->nb_rx_queues;
+	uint16_t nb_tx_q = hw->data->nb_tx_queues;
 	uint8_t max_tc = 0;
 	uint8_t pfc_en;
 	int i;
@@ -1375,6 +1377,10 @@ hns3_dcb_cfg_validate(struct hns3_adapter *hns, uint8_t *tc, bool *changed)
 		*changed = true;
 	pfc_en = RTE_LEN2MASK((uint8_t)dcb_rx_conf->nb_tcs, uint8_t);
 	if (hw->dcb_info.pfc_en != pfc_en)
+		*changed = true;
+
+	/* tx/rx queue number is reconfigured. */
+	if (nb_rx_q != hw->used_rx_queues || nb_tx_q != hw->used_tx_queues)
 		*changed = true;
 }
 
@@ -1449,13 +1455,13 @@ hns3_dcb_info_update(struct hns3_adapter *hns, uint8_t num_tc)
 		return -EINVAL;
 
 	if (nb_rx_q < num_tc) {
-		hns3_err(hw, "number of Rx queues(%d) is less than tcs(%d).",
+		hns3_err(hw, "number of Rx queues(%u) is less than tcs(%u).",
 			 nb_rx_q, num_tc);
 		return -EINVAL;
 	}
 
 	if (nb_tx_q < num_tc) {
-		hns3_err(hw, "number of Tx queues(%d) is less than tcs(%d).",
+		hns3_err(hw, "number of Tx queues(%u) is less than tcs(%u).",
 			 nb_tx_q, num_tc);
 		return -EINVAL;
 	}
