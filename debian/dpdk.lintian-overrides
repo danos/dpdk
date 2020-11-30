@@ -1,6 +1,8 @@
 # upstream ships these, and changing them now would be backward incompatible
 dpdk: script-with-language-extension usr/bin/dpdk-devbind.py
+dpdk: script-with-language-extension usr/bin/dpdk-hugepages.py
 dpdk: script-with-language-extension usr/bin/dpdk-pmdinfo.py
 # those admin only helper tools only come with internal -h documentation
 dpdk: no-manual-page usr/bin/dpdk-devbind.py
+dpdk: no-manual-page usr/bin/dpdk-hugepages.py
 dpdk: no-manual-page usr/bin/dpdk-pmdinfo.py
