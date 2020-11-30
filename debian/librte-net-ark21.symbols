@@ -1,5 +1,5 @@
 librte_net_ark.so.21 librte-net-ark21 #MINVER#
- DPDK_21@DPDK_21 20.11~rc1
+ DPDK_21@DPDK_21 20.11
  EXPERIMENTAL@EXPERIMENTAL 20.11~rc3
  rte_pmd_ark_rx_userdata_dynfield_offset@EXPERIMENTAL 20.11~rc3
  rte_pmd_ark_tx_userdata_dynfield_offset@EXPERIMENTAL 20.11~rc3

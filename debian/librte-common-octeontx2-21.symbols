@@ -13,7 +13,7 @@ librte_common_octeontx2.so.21 librte-common-octeontx2-21 #MINVER#
  otx2_logtype_nix@INTERNAL 20.08
  otx2_logtype_npa@INTERNAL 20.08
  otx2_logtype_npc@INTERNAL 20.08
- otx2_logtype_ree@INTERNAL 20.11~rc1
+ otx2_logtype_ree@INTERNAL 20.11
  otx2_logtype_sso@INTERNAL 20.08
  otx2_logtype_tim@INTERNAL 20.08
  otx2_logtype_tm@INTERNAL 20.08

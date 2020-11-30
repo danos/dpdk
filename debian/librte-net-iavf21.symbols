@@ -1,5 +1,5 @@
 librte_net_iavf.so.21 librte-net-iavf21 #MINVER#
- DPDK_21@DPDK_21 20.11~rc1
+ DPDK_21@DPDK_21 20.11
  EXPERIMENTAL@EXPERIMENTAL 20.11~rc3
  rte_pmd_ifd_dynfield_proto_xtr_metadata_offs@EXPERIMENTAL 20.11~rc3
  rte_pmd_ifd_dynflag_proto_xtr_ip_offset_mask@EXPERIMENTAL 20.11~rc3
