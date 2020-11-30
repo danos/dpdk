@@ -1,6 +1,7 @@
 # admin only test tools, documentation only maintained on the web (if at all) by upstream
 dpdk-dev: no-manual-page usr/bin/dpdk-pdump
 dpdk-dev: no-manual-page usr/bin/dpdk-proc-info
+dpdk-dev: no-manual-page usr/bin/dpdk-telemetry.py
 dpdk-dev: no-manual-page usr/bin/dpdk-test
 dpdk-dev: no-manual-page usr/bin/dpdk-test-acl
 dpdk-dev: no-manual-page usr/bin/dpdk-test-bbdev
@@ -8,6 +9,11 @@ dpdk-dev: no-manual-page usr/bin/dpdk-test-cmdline
 dpdk-dev: no-manual-page usr/bin/dpdk-test-compress-perf
 dpdk-dev: no-manual-page usr/bin/dpdk-test-crypto-perf
 dpdk-dev: no-manual-page usr/bin/dpdk-test-eventdev
+dpdk-dev: no-manual-page usr/bin/dpdk-test-fib
+dpdk-dev: no-manual-page usr/bin/dpdk-test-flow-perf
 dpdk-dev: no-manual-page usr/bin/dpdk-test-pipeline
+dpdk-dev: no-manual-page usr/bin/dpdk-test-regex
 dpdk-dev: no-manual-page usr/bin/dpdk-test-sad
 dpdk-dev: no-manual-page usr/bin/dpdk-testpmd
+# upstream ships it as such, avoid overrides that create incompatibility between distros
+dpdk-dev: script-with-language-extension usr/bin/dpdk-telemetry.py
