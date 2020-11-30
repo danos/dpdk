@@ -19,37 +19,8 @@ Deprecation Notices
   ``NET``, ``CRYPTO``, ``VDPA``. The old macros are deprecated and will be
   removed in a future release.
 
-* meson: The minimum supported version of meson for configuring and building
-  DPDK will be increased to v0.47.1 (from 0.41) from DPDK 19.05 onwards. For
-  those users with a version earlier than 0.47.1, an updated copy of meson
-  can be got using the ``pip3`` tool (or ``python3 -m pip``) for downloading
-  python packages.
-
 * kvargs: The function ``rte_kvargs_process`` will get a new parameter
   for returning key match count. It will ease handling of no-match case.
-
-* eal: The terms blacklist and whitelist to describe devices used
-  by DPDK will be replaced in the 20.11 relase.
-  This will apply to command line arguments as well as macros.
-
-  The macro ``RTE_DEV_BLACKLISTED`` will be replaced with ``RTE_DEV_EXCLUDED``
-  and ``RTE_DEV_WHITELISTED`` will be replaced with ``RTE_DEV_INCLUDED``
-  ``RTE_BUS_SCAN_BLACKLIST`` and ``RTE_BUS_SCAN_WHITELIST`` will be
-  replaced with ``RTE_BUS_SCAN_EXCLUDED`` and ``RTE_BUS_SCAN_INCLUDED``
-  respectively. Likewise ``RTE_DEVTYPE_BLACKLISTED_PCI`` and
-  ``RTE_DEVTYPE_WHITELISTED_PCI`` will be replaced with
-  ``RTE_DEVTYPE_EXCLUDED`` and ``RTE_DEVTYPE_INCLUDED``.
-
-  The old macros will be marked as deprecated in 20.11 and any
-  usage will cause a compile warning. They will be removed in
-  a future release.
-
-  The command line arguments to ``rte_eal_init`` will change from
-  ``-b, --pci-blacklist`` to ``-x, --exclude`` and
-  ``-w, --pci-whitelist`` to ``-i, --include``.
-  The old command line arguments will continue to be accepted in 20.11
-  but will cause a runtime warning message. The old arguments will
-  be removed in a future release.
 
 * eal: The function ``rte_eal_remote_launch`` will return new error codes
   after read or write error on the pipe, instead of calling ``rte_panic``.
@@ -81,13 +52,6 @@ Deprecation Notices
   us extending existing enum/define.
   One solution can be using a fixed size array instead of ``.*MAX.*`` value.
 
-* mbuf: Some fields will be converted to dynamic API in DPDK 20.11
-  in order to reserve more space for the dynamic fields, as explained in
-  `this presentation <https://www.youtube.com/watch?v=Ttl6MlhmzWY>`_.
-  As a consequence, the layout of the ``struct rte_mbuf`` will be re-arranged,
-  avoiding impact on vectorized implementation of the driver datapaths,
-  while evaluating performance gains of a better use of the first cache line.
-
 * ethdev: The flow director API, including ``rte_eth_conf.fdir_conf`` field,
   and the related structures (``rte_fdir_*`` and ``rte_eth_fdir_*``),
   will be removed in DPDK 20.11.
@@ -100,6 +64,31 @@ Deprecation Notices
   In 19.11 PMDs will still update the field even when the offload is not
   enabled.
 
+* ethdev: ``uint32_t max_rx_pkt_len`` field of ``struct rte_eth_rxmode``, will be
+  replaced by a new ``uint32_t mtu`` field of ``struct rte_eth_conf`` in v21.11.
+  The new ``mtu`` field will be used to configure the initial device MTU via
+  ``rte_eth_dev_configure()`` API.
+  Later MTU can be changed by ``rte_eth_dev_set_mtu()`` API as done now.
+  The existing ``(struct rte_eth_dev)->data->mtu`` variable will be used to store
+  the configured ``mtu`` value,
+  and this new ``(struct rte_eth_dev)->data->dev_conf.mtu`` variable will
+  be used to store the user configuration request.
+  Unlike ``max_rx_pkt_len``, which was valid only when ``JUMBO_FRAME`` enabled,
+  ``mtu`` field will be always valid.
+  When ``mtu`` config is not provided by the application, default ``RTE_ETHER_MTU``
+  value will be used.
+  ``(struct rte_eth_dev)->data->mtu`` should be updated after MTU set successfully,
+  either by ``rte_eth_dev_configure()`` or ``rte_eth_dev_set_mtu()``.
+
+  An application may need to configure device for a specific Rx packet size, like for
+  cases ``DEV_RX_OFFLOAD_SCATTER`` is not supported and device received packet size
+  can't be bigger than Rx buffer size.
+  To cover these cases an application needs to know the device packet overhead to be
+  able to calculate the ``mtu`` corresponding to a Rx buffer size, for this
+  ``(struct rte_eth_dev_info).max_rx_pktlen`` will be kept,
+  the device packet overhead can be calculated as:
+  ``(struct rte_eth_dev_info).max_rx_pktlen - (struct rte_eth_dev_info).max_mtu``
+
 * ethdev: ``rx_descriptor_done`` dev_ops and ``rte_eth_rx_descriptor_done``
   will be removed in 21.11.
   Existing ``rte_eth_rx_descriptor_status`` and ``rte_eth_tx_descriptor_status``
@@ -111,12 +100,32 @@ Deprecation Notices
   as deprecated in DPDK 20.11, along with the associated macros ``ETH_MIRROR_*``.
   This API will be fully removed in DPDK 21.11.
 
+* ethdev: Attribute ``shared`` of the ``struct rte_flow_action_count``
+  is deprecated and will be removed in DPDK 21.11. Shared counters should
+  be managed using shared actions API (``rte_flow_shared_action_create`` etc).
+
+* ethdev: The flow API matching pattern structures, ``struct rte_flow_item_*``,
+  should start with relevant protocol header.
+  Some matching pattern structures implements this by duplicating protocol header
+  fields in the struct. To clarify the intention and to be sure protocol header
+  is intact, will replace those fields with relevant protocol header struct.
+  In v21.02 both individual protocol header fields and the protocol header struct
+  will be added as union, target is switch usage to the protocol header by time.
+  In v21.11 LTS, protocol header fields will be cleaned and only protocol header
+  struct will remain.
+
 * ethdev: Queue specific stats fields will be removed from ``struct rte_eth_stats``.
   Mentioned fields are: ``q_ipackets``, ``q_opackets``, ``q_ibytes``, ``q_obytes``,
   ``q_errors``.
   Instead queue stats will be received via xstats API. Current method support
   will be limited to maximum 256 queues.
   Also compile time flag ``RTE_ETHDEV_QUEUE_STAT_CNTRS`` will be removed.
+
+* Broadcom bnxt PMD: NetXtreme devices belonging to the ``BCM573xx and
+  BCM5740x`` families will no longer be supported as of DPDK 21.02.
+  Specifically the support for the following Broadcom PCI IDs will be removed
+  from the release: ``0x16c8, 0x16c9, 0x16ca, 0x16ce, 0x16cf, 0x16df,``
+  ``0x16d0, 0x16d1, 0x16d2, 0x16d4, 0x16d5, 0x16e7, 0x16e8, 0x16e9``.
 
 * sched: To allow more traffic classes, flexible mapping of pipe queues to
   traffic classes, and subport level configuration of pipes and queues
@@ -130,8 +139,3 @@ Deprecation Notices
 * cmdline: ``cmdline`` structure will be made opaque to hide platform-specific
   content. On Linux and FreeBSD, supported prior to DPDK 20.11,
   original structure will be kept until DPDK 21.11.
-
-* dpdk-setup.sh: This old script relies on deprecated stuff, and especially
-  ``make``. Given environments are too much variables for such a simple script,
-  it will be removed in DPDK 20.11.
-  Some useful parts may be converted into specific scripts.

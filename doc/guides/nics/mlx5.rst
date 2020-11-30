@@ -9,9 +9,10 @@ MLX5 poll mode driver
 
 The MLX5 poll mode driver library (**librte_net_mlx5**) provides support
 for **Mellanox ConnectX-4**, **Mellanox ConnectX-4 Lx** , **Mellanox
-ConnectX-5**, **Mellanox ConnectX-6**, **Mellanox ConnectX-6 Dx** and
-**Mellanox BlueField** families of 10/25/40/50/100/200 Gb/s adapters
-as well as their virtual functions (VF) in SR-IOV context.
+ConnectX-5**, **Mellanox ConnectX-6**, **Mellanox ConnectX-6 Dx**, **Mellanox
+ConnectX-6 Lx**, **Mellanox BlueField** and **Mellanox BlueField-2** families
+of 10/25/40/50/100/200 Gb/s adapters as well as their virtual functions (VF)
+in SR-IOV context.
 
 Information and documentation about these adapters can be found on the
 `Mellanox website <http://www.mellanox.com>`__. Help is also provided by the
@@ -316,7 +317,7 @@ Limitations
 - CRC:
 
   - ``DEV_RX_OFFLOAD_KEEP_CRC`` cannot be supported with decapsulation
-    for some NICs (such as ConnectX-6 Dx and BlueField 2).
+    for some NICs (such as ConnectX-6 Dx, ConnectX-6 Lx, and BlueField-2).
     The capability bit ``scatter_fcs_w_decap_disable`` shows NIC support.
 
 - Sample flow:
@@ -442,10 +443,10 @@ Driver options
 
   Supported on:
 
-  - x86_64 with ConnectX-4, ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx
-    and BlueField.
-  - POWER9 and ARMv8 with ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx
-    and BlueField.
+  - x86_64 with ConnectX-4, ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx,
+    ConnectX-6 Lx, BlueField and BlueField-2.
+  - POWER9 and ARMv8 with ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx,
+    ConnectX-6 Lx, BlueField and BlueField-2.
 
 - ``rxq_cqe_pad_en`` parameter [int]
 
@@ -475,10 +476,10 @@ Driver options
 
   Supported on:
 
-  - x86_64 with ConnectX-4, ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx
-    and BlueField.
-  - POWER8 and ARMv8 with ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx
-    and BlueField.
+  - x86_64 with ConnectX-4, ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx,
+    ConnectX-6 Lx, BlueField and BlueField-2.
+  - POWER8 and ARMv8 with ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx,
+    ConnectX-6 Lx, BlueField and BlueField-2.
 
 - ``mprq_en`` parameter [int]
 
@@ -683,11 +684,13 @@ Driver options
 - ``txq_mpw_en`` parameter [int]
 
   A nonzero value enables Enhanced Multi-Packet Write (eMPW) for ConnectX-5,
-  ConnectX-6, ConnectX-6 Dx and BlueField. eMPW allows the TX burst function to pack
-  up multiple packets in a single descriptor session in order to save PCI bandwidth
-  and improve performance at the cost of a slightly higher CPU usage. When
-  ``txq_inline_mpw`` is set along with ``txq_mpw_en``, TX burst function copies
-  entire packet data on to TX descriptor instead of including pointer of packet.
+  ConnectX-6, ConnectX-6 Dx, ConnectX-6 Lx, BlueField, BlueField-2.
+  eMPW allows the Tx burst function to pack up multiple packets
+  in a single descriptor session in order to save PCI bandwidth
+  and improve performance at the cost of a slightly higher CPU usage.
+  When ``txq_inline_mpw`` is set along with ``txq_mpw_en``,
+  Tx burst function copies entire packet data on to Tx descriptor
+  instead of including pointer of packet.
 
   The Enhanced Multi-Packet Write feature is enabled by default if NIC supports
   it, can be disabled by explicit specifying 0 value for ``txq_mpw_en`` option.
@@ -749,9 +752,10 @@ Driver options
 
 - ``tx_vec_en`` parameter [int]
 
-  A nonzero value enables Tx vector on ConnectX-5, ConnectX-6, ConnectX-6 Dx
-  and BlueField NICs if the number of global Tx queues on the port is less than
-  ``txqs_max_vec``. The parameter is deprecated and ignored.
+  A nonzero value enables Tx vector on ConnectX-5, ConnectX-6, ConnectX-6 Dx,
+  ConnectX-6 Lx, BlueField and BlueField-2 NICs
+  if the number of global Tx queues on the port is less than ``txqs_max_vec``.
+  The parameter is deprecated and ignored.
 
 - ``rx_vec_en`` parameter [int]
 
@@ -1154,7 +1158,9 @@ The following Mellanox device families are supported by the same mlx5 driver:
   - ConnectX-5 Ex
   - ConnectX-6
   - ConnectX-6 Dx
+  - ConnectX-6 Lx
   - BlueField
+  - BlueField-2
 
 Below are detailed device names:
 
@@ -1183,6 +1189,7 @@ Below are detailed device names:
 * Mellanox\ |reg| ConnectX\ |reg|-6 200G MCX654106A-HCAT (2x200G)
 * Mellanox\ |reg| ConnectX\ |reg|-6 Dx EN 100G MCX623106AN-CDAT (2x100G)
 * Mellanox\ |reg| ConnectX\ |reg|-6 Dx EN 200G MCX623105AN-VDAT (1x200G)
+* Mellanox\ |reg| ConnectX\ |reg|-6 Lx EN 25G MCX631102AN-ADAT (2x25G)
 
 Quick Start Guide on OFED/EN
 ----------------------------
@@ -1345,6 +1352,29 @@ Performance tuning
    - Configure per-lcore cache when creating Mempools for packet buffer.
    - Refrain from dynamically allocating/freeing memory in run-time.
 
+Rx burst functions
+------------------
+
+There are multiple Rx burst functions with different advantages and limitations.
+
+.. table:: Rx burst functions
+
+   +-------------------+------------------------+---------+-----------------+------+-------+
+   || Function Name    || Enabler               || Scatter|| Error Recovery || CQE || Large|
+   |                   |                        |         |                 || comp|| MTU  |
+   +===================+========================+=========+=================+======+=======+
+   | rx_burst          | rx_vec_en=0            |   Yes   | Yes             |  Yes |  Yes  |
+   +-------------------+------------------------+---------+-----------------+------+-------+
+   | rx_burst_vec      | rx_vec_en=1 (default)  |   No    | if CQE comp off |  Yes |  No   |
+   +-------------------+------------------------+---------+-----------------+------+-------+
+   | rx_burst_mprq     || mprq_en=1             |   No    | Yes             |  Yes |  Yes  |
+   |                   || RxQs >= rxqs_min_mprq |         |                 |      |       |
+   +-------------------+------------------------+---------+-----------------+------+-------+
+   | rx_burst_mprq_vec || rx_vec_en=1 (default) |   No    | if CQE comp off |  Yes |  Yes  |
+   |                   || mprq_en=1             |         |                 |      |       |
+   |                   || RxQs >= rxqs_min_mprq |         |                 |      |       |
+   +-------------------+------------------------+---------+-----------------+------+-------+
+
 .. _mlx5_offloads_support:
 
 Supported hardware offloads
@@ -1352,15 +1382,16 @@ Supported hardware offloads
 
 .. table:: Minimal SW/HW versions for queue offloads
 
-   ============== ===== ===== ========= ===== ========== ==========
+   ============== ===== ===== ========= ===== ========== =============
    Offload        DPDK  Linux rdma-core OFED   firmware   hardware
-   ============== ===== ===== ========= ===== ========== ==========
+   ============== ===== ===== ========= ===== ========== =============
    common base    17.11  4.14    16     4.2-1 12.21.1000 ConnectX-4
    checksums      17.11  4.14    16     4.2-1 12.21.1000 ConnectX-4
    Rx timestamp   17.11  4.14    16     4.2-1 12.21.1000 ConnectX-4
    TSO            17.11  4.14    16     4.2-1 12.21.1000 ConnectX-4
    LRO            19.08  N/A     N/A    4.6-4 16.25.6406 ConnectX-5
-   ============== ===== ===== ========= ===== ========== ==========
+   Buffer Split   20.11  N/A     N/A    5.1-2 22.28.2006 ConnectX-6 Dx
+   ============== ===== ===== ========= ===== ========== =============
 
 .. table:: Minimal SW/HW versions for rte_flow offloads
 
@@ -1382,6 +1413,17 @@ Supported hardware offloads
    |                       | |               | | rdma-core 23  |
    |                       | |               | | ConnectX-4    |
    +-----------------------+-----------------+-----------------+
+   | RSS shared action     | |               | | DPDK 20.11    |
+   |                       | |     N/A       | | OFED 5.2      |
+   |                       | |               | | rdma-core 33  |
+   |                       | |               | | ConnectX-5    |
+   +-----------------------+-----------------+-----------------+
+   | | VLAN                | | DPDK 19.11    | | DPDK 19.11    |
+   | | (of_pop_vlan /      | | OFED 4.7-1    | | OFED 4.7-1    |
+   | | of_push_vlan /      | | ConnectX-5    | | ConnectX-5    |
+   | | of_set_vlan_pcp /   | |               | |               |
+   | | of_set_vlan_vid)    | |               | |               |
+   +-----------------------+-----------------+-----------------+
    | Encapsulation         | | DPDK 19.05    | | DPDK 19.02    |
    | (VXLAN / NVGRE / RAW) | | OFED 4.7-1    | | OFED 4.6      |
    |                       | | rdma-core 24  | | rdma-core 23  |
@@ -1391,6 +1433,11 @@ Supported hardware offloads
    | GENEVE                | | OFED 4.7-3    | | OFED 4.7-3    |
    |                       | | rdma-core 27  | | rdma-core 27  |
    |                       | | ConnectX-5    | | ConnectX-5    |
+   +-----------------------+-----------------+-----------------+
+   | Tunnel Offload        | |  DPDK 20.11   | | DPDK 20.11    |
+   |                       | |  OFED 5.1-2   | | OFED 5.1-2    |
+   |                       | |  rdma-core 32 | | N/A           |
+   |                       | |  ConnectX-5   | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
    | | Header rewrite      | | DPDK 19.05    | | DPDK 19.02    |
    | | (set_ipv4_src /     | | OFED 4.7-1    | | OFED 4.7-1    |
@@ -1419,26 +1466,25 @@ Supported hardware offloads
    |                       | | rdma-core 24  | | rdma-core 23  |
    |                       | | ConnectX-5    | | ConnectX-4    |
    +-----------------------+-----------------+-----------------+
+   | Meta data             | |  DPDK 19.11   | | DPDK 19.11    |
+   |                       | |  OFED 4.7-3   | | OFED 4.7-3    |
+   |                       | |  rdma-core 26 | | rdma-core 26  |
+   |                       | |  ConnectX-5   | | ConnectX-5    |
+   +-----------------------+-----------------+-----------------+
    | Port ID               | | DPDK 19.05    |     | N/A       |
    |                       | | OFED 4.7-1    |     | N/A       |
    |                       | | rdma-core 24  |     | N/A       |
    |                       | | ConnectX-5    |     | N/A       |
-   +-----------------------+-----------------+-----------------+
-   | | VLAN                | | DPDK 19.11    | | DPDK 19.11    |
-   | | (of_pop_vlan /      | | OFED 4.7-1    | | OFED 4.7-1    |
-   | | of_push_vlan /      | | ConnectX-5    | | ConnectX-5    |
-   | | of_set_vlan_pcp /   | |               | |               |
-   | | of_set_vlan_vid)    | |               | |               |
    +-----------------------+-----------------+-----------------+
    | Hairpin               | |               | | DPDK 19.11    |
    |                       | |     N/A       | | OFED 4.7-3    |
    |                       | |               | | rdma-core 26  |
    |                       | |               | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
-   | Meta data             | |  DPDK 19.11   | | DPDK 19.11    |
-   |                       | |  OFED 4.7-3   | | OFED 4.7-3    |
-   |                       | |  rdma-core 26 | | rdma-core 26  |
-   |                       | |  ConnectX-5   | | ConnectX-5    |
+   | 2-port Hairpin        | |               | | DPDK 20.11    |
+   |                       | |     N/A       | | OFED 5.1-2    |
+   |                       | |               | | N/A           |
+   |                       | |               | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
    | Metering              | |  DPDK 19.11   | | DPDK 19.11    |
    |                       | |  OFED 4.7-3   | | OFED 4.7-3    |
@@ -1446,9 +1492,14 @@ Supported hardware offloads
    |                       | |  ConnectX-5   | | ConnectX-5    |
    +-----------------------+-----------------+-----------------+
    | Sampling              | |  DPDK 20.11   | | DPDK 20.11    |
+   |                       | |  OFED 5.1-2   | | OFED 5.1-2    |
+   |                       | |  rdma-core 32 | | N/A           |
+   |                       | |  ConnectX-5   | | ConnectX-5    |
+   +-----------------------+-----------------+-----------------+
+   | Age shared action     | |  DPDK 20.11   | | DPDK 20.11    |
    |                       | |  OFED 5.2     | | OFED 5.2      |
    |                       | |  rdma-core 32 | | rdma-core 32  |
-   |                       | |  ConnectX-5   | | ConnectX-5    |
+   |                       | |  ConnectX-6 Dx| | ConnectX-6 Dx |
    +-----------------------+-----------------+-----------------+
 
 Notes for metadata
@@ -1524,7 +1575,7 @@ ConnectX-4/ConnectX-5/ConnectX-6/BlueField devices managed by librte_net_mlx5.
       eth32
       eth33
 
-#. Optionally, retrieve their PCI bus addresses for whitelisting::
+#. Optionally, retrieve their PCI bus addresses for to be used with the allow list::
 
       {
           for intf in eth2 eth3 eth4 eth5;
@@ -1532,14 +1583,14 @@ ConnectX-4/ConnectX-5/ConnectX-6/BlueField devices managed by librte_net_mlx5.
               (cd "/sys/class/net/${intf}/device/" && pwd -P);
           done;
       } |
-      sed -n 's,.*/\(.*\),-w \1,p'
+      sed -n 's,.*/\(.*\),-a \1,p'
 
    Example output::
 
-      -w 0000:05:00.1
-      -w 0000:06:00.0
-      -w 0000:06:00.1
-      -w 0000:05:00.0
+      -a 0000:05:00.1
+      -a 0000:06:00.0
+      -a 0000:06:00.1
+      -a 0000:05:00.0
 
 #. Request huge pages::
 
@@ -1547,7 +1598,7 @@ ConnectX-4/ConnectX-5/ConnectX-6/BlueField devices managed by librte_net_mlx5.
 
 #. Start testpmd with basic parameters::
 
-      testpmd -l 8-15 -n 4 -w 05:00.0 -w 05:00.1 -w 06:00.0 -w 06:00.1 -- --rxq=2 --txq=2 -i
+      testpmd -l 8-15 -n 4 -a 05:00.0 -a 05:00.1 -a 06:00.0 -a 06:00.1 -- --rxq=2 --txq=2 -i
 
    Example output::
 

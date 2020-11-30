@@ -154,13 +154,13 @@ mlx5_rxq_release_devx_rq_resources(struct mlx5_rxq_ctrl *rxq_ctrl)
 {
 	struct mlx5_devx_dbr_page *dbr_page = rxq_ctrl->rq_dbrec_page;
 
-	if (rxq_ctrl->rxq.wqes) {
-		mlx5_free((void *)(uintptr_t)rxq_ctrl->rxq.wqes);
-		rxq_ctrl->rxq.wqes = NULL;
-	}
 	if (rxq_ctrl->wq_umem) {
 		mlx5_glue->devx_umem_dereg(rxq_ctrl->wq_umem);
 		rxq_ctrl->wq_umem = NULL;
+	}
+	if (rxq_ctrl->rxq.wqes) {
+		mlx5_free((void *)(uintptr_t)rxq_ctrl->rxq.wqes);
+		rxq_ctrl->rxq.wqes = NULL;
 	}
 	if (dbr_page) {
 		claim_zero(mlx5_release_dbr(&rxq_ctrl->priv->dbrpgs,
@@ -181,13 +181,13 @@ mlx5_rxq_release_devx_cq_resources(struct mlx5_rxq_ctrl *rxq_ctrl)
 {
 	struct mlx5_devx_dbr_page *dbr_page = rxq_ctrl->cq_dbrec_page;
 
-	if (rxq_ctrl->rxq.cqes) {
-		rte_free((void *)(uintptr_t)rxq_ctrl->rxq.cqes);
-		rxq_ctrl->rxq.cqes = NULL;
-	}
 	if (rxq_ctrl->cq_umem) {
 		mlx5_glue->devx_umem_dereg(rxq_ctrl->cq_umem);
 		rxq_ctrl->cq_umem = NULL;
+	}
+	if (rxq_ctrl->rxq.cqes) {
+		rte_free((void *)(uintptr_t)rxq_ctrl->rxq.cqes);
+		rxq_ctrl->rxq.cqes = NULL;
 	}
 	if (dbr_page) {
 		claim_zero(mlx5_release_dbr(&rxq_ctrl->priv->dbrpgs,
@@ -294,7 +294,7 @@ static void
 mlx5_devx_wq_attr_fill(struct mlx5_priv *priv, struct mlx5_rxq_ctrl *rxq_ctrl,
 		       struct mlx5_devx_wq_attr *wq_attr)
 {
-	wq_attr->end_padding_mode = priv->config.cqe_pad ?
+	wq_attr->end_padding_mode = priv->config.hw_padding ?
 					MLX5_WQ_END_PAD_MODE_ALIGN :
 					MLX5_WQ_END_PAD_MODE_NONE;
 	wq_attr->pd = priv->sh->pdn;
@@ -694,6 +694,53 @@ error:
 }
 
 /**
+ * Prepare RQT attribute structure for DevX RQT API.
+ *
+ * @param dev
+ *   Pointer to Ethernet device.
+ * @param log_n
+ *   Log of number of queues in the array.
+ * @param ind_tbl
+ *   DevX indirection table object.
+ *
+ * @return
+ *   The RQT attr object initialized, NULL otherwise and rte_errno is set.
+ */
+static struct mlx5_devx_rqt_attr *
+mlx5_devx_ind_table_create_rqt_attr(struct rte_eth_dev *dev,
+				     const unsigned int log_n,
+				     const uint16_t *queues,
+				     const uint32_t queues_n)
+{
+	struct mlx5_priv *priv = dev->data->dev_private;
+	struct mlx5_devx_rqt_attr *rqt_attr = NULL;
+	const unsigned int rqt_n = 1 << log_n;
+	unsigned int i, j;
+
+	rqt_attr = mlx5_malloc(MLX5_MEM_ZERO, sizeof(*rqt_attr) +
+			      rqt_n * sizeof(uint32_t), 0, SOCKET_ID_ANY);
+	if (!rqt_attr) {
+		DRV_LOG(ERR, "Port %u cannot allocate RQT resources.",
+			dev->data->port_id);
+		rte_errno = ENOMEM;
+		return NULL;
+	}
+	rqt_attr->rqt_max_size = priv->config.ind_table_max_size;
+	rqt_attr->rqt_actual_size = rqt_n;
+	for (i = 0; i != queues_n; ++i) {
+		struct mlx5_rxq_data *rxq = (*priv->rxqs)[queues[i]];
+		struct mlx5_rxq_ctrl *rxq_ctrl =
+				container_of(rxq, struct mlx5_rxq_ctrl, rxq);
+
+		rqt_attr->rq_list[i] = rxq_ctrl->obj->rq->id;
+	}
+	MLX5_ASSERT(i > 0);
+	for (j = 0; i != rqt_n; ++j, ++i)
+		rqt_attr->rq_list[i] = rqt_attr->rq_list[j];
+	return rqt_attr;
+}
+
+/**
  * Create RQT using DevX API as a filed of indirection table.
  *
  * @param dev
@@ -712,30 +759,13 @@ mlx5_devx_ind_table_new(struct rte_eth_dev *dev, const unsigned int log_n,
 {
 	struct mlx5_priv *priv = dev->data->dev_private;
 	struct mlx5_devx_rqt_attr *rqt_attr = NULL;
-	const unsigned int rqt_n = 1 << log_n;
-	unsigned int i, j;
 
 	MLX5_ASSERT(ind_tbl);
-	rqt_attr = mlx5_malloc(MLX5_MEM_ZERO, sizeof(*rqt_attr) +
-			      rqt_n * sizeof(uint32_t), 0, SOCKET_ID_ANY);
-	if (!rqt_attr) {
-		DRV_LOG(ERR, "Port %u cannot allocate RQT resources.",
-			dev->data->port_id);
-		rte_errno = ENOMEM;
+	rqt_attr = mlx5_devx_ind_table_create_rqt_attr(dev, log_n,
+							ind_tbl->queues,
+							ind_tbl->queues_n);
+	if (!rqt_attr)
 		return -rte_errno;
-	}
-	rqt_attr->rqt_max_size = priv->config.ind_table_max_size;
-	rqt_attr->rqt_actual_size = rqt_n;
-	for (i = 0; i != ind_tbl->queues_n; ++i) {
-		struct mlx5_rxq_data *rxq = (*priv->rxqs)[ind_tbl->queues[i]];
-		struct mlx5_rxq_ctrl *rxq_ctrl =
-				container_of(rxq, struct mlx5_rxq_ctrl, rxq);
-
-		rqt_attr->rq_list[i] = rxq_ctrl->obj->rq->id;
-	}
-	MLX5_ASSERT(i > 0);
-	for (j = 0; i != rqt_n; ++j, ++i)
-		rqt_attr->rq_list[i] = rqt_attr->rq_list[j];
 	ind_tbl->rqt = mlx5_devx_cmd_create_rqt(priv->sh->ctx, rqt_attr);
 	mlx5_free(rqt_attr);
 	if (!ind_tbl->rqt) {
@@ -745,6 +775,41 @@ mlx5_devx_ind_table_new(struct rte_eth_dev *dev, const unsigned int log_n,
 		return -rte_errno;
 	}
 	return 0;
+}
+
+/**
+ * Modify RQT using DevX API as a filed of indirection table.
+ *
+ * @param dev
+ *   Pointer to Ethernet device.
+ * @param log_n
+ *   Log of number of queues in the array.
+ * @param ind_tbl
+ *   DevX indirection table object.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+static int
+mlx5_devx_ind_table_modify(struct rte_eth_dev *dev, const unsigned int log_n,
+			   const uint16_t *queues, const uint32_t queues_n,
+			   struct mlx5_ind_table_obj *ind_tbl)
+{
+	int ret = 0;
+	struct mlx5_devx_rqt_attr *rqt_attr = NULL;
+
+	MLX5_ASSERT(ind_tbl);
+	rqt_attr = mlx5_devx_ind_table_create_rqt_attr(dev, log_n,
+							queues,
+							queues_n);
+	if (!rqt_attr)
+		return -rte_errno;
+	ret = mlx5_devx_cmd_modify_rqt(ind_tbl->rqt, rqt_attr);
+	mlx5_free(rqt_attr);
+	if (ret)
+		DRV_LOG(ERR, "Port %u cannot modify DevX RQT.",
+			dev->data->port_id);
+	return ret;
 }
 
 /**
@@ -1057,17 +1122,25 @@ mlx5_txq_obj_hairpin_new(struct rte_eth_dev *dev, uint16_t idx)
 static void
 mlx5_txq_release_devx_sq_resources(struct mlx5_txq_obj *txq_obj)
 {
-	if (txq_obj->sq_devx)
+	if (txq_obj->sq_devx) {
 		claim_zero(mlx5_devx_cmd_destroy(txq_obj->sq_devx));
-	if (txq_obj->sq_umem)
+		txq_obj->sq_devx = NULL;
+	}
+	if (txq_obj->sq_umem) {
 		claim_zero(mlx5_glue->devx_umem_dereg(txq_obj->sq_umem));
-	if (txq_obj->sq_buf)
+		txq_obj->sq_umem = NULL;
+	}
+	if (txq_obj->sq_buf) {
 		mlx5_free(txq_obj->sq_buf);
-	if (txq_obj->sq_dbrec_page)
+		txq_obj->sq_buf = NULL;
+	}
+	if (txq_obj->sq_dbrec_page) {
 		claim_zero(mlx5_release_dbr(&txq_obj->txq_ctrl->priv->dbrpgs,
 					    mlx5_os_get_umem_id
 						 (txq_obj->sq_dbrec_page->umem),
 					    txq_obj->sq_dbrec_offset));
+		txq_obj->sq_dbrec_page = NULL;
+	}
 }
 
 /**
@@ -1101,8 +1174,8 @@ mlx5_txq_release_devx_cq_resources(struct mlx5_txq_obj *txq_obj)
 static void
 mlx5_txq_release_devx_resources(struct mlx5_txq_obj *txq_obj)
 {
-	mlx5_txq_release_devx_cq_resources(txq_obj);
 	mlx5_txq_release_devx_sq_resources(txq_obj);
+	mlx5_txq_release_devx_cq_resources(txq_obj);
 }
 
 /**
@@ -1427,6 +1500,7 @@ mlx5_txq_devx_obj_new(struct rte_eth_dev *dev, uint16_t idx)
 	txq_ctrl->uar_mmap_offset =
 				mlx5_os_get_devx_uar_mmap_offset(sh->tx_uar);
 	txq_uar_init(txq_ctrl);
+	dev->data->tx_queue_state[idx] = RTE_ETH_QUEUE_STATE_STARTED;
 	return 0;
 error:
 	ret = rte_errno; /* Save rte_errno before cleanup. */
@@ -1463,6 +1537,7 @@ struct mlx5_obj_ops devx_obj_ops = {
 	.rxq_obj_modify = mlx5_devx_modify_rq,
 	.rxq_obj_release = mlx5_rxq_devx_obj_release,
 	.ind_table_new = mlx5_devx_ind_table_new,
+	.ind_table_modify = mlx5_devx_ind_table_modify,
 	.ind_table_destroy = mlx5_devx_ind_table_destroy,
 	.hrxq_new = mlx5_devx_hrxq_new,
 	.hrxq_destroy = mlx5_devx_tir_destroy,

@@ -80,6 +80,7 @@ enum mlx5_feature_name {
 	MLX5_COPY_MARK,
 	MLX5_MTR_COLOR,
 	MLX5_MTR_SFX,
+	MLX5_ASO_FLOW_HIT,
 };
 
 /* Default queue number. */
@@ -345,8 +346,8 @@ enum mlx5_feature_name {
 #define MLX5_GENEVE_OPT_LEN_0 14
 #define MLX5_GENEVE_OPT_LEN_1 63
 
-#define MLX5_ENCAPSULATION_DECISION_SIZE (sizeof(struct rte_flow_item_eth) + \
-					  sizeof(struct rte_flow_item_ipv4))
+#define MLX5_ENCAPSULATION_DECISION_SIZE (sizeof(struct rte_ether_hdr) + \
+					  sizeof(struct rte_ipv4_hdr))
 
 /* IPv4 fragment_offset field contains relevant data in bits 2 to 15. */
 #define MLX5_IPV4_FRAG_OFFSET_MASK \
@@ -388,6 +389,7 @@ enum mlx5_flow_fate_type {
 	MLX5_FLOW_FATE_PORT_ID,
 	MLX5_FLOW_FATE_DROP,
 	MLX5_FLOW_FATE_DEFAULT_MISS,
+	MLX5_FLOW_FATE_SHARED_RSS,
 	MLX5_FLOW_FATE_MAX,
 };
 
@@ -411,18 +413,6 @@ struct mlx5_flow_dv_matcher {
 };
 
 #define MLX5_ENCAP_MAX_LEN 132
-
-/* Encap/decap resource key of the hash organization. */
-union mlx5_flow_encap_decap_key {
-	struct {
-		uint32_t ft_type:8;	/**< Flow table type, Rx or Tx. */
-		uint32_t refmt_type:8;	/**< Header reformat type. */
-		uint32_t buf_size:8;	/**< Encap buf size. */
-		uint32_t table_level:8;	/**< Root table or not. */
-		uint32_t cksum;		/**< Encap buf check sum. */
-	};
-	uint64_t v64;			/**< full 64bits value of key */
-};
 
 /* Encap/decap resource structure. */
 struct mlx5_flow_dv_encap_decap_resource {
@@ -574,6 +564,7 @@ struct mlx5_flow_dv_sample_resource {
 		void *verbs_action; /**< Verbs sample action object. */
 		void **sub_actions; /**< Sample sub-action array. */
 	};
+	struct rte_eth_dev *dev; /**< Device registers the action. */
 	uint32_t idx; /** Sample object index. */
 	uint8_t ft_type; /** Flow Table Type */
 	uint32_t ft_id; /** Flow Table Level */
@@ -595,6 +586,7 @@ struct mlx5_flow_dv_dest_array_resource {
 	uint32_t idx; /** Destination array action object index. */
 	uint8_t ft_type; /** Flow Table Type */
 	uint8_t num_of_dest; /**< Number of destination actions. */
+	struct rte_eth_dev *dev; /**< Device registers the action. */
 	void *action; /**< Pointer to the rdma core action. */
 	struct mlx5_flow_sub_actions_idx sample_idx[MLX5_MAX_DEST_NUM];
 	/**< Action index resources. */
@@ -651,6 +643,8 @@ struct mlx5_flow_handle {
 		/**< Generic value indicates the fate action. */
 		uint32_t rix_default_fate;
 		/**< Indicates default miss fate action. */
+		uint32_t rix_srss;
+		/**< Indicates shared RSS fate action. */
 	};
 #ifdef HAVE_IBV_FLOW_DV_SUPPORT
 	struct mlx5_flow_handle_dv dvh;
@@ -761,6 +755,7 @@ struct mlx5_flow_verbs_workspace {
 #define MLX5_NUM_MAX_DEV_FLOWS 32
 
 /** Device flow structure. */
+__extension__
 struct mlx5_flow {
 	struct rte_flow *flow; /**< Pointer to the main flow. */
 	uint32_t flow_idx; /**< The memory pool index to the main flow. */
@@ -768,7 +763,9 @@ struct mlx5_flow {
 	uint64_t act_flags;
 	/**< Bit-fields of detected actions, see MLX5_FLOW_ACTION_*. */
 	bool external; /**< true if the flow is created external to PMD. */
-	uint8_t ingress; /**< 1 if the flow is ingress. */
+	uint8_t ingress:1; /**< 1 if the flow is ingress. */
+	uint8_t skip_scale:1;
+	/**< 1 if skip the scale the table with factor. */
 	union {
 #ifdef HAVE_IBV_FLOW_DV_SUPPORT
 		struct mlx5_flow_dv_workspace dv;
@@ -944,8 +941,12 @@ struct mlx5_flow_tunnel {
 
 /** PMD tunnel related context */
 struct mlx5_flow_tunnel_hub {
+	/* Tunnels list
+	 * Access to the list MUST be MT protected
+	 */
 	LIST_HEAD(, mlx5_flow_tunnel) tunnels;
-	rte_spinlock_t sl;			/* Tunnel list spinlock. */
+	 /* protect access to the tunnels list */
+	rte_spinlock_t sl;
 	struct mlx5_hlist *groups;		/** non tunnel groups */
 };
 
@@ -985,8 +986,13 @@ mlx5_tunnel_hub(struct rte_eth_dev *dev)
 static inline bool
 is_tunnel_offload_active(struct rte_eth_dev *dev)
 {
+#ifdef HAVE_IBV_FLOW_DV_SUPPORT
 	struct mlx5_priv *priv = dev->data->dev_private;
 	return !!priv->config.dv_miss_info;
+#else
+	RTE_SET_USED(dev);
+	return false;
+#endif
 }
 
 static inline bool
@@ -1024,7 +1030,6 @@ flow_items_to_tunnel(const struct rte_flow_item items[])
 /* Flow structure. */
 struct rte_flow {
 	ILIST_ENTRY(uint32_t)next; /**< Index to the next flow structure. */
-	uint32_t shared_rss; /** < Shared RSS action ID. */
 	uint32_t dev_handles;
 	/**< Device flow handles that are part of the flow. */
 	uint32_t drv_type:2; /**< Driver type. */
@@ -1074,11 +1079,13 @@ struct mlx5_shared_action_rss {
 	uint32_t refcnt; /**< Atomically accessed refcnt. */
 	struct rte_flow_action_rss origin; /**< Original rte RSS action. */
 	uint8_t key[MLX5_RSS_HASH_KEY_LEN]; /**< RSS hash key. */
-	uint16_t *queue; /**< Queue indices to use. */
+	struct mlx5_ind_table_obj *ind_tbl;
+	/**< Hash RX queues (hrxq, hrxq_tunnel fields) indirection table. */
 	uint32_t hrxq[MLX5_RSS_HASH_FIELDS_LEN];
 	/**< Hash RX queue indexes mapped to mlx5_rss_hash_fields */
 	uint32_t hrxq_tunnel[MLX5_RSS_HASH_FIELDS_LEN];
 	/**< Hash RX queue indexes for tunneled RSS */
+	rte_spinlock_t action_rss_sl; /**< Shared RSS action spinlock. */
 };
 
 struct rte_flow_shared_action {
@@ -1087,11 +1094,23 @@ struct rte_flow_shared_action {
 
 /* Thread specific flow workspace intermediate data. */
 struct mlx5_flow_workspace {
+	/* If creating another flow in same thread, push new as stack. */
+	struct mlx5_flow_workspace *prev;
+	struct mlx5_flow_workspace *next;
+	uint32_t inuse; /* can't create new flow with current. */
 	struct mlx5_flow flows[MLX5_NUM_MAX_DEV_FLOWS];
-	struct mlx5_flow_rss_desc rss_desc[2];
-	uint32_t rssq_num[2]; /* Allocated queue num in rss_desc. */
-	int flow_idx; /* Intermediate device flow index. */
-	int flow_nested_idx; /* Intermediate device flow index, nested. */
+	struct mlx5_flow_rss_desc rss_desc;
+	uint32_t rssq_num; /* Allocated queue num in rss_desc. */
+	uint32_t flow_idx; /* Intermediate device flow index. */
+};
+
+struct mlx5_flow_split_info {
+	bool external;
+	/**< True if flow is created by request external to PMD. */
+	uint8_t skip_scale; /**< Skip the scale the table with factor. */
+	uint32_t flow_idx; /**< This memory pool index to the flow. */
+	uint32_t prefix_mark; /**< Prefix subflow mark flag. */
+	uint64_t prefix_layers; /**< Prefix subflow layers. */
 };
 
 typedef int (*mlx5_flow_validate_t)(struct rte_eth_dev *dev,
@@ -1211,6 +1230,7 @@ struct flow_grp_info {
 	uint64_t fdb_def_rule:1;
 	/* force standard group translation */
 	uint64_t std_tbl_fix:1;
+	uint64_t skip_scale:1;
 };
 
 static inline bool
@@ -1250,8 +1270,8 @@ tunnel_use_standard_attr_group_translate
 int mlx5_flow_group_to_table(struct rte_eth_dev *dev,
 			     const struct mlx5_flow_tunnel *tunnel,
 			     uint32_t group, uint32_t *table,
-			     struct flow_grp_info flags,
-				 struct rte_flow_error *error);
+			     const struct flow_grp_info *flags,
+			     struct rte_flow_error *error);
 uint64_t mlx5_flow_hashfields_adjust(struct mlx5_flow_rss_desc *rss_desc,
 				     int tunnel, uint64_t layer_types,
 				     uint64_t hash_fields);

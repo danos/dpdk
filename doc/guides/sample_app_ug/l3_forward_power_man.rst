@@ -49,7 +49,7 @@ to set the CPUFreq governor and set the frequency of specific cores.
 
 This application includes a P-state power management algorithm to generate a frequency hint to be sent to CPUFreq.
 The algorithm uses the number of received and available Rx packets on recent polls to make a heuristic decision to scale frequency up/down.
-Specifically, some thresholds are checked to see whether a specific core running an DPDK polling thread needs to increase frequency
+Specifically, some thresholds are checked to see whether a specific core running a DPDK polling thread needs to increase frequency
 a step up based on the near to full trend of polled Rx queues.
 Also, it decreases frequency a step if packet processed per loop is far less than the expected threshold
 or the thread's sleeping time exceeds a threshold.
@@ -378,7 +378,8 @@ See :doc:`Power Management<../prog_guide/power_man>` chapter in the DPDK Program
 
 .. code-block:: console
 
-    ./<build_dir>/examples/dpdk-l3fwd-power -l xxx   -n 4   -w 0000:xx:00.0 -w 0000:xx:00.1 -- -p 0x3 -P --config="(0,0,xx),(1,0,xx)" --empty-poll="0,0,0" -l 14 -m 9 -h 1
+    ./<build_dir>/examples/dpdk-l3fwd-power -l xxx -n 4 -a 0000:xx:00.0 -a 0000:xx:00.1 \
+    	-- -p 0x3 -P --config="(0,0,xx),(1,0,xx)" --empty-poll="0,0,0" -l 14 -m 9 -h 1
 
 Where,
 

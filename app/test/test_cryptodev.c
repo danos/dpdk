@@ -6754,6 +6754,7 @@ test_mixed_auth_cipher(const struct mixed_cipher_auth_test_data *tdata,
 	unsigned int ciphertext_len;
 
 	struct rte_cryptodev_info dev_info;
+	struct rte_crypto_op *op;
 
 	/* Check if device supports particular algorithms separately */
 	if (test_mixed_check_if_unsupported(tdata))
@@ -6769,9 +6770,6 @@ test_mixed_auth_cipher(const struct mixed_cipher_auth_test_data *tdata,
 		printf("Device doesn't support digest encrypted.\n");
 		return -ENOTSUP;
 	}
-
-	if (op_mode == OUT_OF_PLACE)
-		return -ENOTSUP;
 
 	/* Create the session */
 	if (verify)
@@ -6849,17 +6847,17 @@ test_mixed_auth_cipher(const struct mixed_cipher_auth_test_data *tdata,
 	if (retval < 0)
 		return retval;
 
-	ut_params->op = process_crypto_request(ts_params->valid_devs[0],
-			ut_params->op);
+	op = process_crypto_request(ts_params->valid_devs[0], ut_params->op);
 
 	/* Check if the op failed because the device doesn't */
 	/* support this particular combination of algorithms */
-	if (ut_params->op == NULL && ut_params->op->status ==
+	if (op == NULL && ut_params->op->status ==
 			RTE_CRYPTO_OP_STATUS_INVALID_SESSION) {
 		printf("Device doesn't support this mixed combination. "
 				"Test Skipped.\n");
 		return -ENOTSUP;
 	}
+	ut_params->op = op;
 
 	TEST_ASSERT_NOT_NULL(ut_params->op, "failed to retrieve obuf");
 
@@ -6950,6 +6948,7 @@ test_mixed_auth_cipher_sgl(const struct mixed_cipher_auth_test_data *tdata,
 	uint8_t digest_buffer[10000];
 
 	struct rte_cryptodev_info dev_info;
+	struct rte_crypto_op *op;
 
 	/* Check if device supports particular algorithms */
 	if (test_mixed_check_if_unsupported(tdata))
@@ -7054,17 +7053,17 @@ test_mixed_auth_cipher_sgl(const struct mixed_cipher_auth_test_data *tdata,
 	if (retval < 0)
 		return retval;
 
-	ut_params->op = process_crypto_request(ts_params->valid_devs[0],
-			ut_params->op);
+	op = process_crypto_request(ts_params->valid_devs[0], ut_params->op);
 
 	/* Check if the op failed because the device doesn't */
 	/* support this particular combination of algorithms */
-	if (ut_params->op == NULL && ut_params->op->status ==
+	if (op == NULL && ut_params->op->status ==
 			RTE_CRYPTO_OP_STATUS_INVALID_SESSION) {
 		printf("Device doesn't support this mixed combination. "
 				"Test Skipped.\n");
 		return -ENOTSUP;
 	}
+	ut_params->op = op;
 
 	TEST_ASSERT_NOT_NULL(ut_params->op, "failed to retrieve obuf");
 
@@ -11147,8 +11146,8 @@ test_AES_GMAC_authentication_SGL(const struct gmac_test_data *tdata,
 	rte_cryptodev_info_get(ts_params->valid_devs[0], &dev_info);
 	feature_flags = dev_info.feature_flags;
 
-	if ((!(feature_flags & RTE_CRYPTODEV_FF_IN_PLACE_SGL)) &&
-			(!(feature_flags & RTE_CRYPTODEV_FF_OOP_SGL_IN_LB_OUT)) &&
+	if ((!(feature_flags & RTE_CRYPTODEV_FF_IN_PLACE_SGL)) ||
+			(!(feature_flags & RTE_CRYPTODEV_FF_OOP_SGL_IN_LB_OUT)) ||
 			(!(feature_flags & RTE_CRYPTODEV_FF_OOP_SGL_IN_SGL_OUT)))
 		return -ENOTSUP;
 

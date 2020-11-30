@@ -405,7 +405,7 @@ mlx5_link_update_unlocked_gset(struct rte_eth_dev *dev,
 	}
 	link_speed = ethtool_cmd_speed(&edata);
 	if (link_speed == -1)
-		dev_link.link_speed = ETH_SPEED_NUM_NONE;
+		dev_link.link_speed = ETH_SPEED_NUM_UNKNOWN;
 	else
 		dev_link.link_speed = link_speed;
 	priv->link_speed_capa = 0;
@@ -425,11 +425,6 @@ mlx5_link_update_unlocked_gset(struct rte_eth_dev *dev,
 				ETH_LINK_HALF_DUPLEX : ETH_LINK_FULL_DUPLEX);
 	dev_link.link_autoneg = !(dev->data->dev_conf.link_speeds &
 			ETH_LINK_SPEED_FIXED);
-	if (((dev_link.link_speed && !dev_link.link_status) ||
-	     (!dev_link.link_speed && dev_link.link_status))) {
-		rte_errno = EAGAIN;
-		return -rte_errno;
-	}
 	*link = dev_link;
 	return 0;
 }
@@ -517,8 +512,8 @@ mlx5_link_update_unlocked_gs(struct rte_eth_dev *dev,
 			dev->data->port_id, strerror(rte_errno));
 		return ret;
 	}
-	dev_link.link_speed = (ecmd->speed == UINT32_MAX) ? ETH_SPEED_NUM_NONE :
-							    ecmd->speed;
+	dev_link.link_speed = (ecmd->speed == UINT32_MAX) ?
+				ETH_SPEED_NUM_UNKNOWN : ecmd->speed;
 	sc = ecmd->link_mode_masks[0] |
 		((uint64_t)ecmd->link_mode_masks[1] << 32);
 	priv->link_speed_capa = 0;
@@ -571,11 +566,6 @@ mlx5_link_update_unlocked_gs(struct rte_eth_dev *dev,
 				ETH_LINK_HALF_DUPLEX : ETH_LINK_FULL_DUPLEX);
 	dev_link.link_autoneg = !(dev->data->dev_conf.link_speeds &
 				  ETH_LINK_SPEED_FIXED);
-	if (((dev_link.link_speed && !dev_link.link_status) ||
-	     (!dev_link.link_speed && dev_link.link_status))) {
-		rte_errno = EAGAIN;
-		return -rte_errno;
-	}
 	*link = dev_link;
 	return 0;
 }
@@ -1325,71 +1315,71 @@ mlx5_os_get_stats_n(struct rte_eth_dev *dev)
 
 static const struct mlx5_counter_ctrl mlx5_counters_init[] = {
 	{
-		.dpdk_name = "rx_port_unicast_bytes",
+		.dpdk_name = "rx_unicast_bytes",
 		.ctr_name = "rx_vport_unicast_bytes",
 	},
 	{
-		.dpdk_name = "rx_port_multicast_bytes",
+		.dpdk_name = "rx_multicast_bytes",
 		.ctr_name = "rx_vport_multicast_bytes",
 	},
 	{
-		.dpdk_name = "rx_port_broadcast_bytes",
+		.dpdk_name = "rx_broadcast_bytes",
 		.ctr_name = "rx_vport_broadcast_bytes",
 	},
 	{
-		.dpdk_name = "rx_port_unicast_packets",
+		.dpdk_name = "rx_unicast_packets",
 		.ctr_name = "rx_vport_unicast_packets",
 	},
 	{
-		.dpdk_name = "rx_port_multicast_packets",
+		.dpdk_name = "rx_multicast_packets",
 		.ctr_name = "rx_vport_multicast_packets",
 	},
 	{
-		.dpdk_name = "rx_port_broadcast_packets",
+		.dpdk_name = "rx_broadcast_packets",
 		.ctr_name = "rx_vport_broadcast_packets",
 	},
 	{
-		.dpdk_name = "tx_port_unicast_bytes",
+		.dpdk_name = "tx_unicast_bytes",
 		.ctr_name = "tx_vport_unicast_bytes",
 	},
 	{
-		.dpdk_name = "tx_port_multicast_bytes",
+		.dpdk_name = "tx_multicast_bytes",
 		.ctr_name = "tx_vport_multicast_bytes",
 	},
 	{
-		.dpdk_name = "tx_port_broadcast_bytes",
+		.dpdk_name = "tx_broadcast_bytes",
 		.ctr_name = "tx_vport_broadcast_bytes",
 	},
 	{
-		.dpdk_name = "tx_port_unicast_packets",
+		.dpdk_name = "tx_unicast_packets",
 		.ctr_name = "tx_vport_unicast_packets",
 	},
 	{
-		.dpdk_name = "tx_port_multicast_packets",
+		.dpdk_name = "tx_multicast_packets",
 		.ctr_name = "tx_vport_multicast_packets",
 	},
 	{
-		.dpdk_name = "tx_port_broadcast_packets",
+		.dpdk_name = "tx_broadcast_packets",
 		.ctr_name = "tx_vport_broadcast_packets",
 	},
 	{
-		.dpdk_name = "rx_wqe_err",
+		.dpdk_name = "rx_wqe_errors",
 		.ctr_name = "rx_wqe_err",
 	},
 	{
-		.dpdk_name = "rx_crc_errors_phy",
+		.dpdk_name = "rx_phy_crc_errors",
 		.ctr_name = "rx_crc_errors_phy",
 	},
 	{
-		.dpdk_name = "rx_in_range_len_errors_phy",
+		.dpdk_name = "rx_phy_in_range_len_errors",
 		.ctr_name = "rx_in_range_len_errors_phy",
 	},
 	{
-		.dpdk_name = "rx_symbol_err_phy",
+		.dpdk_name = "rx_phy_symbol_errors",
 		.ctr_name = "rx_symbol_err_phy",
 	},
 	{
-		.dpdk_name = "tx_errors_phy",
+		.dpdk_name = "tx_phy_errors",
 		.ctr_name = "tx_errors_phy",
 	},
 	{
@@ -1398,44 +1388,44 @@ static const struct mlx5_counter_ctrl mlx5_counters_init[] = {
 		.dev = 1,
 	},
 	{
-		.dpdk_name = "tx_packets_phy",
+		.dpdk_name = "tx_phy_packets",
 		.ctr_name = "tx_packets_phy",
 	},
 	{
-		.dpdk_name = "rx_packets_phy",
+		.dpdk_name = "rx_phy_packets",
 		.ctr_name = "rx_packets_phy",
 	},
 	{
-		.dpdk_name = "tx_discards_phy",
+		.dpdk_name = "tx_phy_discard_packets",
 		.ctr_name = "tx_discards_phy",
 	},
 	{
-		.dpdk_name = "rx_discards_phy",
+		.dpdk_name = "rx_phy_discard_packets",
 		.ctr_name = "rx_discards_phy",
 	},
 	{
-		.dpdk_name = "tx_bytes_phy",
+		.dpdk_name = "tx_phy_bytes",
 		.ctr_name = "tx_bytes_phy",
 	},
 	{
-		.dpdk_name = "rx_bytes_phy",
+		.dpdk_name = "rx_phy_bytes",
 		.ctr_name = "rx_bytes_phy",
 	},
 	/* Representor only */
 	{
-		.dpdk_name = "rx_packets",
+		.dpdk_name = "rx_vport_packets",
 		.ctr_name = "vport_rx_packets",
 	},
 	{
-		.dpdk_name = "rx_bytes",
+		.dpdk_name = "rx_vport_bytes",
 		.ctr_name = "vport_rx_bytes",
 	},
 	{
-		.dpdk_name = "tx_packets",
+		.dpdk_name = "tx_vport_packets",
 		.ctr_name = "vport_tx_packets",
 	},
 	{
-		.dpdk_name = "tx_bytes",
+		.dpdk_name = "tx_vport_bytes",
 		.ctr_name = "vport_tx_bytes",
 	},
 };

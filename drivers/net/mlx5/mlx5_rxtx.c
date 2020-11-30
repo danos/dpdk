@@ -462,11 +462,21 @@ rx_queue_count(struct mlx5_rxq_data *rxq)
 {
 	struct rxq_zip *zip = &rxq->zip;
 	volatile struct mlx5_cqe *cqe;
-	unsigned int cq_ci = rxq->cq_ci;
 	const unsigned int cqe_n = (1 << rxq->cqe_n);
+	const unsigned int sges_n = (1 << rxq->sges_n);
+	const unsigned int elts_n = (1 << rxq->elts_n);
+	const unsigned int strd_n = (1 << rxq->strd_num_n);
 	const unsigned int cqe_cnt = cqe_n - 1;
-	unsigned int used = 0;
+	unsigned int cq_ci, used;
 
+	/* if we are processing a compressed cqe */
+	if (zip->ai) {
+		used = zip->cqe_cnt - zip->ai;
+		cq_ci = zip->cq_ci;
+	} else {
+		used = 0;
+		cq_ci = rxq->cq_ci;
+	}
 	cqe = &(*rxq->cqes)[cq_ci & cqe_cnt];
 	while (check_cqe(cqe, cqe_n, cq_ci) != MLX5_CQE_STATUS_HW_OWN) {
 		int8_t op_own;
@@ -474,17 +484,14 @@ rx_queue_count(struct mlx5_rxq_data *rxq)
 
 		op_own = cqe->op_own;
 		if (MLX5_CQE_FORMAT(op_own) == MLX5_COMPRESSED)
-			if (unlikely(zip->ai))
-				n = zip->cqe_cnt - zip->ai;
-			else
-				n = rte_be_to_cpu_32(cqe->byte_cnt);
+			n = rte_be_to_cpu_32(cqe->byte_cnt);
 		else
 			n = 1;
 		cq_ci += n;
 		used += n;
 		cqe = &(*rxq->cqes)[cq_ci & cqe_cnt];
 	}
-	used = RTE_MIN(used, cqe_n);
+	used = RTE_MIN(used * sges_n, elts_n * strd_n);
 	return used;
 }
 
@@ -548,7 +555,7 @@ mlx5_rxq_info_get(struct rte_eth_dev *dev, uint16_t rx_queue_id,
 
 	if (!rxq)
 		return;
-	qinfo->mp = mlx5_rxq_mprq_enabled(&rxq_ctrl->rxq) ?
+	qinfo->mp = mlx5_rxq_mprq_enabled(rxq) ?
 					rxq->mprq_mp : rxq->mp;
 	qinfo->conf.rx_thresh.pthresh = 0;
 	qinfo->conf.rx_thresh.hthresh = 0;
@@ -558,7 +565,9 @@ mlx5_rxq_info_get(struct rte_eth_dev *dev, uint16_t rx_queue_id,
 	qinfo->conf.rx_deferred_start = rxq_ctrl ? 0 : 1;
 	qinfo->conf.offloads = dev->data->dev_conf.rxmode.offloads;
 	qinfo->scattered_rx = dev->data->scattered_rx;
-	qinfo->nb_desc = 1 << rxq->elts_n;
+	qinfo->nb_desc = mlx5_rxq_mprq_enabled(rxq) ?
+		(1 << rxq->elts_n) * (1 << rxq->strd_num_n) :
+		(1 << rxq->elts_n);
 }
 
 /**
@@ -1181,6 +1190,7 @@ mlx5_rx_poll_len(struct mlx5_rxq_data *rxq, volatile struct mlx5_cqe *cqe,
 		} else {
 			int ret;
 			int8_t op_own;
+			uint32_t cq_ci;
 
 			ret = check_cqe(cqe, cqe_n, rxq->cq_ci);
 			if (unlikely(ret != MLX5_CQE_STATUS_SW_OWN)) {
@@ -1194,14 +1204,19 @@ mlx5_rx_poll_len(struct mlx5_rxq_data *rxq, volatile struct mlx5_cqe *cqe,
 					return 0;
 				}
 			}
-			++rxq->cq_ci;
+			/*
+			 * Introduce the local variable to have queue cq_ci
+			 * index in queue structure always consistent with
+			 * actual CQE boundary (not pointing to the middle
+			 * of compressed CQE session).
+			 */
+			cq_ci = rxq->cq_ci + 1;
 			op_own = cqe->op_own;
 			if (MLX5_CQE_FORMAT(op_own) == MLX5_COMPRESSED) {
 				volatile struct mlx5_mini_cqe8 (*mc)[8] =
 					(volatile struct mlx5_mini_cqe8 (*)[8])
 					(uintptr_t)(&(*rxq->cqes)
-						[rxq->cq_ci &
-						 cqe_cnt].pkt_info);
+						[cq_ci & cqe_cnt].pkt_info);
 
 				/* Fix endianness. */
 				zip->cqe_cnt = rte_be_to_cpu_32(cqe->byte_cnt);
@@ -1214,10 +1229,9 @@ mlx5_rx_poll_len(struct mlx5_rxq_data *rxq, volatile struct mlx5_cqe *cqe,
 				 * 7 CQEs after the initial CQE instead of 8
 				 * for subsequent ones.
 				 */
-				zip->ca = rxq->cq_ci;
+				zip->ca = cq_ci;
 				zip->na = zip->ca + 7;
 				/* Compute the next non compressed CQE. */
-				--rxq->cq_ci;
 				zip->cq_ci = rxq->cq_ci + zip->cqe_cnt;
 				/* Get packet size to return. */
 				len = rte_be_to_cpu_32((*mc)[0].byte_cnt &
@@ -1233,6 +1247,7 @@ mlx5_rx_poll_len(struct mlx5_rxq_data *rxq, volatile struct mlx5_cqe *cqe,
 					++idx;
 				}
 			} else {
+				rxq->cq_ci = cq_ci;
 				len = rte_be_to_cpu_32(cqe->byte_cnt);
 			}
 		}
@@ -2098,8 +2113,10 @@ mlx5_tx_handle_completion(struct mlx5_txq_data *__rte_restrict txq,
 		}
 		/* Normal transmit completion. */
 		MLX5_ASSERT(txq->cq_ci != txq->cq_pi);
+#ifdef RTE_LIBRTE_MLX5_DEBUG
 		MLX5_ASSERT((txq->fcqs[txq->cq_ci & txq->cqe_m] >> 16) ==
 			    cqe->wqe_counter);
+#endif
 		ring_doorbell = true;
 		++txq->cq_ci;
 		last_cqe = cqe;

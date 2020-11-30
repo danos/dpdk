@@ -179,12 +179,14 @@ rxp_flush_rules(struct ibv_context *ctx, struct mlx5_rxp_rof_entry *rules,
 				     count, ~0,
 				     MLX5_RXP_POLL_CSR_FOR_VALUE_TIMEOUT, id);
 	if (ret < 0) {
-		DRV_LOG(ERR, "Rules not rx by RXP: credit: %d, depth: %d", val,
-			fifo_depth);
+		if (ret == -EBUSY)
+			DRV_LOG(ERR, "Rules not rx by RXP: credit: %d, depth:"
+				" %d", val, fifo_depth);
+		else
+			DRV_LOG(ERR, "CSR poll failed, can't read value!");
 		return ret;
 	}
 	DRV_LOG(DEBUG, "RTRU FIFO depth: 0x%x", fifo_depth);
-	DRV_LOG(DEBUG, "Rules flush took %d cycles.", ret);
 	ret = mlx5_devx_regex_register_read(ctx, id, MLX5_RXP_RTRU_CSR_CTRL,
 					    &val);
 	if (ret) {
@@ -194,15 +196,21 @@ rxp_flush_rules(struct ibv_context *ctx, struct mlx5_rxp_rof_entry *rules,
 	val |= MLX5_RXP_RTRU_CSR_CTRL_GO;
 	ret = mlx5_devx_regex_register_write(ctx, id, MLX5_RXP_RTRU_CSR_CTRL,
 					     val);
+	if (ret) {
+		DRV_LOG(ERR, "CSR write failed!");
+		return -1;
+	}
 	ret = rxp_poll_csr_for_value(ctx, &val, MLX5_RXP_RTRU_CSR_STATUS,
 				     MLX5_RXP_RTRU_CSR_STATUS_UPDATE_DONE,
 				     MLX5_RXP_RTRU_CSR_STATUS_UPDATE_DONE,
 				     MLX5_RXP_POLL_CSR_FOR_VALUE_TIMEOUT, id);
 	if (ret < 0) {
-		DRV_LOG(ERR, "Rules update timeout: 0x%08X", val);
+		if (ret == -EBUSY)
+			DRV_LOG(ERR, "Rules update timeout: 0x%08X", val);
+		else
+			DRV_LOG(ERR, "CSR poll failed, can't read value!");
 		return ret;
 	}
-	DRV_LOG(DEBUG, "Rules update took %d cycles", ret);
 	if (mlx5_devx_regex_register_read(ctx, id, MLX5_RXP_RTRU_CSR_CTRL,
 					  &val)) {
 		DRV_LOG(ERR, "CSR read failed!");
@@ -211,7 +219,7 @@ rxp_flush_rules(struct ibv_context *ctx, struct mlx5_rxp_rof_entry *rules,
 	val &= ~(MLX5_RXP_RTRU_CSR_CTRL_GO);
 	if (mlx5_devx_regex_register_write(ctx, id, MLX5_RXP_RTRU_CSR_CTRL,
 					   val)) {
-		DRV_LOG(ERR, "CSR write write failed!");
+		DRV_LOG(ERR, "CSR write failed!");
 		return -1;
 	}
 
@@ -225,7 +233,7 @@ rxp_poll_csr_for_value(struct ibv_context *ctx, uint32_t *value,
 		       uint32_t expected_mask, uint32_t timeout_ms, uint8_t id)
 {
 	unsigned int i;
-	int ret = 0;
+	int ret;
 
 	ret = -EBUSY;
 	for (i = 0; i < timeout_ms; i++) {
@@ -276,7 +284,7 @@ rxp_init_rtru(struct ibv_context *ctx, uint8_t id, uint32_t init_bits)
 	uint32_t poll_value;
 	uint32_t expected_value;
 	uint32_t expected_mask;
-	int ret = 0;
+	int ret;
 
 	/* Read the rtru ctrl CSR. */
 	ret = mlx5_devx_regex_register_read(ctx, id, MLX5_RXP_RTRU_CSR_CTRL,
@@ -554,6 +562,8 @@ rxp_init_eng(struct mlx5_regex_priv *priv, uint8_t id)
 		return ret;
 	ctrl &= ~MLX5_RXP_CSR_CTRL_INIT;
 	ret = mlx5_devx_regex_register_write(ctx, id, MLX5_RXP_CSR_CTRL, ctrl);
+	if (ret)
+		return ret;
 	rte_delay_us(20000);
 	ret = rxp_poll_csr_for_value(ctx, &ctrl, MLX5_RXP_CSR_STATUS,
 				     MLX5_RXP_CSR_STATUS_INIT_DONE,
@@ -921,7 +931,7 @@ mlx5_regex_rules_db_import(struct rte_regexdev *dev,
 {
 	struct mlx5_regex_priv *priv = dev->data->dev_private;
 	struct mlx5_rxp_ctl_rules_pgm *rules = NULL;
-	uint8_t id;
+	uint32_t id;
 	int ret;
 
 	if (priv->prog_mode == MLX5_RXP_MODE_NOT_DEFINED) {

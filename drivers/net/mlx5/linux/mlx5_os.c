@@ -250,15 +250,13 @@ mlx5_alloc_shared_dr(struct mlx5_priv *priv)
 			     flow_dv_push_vlan_remove_cb);
 	/* Init sample action cache list. */
 	snprintf(s, sizeof(s), "%s_sample_action_cache", sh->ibdev_name);
-	mlx5_cache_list_init(&sh->sample_action_list, s, 0,
-			     &rte_eth_devices[priv->dev_data->port_id],
+	mlx5_cache_list_init(&sh->sample_action_list, s, 0, sh,
 			     flow_dv_sample_create_cb,
 			     flow_dv_sample_match_cb,
 			     flow_dv_sample_remove_cb);
 	/* Init dest array action cache list. */
 	snprintf(s, sizeof(s), "%s_dest_array_cache", sh->ibdev_name);
-	mlx5_cache_list_init(&sh->dest_array_list, s, 0,
-			     &rte_eth_devices[priv->dev_data->port_id],
+	mlx5_cache_list_init(&sh->dest_array_list, s, 0, sh,
 			     flow_dv_dest_array_create_cb,
 			     flow_dv_dest_array_match_cb,
 			     flow_dv_dest_array_remove_cb);
@@ -757,7 +755,13 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 			rte_errno = ENOMEM;
 			return NULL;
 		}
-		eth_dev->device = dpdk_dev;
+		priv = eth_dev->data->dev_private;
+		if (priv->sh->bond_dev != UINT16_MAX)
+			/* For bonding port, use primary PCI device. */
+			eth_dev->device =
+				rte_eth_devices[priv->sh->bond_dev].device;
+		else
+			eth_dev->device = dpdk_dev;
 		eth_dev->dev_ops = &mlx5_os_dev_sec_ops;
 		eth_dev->rx_descriptor_status = mlx5_rx_descriptor_status;
 		eth_dev->tx_descriptor_status = mlx5_tx_descriptor_status;
@@ -1129,17 +1133,6 @@ err_secondary:
 			err = -err;
 			goto error;
 		}
-#ifdef HAVE_MLX5DV_DR_ACTION_FLOW_HIT
-		if (config->hca_attr.flow_hit_aso) {
-			sh->flow_hit_aso_en = 1;
-			err = mlx5_flow_aso_age_mng_init(sh);
-			if (err) {
-				err = -err;
-				goto error;
-			}
-			DRV_LOG(DEBUG, "Flow Hit ASO is supported.");
-		}
-#endif /* HAVE_MLX5DV_DR_ACTION_FLOW_HIT */
 		/* Check relax ordering support. */
 		if (!haswell_broadwell_cpu) {
 			sh->cmng.relaxed_ordering_write =
@@ -1186,8 +1179,17 @@ err_secondary:
 				DRV_LOG(WARNING, "No available register for"
 					" meter.");
 			} else {
-				priv->mtr_color_reg = ffs(reg_c_mask) - 1 +
-						      REG_C_0;
+				/*
+				 * The meter color register is used by the
+				 * flow-hit feature as well.
+				 * The flow-hit feature must use REG_C_3
+				 * Prefer REG_C_3 if it is available.
+				 */
+				if (reg_c_mask & (1 << (REG_C_3 - REG_C_0)))
+					priv->mtr_color_reg = REG_C_3;
+				else
+					priv->mtr_color_reg = ffs(reg_c_mask)
+							      - 1 + REG_C_0;
 				priv->mtr_en = 1;
 				priv->mtr_reg_share =
 				      config->hca_attr.qos.flow_meter_reg_share;
@@ -1196,6 +1198,18 @@ err_secondary:
 			}
 		}
 #endif
+#ifdef HAVE_MLX5_DR_CREATE_ACTION_ASO
+		if (config->hca_attr.flow_hit_aso &&
+		    priv->mtr_color_reg == REG_C_3) {
+			sh->flow_hit_aso_en = 1;
+			err = mlx5_flow_aso_age_mng_init(sh);
+			if (err) {
+				err = -err;
+				goto error;
+			}
+			DRV_LOG(DEBUG, "Flow Hit ASO is supported.");
+		}
+#endif /* HAVE_MLX5_DR_CREATE_ACTION_ASO */
 #if defined(HAVE_MLX5DV_DR) && defined(HAVE_MLX5_DR_CREATE_ACTION_FLOW_SAMPLE)
 		if (config->hca_attr.log_max_ft_sampler_num > 0  &&
 		    config->dv_flow_en) {
@@ -1373,7 +1387,17 @@ err_secondary:
 	eth_dev->data->dev_private = priv;
 	priv->dev_data = eth_dev->data;
 	eth_dev->data->mac_addrs = priv->mac;
-	eth_dev->device = dpdk_dev;
+	if (spawn->pf_bond < 0) {
+		eth_dev->device = dpdk_dev;
+	} else {
+		/* Use primary bond PCI as device. */
+		if (sh->bond_dev == UINT16_MAX) {
+			sh->bond_dev = eth_dev->data->port_id;
+			eth_dev->device = dpdk_dev;
+		} else {
+			eth_dev->device = rte_eth_devices[sh->bond_dev].device;
+		}
+	}
 	eth_dev->data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 	/* Configure the first MAC address by default. */
 	if (mlx5_get_mac(eth_dev, &mac.addr_bytes)) {
@@ -1942,6 +1966,7 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 						(list[ns].ifindex,
 						 &list[ns].info);
 			}
+#ifdef HAVE_MLX5DV_DR_DEVX_PORT
 			if (!ret && bd >= 0) {
 				switch (list[ns].info.name_type) {
 				case MLX5_PHYS_PORT_NAME_TYPE_UPLINK:
@@ -1959,6 +1984,7 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 				}
 				continue;
 			}
+#endif
 			if (!ret && (list[ns].info.representor ^
 				     list[ns].info.master))
 				ns++;
@@ -2097,7 +2123,7 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 	case PCI_DEVICE_ID_MELLANOX_CONNECTX5EXVF:
 	case PCI_DEVICE_ID_MELLANOX_CONNECTX5BFVF:
 	case PCI_DEVICE_ID_MELLANOX_CONNECTX6VF:
-	case PCI_DEVICE_ID_MELLANOX_CONNECTX6DXVF:
+	case PCI_DEVICE_ID_MELLANOX_CONNECTXVF:
 		dev_config_vf = 1;
 		break;
 	default:

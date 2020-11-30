@@ -57,9 +57,11 @@ eal_pmd_path = join_paths(get_option('prefix'), driver_install_path)
 # driver .so files often depend upon the bus drivers for their connect bus,
 # e.g. ixgbe depends on librte_bus_pci. This means that the bus drivers need
 # to be in the library path, so symlink the drivers from the main lib directory.
-meson.add_install_script('../buildtools/symlink-drivers-solibs.sh',
-		get_option('libdir'),
-		pmd_subdir_opt)
+if not is_windows
+	meson.add_install_script('../buildtools/symlink-drivers-solibs.sh',
+			get_option('libdir'),
+			pmd_subdir_opt)
+endif
 
 # set the machine type and cflags for it
 if meson.is_cross_build()
@@ -192,6 +194,7 @@ warning_flags = [
 	# additional warnings in alphabetical order
 	'-Wcast-qual',
 	'-Wdeprecated',
+	'-Wformat',
 	'-Wformat-nonliteral',
 	'-Wformat-security',
 	'-Wmissing-declarations',
@@ -218,7 +221,7 @@ if not dpdk_conf.get('RTE_ARCH_64')
 	warning_flags += '-Wno-pointer-to-int-cast'
 endif
 if cc.get_id() == 'intel'
-	warning_ids = [188, 2203, 2279, 2557, 3179, 3656]
+	warning_ids = [181, 188, 2203, 2279, 2557, 3179, 3656]
 	foreach i:warning_ids
 		warning_flags += '-diag-disable=@0@'.format(i)
 	endforeach

@@ -5,9 +5,8 @@ ICE Poll Mode Driver
 ======================
 
 The ice PMD (**librte_net_ice**) provides poll mode driver support for
-10/25/50/100 Gbps Intel® Ethernet 810 Series Network Adapters based on
-the Intel Ethernet Controller E810.
-
+10/25/50/100 Gbps Intel® Ethernet 800 Series Network Adapters based on
+the Intel Ethernet Controller E810 and Intel Ethernet Connection E822/E823.
 
 Prerequisites
 -------------
@@ -16,6 +15,30 @@ Prerequisites
 
 - To get better performance on Intel platforms, please follow the "How to get best performance with NICs on Intel platforms"
   section of the :ref:`Getting Started Guide for Linux <linux_gsg>`.
+
+- Please follow the matching list to download specific kernel driver, firmware and DDP package from
+  `https://www.intel.com/content/www/us/en/search.html?ws=text#q=e810&t=Downloads&layout=table`.
+
+- To understand what is DDP package and how it works, please review `Intel® Ethernet Controller E810 Dynamic
+  Device Personalization (DDP) for Telecommunications Technology Guide <https://cdrdv2.intel.com/v1/dl/getContent/617015>`_.
+
+- To understand DDP for COMMs usage with DPDK, please review `Intel® Ethernet 800 Series Telecommunication (Comms)
+  Dynamic Device Personalization (DDP) Package <https://cdrdv2.intel.com/v1/dl/getContent/618651>`_.
+
+
+Recommended Matching List
+-------------------------
+
+It is highly recommended to upgrade the ice kernel driver, firmware and DDP package
+to avoid the compatibility issues with ice PMD.
+Here is the suggested matching list which has been tested and verified.
+The detailed information can refer to chapter Tested Platforms/Tested NICs in release notes.
+
+   +-----------+---------------+-----------------+-----------+-----------+
+   |    DPDK   | Kernel Driver | OS Default DDP  | COMMS DDP | Firmware  |
+   +===========+===============+=================+===========+===========+
+   |    20.11  |     1.3.0     |      1.3.20     |  1.3.24   |    2.3    |
+   +-----------+---------------+-----------------+-----------+-----------+
 
 Pre-Installation Configuration
 ------------------------------
@@ -30,7 +53,7 @@ Runtime Config Options
   But if user intend to use the device without OS package, user can take ``devargs``
   parameter ``safe-mode-support``, for example::
 
-    -w 80:00.0,safe-mode-support=1
+    -a 80:00.0,safe-mode-support=1
 
   Then the driver will be initialized successfully and the device will enter Safe Mode.
   NOTE: In Safe mode, only very limited features are available, features like RSS,
@@ -41,7 +64,7 @@ Runtime Config Options
   In pipeline mode, a flow can be set at one specific stage by setting parameter
   ``priority``. Currently, we support two stages: priority = 0 or !0. Flows with
   priority 0 located at the first pipeline stage which typically be used as a firewall
-  to drop the packet on a blacklist(we called it permission stage). At this stage,
+  to drop the packet on a blocklist(we called it permission stage). At this stage,
   flow rules are created for the device's exact match engine: switch. Flows with priority
   !0 located at the second stage, typically packets are classified here and be steered to
   specific queue or queue group (we called it distribution stage), At this stage, flow
@@ -53,7 +76,7 @@ Runtime Config Options
   use pipeline mode by setting ``devargs`` parameter ``pipeline-mode-support``,
   for example::
 
-    -w 80:00.0,pipeline-mode-support=1
+    -a 80:00.0,pipeline-mode-support=1
 
 - ``Protocol extraction for per queue``
 
@@ -62,8 +85,8 @@ Runtime Config Options
 
   The argument format is::
 
-      -w 18:00.0,proto_xtr=<queues:protocol>[<queues:protocol>...]
-      -w 18:00.0,proto_xtr=<protocol>
+      -a 18:00.0,proto_xtr=<queues:protocol>[<queues:protocol>...]
+      -a 18:00.0,proto_xtr=<protocol>
 
   Queues are grouped by ``(`` and ``)`` within the group. The ``-`` character
   is used as a range separator and ``,`` is used as a single number separator.
@@ -74,14 +97,14 @@ Runtime Config Options
 
   .. code-block:: console
 
-    dpdk-testpmd -w 18:00.0,proto_xtr='[(1,2-3,8-9):tcp,10-13:vlan]'
+    dpdk-testpmd -a 18:00.0,proto_xtr='[(1,2-3,8-9):tcp,10-13:vlan]'
 
   This setting means queues 1, 2-3, 8-9 are TCP extraction, queues 10-13 are
   VLAN extraction, other queues run with no protocol extraction.
 
   .. code-block:: console
 
-    dpdk-testpmd -w 18:00.0,proto_xtr=vlan,proto_xtr='[(1,2-3,8-9):tcp,10-23:ipv6]'
+    dpdk-testpmd -a 18:00.0,proto_xtr=vlan,proto_xtr='[(1,2-3,8-9):tcp,10-23:ipv6]'
 
   This setting means queues 1, 2-3, 8-9 are TCP extraction, queues 10-23 are
   IPv6 extraction, other queues use the default VLAN extraction.
@@ -233,7 +256,7 @@ responses for the same from PF.
 
 #. Bind the VF0,  and run testpmd with 'cap=dcf' devarg::
 
-      dpdk-testpmd -l 22-25 -n 4 -w 18:01.0,cap=dcf -- -i
+      dpdk-testpmd -l 22-25 -n 4 -a 18:01.0,cap=dcf -- -i
 
 #. Monitor the VF2 interface network traffic::
 

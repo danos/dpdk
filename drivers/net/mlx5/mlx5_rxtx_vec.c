@@ -148,18 +148,26 @@ mlx5_rx_mprq_replenish_bulk_mbuf(struct mlx5_rxq_data *rxq)
 	uint32_t n = elts_n - (rxq->elts_ci - rxq->rq_pi);
 	uint32_t elts_idx = rxq->elts_ci & wqe_mask;
 	struct rte_mbuf **elts = &(*rxq->elts)[elts_idx];
+	unsigned int i;
 
-	/* Not to cross queue end. */
-	if (n >= rxq->rq_repl_thresh) {
+	if (n >= rxq->rq_repl_thresh &&
+	    rxq->elts_ci - rxq->rq_pi <= rxq->rq_repl_thresh) {
 		MLX5_ASSERT(n >= MLX5_VPMD_RXQ_RPLNSH_THRESH(elts_n));
 		MLX5_ASSERT(MLX5_VPMD_RXQ_RPLNSH_THRESH(elts_n) >
 			     MLX5_VPMD_DESCS_PER_LOOP);
-		n = RTE_MIN(n, elts_n - elts_idx);
+		/* Not to cross queue end. */
+		n = RTE_MIN(n - MLX5_VPMD_DESCS_PER_LOOP, elts_n - elts_idx);
+		/* Limit replenish number to threshold value. */
+		n = RTE_MIN(n, rxq->rq_repl_thresh);
 		if (rte_mempool_get_bulk(rxq->mp, (void *)elts, n) < 0) {
 			rxq->stats.rx_nombuf += n;
 			return;
 		}
 		rxq->elts_ci += n;
+		/* Prevent overflowing into consumed mbufs. */
+		elts_idx = rxq->elts_ci & wqe_mask;
+		for (i = 0; i < MLX5_VPMD_DESCS_PER_LOOP; ++i)
+			(*rxq->elts)[elts_idx + i] = &rxq->fake_mbuf;
 	}
 }
 
