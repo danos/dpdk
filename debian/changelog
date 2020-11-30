@@ -1,3 +1,12 @@
+dpdk (20.11-1) UNRELEASED; urgency=medium
+
+  * dpdk: suggest dpdk-kmods-dkms
+  * dpdk: drop Suggests: linux-image-generic, not needed
+  * New upstream release 19.11; for a full list of changes see:
+    http://doc.dpdk.org/guides-19.08/rel_notes/release_20_11.html
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 30 Nov 2020 11:58:55 +0000
+
 dpdk (20.11~rc3-1) experimental; urgency=medium
 
   [ Christian Ehrhardt ]
