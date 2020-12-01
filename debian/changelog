@@ -1,11 +1,17 @@
-dpdk (20.11-1) UNRELEASED; urgency=medium
+dpdk (20.11-1) experimental; urgency=medium
 
   * dpdk: suggest dpdk-kmods-dkms
   * dpdk: drop Suggests: linux-image-generic, not needed
   * New upstream release 19.11; for a full list of changes see:
     http://doc.dpdk.org/guides-19.08/rel_notes/release_20_11.html
+  * dpdk: install new dpdk-hugepages.py script
+  * dpdk-dev: override lintian warnings about new scripts
+  * d/watch: bump to version 4, no changes
+  * d/copyright: update new path to rte_kni_common.h
+  * Bump Standards-Version to 4.5.1, no changes
+  * Add symbols files for librte-graph, librte-node, librte-regexdev
 
- -- Luca Boccassi <bluca@debian.org>  Mon, 30 Nov 2020 11:58:55 +0000
+ -- Luca Boccassi <bluca@debian.org>  Tue, 01 Dec 2020 12:35:48 +0000
 
 dpdk (20.11~rc3-1) experimental; urgency=medium
 
