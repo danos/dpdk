@@ -2,8 +2,8 @@ dpdk (20.11-1) experimental; urgency=medium
 
   * dpdk: suggest dpdk-kmods-dkms
   * dpdk: drop Suggests: linux-image-generic, not needed
-  * New upstream release 19.11; for a full list of changes see:
-    http://doc.dpdk.org/guides-19.08/rel_notes/release_20_11.html
+  * New upstream release 20.11; for a full list of changes see:
+    http://doc.dpdk.org/guides-20.11/rel_notes/release_20_11.html
   * dpdk: install new dpdk-hugepages.py script
   * dpdk-dev: override lintian warnings about new scripts
   * d/watch: bump to version 4, no changes
