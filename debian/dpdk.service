@@ -2,7 +2,8 @@
 Description=DPDK runtime environment
 Documentation=https://dpdk.org/doc/guides/index.html
 DefaultDependencies=false
-After=network-pre.target local-fs.target
+After=local-fs.target
+Before=network-pre.target
 
 [Service]
 Type=oneshot
