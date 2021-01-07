@@ -1,3 +1,9 @@
+dpdk (20.11-2) UNRELEASED; urgency=medium
+
+  * dpdk.service: start earlier and avoid dependency loop (Closes: #979489)
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 07 Jan 2021 11:23:43 +0100
+
 dpdk (20.11-1) experimental; urgency=medium
 
   * dpdk: suggest dpdk-kmods-dkms
