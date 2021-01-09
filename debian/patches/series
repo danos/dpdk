@@ -55,3 +55,4 @@ add-build-option-for-ipsecgw.patch
 mlx5-disable-dv-flow.patch
 i40e-bringup.patch
 net-virtio-add-mac-addr-set-support.patch
+net-bonding-stop-all-members-in-bond-ethdev-stop.patch
