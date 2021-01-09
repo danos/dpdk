@@ -61,3 +61,4 @@ af_packet_advertise_supported_capabilities
 bonding_secondary_mac_debug.patch
 net-vmxnet3-add-mac-addr-set-support.patch
 net-virtio-add-mac-addr-set-support.patch
+net-bonding-stop-all-members-in-bond-ethdev-stop.patch
