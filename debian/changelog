@@ -1,3 +1,13 @@
+dpdk (19.11.4-0vyatta8) unstable; urgency=medium
+
+  [ Sharmila Podury ]
+  * net/bond: disabled bond has members in u/u state
+
+  [ Charles (Chas) Williams ]
+  * Update sched symbol versions for next release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 12 Jan 2021 09:37:16 -0500
+
 dpdk (19.11.4-0vyatta7) unstable; urgency=medium
 
   * rte_approx_int is now marked experimental
