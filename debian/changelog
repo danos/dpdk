@@ -1,3 +1,10 @@
+dpdk (18.11.5-1vyatta19) unstable; urgency=medium
+
+  [ Sharmila Podury ]
+  * net/bond: disabled bond has members in u/u state
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 12 Jan 2021 14:02:38 -0500
+
 dpdk (18.11.5-1vyatta18) unstable; urgency=medium
 
   * debian: do not the patch symbol files in debian/
