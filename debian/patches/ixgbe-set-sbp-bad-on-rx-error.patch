@@ -1,0 +1,54 @@
+--- a/drivers/net/ixgbe/ixgbe_ethdev.h
++++ b/drivers/net/ixgbe/ixgbe_ethdev.h
+@@ -37,6 +37,7 @@
+ #define IXGBE_RXD_STAT_TMST         0x10000    /* Timestamped Packet indication */
+ #define IXGBE_ADVTXD_TUCMD_L4T_RSV  0x00001800 /* L4 Packet TYPE, resvd  */
+ #define IXGBE_RXDADV_ERR_CKSUM_BIT  30
++#define IXGBE_RXDADV_ERR_RXE_BIT    29
+ #define IXGBE_RXDADV_ERR_CKSUM_MSK  3
+ #define IXGBE_ADVTXD_MACLEN_SHIFT   9          /* Bit shift for l2_len */
+ #define IXGBE_NB_STAT_MAPPING_REGS  32
+--- a/drivers/net/ixgbe/ixgbe_rxtx.c
++++ b/drivers/net/ixgbe/ixgbe_rxtx.c
+@@ -1453,6 +1453,9 @@
+ 	pkt_flags = error_to_pkt_flags_map[(rx_status >>
+ 		IXGBE_RXDADV_ERR_CKSUM_BIT) & IXGBE_RXDADV_ERR_CKSUM_MSK];
+ 
++	if (rx_status & (1 << IXGBE_RXDADV_ERR_RXE_BIT))
++		pkt_flags |= PKT_RX_RXE_SBP_BAD;
++
+ 	if ((rx_status & IXGBE_RXD_STAT_OUTERIPCS) &&
+ 	    (rx_status & IXGBE_RXDADV_ERR_OUTERIPER)) {
+ 		pkt_flags |= PKT_RX_EIP_CKSUM_BAD;
+--- a/drivers/net/ixgbe/ixgbe_rxtx_vec_sse.c
++++ b/drivers/net/ixgbe/ixgbe_rxtx_vec_sse.c
+@@ -491,6 +491,16 @@
+ 
+ 		/* set ol_flags with vlan packet type */
+ 		desc_to_olflags_v(descs, mbuf_init, vlan_flags, &rx_pkts[pos]);
++#define STATUS_ERROR_OF(desc_ptr) (((union ixgbe_adv_rx_desc*)(void *)desc_ptr)->wb.upper.status_error)
++
++		if (STATUS_ERROR_OF(&descs[0]) & (1 << IXGBE_RXDADV_ERR_RXE_BIT))
++			rx_pkts[pos]->ol_flags |= PKT_RX_RXE_SBP_BAD;
++		if (STATUS_ERROR_OF(&descs[1]) & (1 << IXGBE_RXDADV_ERR_RXE_BIT))
++			rx_pkts[pos+1]->ol_flags |= PKT_RX_RXE_SBP_BAD;
++		if (STATUS_ERROR_OF(&descs[2]) & (1 << IXGBE_RXDADV_ERR_RXE_BIT))
++			rx_pkts[pos+2]->ol_flags |= PKT_RX_RXE_SBP_BAD;
++		if (STATUS_ERROR_OF(&descs[3]) & (1 << IXGBE_RXDADV_ERR_RXE_BIT))
++			rx_pkts[pos+3]->ol_flags |= PKT_RX_RXE_SBP_BAD;
+ 
+ #ifdef RTE_LIBRTE_SECURITY
+ 		if (unlikely(use_ipsec))
+--- a/lib/librte_mbuf/rte_mbuf.h
++++ b/lib/librte_mbuf/rte_mbuf.h
+@@ -133,6 +133,10 @@
+ 
+ #define PKT_RX_IEEE1588_PTP  (1ULL << 9)  /**< RX IEEE1588 L2 Ethernet PT Packet. */
+ #define PKT_RX_IEEE1588_TMST (1ULL << 10) /**< RX IEEE1588 L2/L4 timestamped packet.*/
++
++/** RX BAD PACKET FORCED SAVED VIA NIC FEATURE */
++#define PKT_RX_RXE_SBP_BAD   (1ULL << 11)
++
+ #define PKT_RX_FDIR_ID       (1ULL << 13) /**< FD id reported if FDIR match. */
+ #define PKT_RX_FDIR_FLX      (1ULL << 14) /**< Flexible bytes reported if FDIR match. */
+ 

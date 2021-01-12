@@ -62,3 +62,5 @@ bonding_secondary_mac_debug.patch
 net-vmxnet3-add-mac-addr-set-support.patch
 net-virtio-add-mac-addr-set-support.patch
 net-bonding-stop-all-members-in-bond-ethdev-stop.patch
+# IXGBE MBUF Patch
+ixgbe-set-sbp-bad-on-rx-error.patch
