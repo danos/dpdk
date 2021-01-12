@@ -1,3 +1,10 @@
+dpdk (19.11.3-0vyatta5.2) unstable; urgency=medium
+
+  [ Sharmila Podury ]
+  * net/bond: disabled bond has members in u/u state
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 12 Jan 2021 18:52:34 -0500
+
 dpdk (19.11.3-0vyatta5.1) unstable; urgency=medium
 
   [ aroberts ]
