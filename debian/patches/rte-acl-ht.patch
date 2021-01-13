@@ -1,0 +1,522 @@
+--- a/lib/librte_acl/meson.build
++++ b/lib/librte_acl/meson.build
+@@ -5,6 +5,8 @@
+ 		'rte_acl.c', 'tb_mem.c')
+ headers = files('rte_acl.h', 'rte_acl_osdep.h')
+ 
++deps += ['hash', 'mempool']
++
+ if dpdk_conf.has('RTE_ARCH_X86')
+ 	sources += files('acl_run_sse.c')
+ 
+--- a/lib/librte_acl/acl.h
++++ b/lib/librte_acl/acl.h
+@@ -163,10 +163,23 @@
+ 	/** Socket ID to allocate memory from. */
+ 	enum rte_acl_classify_alg alg;
+ 	void               *rules;
++	unsigned int        flags;
++	struct rte_hash    *ht;
++	/** ACL ctx hashtable: only used if flag ACL_F_USE_HASHTABLE is set.
++	 *  Not used at runtime/classification, just build-time.
++	 */
++	struct rte_mempool *rule_pool;
++	/** ACL ctx rule memory pool. Only used if ACL_F_USE_HASHTABLE flag
++	 *  is set.
++	 */
+ 	uint32_t            max_rules;
+ 	uint32_t            rule_sz;
+ 	uint32_t            num_rules;
+ 	uint32_t            num_categories;
++
++	/* below here: all RT related fields.
++	 * get reset by acl_build_reset.
++	 */
+ 	uint32_t            num_tries;
+ 	uint32_t            match_index;
+ 	uint64_t            no_match;
+--- a/lib/librte_acl/rte_acl.c
++++ b/lib/librte_acl/rte_acl.c
+@@ -6,6 +6,10 @@
+ #include <rte_string_fns.h>
+ #include <rte_acl.h>
+ #include <rte_tailq.h>
++#include <rte_hash.h>
++#include <rte_jhash.h>
++#include <rte_random.h>
++#include <rte_mempool.h>
+ 
+ #include "acl.h"
+ 
+@@ -202,10 +206,39 @@
+ 	rte_mcfg_tailq_write_unlock();
+ 
+ 	rte_free(ctx->mem);
++	if (ctx->ht)
++		rte_hash_free(ctx->ht);
+ 	rte_free(ctx);
+ 	rte_free(te);
+ }
+ 
++static struct rte_hash *
++acl_create_hashtable(const struct rte_acl_param *param)
++{
++	int ret;
++	char hash_name[RTE_HASH_NAMESIZE];
++
++	ret = snprintf(hash_name, sizeof(hash_name), "ht_%s", param->name);
++	if (ret < 0 || ret >= RTE_HASH_NAMESIZE) {
++		rte_errno = ENAMETOOLONG;
++		return NULL;
++	}
++
++	struct rte_hash_parameters hash_params = {
++		.entries = param->max_rule_num,
++		.key_len = param->hash_key_len,
++		.hash_func = param->hash_func,
++		.hash_func_init_val = 0,
++		.name = hash_name,
++		.socket_id = param->socket_id,
++		.reserved = 0,
++		.extra_flag = 0
++	};
++
++
++	return rte_hash_create(&hash_params);
++}
++
+ struct rte_acl_ctx *
+ rte_acl_create(const struct rte_acl_param *param)
+ {
+@@ -223,10 +256,19 @@
+ 		return NULL;
+ 	}
+ 
++	/* check that hashtable parameters are valid. */
++	if (param->flags & ACL_F_USE_HASHTABLE
++	    && (param->rule_pool == NULL || param->hash_func == NULL)) {
++		rte_errno = EINVAL;
++		return NULL;
++	}
++
+ 	snprintf(name, sizeof(name), "ACL_%s", param->name);
+ 
+ 	/* calculate amount of memory required for pattern set. */
+-	sz = sizeof(*ctx) + param->max_rule_num * param->rule_size;
++	sz = sizeof(*ctx);
++	if (!(param->flags & ACL_F_USE_HASHTABLE))
++		sz += param->max_rule_num * param->rule_size;
+ 
+ 	/* get EAL TAILQ lock. */
+ 	rte_mcfg_tailq_write_lock();
+@@ -238,41 +280,190 @@
+ 			break;
+ 	}
+ 
++	if (te) {
++		rte_mcfg_tailq_write_unlock();
++		return ctx;
++	}
++
+ 	/* if ACL with such name doesn't exist, then create a new one. */
++	te = rte_zmalloc("ACL_TAILQ_ENTRY", sizeof(*te), 0);
++
+ 	if (te == NULL) {
+-		ctx = NULL;
+-		te = rte_zmalloc("ACL_TAILQ_ENTRY", sizeof(*te), 0);
++		RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
++		goto error;
++	}
++
++	ctx = rte_zmalloc_socket(name, sz, RTE_CACHE_LINE_SIZE, param->socket_id);
++
++	if (ctx == NULL) {
++		RTE_LOG(ERR, ACL,
++			"allocation of %zu bytes on socket %d for %s failed\n",
++			sz, param->socket_id, name);
++		rte_free(te);
++		goto error;
++	}
++
++
++	/* init new allocated context. */
++	ctx->rules = (param->flags & ACL_F_USE_HASHTABLE) ? NULL : ctx + 1;
++	ctx->max_rules = param->max_rule_num;
++	ctx->rule_sz = param->rule_size;
++	ctx->socket_id = param->socket_id;
++	ctx->alg = rte_acl_default_classify;
++	ctx->flags = param->flags;
++	strlcpy(ctx->name, param->name, sizeof(ctx->name));
++
++	te->data = (void *) ctx;
+ 
+-		if (te == NULL) {
+-			RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
+-			goto exit;
++	TAILQ_INSERT_TAIL(acl_list, te, next);
++
++	rte_mcfg_tailq_write_unlock();
++
++	if (!(param->flags & ACL_F_USE_HASHTABLE))
++		return ctx;
++
++	ctx->rule_pool = param->rule_pool;
++
++	ctx->ht = acl_create_hashtable(param);
++	if (ctx->ht == NULL) {
++		RTE_LOG(ERR, ACL, "creation of hash-table on socket %d for %s failed: %s\n",
++			param->socket_id, name,
++			rte_strerror(rte_errno));
++		rte_free(te);
++		rte_free(ctx);
++		goto error;
++	}
++
++	return ctx;
++
++error:
++	rte_mcfg_tailq_write_unlock();
++	return NULL;
++}
++
++static struct rte_acl_rule *
++acl_rule_create(struct rte_acl_ctx *ctx)
++{
++	int ret;
++	struct rte_acl_rule *rule;
++
++	if (!ctx)
++		return NULL;
++
++	ret = rte_mempool_get(ctx->rule_pool, (void *)&rule);
++	if (ret < 0)
++		return NULL;
++
++	return rule;
++}
++
++static void
++acl_rule_free(struct rte_acl_ctx *ctx, struct rte_acl_rule *rule)
++{
++	if (!ctx || !rule)
++		return;
++
++	rte_mempool_put(ctx->rule_pool, (void *)rule);
++}
++
++static int
++acl_del_rule_ht(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rule)
++{
++	int ret;
++	struct rte_acl_rule *res = NULL;
++
++	ret = rte_hash_lookup_data(ctx->ht, (const void *) rule,
++				   (void **) &res);
++	if (ret < 0) {
++		RTE_LOG(ERR, ACL, "lookup of rule on socket %d for %s failed: %s\n",
++				ctx->socket_id, ctx->name,
++				rte_strerror(-ret));
++		return ret;
++	}
++
++	ret = rte_hash_del_key(ctx->ht, (const void *) rule);
++	if (ret < 0) {
++		RTE_LOG(ERR, ACL, "deleting rule on socket %d for %s failed: %s\n",
++				ctx->socket_id, ctx->name,
++				rte_strerror(-ret));
++		return ret;
++	}
++
++	acl_rule_free(ctx, res);
++
++	ctx->num_rules--;
++
++	return 0;
++}
++
++int
++rte_acl_del_rule(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rule)
++{
++	if (ctx == NULL || rule == NULL || 0 == ctx->rule_sz)
++		return -EINVAL;
++
++	if (ctx->ht)
++		return acl_del_rule_ht(ctx, rule);
++	else
++		return -ENOTSUP;
++}
++
++
++static int
++acl_add_rules_ht(struct rte_acl_ctx *ctx, const void *rules, uint32_t num)
++{
++	int ret;
++	uint32_t i;
++	const uint8_t *pos;
++	struct rte_acl_rule *rule;
++
++	/* With flag ACL_F_USE_HASHTABLE set, it is mandatory
++	 * to have unique rules only.
++	 * If a rule/key already exists, none of the supplied rules
++	 * get added.
++	 */
++	for (i=0, pos = rules; i < num; i++, pos += ctx->rule_sz) {
++		ret = rte_hash_lookup(ctx->ht, pos);
++		if (ret != -ENOENT)
++			return -EEXIST;
++	}
++
++	for (i=0, pos = rules; i < num; i++, pos += ctx->rule_sz) {
++
++		rule = acl_rule_create(ctx);
++		if (!rule) {
++			RTE_LOG(ERR, ACL, "creating rule #%d on socket %d for %s failed: %s\n",
++				i, ctx->socket_id, ctx->name,
++				rte_strerror(rte_errno));
++			return -ENOMEM;
+ 		}
+ 
+-		ctx = rte_zmalloc_socket(name, sz, RTE_CACHE_LINE_SIZE, param->socket_id);
++		memset(rule, 0, ctx->rule_sz);
++		memcpy(rule, pos, ctx->rule_sz);
++
++		ret = rte_hash_add_key_data(ctx->ht, rule, (void *) rule);
++		if (ret < 0) {
++			RTE_LOG(ERR, ACL, "adding rule #%d to hash-table on socket %d for %s failed: %s\n",
++				i, ctx->socket_id, ctx->name,
++				rte_strerror(rte_errno));
+ 
+-		if (ctx == NULL) {
+-			RTE_LOG(ERR, ACL,
+-				"allocation of %zu bytes on socket %d for %s failed\n",
+-				sz, param->socket_id, name);
+-			rte_free(te);
+-			goto exit;
++			num = i;
++
++			goto error;
+ 		}
+-		/* init new allocated context. */
+-		ctx->rules = ctx + 1;
+-		ctx->max_rules = param->max_rule_num;
+-		ctx->rule_sz = param->rule_size;
+-		ctx->socket_id = param->socket_id;
+-		ctx->alg = rte_acl_default_classify;
+-		strlcpy(ctx->name, param->name, sizeof(ctx->name));
+ 
+-		te->data = (void *) ctx;
++		ctx->num_rules++;
++	}
++
++	return 0;
++
++error:
+ 
+-		TAILQ_INSERT_TAIL(acl_list, te, next);
++	for (i=0, pos = rules; i < num; i++, pos += ctx->rule_sz) {
++		acl_del_rule_ht(ctx, rule);
+ 	}
+ 
+-exit:
+-	rte_mcfg_tailq_write_unlock();
+-	return ctx;
++	return ret;
+ }
+ 
+ static int
+@@ -283,6 +474,9 @@
+ 	if (num + ctx->num_rules > ctx->max_rules)
+ 		return -ENOMEM;
+ 
++	if (ctx->ht)
++		return acl_add_rules_ht(ctx, rules, num);
++
+ 	pos = ctx->rules;
+ 	pos += ctx->rule_sz * ctx->num_rules;
+ 	memcpy(pos, rules, num * ctx->rule_sz);
+@@ -334,8 +528,24 @@
+ void
+ rte_acl_reset_rules(struct rte_acl_ctx *ctx)
+ {
+-	if (ctx != NULL)
+-		ctx->num_rules = 0;
++	uint32_t iter = 0;
++	struct rte_acl_rule *r;
++	void *key;
++
++	if (ctx == NULL)
++		return;
++
++	ctx->num_rules = 0;
++
++	if (ctx->ht == NULL)
++		return;
++
++	while (rte_hash_iterate(ctx->ht, (void *) &key, (void **) &r, &iter)
++	       >= 0) {
++		acl_rule_free(ctx, r);
++	}
++
++	rte_hash_reset(ctx->ht);
+ }
+ 
+ /*
+@@ -366,6 +576,7 @@
+ 	printf("  num_rules=%"PRIu32"\n", ctx->num_rules);
+ 	printf("  num_categories=%"PRIu32"\n", ctx->num_categories);
+ 	printf("  num_tries=%"PRIu32"\n", ctx->num_tries);
++	printf("  flags=%u\n", ctx->flags);
+ }
+ 
+ /*
+--- a/lib/librte_acl/rte_acl.h
++++ b/lib/librte_acl/rte_acl.h
+@@ -122,6 +122,10 @@
+ /** Max number of characters in name.*/
+ #define	RTE_ACL_NAMESIZE		32
+ 
++/** Type of function to compare the rule hash key */
++typedef uint32_t (*rte_acl_hash_function)(const void *key, uint32_t key_len,
++					  uint32_t init_val);
++
+ /**
+  * Parameters used when creating the ACL context.
+  */
+@@ -130,8 +134,15 @@
+ 	int         socket_id;    /**< Socket ID to allocate memory for. */
+ 	uint32_t    rule_size;    /**< Size of each rule. */
+ 	uint32_t    max_rule_num; /**< Maximum number of rules. */
++
++	unsigned int flags;              /**< Flags of the ACL context. */
++	struct rte_mempool *rule_pool;   /**< Memory pool for ACLs, used with ACL_F_USE_HASHTABLE. */
++	uint32_t hash_key_len;           /**< Length of hash key. */
++	rte_acl_hash_function hash_func; /**< Function used to calculate hash. */
+ };
+ 
++#define ACL_F_USE_HASHTABLE 0x0001 /**< Use hashtable for ACL context entries. */
++
+ 
+ /**
+  * Create a new ACL context.
+@@ -193,6 +204,22 @@
+ 	uint32_t num);
+ 
+ /**
++ * Delete rule of an existing ACL context.
++ * This function is not multi-thread safe.
++ *
++ * @param ctx
++ *   ACL context to add patterns to.
++ * @param rule
++ *   Single rule which should get deleted.
++ * @return
++ *   - -ENOENT if the rule could not be found.
++ *   - -EINVAL if the parameters are invalid.
++ *   - Zero if operation completed successfully.
++ */
++int
++rte_acl_del_rule(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rule);
++
++/**
+  * Delete all rules from the ACL context.
+  * This function is not multi-thread safe.
+  * Note that internal run-time structures are not affected.
+--- a/lib/librte_acl/acl_bld.c
++++ b/lib/librte_acl/acl_bld.c
+@@ -3,6 +3,7 @@
+  */
+ 
+ #include <rte_acl.h>
++#include <rte_hash.h>
+ #include "tb_mem.h"
+ #include "acl.h"
+ 
+@@ -1433,13 +1434,36 @@
+ 	}
+ }
+ 
++static void
++init_build_rules(struct acl_build_context *bcx, const struct rte_acl_rule *rule,
++		 struct rte_acl_build_rule *br, uint32_t fn,
++		 struct rte_acl_build_rule **head, uint32_t **wp, uint32_t *n)
++{
++	uint32_t num = *n;
++
++	if ((rule->data.category_mask & bcx->category_mask) == 0)
++		return;
++
++	br[num].next = *head;
++	br[num].config = &bcx->cfg;
++	br[num].f = rule;
++	br[num].wildness = *wp;
++	*wp += fn;
++	*head = br + num;
++
++	num++;
++	*n = num;
++}
++
+ static int
+ acl_build_rules(struct acl_build_context *bcx)
+ {
+ 	struct rte_acl_build_rule *br, *head;
+ 	const struct rte_acl_rule *rule;
++	struct rte_acl_rule *r;
++	void *key;
+ 	uint32_t *wp;
+-	uint32_t fn, i, n, num;
++	uint32_t fn, i, n, num, iter = 0;
+ 	size_t ofs, sz;
+ 
+ 	fn = bcx->cfg.num_fields;
+@@ -1453,17 +1477,19 @@
+ 	num = 0;
+ 	head = NULL;
+ 
+-	for (i = 0; i != n; i++) {
+-		rule = (const struct rte_acl_rule *)
+-			((uintptr_t)bcx->acx->rules + bcx->acx->rule_sz * i);
+-		if ((rule->data.category_mask & bcx->category_mask) != 0) {
+-			br[num].next = head;
+-			br[num].config = &bcx->cfg;
+-			br[num].f = rule;
+-			br[num].wildness = wp;
+-			wp += fn;
+-			head = br + num;
+-			num++;
++	if (bcx->acx->ht) {
++		while (rte_hash_iterate(bcx->acx->ht,
++					(void *) &key,
++					(void **) &r,
++					&iter) >= 0)
++			init_build_rules(bcx, r, br, fn, &head, &wp, &num);
++	} else {
++		for (i = 0; i != n; i++) {
++			rule = (const struct rte_acl_rule *)
++				((uintptr_t)bcx->acx->rules
++				 + bcx->acx->rule_sz * i);
++
++			init_build_rules(bcx, rule, br, fn, &head, &wp, &num);
+ 		}
+ 	}
+ 
+@@ -1595,6 +1621,9 @@
+ 
+ 	acl_build_reset(ctx);
+ 
++	if (ctx->num_rules == 0)
++		return 0;
++
+ 	if (cfg->max_size == 0) {
+ 		n = NODE_MIN;
+ 		max_size = SIZE_MAX;
+--- a/lib/librte_acl/rte_acl_version.map
++++ b/lib/librte_acl/rte_acl_version.map
+@@ -7,6 +7,7 @@
+ 	rte_acl_classify_alg;
+ 	rte_acl_classify_scalar;
+ 	rte_acl_create;
++	rte_acl_del_rule;
+ 	rte_acl_dump;
+ 	rte_acl_find_existing;
+ 	rte_acl_free;
