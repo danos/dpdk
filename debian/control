@@ -512,6 +512,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
+Provides: librte-mbuf-rx-sbp-bad,
 Description: Data Plane Development Kit (librte-mbuf2 runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.
