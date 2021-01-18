@@ -221,6 +221,11 @@ otx2_nix_timesync_enable(struct rte_eth_dev *eth_dev)
 		return -EINVAL;
 	}
 
+	if (dev->npc_flow.switch_header_type == OTX2_PRIV_FLAGS_HIGIG) {
+		otx2_err("Both PTP and switch header enabled");
+		return -EINVAL;
+	}
+
 	/* Allocating a iova address for tx tstamp */
 	const struct rte_memzone *ts;
 	ts = rte_eth_dma_zone_reserve(eth_dev, "otx2_ts",
@@ -233,6 +238,14 @@ otx2_nix_timesync_enable(struct rte_eth_dev *eth_dev)
 
 	dev->tstamp.tx_tstamp_iova = ts->iova;
 	dev->tstamp.tx_tstamp = ts->addr;
+
+	rc = rte_mbuf_dyn_rx_timestamp_register(
+			&dev->tstamp.tstamp_dynfield_offset,
+			&dev->tstamp.rx_tstamp_dynflag);
+	if (rc != 0) {
+		otx2_err("Failed to register Rx timestamp field/flag");
+		return -rte_errno;
+	}
 
 	/* System time should be already on by default */
 	nix_start_timecounters(eth_dev);

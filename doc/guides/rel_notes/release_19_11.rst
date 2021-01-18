@@ -206,7 +206,7 @@ New Features
   * Added support for VLAN set VID offload command.
   * Added support for matching on packets withe Geneve tunnel header.
   * Added hairpin support.
-  * Added ConnectX6-DX support.
+  * Added ConnectX-6 Dx support.
   * Flow engine selected based on RDMA Core library version.
     DV flow engine selected if version is rdma-core-24.0 or higher.
     Verbs flow engine selected otherwise.
@@ -260,7 +260,7 @@ New Features
 * **Enabled Single Pass GCM acceleration on QAT GEN3.**
 
   Added support for Single Pass GCM, available on QAT GEN3 only (Intel
-  QuickAssist Technology C4xxx). It is automatically chosen instead of the
+  QuickAssist Technology P5xxx). It is automatically chosen instead of the
   classic 2-pass mode when running on QAT GEN3, significantly improving
   the performance of AES GCM operations.
 
@@ -474,9 +474,8 @@ API Changes
 
 * event: The function ``rte_event_eth_tx_adapter_enqueue`` takes an additional
   input as ``flags``. Flag ``RTE_EVENT_ETH_TX_ADAPTER_ENQUEUE_SAME_DEST`` which
-  has been introduced in this release is used when used when all the packets
-  enqueued in the Tx adapter are destined for the same Ethernet port ans Tx
-  queue.
+  has been introduced in this release is used when all the packets enqueued in
+  the Tx adapter are destined for the same Ethernet port and Tx queue.
 
 * sched: The pipe nodes configuration parameters such as number of pipes,
   pipe queue sizes, pipe profiles, etc., are moved from port level structure

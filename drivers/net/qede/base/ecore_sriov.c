@@ -61,6 +61,39 @@ const char *qede_ecore_channel_tlvs_string[] = {
 	"CHANNEL_TLV_COALESCE_READ",
 	"CHANNEL_TLV_BULLETIN_UPDATE_MAC",
 	"CHANNEL_TLV_UPDATE_MTU",
+	"CHANNEL_TLV_RDMA_ACQUIRE",
+	"CHANNEL_TLV_RDMA_START",
+	"CHANNEL_TLV_RDMA_STOP",
+	"CHANNEL_TLV_RDMA_ADD_USER",
+	"CHANNEL_TLV_RDMA_REMOVE_USER",
+	"CHANNEL_TLV_RDMA_QUERY_COUNTERS",
+	"CHANNEL_TLV_RDMA_ALLOC_TID",
+	"CHANNEL_TLV_RDMA_REGISTER_TID",
+	"CHANNEL_TLV_RDMA_DEREGISTER_TID",
+	"CHANNEL_TLV_RDMA_FREE_TID",
+	"CHANNEL_TLV_RDMA_CREATE_CQ",
+	"CHANNEL_TLV_RDMA_RESIZE_CQ",
+	"CHANNEL_TLV_RDMA_DESTROY_CQ",
+	"CHANNEL_TLV_RDMA_CREATE_QP",
+	"CHANNEL_TLV_RDMA_MODIFY_QP",
+	"CHANNEL_TLV_RDMA_QUERY_QP",
+	"CHANNEL_TLV_RDMA_DESTROY_QP",
+	"CHANNEL_TLV_RDMA_CREATE_SRQ",
+	"CHANNEL_TLV_RDMA_MODIFY_SRQ",
+	"CHANNEL_TLV_RDMA_DESTROY_SRQ",
+	"CHANNEL_TLV_RDMA_QUERY_PORT",
+	"CHANNEL_TLV_RDMA_QUERY_DEVICE",
+	"CHANNEL_TLV_RDMA_IWARP_CONNECT",
+	"CHANNEL_TLV_RDMA_IWARP_ACCEPT",
+	"CHANNEL_TLV_RDMA_IWARP_CREATE_LISTEN",
+	"CHANNEL_TLV_RDMA_IWARP_DESTROY_LISTEN",
+	"CHANNEL_TLV_RDMA_IWARP_PAUSE_LISTEN",
+	"CHANNEL_TLV_RDMA_IWARP_REJECT",
+	"CHANNEL_TLV_RDMA_IWARP_SEND_RTR",
+	"CHANNEL_TLV_ESTABLISH_LL2_CONN",
+	"CHANNEL_TLV_TERMINATE_LL2_CONN",
+	"CHANNEL_TLV_ASYNC_EVENT",
+	"CHANNEL_TLV_SOFT_FLR",
 	"CHANNEL_TLV_MAX"
 };
 
@@ -384,15 +417,16 @@ static enum _ecore_status_t ecore_iov_pci_cfg_info(struct ecore_dev *p_dev)
 	int pos = iov->pos;
 
 	DP_VERBOSE(p_dev, ECORE_MSG_IOV, "sriov ext pos %d\n", pos);
-	OSAL_PCI_READ_CONFIG_WORD(p_dev, pos + PCI_SRIOV_CTRL, &iov->ctrl);
+	OSAL_PCI_READ_CONFIG_WORD(p_dev, pos + RTE_PCI_SRIOV_CTRL, &iov->ctrl);
 
+	OSAL_PCI_READ_CONFIG_WORD(p_dev, pos + RTE_PCI_SRIOV_TOTAL_VF,
+				  &iov->total_vfs);
 	OSAL_PCI_READ_CONFIG_WORD(p_dev,
-				  pos + PCI_SRIOV_TOTAL_VF, &iov->total_vfs);
-	OSAL_PCI_READ_CONFIG_WORD(p_dev,
-				  pos + PCI_SRIOV_INITIAL_VF,
+				  pos + RTE_PCI_SRIOV_INITIAL_VF,
 				  &iov->initial_vfs);
 
-	OSAL_PCI_READ_CONFIG_WORD(p_dev, pos + PCI_SRIOV_NUM_VF, &iov->num_vfs);
+	OSAL_PCI_READ_CONFIG_WORD(p_dev, pos + RTE_PCI_SRIOV_NUM_VF,
+				  &iov->num_vfs);
 	if (iov->num_vfs) {
 		/* @@@TODO - in future we might want to add an OSAL here to
 		 * allow each OS to decide on its own how to act.
@@ -404,20 +438,21 @@ static enum _ecore_status_t ecore_iov_pci_cfg_info(struct ecore_dev *p_dev)
 	}
 
 	OSAL_PCI_READ_CONFIG_WORD(p_dev,
-				  pos + PCI_SRIOV_VF_OFFSET, &iov->offset);
+				  pos + RTE_PCI_SRIOV_VF_OFFSET, &iov->offset);
 
 	OSAL_PCI_READ_CONFIG_WORD(p_dev,
-				  pos + PCI_SRIOV_VF_STRIDE, &iov->stride);
+				  pos + RTE_PCI_SRIOV_VF_STRIDE, &iov->stride);
 
-	OSAL_PCI_READ_CONFIG_WORD(p_dev,
-				  pos + PCI_SRIOV_VF_DID, &iov->vf_device_id);
+	OSAL_PCI_READ_CONFIG_WORD(p_dev, pos + RTE_PCI_SRIOV_VF_DID,
+				  &iov->vf_device_id);
 
 	OSAL_PCI_READ_CONFIG_DWORD(p_dev,
-				   pos + PCI_SRIOV_SUP_PGSIZE, &iov->pgsz);
+				   pos + RTE_PCI_SRIOV_SUP_PGSIZE, &iov->pgsz);
 
-	OSAL_PCI_READ_CONFIG_DWORD(p_dev, pos + PCI_SRIOV_CAP, &iov->cap);
+	OSAL_PCI_READ_CONFIG_DWORD(p_dev, pos + RTE_PCI_SRIOV_CAP, &iov->cap);
 
-	OSAL_PCI_READ_CONFIG_BYTE(p_dev, pos + PCI_SRIOV_FUNC_LINK, &iov->link);
+	OSAL_PCI_READ_CONFIG_BYTE(p_dev, pos + RTE_PCI_SRIOV_FUNC_LINK,
+				  &iov->link);
 
 	DP_VERBOSE(p_dev, ECORE_MSG_IOV, "IOV info: nres %d, cap 0x%x,"
 		   "ctrl 0x%x, total %d, initial %d, num vfs %d, offset %d,"
@@ -636,7 +671,7 @@ enum _ecore_status_t ecore_iov_hw_info(struct ecore_hwfn *p_hwfn)
 
 	/* Learn the PCI configuration */
 	pos = OSAL_PCI_FIND_EXT_CAPABILITY(p_hwfn->p_dev,
-					   PCI_EXT_CAP_ID_SRIOV);
+					   RTE_PCI_EXT_CAP_ID_SRIOV);
 	if (!pos) {
 		DP_VERBOSE(p_hwfn, ECORE_MSG_IOV, "No PCIe IOV support\n");
 		return ECORE_SUCCESS;
@@ -4042,7 +4077,7 @@ ecore_iov_execute_vf_flr_cleanup(struct ecore_hwfn *p_hwfn,
 		rc = ecore_iov_enable_vf_access(p_hwfn, p_ptt, p_vf);
 		if (rc) {
 			/* TODO - again, a mess... */
-			DP_ERR(p_hwfn, "Failed to re-enable VF[%d] acces\n",
+			DP_ERR(p_hwfn, "Failed to re-enable VF[%d] access\n",
 			       vfid);
 			return rc;
 		}

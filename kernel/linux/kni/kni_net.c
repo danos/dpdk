@@ -47,7 +47,7 @@ iova2kva(struct kni_dev *kni, void *iova)
 static inline void *
 iova2data_kva(struct kni_dev *kni, struct rte_kni_mbuf *m)
 {
-	return phys_to_virt(iova_to_phys(kni->usr_tsk, m->buf_physaddr) +
+	return phys_to_virt(iova_to_phys(kni->usr_tsk, m->buf_iova) +
 			    m->data_off);
 }
 #endif
@@ -67,7 +67,7 @@ pa2va(void *pa, struct rte_kni_mbuf *m)
 
 	va = (void *)((unsigned long)pa +
 			(unsigned long)m->buf_addr -
-			(unsigned long)m->buf_physaddr);
+			(unsigned long)m->buf_iova);
 	return va;
 }
 
@@ -75,7 +75,7 @@ pa2va(void *pa, struct rte_kni_mbuf *m)
 static void *
 kva2data_kva(struct rte_kni_mbuf *m)
 {
-	return phys_to_virt(m->buf_physaddr + m->data_off);
+	return phys_to_virt(m->buf_iova + m->data_off);
 }
 
 static inline void *
@@ -158,7 +158,7 @@ kni_net_open(struct net_device *dev)
 	struct kni_dev *kni = netdev_priv(dev);
 
 	netif_start_queue(dev);
-	if (dflt_carrier == 1)
+	if (kni_dflt_carrier == 1)
 		netif_carrier_on(dev);
 	else
 		netif_carrier_off(dev);
@@ -623,8 +623,13 @@ kni_net_rx(struct kni_dev *kni)
 /*
  * Deal with a transmit timeout.
  */
+#ifdef HAVE_TX_TIMEOUT_TXQUEUE
+static void
+kni_net_tx_timeout(struct net_device *dev, unsigned int txqueue)
+#else
 static void
 kni_net_tx_timeout(struct net_device *dev)
+#endif
 {
 	pr_debug("Transmit timeout at %ld, latency %ld\n", jiffies,
 			jiffies - dev_trans_start(dev));

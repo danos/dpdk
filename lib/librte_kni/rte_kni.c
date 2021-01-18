@@ -145,31 +145,38 @@ kni_reserve_mz(struct rte_kni *kni)
 	char mz_name[RTE_MEMZONE_NAMESIZE];
 
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE, KNI_TX_Q_MZ_NAME_FMT, kni->name);
-	kni->m_tx_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY, 0);
+	kni->m_tx_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY,
+			RTE_MEMZONE_IOVA_CONTIG);
 	KNI_MEM_CHECK(kni->m_tx_q == NULL, tx_q_fail);
 
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE, KNI_RX_Q_MZ_NAME_FMT, kni->name);
-	kni->m_rx_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY, 0);
+	kni->m_rx_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY,
+			RTE_MEMZONE_IOVA_CONTIG);
 	KNI_MEM_CHECK(kni->m_rx_q == NULL, rx_q_fail);
 
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE, KNI_ALLOC_Q_MZ_NAME_FMT, kni->name);
-	kni->m_alloc_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY, 0);
+	kni->m_alloc_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY,
+			RTE_MEMZONE_IOVA_CONTIG);
 	KNI_MEM_CHECK(kni->m_alloc_q == NULL, alloc_q_fail);
 
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE, KNI_FREE_Q_MZ_NAME_FMT, kni->name);
-	kni->m_free_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY, 0);
+	kni->m_free_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY,
+			RTE_MEMZONE_IOVA_CONTIG);
 	KNI_MEM_CHECK(kni->m_free_q == NULL, free_q_fail);
 
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE, KNI_REQ_Q_MZ_NAME_FMT, kni->name);
-	kni->m_req_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY, 0);
+	kni->m_req_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY,
+			RTE_MEMZONE_IOVA_CONTIG);
 	KNI_MEM_CHECK(kni->m_req_q == NULL, req_q_fail);
 
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE, KNI_RESP_Q_MZ_NAME_FMT, kni->name);
-	kni->m_resp_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY, 0);
+	kni->m_resp_q = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY,
+			RTE_MEMZONE_IOVA_CONTIG);
 	KNI_MEM_CHECK(kni->m_resp_q == NULL, resp_q_fail);
 
 	snprintf(mz_name, RTE_MEMZONE_NAMESIZE, KNI_SYNC_ADDR_MZ_NAME_FMT, kni->name);
-	kni->m_sync_addr = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY, 0);
+	kni->m_sync_addr = rte_memzone_reserve(mz_name, KNI_FIFO_SIZE, SOCKET_ID_ANY,
+			RTE_MEMZONE_IOVA_CONTIG);
 	KNI_MEM_CHECK(kni->m_sync_addr == NULL, sync_addr_fail);
 
 	return 0;
@@ -269,37 +276,37 @@ rte_kni_alloc(struct rte_mempool *pktmbuf_pool,
 	/* TX RING */
 	kni->tx_q = kni->m_tx_q->addr;
 	kni_fifo_init(kni->tx_q, KNI_FIFO_COUNT_MAX);
-	dev_info.tx_phys = kni->m_tx_q->phys_addr;
+	dev_info.tx_phys = kni->m_tx_q->iova;
 
 	/* RX RING */
 	kni->rx_q = kni->m_rx_q->addr;
 	kni_fifo_init(kni->rx_q, KNI_FIFO_COUNT_MAX);
-	dev_info.rx_phys = kni->m_rx_q->phys_addr;
+	dev_info.rx_phys = kni->m_rx_q->iova;
 
 	/* ALLOC RING */
 	kni->alloc_q = kni->m_alloc_q->addr;
 	kni_fifo_init(kni->alloc_q, KNI_FIFO_COUNT_MAX);
-	dev_info.alloc_phys = kni->m_alloc_q->phys_addr;
+	dev_info.alloc_phys = kni->m_alloc_q->iova;
 
 	/* FREE RING */
 	kni->free_q = kni->m_free_q->addr;
 	kni_fifo_init(kni->free_q, KNI_FIFO_COUNT_MAX);
-	dev_info.free_phys = kni->m_free_q->phys_addr;
+	dev_info.free_phys = kni->m_free_q->iova;
 
 	/* Request RING */
 	kni->req_q = kni->m_req_q->addr;
 	kni_fifo_init(kni->req_q, KNI_FIFO_COUNT_MAX);
-	dev_info.req_phys = kni->m_req_q->phys_addr;
+	dev_info.req_phys = kni->m_req_q->iova;
 
 	/* Response RING */
 	kni->resp_q = kni->m_resp_q->addr;
 	kni_fifo_init(kni->resp_q, KNI_FIFO_COUNT_MAX);
-	dev_info.resp_phys = kni->m_resp_q->phys_addr;
+	dev_info.resp_phys = kni->m_resp_q->iova;
 
 	/* Req/Resp sync mem area */
 	kni->sync_addr = kni->m_sync_addr->addr;
 	dev_info.sync_va = kni->m_sync_addr->addr;
-	dev_info.sync_phys = kni->m_sync_addr->phys_addr;
+	dev_info.sync_phys = kni->m_sync_addr->iova;
 
 	kni->pktmbuf_pool = pktmbuf_pool;
 	kni->group_id = conf->group_id;

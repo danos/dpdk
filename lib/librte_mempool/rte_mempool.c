@@ -12,7 +12,6 @@
 #include <inttypes.h>
 #include <errno.h>
 #include <sys/queue.h>
-#include <sys/mman.h>
 
 #include <rte_common.h>
 #include <rte_log.h>
@@ -31,8 +30,10 @@
 #include <rte_string_fns.h>
 #include <rte_spinlock.h>
 #include <rte_tailq.h>
+#include <rte_eal_paging.h>
 
 #include "rte_mempool.h"
+#include "rte_mempool_trace.h"
 
 TAILQ_HEAD(rte_mempool_list, rte_tailq_entry);
 
@@ -45,6 +46,7 @@ EAL_REGISTER_TAILQ(rte_mempool_tailq)
 #define CALC_CACHE_FLUSHTHRESH(c)	\
 	((typeof(c))((c) * CACHE_FLUSHTHRESH_MULTIPLIER))
 
+#if defined(RTE_ARCH_X86)
 /*
  * return the greatest common divisor between a and b (fast algorithm)
  *
@@ -74,12 +76,13 @@ static unsigned get_gcd(unsigned a, unsigned b)
 }
 
 /*
- * Depending on memory configuration, objects addresses are spread
+ * Depending on memory configuration on x86 arch, objects addresses are spread
  * between channels and ranks in RAM: the pool allocator will add
  * padding between objects. This function return the new size of the
  * object.
  */
-static unsigned optimize_object_size(unsigned obj_size)
+static unsigned int
+arch_mem_object_align(unsigned int obj_size)
 {
 	unsigned nrank, nchan;
 	unsigned new_obj_size;
@@ -99,6 +102,13 @@ static unsigned optimize_object_size(unsigned obj_size)
 		new_obj_size++;
 	return new_obj_size * RTE_MEMPOOL_ALIGN;
 }
+#else
+static unsigned int
+arch_mem_object_align(unsigned int obj_size)
+{
+	return obj_size;
+}
+#endif
 
 struct pagesz_walk_arg {
 	int socket_id;
@@ -137,7 +147,7 @@ get_min_page_size(int socket_id)
 
 	rte_memseg_list_walk(find_min_pagesz, &wa);
 
-	return wa.min == SIZE_MAX ? (size_t) getpagesize() : wa.min;
+	return wa.min == SIZE_MAX ? (size_t) rte_mem_page_size() : wa.min;
 }
 
 
@@ -234,8 +244,8 @@ rte_mempool_calc_obj_size(uint32_t elt_size, uint32_t flags,
 	 */
 	if ((flags & MEMPOOL_F_NO_SPREAD) == 0) {
 		unsigned new_size;
-		new_size = optimize_object_size(sz->header_size + sz->elt_size +
-			sz->trailer_size);
+		new_size = arch_mem_object_align
+			    (sz->header_size + sz->elt_size + sz->trailer_size);
 		sz->trailer_size = new_size - sz->header_size - sz->elt_size;
 	}
 
@@ -332,7 +342,7 @@ rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
 		off = RTE_PTR_ALIGN_CEIL(vaddr, RTE_MEMPOOL_ALIGN) - vaddr;
 
 	if (off > len) {
-		ret = -EINVAL;
+		ret = 0;
 		goto fail;
 	}
 
@@ -343,12 +353,14 @@ rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
 
 	/* not enough room to store one object */
 	if (i == 0) {
-		ret = -EINVAL;
+		ret = 0;
 		goto fail;
 	}
 
 	STAILQ_INSERT_TAIL(&mp->mem_list, memhdr, next);
 	mp->nb_mem_chunks++;
+
+	rte_mempool_trace_populate_iova(mp, vaddr, iova, len, free_cb, opaque);
 	return i;
 
 fail:
@@ -408,6 +420,8 @@ rte_mempool_populate_virt(struct rte_mempool *mp, char *addr,
 
 		ret = rte_mempool_populate_iova(mp, addr + off, iova,
 			phys_len, free_cb, opaque);
+		if (ret == 0)
+			continue;
 		if (ret < 0)
 			goto fail;
 		/* no need to call the free callback for next chunks */
@@ -415,6 +429,7 @@ rte_mempool_populate_virt(struct rte_mempool *mp, char *addr,
 		cnt += ret;
 	}
 
+	rte_mempool_trace_populate_virt(mp, addr, len, pg_sz, free_cb, opaque);
 	return cnt;
 
  fail:
@@ -442,8 +457,9 @@ rte_mempool_get_page_size(struct rte_mempool *mp, size_t *pg_sz)
 	else if (rte_eal_has_hugepages() || alloc_in_ext_mem)
 		*pg_sz = get_min_page_size(mp->socket_id);
 	else
-		*pg_sz = getpagesize();
+		*pg_sz = rte_mem_page_size();
 
+	rte_mempool_trace_get_page_size(mp, *pg_sz);
 	return 0;
 }
 
@@ -463,6 +479,7 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 	unsigned mz_id, n;
 	int ret;
 	bool need_iova_contig_obj;
+	size_t max_alloc_size = SIZE_MAX;
 
 	ret = mempool_ops_alloc_once(mp);
 	if (ret != 0)
@@ -542,27 +559,21 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 		if (min_chunk_size == (size_t)mem_size)
 			mz_flags |= RTE_MEMZONE_IOVA_CONTIG;
 
-		mz = rte_memzone_reserve_aligned(mz_name, mem_size,
+		/* Allocate a memzone, retrying with a smaller area on ENOMEM */
+		do {
+			mz = rte_memzone_reserve_aligned(mz_name,
+				RTE_MIN((size_t)mem_size, max_alloc_size),
 				mp->socket_id, mz_flags, align);
 
-		/* don't try reserving with 0 size if we were asked to reserve
-		 * IOVA-contiguous memory.
-		 */
-		if (min_chunk_size < (size_t)mem_size && mz == NULL) {
-			/* not enough memory, retry with the biggest zone we
-			 * have
-			 */
-			mz = rte_memzone_reserve_aligned(mz_name, 0,
-					mp->socket_id, mz_flags, align);
-		}
+			if (mz != NULL || rte_errno != ENOMEM)
+				break;
+
+			max_alloc_size = RTE_MIN(max_alloc_size,
+						(size_t)mem_size) / 2;
+		} while (mz == NULL && max_alloc_size >= min_chunk_size);
+
 		if (mz == NULL) {
 			ret = -rte_errno;
-			goto fail;
-		}
-
-		if (mz->len < min_chunk_size) {
-			rte_memzone_free(mz);
-			ret = -ENOMEM;
 			goto fail;
 		}
 
@@ -581,12 +592,15 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 				mz->len, pg_sz,
 				rte_mempool_memchunk_mz_free,
 				(void *)(uintptr_t)mz);
+		if (ret == 0) /* should not happen */
+			ret = -ENOBUFS;
 		if (ret < 0) {
 			rte_memzone_free(mz);
 			goto fail;
 		}
 	}
 
+	rte_mempool_trace_populate_default(mp);
 	return mp->size;
 
  fail:
@@ -603,7 +617,7 @@ get_anon_size(const struct rte_mempool *mp)
 	size_t min_chunk_size;
 	size_t align;
 
-	pg_sz = getpagesize();
+	pg_sz = rte_mem_page_size();
 	pg_shift = rte_bsf32(pg_sz);
 	size = rte_mempool_ops_calc_mem_size(mp, mp->size, pg_shift,
 					     &min_chunk_size, &align);
@@ -627,7 +641,7 @@ rte_mempool_memchunk_anon_free(struct rte_mempool_memhdr *memhdr,
 	if (size < 0)
 		return;
 
-	munmap(opaque, size);
+	rte_mem_unmap(opaque, size);
 }
 
 /* populate the mempool with an anonymous mapping */
@@ -645,8 +659,10 @@ rte_mempool_populate_anon(struct rte_mempool *mp)
 	}
 
 	ret = mempool_ops_alloc_once(mp);
-	if (ret != 0)
-		return ret;
+	if (ret < 0) {
+		rte_errno = -ret;
+		return 0;
+	}
 
 	size = get_anon_size(mp);
 	if (size < 0) {
@@ -655,24 +671,26 @@ rte_mempool_populate_anon(struct rte_mempool *mp)
 	}
 
 	/* get chunk of virtually continuous memory */
-	addr = mmap(NULL, size, PROT_READ | PROT_WRITE,
-		MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-	if (addr == MAP_FAILED) {
-		rte_errno = errno;
+	addr = rte_mem_map(NULL, size, RTE_PROT_READ | RTE_PROT_WRITE,
+		RTE_MAP_SHARED | RTE_MAP_ANONYMOUS, -1, 0);
+	if (addr == NULL)
 		return 0;
-	}
 	/* can't use MMAP_LOCKED, it does not exist on BSD */
-	if (mlock(addr, size) < 0) {
-		rte_errno = errno;
-		munmap(addr, size);
+	if (rte_mem_lock(addr, size) < 0) {
+		rte_mem_unmap(addr, size);
 		return 0;
 	}
 
-	ret = rte_mempool_populate_virt(mp, addr, size, getpagesize(),
+	ret = rte_mempool_populate_virt(mp, addr, size, rte_mem_page_size(),
 		rte_mempool_memchunk_anon_free, addr);
-	if (ret == 0)
+	if (ret == 0) /* should not happen */
+		ret = -ENOBUFS;
+	if (ret < 0) {
+		rte_errno = -ret;
 		goto fail;
+	}
 
+	rte_mempool_trace_populate_anon(mp);
 	return mp->populated_size;
 
  fail:
@@ -704,6 +722,7 @@ rte_mempool_free(struct rte_mempool *mp)
 	}
 	rte_mcfg_tailq_write_unlock();
 
+	rte_mempool_trace_free(mp);
 	rte_mempool_free_memchunks(mp);
 	rte_mempool_ops_free(mp);
 	rte_memzone_free(mp->mz);
@@ -742,6 +761,7 @@ rte_mempool_cache_create(uint32_t size, int socket_id)
 
 	mempool_cache_init(cache, size);
 
+	rte_mempool_trace_cache_create(size, socket_id, cache);
 	return cache;
 }
 
@@ -753,6 +773,7 @@ rte_mempool_cache_create(uint32_t size, int socket_id)
 void
 rte_mempool_cache_free(struct rte_mempool_cache *cache)
 {
+	rte_mempool_trace_cache_free(cache);
 	rte_free(cache);
 }
 
@@ -883,6 +904,8 @@ rte_mempool_create_empty(const char *name, unsigned n, unsigned elt_size,
 	rte_mcfg_tailq_write_unlock();
 	rte_mcfg_mempool_write_unlock();
 
+	rte_mempool_trace_create_empty(name, n, elt_size, cache_size,
+		private_data_size, flags, mp);
 	return mp;
 
 exit_unlock:
@@ -935,6 +958,9 @@ rte_mempool_create(const char *name, unsigned n, unsigned elt_size,
 	if (obj_init)
 		rte_mempool_obj_iter(mp, obj_init, obj_init_arg);
 
+	rte_mempool_trace_create(name, n, elt_size, cache_size,
+		private_data_size, mp_init, mp_init_arg, obj_init,
+		obj_init_arg, flags, mp);
 	return mp;
 
  fail:
@@ -1170,6 +1196,7 @@ rte_mempool_dump(FILE *f, struct rte_mempool *mp)
 	unsigned lcore_id;
 #endif
 	struct rte_mempool_memhdr *memhdr;
+	struct rte_mempool_ops *ops;
 	unsigned common_count;
 	unsigned cache_count;
 	size_t mem_len = 0;
@@ -1179,6 +1206,7 @@ rte_mempool_dump(FILE *f, struct rte_mempool *mp)
 
 	fprintf(f, "mempool <%s>@%p\n", mp->name, mp);
 	fprintf(f, "  flags=%x\n", mp->flags);
+	fprintf(f, "  socket_id=%d\n", mp->socket_id);
 	fprintf(f, "  pool=%p\n", mp->pool_data);
 	fprintf(f, "  iova=0x%" PRIx64 "\n", mp->mz->iova);
 	fprintf(f, "  nb_mem_chunks=%u\n", mp->nb_mem_chunks);
@@ -1191,6 +1219,10 @@ rte_mempool_dump(FILE *f, struct rte_mempool *mp)
 	       mp->header_size + mp->elt_size + mp->trailer_size);
 
 	fprintf(f, "  private_data_size=%"PRIu32"\n", mp->private_data_size);
+
+	fprintf(f, "  ops_index=%d\n", mp->ops_index);
+	ops = rte_mempool_get_ops(mp->ops_index);
+	fprintf(f, "  ops_name: <%s>\n", (ops != NULL) ? ops->name : "NA");
 
 	STAILQ_FOREACH(memhdr, &mp->mem_list, next)
 		mem_len += memhdr->len;
