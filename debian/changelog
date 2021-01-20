@@ -1,3 +1,11 @@
+dpdk (18.11.5-1vyatta20) unstable; urgency=medium
+
+  [ Nachiketa Prachanda ]
+  * ixgbe: mark packets with RXE bits set is rx desc
+  * add virtual package for SBP bad patch
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 20 Jan 2021 16:32:29 -0500
+
 dpdk (18.11.5-1vyatta19) unstable; urgency=medium
 
   [ Sharmila Podury ]
