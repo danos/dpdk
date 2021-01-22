@@ -12,6 +12,7 @@ librte_acl.so.20.0 librte-acl20.0 #MINVER#
  rte_acl_find_existing@DPDK_20.0 19.11
  rte_acl_free@DPDK_20.0 19.11
  rte_acl_list_dump@DPDK_20.0 19.11
+ rte_acl_rcu_qsbr_add@DPDK_20.0 19.11
  rte_acl_reset@DPDK_20.0 19.11
  rte_acl_reset_rules@DPDK_20.0 19.11
  rte_acl_set_ctx_classify@DPDK_20.0 19.11

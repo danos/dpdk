@@ -40,6 +40,7 @@ sched-rte-approx-unit-test.patch
 rte-acl-ht.patch
 rte-acl-copy.patch
 rte-acl-rcx.patch
+rte-acl-rcu.patch
 
 # Bonding
 bonding-polled-slave-muxstate.patch

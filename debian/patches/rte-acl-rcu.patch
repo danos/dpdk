@@ -1,0 +1,172 @@
+--- a/lib/librte_acl/rte_acl.h
++++ b/lib/librte_acl/rte_acl.h
+@@ -69,6 +69,21 @@
+ 	/**< max memory limit for internal run-time structures. */
+ };
+ 
++/** RCU reclamation modes */
++enum rte_acl_qsbr_mode {
++	/** Create defer queue for reclaim. */
++	RTE_ACL_QSBR_MODE_DQ = 0,
++	/** Use blocking mode reclaim. No defer queue created. */
++	RTE_ACL_QSBR_MODE_SYNC
++};
++
++/** ACL RCU QSBR configuration. */
++struct rte_acl_rcu_config {
++	struct rte_rcu_qsbr *v;
++	/** < RCU QSBR variable. Mode of RCU QSBR: RTE_ACL_QSBR_MODE_xxx */
++	enum rte_acl_qsbr_mode mode;
++};
++
+ /**
+  * Defines the value of a field for a rule.
+  */
+@@ -181,6 +196,25 @@
+ rte_acl_free(struct rte_acl_ctx *ctx);
+ 
+ /**
++ * Associate RCU QSBR variable with the ACL context.
++ *
++ * @param ctx
++ *   ACL context to add RCU QSBR
++ * @param cfg
++ *   RCU QSBR configuration
++ * @return
++ *   On success - 0
++ *   On error - 1 with error code set in rte_errno.
++ *   Possible rte_errno errors include:
++ *   - EINVAL if the parameters are invalid.
++ *   - EEXIST if QSBR already added.
++ *   - ENOMEM if the memory allocation failed.
++ *   - Zero if operation completed successfully.
++ */
++int
++rte_acl_rcu_qsbr_add(struct rte_acl_ctx *ctx, struct rte_acl_rcu_config *cfg);
++
++/**
+  * Add rules to an existing ACL context.
+  * This function is not multi-thread safe.
+  *
+--- a/lib/librte_acl/rte_acl.c
++++ b/lib/librte_acl/rte_acl.c
+@@ -143,6 +143,9 @@
+ 			((RTE_ACL_RESULTS_MULTIPLIER - 1) & categories) != 0)
+ 		return -EINVAL;
+ 
++	if (!ctx->rcx)
++		return -EINVAL;
++
+ 	return classify_fns[alg](ctx, data, results, num, categories);
+ }
+ 
+@@ -178,6 +181,27 @@
+ 	return ctx;
+ }
+ 
++int
++rte_acl_rcu_qsbr_add(struct rte_acl_ctx *ctx, struct rte_acl_rcu_config *cfg)
++{
++	if (ctx == NULL || cfg == NULL)
++		return -EINVAL;
++
++	if (cfg->mode == RTE_ACL_QSBR_MODE_SYNC) {
++		/* Nothing to do. */
++	} else if (cfg->mode == RTE_ACL_QSBR_MODE_DQ) {
++		/* Not yet implemented. */
++		return -EINVAL;
++	} else {
++		return -EINVAL;
++	}
++
++	ctx->rcu_mode = cfg->mode;
++	ctx->v = cfg->v;
++
++	return 0;
++}
++
+ void
+ rte_acl_free(struct rte_acl_ctx *ctx)
+ {
+--- a/lib/librte_acl/rte_acl_version.map
++++ b/lib/librte_acl/rte_acl_version.map
+@@ -13,6 +13,7 @@
+ 	rte_acl_find_existing;
+ 	rte_acl_free;
+ 	rte_acl_list_dump;
++	rte_acl_rcu_qsbr_add;
+ 	rte_acl_reset;
+ 	rte_acl_reset_rules;
+ 	rte_acl_set_ctx_classify;
+--- a/lib/librte_acl/acl.h
++++ b/lib/librte_acl/acl.h
+@@ -190,6 +190,10 @@
+ 	uint32_t            num_rules;
+ 	uint32_t            num_categories;
+ 
++	/* RCU config. */
++	struct rte_rcu_qsbr *v;          /* RCU QSBR variable. */
++	enum rte_acl_qsbr_mode rcu_mode; /* Blocking, defer queue. */
++
+ 	struct rte_acl_rt_ctx *rcx;
+ };
+ 
+--- a/lib/librte_acl/acl_gen.c
++++ b/lib/librte_acl/acl_gen.c
+@@ -3,6 +3,7 @@
+  */
+ 
+ #include <rte_acl.h>
++#include <rte_rcu_qsbr.h>
+ #include "acl.h"
+ 
+ #define	QRANGE_MIN	((uint8_t)INT8_MIN)
+@@ -538,12 +539,15 @@
+ 	rcx->trans_table = node_array;
+ 	memcpy(rcx->trie, trie, sizeof(rcx->trie));
+ 
+-	/* This is not thread-safe. */
++	/* Wait until the active runtime context is unused. */
++	if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_SYNC)
++		rte_rcu_qsbr_synchronize(ctx->v, RTE_QSBR_THRID_INVALID);
++
++	__atomic_store_n(&ctx->rcx, rcx, __ATOMIC_RELAXED);
++
+ 	if (prev_rcx)
+ 		rte_free(prev_rcx);
+ 
+-	ctx->rcx = rcx;
+-
+ 	acl_gen_log_stats(ctx, &counts, &indices, max_size);
+ 	return 0;
+ }
+--- a/lib/librte_acl/meson.build
++++ b/lib/librte_acl/meson.build
+@@ -5,7 +5,7 @@
+ 		'rte_acl.c', 'tb_mem.c')
+ headers = files('rte_acl.h', 'rte_acl_osdep.h')
+ 
+-deps += ['hash', 'mempool']
++deps += ['hash', 'mempool', 'rcu']
+ 
+ if dpdk_conf.has('RTE_ARCH_X86')
+ 	sources += files('acl_run_sse.c')
+--- a/lib/meson.build
++++ b/lib/meson.build
+@@ -12,6 +12,7 @@
+ 	'kvargs', # eal depends on kvargs
+ 	'eal', # everything depends on eal
+ 	'ring', 'mempool', 'mbuf', 'net', 'meter', 'ethdev', 'pci', # core
++	'rcu', # rcu depends on this
+ 	'cmdline',
+ 	'metrics', # bitrate/latency stats depends on this
+ 	'hash',    # efd depends on this
+@@ -22,7 +23,7 @@
+ 	'gro', 'gso', 'ip_frag', 'jobstats',
+ 	'kni', 'latencystats', 'lpm', 'member',
+ 	'power', 'pdump', 'rawdev',
+-	'rcu', 'rib', 'reorder', 'sched', 'security', 'stack', 'vhost',
++	'rib', 'reorder', 'sched', 'security', 'stack', 'vhost',
+ 	# ipsec lib depends on net, crypto and security
+ 	'ipsec',
+ 	#fib lib depends on rib
