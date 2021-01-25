@@ -1,3 +1,21 @@
+dpdk (19.11.4-0vyatta10) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: add rte_acl_del_rule API
+
+  [ Srinivas Narayan ]
+  * rte-acl: Add a new API to copy rules between contexts
+
+  [ Daniel Gollub ]
+  * rte-acl: introduce runtime context
+  * rte-acl: add RCU QSBR sync support
+  * debian: introduce rte-acl-rebuild-support provides
+
+  [ Charles (Chas) Williams ]
+  * Update sched symbol versions for next release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 25 Jan 2021 07:43:00 -0500
+
 dpdk (19.11.4-0vyatta9) unstable; urgency=medium
 
   [ Nachiketa Prachanda ]
