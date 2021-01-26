@@ -50,17 +50,18 @@
   *
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -143,6 +143,9 @@
+@@ -143,6 +143,10 @@
  			((RTE_ACL_RESULTS_MULTIPLIER - 1) & categories) != 0)
  		return -EINVAL;
  
-+	if (!ctx->rcx)
++	/* don't call an empty ACL CTX */
++	if (!ctx->rcx || ctx->rcx->num_tries == 0)
 +		return -EINVAL;
 +
  	return classify_fns[alg](ctx, data, results, num, categories);
  }
  
-@@ -178,6 +181,27 @@
+@@ -178,6 +182,27 @@
  	return ctx;
  }
  
