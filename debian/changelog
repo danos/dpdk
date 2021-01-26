@@ -1,3 +1,14 @@
+dpdk (19.11.4-0vyatta11) unstable; urgency=medium
+
+  [ Sameer Agrawal ]
+  * mlx5: Adjust the number of strides and size for memory and performance
+    gains improvement. Fixes VRVDR-52096
+
+  [ Charles (Chas) Williams ]
+  * Update sched symbol versions for next release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 26 Jan 2021 15:23:01 -0500
+
 dpdk (19.11.4-0vyatta10) unstable; urgency=medium
 
   [ Daniel Gollub ]
