@@ -64,3 +64,4 @@ net-virtio-add-mac-addr-set-support.patch
 net-bonding-stop-all-members-in-bond-ethdev-stop.patch
 # IXGBE MBUF Patch
 ixgbe-set-sbp-bad-on-rx-error.patch
+mlx5-adjust-stride-number-and-size.patch
