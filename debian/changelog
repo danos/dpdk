@@ -1,3 +1,13 @@
+dpdk (19.11.4-0vyatta12) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: don't run classification on empty tries
+
+  [ Charles (Chas) Williams ]
+  * Update sched symbol versions for next release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 27 Jan 2021 10:39:52 -0500
+
 dpdk (19.11.4-0vyatta11) unstable; urgency=medium
 
   [ Sameer Agrawal ]
