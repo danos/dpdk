@@ -1,3 +1,18 @@
+dpdk (19.11.4-0vyatta9.1) unstable; urgency=medium
+
+  [ Sameer Agrawal ]
+  * mlx5: Adjust the number of strides and size for memory and performance
+    gains improvement. Fixes VRVDR-52096
+
+  [ Mark Gillott ]
+  * vmxnet3: store default MAC address in mac_addrs list (Fixes:
+    VRVDR-54160)
+
+  [ Charles (Chas) Williams ]
+  * Update sched symbol versions for next release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 09 Feb 2021 06:38:05 -0500
+
 dpdk (19.11.4-0vyatta9) unstable; urgency=medium
 
   [ Nachiketa Prachanda ]
