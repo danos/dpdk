@@ -30,17 +30,92 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	/* Weighted Round Robin (WRR) */
  	uint32_t wrr_tokens[RTE_SCHED_QUEUES_PER_PIPE];
-@@ -1794,6 +1794,7 @@ grinder_credits_update(struct rte_sched_
+@@ -138,6 +138,12 @@ enum grinder_state {
+ 	e_GRINDER_READ_MBUF
+ };
+ 
++enum token_state {
++	TOKENS_UNDEFINED = 0,
++	TOKENS_USED,
++	TOKENS_AVAIL
++};
++
+ /*
+  * Path through the scheduler hierarchy used by the scheduler enqueue
+  * operation to identify the destination queue for the current
+@@ -639,6 +645,20 @@ rte_sched_port_log_pipe_profile(struct r
+ }
+ 
+ static inline uint64_t
++rte_sched_time_us_to_bytes(uint32_t time_us, uint32_t rate)
++{
++	uint64_t time = time_us;
++
++	time = (time * rate) / 1000000;
++
++	/* Don't allow a zero byte count */
++	if (!time)
++		return 1;
++
++	return time;
++}
++
++static inline uint64_t
+ rte_sched_time_ms_to_bytes(uint32_t time_ms, uint32_t rate)
+ {
+ 	uint64_t time = time_ms;
+@@ -682,12 +702,12 @@ rte_sched_pipe_profile_convert(struct rt
+ 	dst->tb_size = src->tb_size;
+ 
+ 	/* Traffic Classes */
+-	dst->tc_period = rte_sched_time_ms_to_bytes(src->tc_period,
++	dst->tc_period = rte_sched_time_us_to_bytes(src->tc_period,
+ 						rate);
+ 
+ 	for (i = 0; i < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; i++)
+ 		dst->tc_credits_per_period[i]
+-			= rte_sched_time_ms_to_bytes(src->tc_period,
++			= rte_sched_time_us_to_bytes(src->tc_period,
+ 				src->tc_rate[i]);
+ 
+ #ifdef RTE_SCHED_SUBPORT_TC_OV
+@@ -1041,11 +1061,11 @@ rte_sched_subport_config_common(struct r
+ 	s->tb_credits = s->tb_size / 2;
+ 
+ 	/* Traffic Classes (TCs) */
+-	s->tc_period = rte_sched_time_ms_to_bytes(params->tc_period, port->rate);
++	s->tc_period = rte_sched_time_us_to_bytes(params->tc_period, port->rate);
+ 	s->tc_time = port->time + s->tc_period;
+ 	for (i = 0; i < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; i++) {
+ 		s->tc_credits_per_period[i]
+-			= rte_sched_time_ms_to_bytes(params->tc_period,
++			= rte_sched_time_us_to_bytes(params->tc_period,
+ 						     params->tc_rate[i]);
+ 		s->tc_credits[i] = s->tc_credits_per_period[i];
+ 	}
+@@ -1794,35 +1814,62 @@ grinder_credits_update(struct rte_sched_
  	struct rte_sched_pipe_profile *params = grinder->pipe_params;
  	uint64_t n_periods;
  	uint32_t tc;
 +	uint64_t lapsed;
  
  	/* Subport TB */
- 	n_periods = (port->time - subport->tb_time) / subport->tb_period;
-@@ -1810,19 +1811,43 @@ grinder_credits_update(struct rte_sched_
+-	n_periods = (port->time - subport->tb_time) / subport->tb_period;
++	n_periods = (port->time_cpu_bytes - subport->tb_time) / subport->tb_period;
+ 	subport->tb_credits += n_periods * subport->tb_credits_per_period;
+ 	subport->tb_credits = rte_sched_min_val_2_u32(subport->tb_credits, subport->tb_size);
+ 	subport->tb_time += n_periods * subport->tb_period;
+ 
+ 	/* Pipe TB */
+-	n_periods = (port->time - pipe->tb_time) / params->tb_period;
++	n_periods = (port->time_cpu_bytes - pipe->tb_time) / params->tb_period;
+ 	pipe->tb_credits += n_periods * params->tb_credits_per_period;
+ 	pipe->tb_credits = rte_sched_min_val_2_u32(pipe->tb_credits, params->tb_size);
+ 	pipe->tb_time += n_periods * params->tb_period;
+ 
  	/* Subport TCs */
- 	if (unlikely(port->time >= subport->tc_time)) {
+-	if (unlikely(port->time >= subport->tc_time)) {
++	if (unlikely(port->time_cpu_bytes >= subport->tc_time)) {
  		for (tc = 0; tc < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; tc++) {
 -			subport->tc_credits[tc] =
 -				subport->tc_credits_per_period[tc];
@@ -56,15 +131,17 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 +		 * the time + tc_period so we'll replenish the tc tokens early
 +		 * in the next tc_period to compensate.
 +		 */
-+		lapsed = port->time - subport->tc_time;
++		lapsed = port->time_cpu_bytes - subport->tc_time;
 +		if (lapsed < subport->tc_period)
 +			subport->tc_time += subport->tc_period;
 +		else
-+			subport->tc_time = port->time + subport->tc_period;
++			subport->tc_time = port->time_cpu_bytes +
++						subport->tc_period;
  	}
  
  	/* Pipe TCs */
- 	if (unlikely(port->time >= pipe->tc_time)) {
+-	if (unlikely(port->time >= pipe->tc_time)) {
++	if (unlikely(port->time_cpu_bytes >= pipe->tc_time)) {
  		for (tc = 0; tc < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; tc++) {
 -			pipe->tc_credits[tc] =
 -				params->tc_credits_per_period[tc];
@@ -80,24 +157,16 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
 +		 * the time + tc_period so we'll replenish the tc tokens early
 +		 * in the next tc_period to compensate.
 +		 */
-+		lapsed = port->time - pipe->tc_time;
++		lapsed = port->time_cpu_bytes - pipe->tc_time;
 +		if (lapsed < params->tc_period)
 +			pipe->tc_time += params->tc_period;
 +		else
-+			pipe->tc_time = port->time + params->tc_period;
++			pipe->tc_time = port->time_cpu_bytes +
++						params->tc_period;
  	}
  }
  
-@@ -1924,7 +1949,7 @@ grinder_credits_update(struct rte_sched_
- #ifndef RTE_SCHED_SUBPORT_TC_OV
- 
- static inline int
--grinder_credits_check(struct rte_sched_port *port, uint32_t pos)
-+grinder_credits_check(struct rte_sched_port *port, uint32_t pos, uint32_t *time)
- {
- 	struct rte_sched_grinder *grinder = port->grinder + pos;
- 	struct rte_sched_subport *subport = grinder->subport;
-@@ -1933,28 +1958,33 @@ grinder_credits_check(struct rte_sched_p
+@@ -1933,19 +1980,19 @@ grinder_credits_check(struct rte_sched_p
  	uint32_t tc_index = grinder->tc_index;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
  	uint32_t subport_tb_credits = subport->tb_credits;
@@ -123,12 +192,7 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	if (!enough_credits)
  		return 0;
- 
-+	if (pkt_len > pipe_tc_credits)
-+		*time = pipe_tc_credits;
-+	else
-+		*time = pkt_len;
-+
+@@ -1953,8 +2000,8 @@ grinder_credits_check(struct rte_sched_p
  	/* Update port credits */
  	subport->tb_credits -= pkt_len;
  	subport->tc_credits[tc_index] -= pkt_len;
@@ -138,40 +202,108 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  
  	return 1;
  }
-@@ -1962,7 +1992,7 @@ grinder_credits_check(struct rte_sched_p
- #else
+@@ -2006,15 +2053,20 @@ grinder_credits_check(struct rte_sched_p
+ 
  
  static inline int
--grinder_credits_check(struct rte_sched_port *port, uint32_t pos)
-+grinder_credits_check(struct rte_sched_port *port, uint32_t pos, uint32_t *time)
+-grinder_schedule(struct rte_sched_port *port, uint32_t pos)
++grinder_schedule(struct rte_sched_port *port, uint32_t pos,
++		 enum token_state *token_state)
  {
  	struct rte_sched_grinder *grinder = port->grinder + pos;
- 	struct rte_sched_subport *subport = grinder->subport;
-@@ -1992,6 +2022,8 @@ grinder_credits_check(struct rte_sched_p
- 	if (!enough_credits)
- 		return 0;
- 
-+	*time = pkt_len;
-+
- 	/* Update pipe and subport credits */
- 	subport->tb_credits -= pkt_len;
- 	subport->tc_credits[tc_index] -= pkt_len;
-@@ -2012,15 +2044,16 @@ grinder_schedule(struct rte_sched_port *
  	struct rte_sched_queue *queue = grinder->queue[grinder->qpos];
  	struct rte_mbuf *pkt = grinder->pkt;
  	int32_t pkt_len = pkt->pkt_len + port->frame_overhead;
-+	uint32_t time;
  
 -	if (!grinder_credits_check(port, pos))
-+	if (!grinder_credits_check(port, pos, &time))
++	if (!grinder_credits_check(port, pos)) {
++		*token_state = TOKENS_USED;
  		return 0;
++	}
++
++	*token_state = TOKENS_AVAIL;
  
  	if (pkt_len < 0)
  		pkt_len = 0;
+@@ -2357,7 +2409,8 @@ grinder_prefetch_mbuf(struct rte_sched_p
+ }
  
- 	/* Advance port time */
--	port->time += pkt_len;
-+	port->time += time;
+ static inline uint32_t
+-grinder_handle(struct rte_sched_port *port, uint32_t pos)
++grinder_handle(struct rte_sched_port *port, uint32_t pos,
++	       enum token_state *token_state)
+ {
+ 	struct rte_sched_grinder *grinder = port->grinder + pos;
  
- 	/* Send packet */
- 	port->pkts_out[port->n_pkts_out++] = pkt;
+@@ -2399,7 +2452,7 @@ grinder_handle(struct rte_sched_port *po
+ 	{
+ 		uint32_t result = 0;
+ 
+-		result = grinder_schedule(port, pos);
++		result = grinder_schedule(port, pos, token_state);
+ 
+ 		/* Look for next packet within the same TC */
+ 		if (result && grinder->qmask) {
+@@ -2490,7 +2543,10 @@ rte_sched_port_exceptions(struct rte_sch
+ int
+ rte_sched_port_dequeue(struct rte_sched_port *port, struct rte_mbuf **pkts, uint32_t n_pkts)
+ {
+-	uint32_t i, count;
++	uint32_t i, count, j;
++	enum token_state token_state;
++	uint32_t npipes = port->n_subports_per_port *
++				port->n_pipes_per_subport;
+ 
+ 	port->pkts_out = pkts;
+ 	port->n_pkts_out = 0;
+@@ -2498,12 +2554,27 @@ rte_sched_port_dequeue(struct rte_sched_
+ 	rte_sched_port_time_resync(port);
+ 
+ 	/* Take each queue in the grinder one step further */
+-	for (i = 0, count = 0; ; i++)  {
+-		count += grinder_handle(port, i & (RTE_SCHED_PORT_N_GRINDERS - 1));
++	for (i = 0, count = 0, j = 0; ; i++)  {
++		token_state = TOKENS_UNDEFINED;
++		count += grinder_handle(port, i & (RTE_SCHED_PORT_N_GRINDERS - 1),
++					&token_state);
+ 		if ((count == n_pkts) ||
+ 		    rte_sched_port_exceptions(port, i >= RTE_SCHED_PORT_N_GRINDERS)) {
+ 			break;
+ 		}
++		/* We need to look at all pipes */
++		if ((i+1) < npipes)
++			continue;
++		/*
++		 * If we've been through all the pipes and none have any
++		 * tokens leave the loop.
++		 */
++		if (token_state == TOKENS_USED) {
++			if (j++ >= npipes)
++				break;
++		} else if (token_state == TOKENS_AVAIL) {
++			j = 0;
++		}
+ 	}
+ 
+ 	return count;
+--- a/lib/librte_sched/rte_sched.h
++++ b/lib/librte_sched/rte_sched.h
+@@ -127,14 +127,14 @@ extern "C" {
+  */
+ struct rte_sched_subport_params {
+ 	/* Subport token bucket */
+-	uint32_t tb_rate;                /**< Rate (measured in bytes per second) */
+-	uint32_t tb_size;                /**< Size (measured in credits) */
+-
++	uint64_t tb_rate;                /**< Rate (measured in bytes per second) */
+ 	/* Subport traffic classes */
+-	uint32_t tc_rate[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
++	uint64_t tc_rate[RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE];
+ 	/**< Traffic class rates (measured in bytes per second) */
+ 	uint32_t tc_period;
+ 	/**< Enforcement period for rates (measured in milliseconds) */
++	/* Subport token bucket burst size */
++	uint32_t tb_size;                /**< Size (measured in credits) */
+ };
+ 
+ /** Subport statistics */

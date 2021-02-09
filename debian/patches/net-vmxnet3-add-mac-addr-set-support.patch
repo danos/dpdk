@@ -46,7 +46,16 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  	.dev_infos_get        = vmxnet3_dev_info_get,
  	.dev_supported_ptypes_get = vmxnet3_dev_supported_ptypes_get,
  	.vlan_filter_set      = vmxnet3_dev_vlan_filter_set,
-@@ -1220,6 +1228,37 @@ vmxnet3_mac_addr_set(struct rte_eth_dev
+@@ -1216,11 +1224,56 @@ vmxnet3_mac_addr_set(struct rte_eth_dev
+ {
+ 	struct vmxnet3_hw *hw = dev->data->dev_private;
+ 
++	/*
++	 * Update the permanent (default) MAC address
++	 */
+ 	rte_ether_addr_copy(mac_addr, (struct rte_ether_addr *)(hw->perm_addr));
++	rte_ether_addr_copy(mac_addr, &dev->data->mac_addrs[0]);
+ 	vmxnet3_write_mac(hw, mac_addr->addr_bytes);
  	return 0;
  }
  
@@ -56,9 +65,19 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
 +{
 +	struct vmxnet3_hw *hw = dev->data->dev_private;
 +
-+	/* Index 0 holds the default address */
-+	if (index == 0 || index >= VMXNET3_MAX_MAC_ADDRS)
++	if (index >= VMXNET3_MAX_MAC_ADDRS)
 +		return -ENOSPC;
++
++	if (rte_is_same_ether_addr(mac_addr, &dev->data->mac_addrs[index]))
++		return 0;
++
++	/*
++	 * Index 0 holds the default address. Cannot overwrite the
++	 * default address - use vmxnet3_mac_addr_set()
++	 */
++	if (index == 0)
++		return -EPERM;
++
 +	rte_ether_addr_copy(mac_addr, &dev->data->mac_addrs[index]);
 +	if (hw->extra_mac_addresses == 0)
 +		__vmxnet3_dev_promiscuous_enable(dev);
@@ -84,7 +103,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  /* return 0 means link status changed, -1 means not changed */
  static int
  __vmxnet3_dev_link_update(struct rte_eth_dev *dev,
-@@ -1269,7 +1308,7 @@ vmxnet3_dev_set_rxmode(struct vmxnet3_hw
+@@ -1270,7 +1323,7 @@ vmxnet3_dev_set_rxmode(struct vmxnet3_hw
  
  /* Promiscuous supported only if Vmxnet3_DriverShared is initialized in adapter */
  static int
@@ -93,7 +112,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  {
  	struct vmxnet3_hw *hw = dev->data->dev_private;
  	uint32_t *vf_table = hw->shared->devRead.rxFilterConf.vfTable;
-@@ -1283,9 +1322,18 @@ vmxnet3_dev_promiscuous_enable(struct rt
+@@ -1284,9 +1337,18 @@ vmxnet3_dev_promiscuous_enable(struct rt
  	return 0;
  }
  
@@ -113,7 +132,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  {
  	struct vmxnet3_hw *hw = dev->data->dev_private;
  	uint32_t *vf_table = hw->shared->devRead.rxFilterConf.vfTable;
-@@ -1302,6 +1350,20 @@ vmxnet3_dev_promiscuous_disable(struct r
+@@ -1303,6 +1365,20 @@ vmxnet3_dev_promiscuous_disable(struct r
  	return 0;
  }
  
@@ -145,7 +164,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  
  /* UPT feature to negotiate */
  #define VMXNET3_F_RXCSUM      0x0001
-@@ -70,6 +70,8 @@ struct vmxnet3_hw {
+@@ -74,6 +74,8 @@ struct vmxnet3_hw {
  	uint16_t subsystem_device_id;
  	uint16_t subsystem_vendor_id;
  	bool adapter_stopped;

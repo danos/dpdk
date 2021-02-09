@@ -17,8 +17,8 @@
  #define RTE_SCHED_PIPE_INVALID                UINT32_MAX
  #define RTE_SCHED_BMP_POS_INVALID             UINT32_MAX
  
-@@ -135,9 +136,17 @@ enum grinder_state {
- 	e_GRINDER_READ_MBUF
+@@ -141,9 +142,17 @@ enum token_state {
+ 	TOKENS_AVAIL
  };
  
 +_Static_assert(RTE_SCHED_QUEUES_PER_PIPE <= 32, "Too many queues per pipe");
@@ -36,7 +36,7 @@
  	uint32_t pcache_qindex[RTE_SCHED_GRINDER_PCACHE_SIZE];
  	uint32_t pcache_w;
  	uint32_t pcache_r;
-@@ -151,8 +160,8 @@ struct rte_sched_grinder {
+@@ -157,8 +166,8 @@ struct rte_sched_grinder {
  	struct rte_sched_pipe_profile *pipe_params;
  
  	/* TC cache */
@@ -47,7 +47,7 @@
  	uint32_t tccache_w;
  	uint32_t tccache_r;
  
-@@ -2310,57 +2319,82 @@ static inline void
+@@ -2327,57 +2336,82 @@ static inline void
  grinder_pcache_populate(struct rte_sched_port *port, uint32_t pos, uint32_t bmp_pos, uint64_t bmp_slab)
  {
  	struct rte_sched_grinder *grinder = port->grinder + pos;
@@ -153,7 +153,7 @@
  }
  
  static inline int
-@@ -2399,7 +2433,7 @@ grinder_next_pipe(struct rte_sched_port
+@@ -2416,7 +2450,7 @@ grinder_next_pipe(struct rte_sched_port
  {
  	struct rte_sched_grinder *grinder = port->grinder + pos;
  	uint32_t pipe_qindex;

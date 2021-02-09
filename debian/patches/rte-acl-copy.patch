@@ -1,0 +1,167 @@
+--- a/lib/librte_acl/rte_acl.h
++++ b/lib/librte_acl/rte_acl.h
+@@ -220,6 +220,25 @@
+ rte_acl_del_rule(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rule);
+ 
+ /**
++ * Copy rules from src context to dest context
++ * This function is not multi-thread safe
++ * This function is used to copy the build time array of rules maintained
++ * within the acl context to a new context to enable a merge of contexts
++ *
++ * @param dst_ctx
++ *  Destination context to add rules to
++ * @param src_ctx
++ *  Source context to copy rules from
++ * @return
++ *  - -ENOMEM - if there is no space in the ACL context for these rules
++ *  - -EINVAL if the parameters are invalid
++ *  - Zero if the operation completed successfully.
++ */
++int
++rte_acl_copy_rules(struct rte_acl_ctx *dst_ctx,
++		   const struct rte_acl_ctx *src_ctx);
++
++/**
+  * Delete all rules from the ACL context.
+  * This function is not multi-thread safe.
+  * Note that internal run-time structures are not affected.
+--- a/lib/librte_acl/rte_acl.c
++++ b/lib/librte_acl/rte_acl.c
+@@ -496,17 +496,14 @@
+ 	return 0;
+ }
+ 
+-int
+-rte_acl_add_rules(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rules,
+-	uint32_t num)
++static int
++acl_check_rules(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rules,
++		uint32_t num)
+ {
+ 	const struct rte_acl_rule *rv;
+ 	uint32_t i;
+ 	int32_t rc;
+ 
+-	if (ctx == NULL || rules == NULL || 0 == ctx->rule_sz)
+-		return -EINVAL;
+-
+ 	for (i = 0; i != num; i++) {
+ 		rv = (const struct rte_acl_rule *)
+ 			((uintptr_t)rules + i * ctx->rule_sz);
+@@ -518,9 +515,105 @@
+ 		}
+ 	}
+ 
++	return 0;
++}
++
++int
++rte_acl_add_rules(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rules,
++	uint32_t num)
++{
++	const struct rte_acl_rule *rv;
++	uint32_t i;
++	int32_t rc;
++
++	if (ctx == NULL || rules == NULL || 0 == ctx->rule_sz)
++		return -EINVAL;
++
++	rc = acl_check_rules(ctx, rules, num);
++	if (rc)
++		return rc;
++
+ 	return acl_add_rules(ctx, rules, num);
+ }
+ 
++static int
++acl_copy_rules_ht(struct rte_acl_ctx *dst_ctx,
++		  const struct rte_acl_ctx *src_ctx)
++{
++	uint32_t iter = 0;
++	struct rte_acl_rule *src_rule, *rule;
++	int err, ret;
++	void *key;
++
++	if (!dst_ctx->ht || !src_ctx->ht)
++		return -EINVAL;
++
++	while (rte_hash_iterate(src_ctx->ht, (void *) &key, (void **) &src_rule,
++				&iter) >= 0) {
++
++		rule = acl_rule_create(dst_ctx);
++		if (!rule) {
++			RTE_LOG(ERR, ACL, "Rule creation failed for ctx %s : %s\n",
++				dst_ctx->name, rte_strerror(rte_errno));
++			ret = -ENOMEM;
++			goto error;
++		}
++
++		memcpy(rule, src_rule, src_ctx->rule_sz);
++
++		ret = rte_hash_add_key_data(dst_ctx->ht, rule, (void *) rule);
++		if (ret < 0) {
++			RTE_LOG(ERR, ACL, "Rule addition failed on ctx %s : %s\n",
++				dst_ctx->name, rte_strerror(-ret));
++			goto error;
++		}
++
++		dst_ctx->num_rules++;
++	}
++	return 0;
++
++error:
++	while (rte_hash_iterate(dst_ctx->ht, (void *)&key, (void **)&rule,
++				&iter)) {
++		err = rte_hash_del_key(dst_ctx->ht, (const void *)rule);
++		if (err < 0) {
++			RTE_LOG(ERR, ACL,
++				"Rule deletion failed during cleanup on ctx %s : %s\n",
++				dst_ctx->name, rte_strerror(-err));
++			continue;
++		}
++		acl_rule_free(dst_ctx, rule);
++		dst_ctx->num_rules--;
++	}
++	return ret;
++}
++
++
++int
++rte_acl_copy_rules(struct rte_acl_ctx *dst_ctx,
++		   const struct rte_acl_ctx *src_ctx)
++{
++	const struct rte_acl_rule *rules;
++	const struct rte_acl_rule *rv;
++	uint32_t i;
++	int32_t rc;
++
++	if (dst_ctx == NULL || src_ctx == NULL || 0 == dst_ctx->rule_sz ||
++	    0 == src_ctx->rule_sz)
++		return -EINVAL;
++
++	if (dst_ctx->flags |= src_ctx->flags) {
++		RTE_LOG(ERR, ACL,
++			"Copying only supported between ACLs with same flags\n");
++		return -EINVAL;
++	}
++
++	if (dst_ctx->ht)
++		return acl_copy_rules_ht(dst_ctx, src_ctx);
++
++	return acl_add_rules(dst_ctx, src_ctx->rules, src_ctx->num_rules);
++}
++
+ /*
+  * Reset all rules.
+  * Note that RT structures are not affected.
+--- a/lib/librte_acl/rte_acl_version.map
++++ b/lib/librte_acl/rte_acl_version.map
+@@ -6,6 +6,7 @@
+ 	rte_acl_classify;
+ 	rte_acl_classify_alg;
+ 	rte_acl_classify_scalar;
++	rte_acl_copy_rules;
+ 	rte_acl_create;
+ 	rte_acl_del_rule;
+ 	rte_acl_dump;

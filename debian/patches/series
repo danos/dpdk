@@ -1,9 +1,12 @@
+# Patches that should be submitted upstream
+0001-net-ensure-seg-is-valid-before-dereference.patch
+0001-net-i40e-disable-source-pruning.patch
+
 # Patches for DPDK
+0001-net-bonding-allow-application-to-select-LSC-interrup.patch
+0001-net-mlx5-fix-out-of-bound-write-in-xstats.patch
 0001-ixgbe-stop-delayed-interrupt-handler-when-starting.patch
 0001-net-bonding-advertise-rx-vlan-filter-capability.patch
-
-# Backport from dpdk master
-0001-net-cxgbe-announce-Tx-multi-segments-offload.patch
 
 # Backport from dpdk stable
 
@@ -30,6 +33,14 @@ sched-per-dscp-wred-stats.patch
 sched-add-64-bit-counter-retrieval-API.patch
 sched-meson.patch
 sched-fix-broken-strict-priority-of-tcs.patch
+sched-rte-approx.patch
+sched-rte-approx-unit-test.patch
+
+# ACL enhancements
+rte-acl-ht.patch
+rte-acl-copy.patch
+rte-acl-rcx.patch
+rte-acl-rcu.patch
 
 # Bonding
 bonding-polled-slave-muxstate.patch
@@ -41,12 +52,16 @@ mlx5-debug.patch
 mlx5-skip-legacy-ethtool.patch
 vlan-insert-clone-add_new-hdr-mbuf.patch
 i40evf-remove-braodcast-mac-from-set-mc-addr-list.patch
-add-build-option-for-l3fwd.patch
 mlx5-hardcode-devargs.patch
 bonding_secondary_mac_debug.patch
 net-vmxnet3-add-mac-addr-set-support.patch
 net-ena-announce-Tx-multi-segments-offload.patch
-add-build-option-for-l3fwd-acl.patch
 net-bonding-advertise-mq-rx-rss-capability.patch
 add-build-option-for-ipsecgw.patch
 mlx5-disable-dv-flow.patch
+i40e-bringup.patch
+net-virtio-add-mac-addr-set-support.patch
+net-bonding-stop-all-members-in-bond-ethdev-stop.patch
+# IXGBE MBUF Patch
+ixgbe-set-sbp-bad-on-rx-error.patch
+mlx5-adjust-stride-number-and-size.patch

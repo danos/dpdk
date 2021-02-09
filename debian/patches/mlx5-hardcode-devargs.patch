@@ -1,6 +1,6 @@
 --- a/drivers/net/mlx5/mlx5.c
 +++ b/drivers/net/mlx5/mlx5.c
-@@ -3269,11 +3269,11 @@ mlx5_pci_probe(struct rte_pci_driver *pc
+@@ -3308,11 +3308,11 @@ mlx5_pci_probe(struct rte_pci_driver *pc
  		.txq_inline_max = MLX5_ARG_UNSET,
  		.txq_inline_min = MLX5_ARG_UNSET,
  		.txq_inline_mpw = MLX5_ARG_UNSET,
@@ -11,6 +11,6 @@
  		.mprq = {
 -			.enabled = 0, /* Disabled by default. */
 +			.enabled = 1, /* Enabled by default. */
- 			.stride_num_n = MLX5_MPRQ_STRIDE_NUM_N,
+ 			.stride_num_n = 0,
+ 			.stride_size_n = 0,
  			.max_memcpy_len = MLX5_MPRQ_MEMCPY_DEFAULT_LEN,
- 			.min_rxqs_num = MLX5_MPRQ_MIN_RXQS,

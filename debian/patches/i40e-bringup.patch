@@ -1,0 +1,11 @@
+--- a/drivers/net/i40e/i40e_ethdev.c
++++ b/drivers/net/i40e/i40e_ethdev.c
+@@ -1443,7 +1443,7 @@
+ 		return -EIO;
+ 	}
+ 	/* Firmware of SFP x722 does not support adminq option */
+-	if (hw->device_id == I40E_DEV_ID_SFP_X722)
++	if (hw->mac.type == I40E_MAC_X722)
+ 		hw->flags &= ~I40E_HW_FLAG_802_1AD_CAPABLE;
+ 
+ 	PMD_INIT_LOG(INFO, "FW %d.%d API %d.%d NVM %02d.%02d.%02d eetrack %04x",

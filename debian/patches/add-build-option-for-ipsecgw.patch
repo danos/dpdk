@@ -1,11 +1,3 @@
---- a/meson_options.txt
-+++ b/meson_options.txt
-@@ -32,4 +32,4 @@ option('tests', type: 'boolean', value:
- 	description: 'build unit tests')
- option('use_hpet', type: 'boolean', value: false,
- 	description: 'use HPET timer in EAL')
--option('examples', type: 'string', value: 'l3fwd,l3fwd-acl')
-+option('examples', type: 'string', value: 'l3fwd,l3fwd-acl,ipsec-secgw')
 --- a/config/common_base
 +++ b/config/common_base
 @@ -626,7 +626,7 @@ CONFIG_RTE_MAX_VIRTIO_CRYPTO=32

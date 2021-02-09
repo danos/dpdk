@@ -1,7 +1,0 @@
---- a/meson_options.txt
-+++ b/meson_options.txt
-@@ -32,3 +32,4 @@ option('tests', type: 'boolean', value:
- 	description: 'build unit tests')
- option('use_hpet', type: 'boolean', value: false,
- 	description: 'use HPET timer in EAL')
-+option('examples', type: 'string', value: 'l3fwd')
