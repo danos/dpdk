@@ -1,0 +1,3 @@
+# dpdk is a massive package by the way as defined by upstream
+# accept the long depends list
+librte-meta-all: field-too-long

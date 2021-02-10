@@ -1,4 +1,0 @@
-librte_pmd_vhost.so.20.0 librte-pmd-vhost20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- rte_eth_vhost_get_queue_event@DPDK_20.0 19.11
- rte_eth_vhost_get_vid_from_port_id@DPDK_20.0 19.11

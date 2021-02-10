@@ -1,0 +1,16 @@
+librte_metrics.so.21 librte-metrics21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ EXPERIMENTAL@EXPERIMENTAL 19.08
+ rte_metrics_deinit@EXPERIMENTAL 19.08
+ rte_metrics_get_names@DPDK_21 20.11
+ rte_metrics_get_values@DPDK_21 20.11
+ rte_metrics_init@DPDK_21 20.11
+ rte_metrics_reg_name@DPDK_21 20.11
+ rte_metrics_reg_names@DPDK_21 20.11
+ rte_metrics_tel_encode_json_format@EXPERIMENTAL 20.08
+ rte_metrics_tel_extract_data@EXPERIMENTAL 20.08
+ rte_metrics_tel_get_port_stats_ids@EXPERIMENTAL 20.08
+ rte_metrics_tel_get_ports_stats_json@EXPERIMENTAL 20.08
+ rte_metrics_tel_reg_all_ethdev@EXPERIMENTAL 20.08
+ rte_metrics_update_value@DPDK_21 20.11
+ rte_metrics_update_values@DPDK_21 20.11

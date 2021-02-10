@@ -1,0 +1,8 @@
+librte_gro.so.21 librte-gro21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_gro_ctx_create@DPDK_21 20.11
+ rte_gro_ctx_destroy@DPDK_21 20.11
+ rte_gro_get_pkt_count@DPDK_21 20.11
+ rte_gro_reassemble@DPDK_21 20.11
+ rte_gro_reassemble_burst@DPDK_21 20.11
+ rte_gro_timeout_flush@DPDK_21 20.11

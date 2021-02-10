@@ -1,0 +1,8 @@
+librte_bus_vdev.so.21 librte-bus-vdev21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_vdev_add_custom_scan@DPDK_21 20.11
+ rte_vdev_init@DPDK_21 20.11
+ rte_vdev_register@DPDK_21 20.11
+ rte_vdev_remove_custom_scan@DPDK_21 20.11
+ rte_vdev_uninit@DPDK_21 20.11
+ rte_vdev_unregister@DPDK_21 20.11

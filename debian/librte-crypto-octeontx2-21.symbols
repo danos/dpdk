@@ -1,0 +1,6 @@
+librte_crypto_octeontx2.so.21 librte-crypto-octeontx2-21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ INTERNAL@INTERNAL 20.11
+ otx2_cpt_af_reg_read@INTERNAL 20.11
+ otx2_cpt_af_reg_write@INTERNAL 20.11
+ otx2_cryptodev_driver_id@INTERNAL 20.11

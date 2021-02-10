@@ -1,11 +1,10 @@
 
-Package: dpdk-modules-#KVERS#
+Package: dpdk-rte-kni-kmod-#KVERS#
 Section: kernel
 Architecture: amd64 arm64 i386
 Depends: linux-image-#KVERS#-signed #KDREV# | linux-image-#KVERS#-unsigned #KDREV# | linux-image-#KVERS# #KDREV#
-Provides: dpdk-modules,
-Conflicts: dpdk-igb-uio-dkms,
-           dpdk-rte-kni-dkms,
+Provides: dpdk-rte-kni-kmod,
+Conflicts: dpdk-rte-kni-dkms,
 Built-Using: ${built:using:kernel},
 Description: Data Plane Development Kit (rte kni, igb uio modules)
  DPDK is a set of libraries for fast packet processing. Applications run

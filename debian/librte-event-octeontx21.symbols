@@ -1,0 +1,2 @@
+librte_event_octeontx.so.21 librte-event-octeontx21 #MINVER#
+ DPDK_21@DPDK_21 20.11

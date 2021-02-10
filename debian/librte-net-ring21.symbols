@@ -1,0 +1,4 @@
+librte_net_ring.so.21 librte-net-ring21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_eth_from_ring@DPDK_21 20.11
+ rte_eth_from_rings@DPDK_21 20.11

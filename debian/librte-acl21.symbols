@@ -1,0 +1,15 @@
+librte_acl.so.21 librte-acl21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_acl_add_rules@DPDK_21 20.11
+ rte_acl_build@DPDK_21 20.11
+ rte_acl_classify@DPDK_21 20.11
+ rte_acl_classify_alg@DPDK_21 20.11
+ rte_acl_classify_scalar@DPDK_21 20.11
+ rte_acl_create@DPDK_21 20.11
+ rte_acl_dump@DPDK_21 20.11
+ rte_acl_find_existing@DPDK_21 20.11
+ rte_acl_free@DPDK_21 20.11
+ rte_acl_list_dump@DPDK_21 20.11
+ rte_acl_reset@DPDK_21 20.11
+ rte_acl_reset_rules@DPDK_21 20.11
+ rte_acl_set_ctx_classify@DPDK_21 20.11

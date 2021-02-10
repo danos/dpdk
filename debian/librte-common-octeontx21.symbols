@@ -1,0 +1,8 @@
+librte_common_octeontx.so.21 librte-common-octeontx21 #MINVER#
+ INTERNAL@INTERNAL 20.11
+ octeontx_get_global_domain@INTERNAL 20.11
+ octeontx_logtype_mbox@INTERNAL 20.11
+ octeontx_mbox_init@INTERNAL 20.11
+ octeontx_mbox_send@INTERNAL 20.11
+ octeontx_mbox_set_ram_mbox_base@INTERNAL 20.11
+ octeontx_mbox_set_reg@INTERNAL 20.11

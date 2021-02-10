@@ -1,0 +1,6 @@
+librte_crypto_dpaa2_sec.so.21 librte-crypto-dpaa2-sec21 #MINVER#
+ INTERNAL@INTERNAL 20.11
+ dpaa2_sec_eventq_attach@INTERNAL 20.11
+ dpaa2_sec_eventq_detach@INTERNAL 20.11
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

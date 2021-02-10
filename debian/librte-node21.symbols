@@ -1,0 +1,6 @@
+librte_node.so.21 librte-node21 #MINVER#
+ EXPERIMENTAL@EXPERIMENTAL 20.11
+ rte_node_eth_config@EXPERIMENTAL 20.11
+ rte_node_ip4_rewrite_add@EXPERIMENTAL 20.11
+ rte_node_ip4_route_add@EXPERIMENTAL 20.11
+ rte_node_logtype@EXPERIMENTAL 20.11

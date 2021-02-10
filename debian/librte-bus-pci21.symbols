@@ -1,0 +1,16 @@
+librte_bus_pci.so.21 librte-bus-pci21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ EXPERIMENTAL@EXPERIMENTAL 20.11
+ rte_pci_dump@DPDK_21 20.11
+ rte_pci_find_ext_capability@EXPERIMENTAL 20.11
+ rte_pci_get_sysfs_path@DPDK_21 20.11
+ rte_pci_ioport_map@DPDK_21 20.11
+ rte_pci_ioport_read@DPDK_21 20.11
+ rte_pci_ioport_unmap@DPDK_21 20.11
+ rte_pci_ioport_write@DPDK_21 20.11
+ rte_pci_map_device@DPDK_21 20.11
+ rte_pci_read_config@DPDK_21 20.11
+ rte_pci_register@DPDK_21 20.11
+ rte_pci_unmap_device@DPDK_21 20.11
+ rte_pci_unregister@DPDK_21 20.11
+ rte_pci_write_config@DPDK_21 20.11

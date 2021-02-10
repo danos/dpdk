@@ -1,0 +1,4 @@
+librte_mempool_octeontx2.so.21 librte-mempool-octeontx2-21 #MINVER#
+ INTERNAL@INTERNAL 20.08
+ otx2_npa_lf_fini@INTERNAL 20.08
+ otx2_npa_lf_init@INTERNAL 20.08

@@ -1,0 +1,9 @@
+librte_flow_classify.so.21 librte-flow-classify21 #MINVER#
+ EXPERIMENTAL@EXPERIMENTAL 19.11
+ rte_flow_classifier_create@EXPERIMENTAL 19.11
+ rte_flow_classifier_free@EXPERIMENTAL 19.11
+ rte_flow_classifier_query@EXPERIMENTAL 19.11
+ rte_flow_classify_table_create@EXPERIMENTAL 19.11
+ rte_flow_classify_table_entry_add@EXPERIMENTAL 19.11
+ rte_flow_classify_table_entry_delete@EXPERIMENTAL 19.11
+ rte_flow_classify_validate@EXPERIMENTAL 19.11

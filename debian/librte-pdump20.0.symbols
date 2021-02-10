@@ -1,8 +1,0 @@
-librte_pdump.so.20.0 librte-pdump20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- rte_pdump_disable@DPDK_20.0 19.11
- rte_pdump_disable_by_deviceid@DPDK_20.0 19.11
- rte_pdump_enable@DPDK_20.0 19.11
- rte_pdump_enable_by_deviceid@DPDK_20.0 19.11
- rte_pdump_init@DPDK_20.0 19.11
- rte_pdump_uninit@DPDK_20.0 19.11

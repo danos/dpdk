@@ -1,0 +1,11 @@
+librte_net.so.21 librte-net21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ EXPERIMENTAL@EXPERIMENTAL 18.02
+ rte_eth_random_addr@DPDK_21 20.11
+ rte_ether_format_addr@DPDK_21 20.11
+ rte_ether_unformat_addr@EXPERIMENTAL 19.08
+ rte_net_crc_calc@DPDK_21 20.11
+ rte_net_crc_set_alg@DPDK_21 20.11
+ rte_net_get_ptype@DPDK_21 20.11
+ rte_net_make_rarp_packet@EXPERIMENTAL 18.02
+ rte_net_skip_ip6_ext@EXPERIMENTAL 18.05

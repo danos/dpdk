@@ -1,0 +1,4 @@
+librte_crypto_bcmfs.so.21 librte-crypto-bcmfs21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

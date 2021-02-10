@@ -1,0 +1,9 @@
+librte_net_atlantic.so.21 librte-net-atlantic21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ EXPERIMENTAL@EXPERIMENTAL 20.11
+ rte_pmd_atl_macsec_config_rxsc@EXPERIMENTAL 20.11
+ rte_pmd_atl_macsec_config_txsc@EXPERIMENTAL 20.11
+ rte_pmd_atl_macsec_disable@EXPERIMENTAL 20.11
+ rte_pmd_atl_macsec_enable@EXPERIMENTAL 20.11
+ rte_pmd_atl_macsec_select_rxsa@EXPERIMENTAL 20.11
+ rte_pmd_atl_macsec_select_txsa@EXPERIMENTAL 20.11

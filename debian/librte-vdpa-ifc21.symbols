@@ -1,0 +1,4 @@
+librte_vdpa_ifc.so.21 librte-vdpa-ifc21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+# INFO: this library exports no symbols, it is like a PMD relying
+# on callbacks once registered

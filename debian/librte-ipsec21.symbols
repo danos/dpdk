@@ -1,0 +1,13 @@
+librte_ipsec.so.21 librte-ipsec21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_ipsec_sa_fini@DPDK_21 20.11
+ rte_ipsec_sa_init@DPDK_21 20.11
+ rte_ipsec_sa_size@DPDK_21 20.11
+ rte_ipsec_sa_type@DPDK_21 20.11
+ rte_ipsec_sad_add@DPDK_21 20.11
+ rte_ipsec_sad_create@DPDK_21 20.11
+ rte_ipsec_sad_del@DPDK_21 20.11
+ rte_ipsec_sad_destroy@DPDK_21 20.11
+ rte_ipsec_sad_find_existing@DPDK_21 20.11
+ rte_ipsec_sad_lookup@DPDK_21 20.11
+ rte_ipsec_session_prepare@DPDK_21 20.11

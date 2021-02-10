@@ -7,6 +7,6 @@ case $arch in
         ;;
     *)
         echo "Architecture ${arch} not supported, SKIP test"
-        exit 0
+        exit 77
         ;;
 esac

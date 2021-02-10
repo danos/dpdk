@@ -1,0 +1,4 @@
+librte_rawdev_octeontx2_ep.so.21 librte-rawdev-octeontx2-ep21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+# INFO: this library exports no symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

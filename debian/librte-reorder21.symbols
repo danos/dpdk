@@ -1,0 +1,11 @@
+librte_reorder.so.21 librte-reorder21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ EXPERIMENTAL@EXPERIMENTAL 20.11~rc3
+ rte_reorder_create@DPDK_21 20.11
+ rte_reorder_drain@DPDK_21 20.11
+ rte_reorder_find_existing@DPDK_21 20.11
+ rte_reorder_free@DPDK_21 20.11
+ rte_reorder_init@DPDK_21 20.11
+ rte_reorder_insert@DPDK_21 20.11
+ rte_reorder_reset@DPDK_21 20.11
+ rte_reorder_seqn_dynfield_offset@EXPERIMENTAL 20.11~rc3

@@ -1,0 +1,6 @@
+librte_net_ipn3ke.so.21 librte-net-ipn3ke21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ EXPERIMENTAL@EXPERIMENTAL 20.11
+ ipn3ke_bridge_func@EXPERIMENTAL 20.11
+# INFO: this library exports no stable symbols, essentially it is a driver that
+# registers itself on load and is then only driven by callbacks.

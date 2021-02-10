@@ -1,9 +1,0 @@
-librte_pmd_atlantic.so.20.0 librte-pmd-atlantic20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- EXPERIMENTAL@EXPERIMENTAL 19.08
- rte_pmd_atl_macsec_config_rxsc@EXPERIMENTAL 19.08
- rte_pmd_atl_macsec_config_txsc@EXPERIMENTAL 19.08
- rte_pmd_atl_macsec_disable@EXPERIMENTAL 19.08
- rte_pmd_atl_macsec_enable@EXPERIMENTAL 19.08
- rte_pmd_atl_macsec_select_rxsa@EXPERIMENTAL 19.08
- rte_pmd_atl_macsec_select_txsa@EXPERIMENTAL 19.08

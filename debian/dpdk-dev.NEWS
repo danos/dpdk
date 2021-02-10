@@ -1,0 +1,13 @@
+dpdk (18.11-6) unstable; urgency=medium
+
+  As a result from switching the build system to Meson, the following changes
+  happened since 17.11:
+  - Switch PMD installation directory from /usr/lib/*/dpdk-18.11-drivers to
+    /usr/lib/*/dpdk/pmds-18.11.
+  - Remove backward-compatibility symlink for arch-dependent headers. Users
+    now should use the libdpdk.pc pkg-config file to get the appropriate
+    CFLAGS, or specify -I/usr/include/<ARCH>/dpdk manually.
+  - Drop the dpdk-dev SDK package, users should just use pkg-config now.
+  - Rename all binaries and scripts to have a dpdk- prefix.
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 07 Feb 2019 15:15:07 +0000

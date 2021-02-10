@@ -1,0 +1,5 @@
+librte_pci.so.21 librte-pci21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_pci_addr_cmp@DPDK_21 20.11
+ rte_pci_addr_parse@DPDK_21 20.11
+ rte_pci_device_name@DPDK_21 20.11

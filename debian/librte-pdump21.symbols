@@ -1,0 +1,8 @@
+librte_pdump.so.21 librte-pdump21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_pdump_disable@DPDK_21 20.11
+ rte_pdump_disable_by_deviceid@DPDK_21 20.11
+ rte_pdump_enable@DPDK_21 20.11
+ rte_pdump_enable_by_deviceid@DPDK_21 20.11
+ rte_pdump_init@DPDK_21 20.11
+ rte_pdump_uninit@DPDK_21 20.11

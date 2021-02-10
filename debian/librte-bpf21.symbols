@@ -1,0 +1,12 @@
+librte_bpf.so.21 librte-bpf21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_bpf_destroy@DPDK_21 20.11
+ rte_bpf_elf_load@DPDK_21 20.11
+ rte_bpf_eth_rx_elf_load@DPDK_21 20.11
+ rte_bpf_eth_rx_unload@DPDK_21 20.11
+ rte_bpf_eth_tx_elf_load@DPDK_21 20.11
+ rte_bpf_eth_tx_unload@DPDK_21 20.11
+ rte_bpf_exec@DPDK_21 20.11
+ rte_bpf_exec_burst@DPDK_21 20.11
+ rte_bpf_get_jit@DPDK_21 20.11
+ rte_bpf_load@DPDK_21 20.11

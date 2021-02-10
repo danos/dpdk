@@ -1,9 +1,0 @@
-librte_reorder.so.20.0 librte-reorder20.0 #MINVER#
- DPDK_20.0@DPDK_20.0 19.11
- rte_reorder_create@DPDK_20.0 19.11
- rte_reorder_drain@DPDK_20.0 19.11
- rte_reorder_find_existing@DPDK_20.0 19.11
- rte_reorder_free@DPDK_20.0 19.11
- rte_reorder_init@DPDK_20.0 19.11
- rte_reorder_insert@DPDK_20.0 19.11
- rte_reorder_reset@DPDK_20.0 19.11

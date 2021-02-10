@@ -1,0 +1,7 @@
+librte_bitratestats.so.21 librte-bitratestats21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ EXPERIMENTAL@EXPERIMENTAL 20.11
+ rte_stats_bitrate_calc@DPDK_21 20.11
+ rte_stats_bitrate_create@DPDK_21 20.11
+ rte_stats_bitrate_free@EXPERIMENTAL 20.11
+ rte_stats_bitrate_reg@DPDK_21 20.11

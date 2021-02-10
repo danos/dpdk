@@ -1,0 +1,12 @@
+librte_crypto_scheduler.so.21 librte-crypto-scheduler21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_cryptodev_scheduler_load_user_scheduler@DPDK_21 20.11
+ rte_cryptodev_scheduler_mode_get@DPDK_21 20.11
+ rte_cryptodev_scheduler_mode_set@DPDK_21 20.11
+ rte_cryptodev_scheduler_option_get@DPDK_21 20.11
+ rte_cryptodev_scheduler_option_set@DPDK_21 20.11
+ rte_cryptodev_scheduler_ordering_get@DPDK_21 20.11
+ rte_cryptodev_scheduler_ordering_set@DPDK_21 20.11
+ rte_cryptodev_scheduler_worker_attach@DPDK_21 20.11
+ rte_cryptodev_scheduler_worker_detach@DPDK_21 20.11
+ rte_cryptodev_scheduler_workers_get@DPDK_21 20.11

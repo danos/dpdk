@@ -1,0 +1,8 @@
+librte_meter.so.21 librte-meter21 #MINVER#
+ DPDK_21@DPDK_21 20.08
+ rte_meter_srtcm_config@DPDK_21 20.11
+ rte_meter_srtcm_profile_config@DPDK_21 20.11
+ rte_meter_trtcm_config@DPDK_21 20.11
+ rte_meter_trtcm_profile_config@DPDK_21 20.11
+ rte_meter_trtcm_rfc4115_config@DPDK_21 20.08
+ rte_meter_trtcm_rfc4115_profile_config@DPDK_21 20.08

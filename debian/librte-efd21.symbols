@@ -1,0 +1,9 @@
+librte_efd.so.21 librte-efd21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ rte_efd_create@DPDK_21 20.11
+ rte_efd_delete@DPDK_21 20.11
+ rte_efd_find_existing@DPDK_21 20.11
+ rte_efd_free@DPDK_21 20.11
+ rte_efd_lookup@DPDK_21 20.11
+ rte_efd_lookup_bulk@DPDK_21 20.11
+ rte_efd_update@DPDK_21 20.11

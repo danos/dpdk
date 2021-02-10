@@ -1,0 +1,9 @@
+librte_kvargs.so.21 librte-kvargs21 #MINVER#
+ DPDK_21@DPDK_21 20.11
+ EXPERIMENTAL@EXPERIMENTAL 18.08
+ rte_kvargs_count@DPDK_21 20.11
+ rte_kvargs_free@DPDK_21 20.11
+ rte_kvargs_parse@DPDK_21 20.11
+ rte_kvargs_parse_delim@EXPERIMENTAL 18.08
+ rte_kvargs_process@DPDK_21 20.11
+ rte_kvargs_strcmp@EXPERIMENTAL 18.08
