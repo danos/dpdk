@@ -1,11 +1,11 @@
---- a/drivers/net/mlx5/mlx5.c
-+++ b/drivers/net/mlx5/mlx5.c
-@@ -3295,7 +3295,7 @@
- 			.min_rxqs_num = MLX5_MPRQ_MIN_RXQS,
- 		},
- 		.dv_esw_en = 1,
--		.dv_flow_en = 1,
-+		.dv_flow_en = 0,
- 	};
- 	/* Device specific configuration. */
- 	switch (pci_dev->id.device_id) {
+--- a/drivers/net/mlx5/linux/mlx5_os.c
++++ b/drivers/net/mlx5/linux/mlx5_os.c
+@@ -2149,7 +2149,7 @@ mlx5_os_pci_probe(struct rte_pci_driver
+ 		dev_config.mprq.max_memcpy_len = MLX5_MPRQ_MEMCPY_DEFAULT_LEN;
+ 		dev_config.mprq.min_rxqs_num = MLX5_MPRQ_MIN_RXQS;
+ 		dev_config.dv_esw_en = 1;
+-		dev_config.dv_flow_en = 1;
++		dev_config.dv_flow_en = 0;
+ 		dev_config.decap_en = 1;
+ 		dev_config.log_hp_size = MLX5_ARG_UNSET;
+ 		list[i].eth_dev = mlx5_dev_spawn(&pci_dev->device,
