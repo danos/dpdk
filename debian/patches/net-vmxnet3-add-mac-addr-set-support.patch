@@ -16,9 +16,9 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
 
 --- a/drivers/net/vmxnet3/vmxnet3_ethdev.c
 +++ b/drivers/net/vmxnet3/vmxnet3_ethdev.c
-@@ -66,7 +66,9 @@ static int vmxnet3_dev_start(struct rte_
- static void vmxnet3_dev_stop(struct rte_eth_dev *dev);
- static void vmxnet3_dev_close(struct rte_eth_dev *dev);
+@@ -68,7 +68,9 @@ static int vmxnet3_dev_start(struct rte_
+ static int vmxnet3_dev_stop(struct rte_eth_dev *dev);
+ static int vmxnet3_dev_close(struct rte_eth_dev *dev);
  static void vmxnet3_dev_set_rxmode(struct vmxnet3_hw *hw, uint32_t feature, int set);
 +static int __vmxnet3_dev_promiscuous_enable(struct rte_eth_dev *dev);
  static int vmxnet3_dev_promiscuous_enable(struct rte_eth_dev *dev);
@@ -26,7 +26,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  static int vmxnet3_dev_promiscuous_disable(struct rte_eth_dev *dev);
  static int vmxnet3_dev_allmulticast_enable(struct rte_eth_dev *dev);
  static int vmxnet3_dev_allmulticast_disable(struct rte_eth_dev *dev);
-@@ -92,6 +94,10 @@ static int vmxnet3_dev_vlan_filter_set(s
+@@ -95,6 +97,10 @@ static int vmxnet3_dev_vlan_filter_set(s
  static int vmxnet3_dev_vlan_offload_set(struct rte_eth_dev *dev, int mask);
  static int vmxnet3_mac_addr_set(struct rte_eth_dev *dev,
  				 struct rte_ether_addr *mac_addr);
@@ -36,7 +36,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
 +static void vmxnet3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index);
  static void vmxnet3_interrupt_handler(void *param);
  
- int vmxnet3_logtype_init;
+ /*
 @@ -122,6 +128,8 @@ static const struct eth_dev_ops vmxnet3_
  	.xstats_get           = vmxnet3_dev_xstats_get,
  	.stats_reset          = vmxnet3_dev_stats_reset,
@@ -45,8 +45,8 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
 +	.mac_addr_remove      = vmxnet3_mac_addr_remove,
  	.dev_infos_get        = vmxnet3_dev_info_get,
  	.dev_supported_ptypes_get = vmxnet3_dev_supported_ptypes_get,
- 	.vlan_filter_set      = vmxnet3_dev_vlan_filter_set,
-@@ -1216,11 +1224,56 @@ vmxnet3_mac_addr_set(struct rte_eth_dev
+ 	.mtu_set              = vmxnet3_dev_mtu_set,
+@@ -1245,11 +1253,56 @@ vmxnet3_mac_addr_set(struct rte_eth_dev
  {
  	struct vmxnet3_hw *hw = dev->data->dev_private;
  
@@ -103,7 +103,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  /* return 0 means link status changed, -1 means not changed */
  static int
  __vmxnet3_dev_link_update(struct rte_eth_dev *dev,
-@@ -1270,7 +1323,7 @@ vmxnet3_dev_set_rxmode(struct vmxnet3_hw
+@@ -1299,7 +1352,7 @@ vmxnet3_dev_set_rxmode(struct vmxnet3_hw
  
  /* Promiscuous supported only if Vmxnet3_DriverShared is initialized in adapter */
  static int
@@ -112,7 +112,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  {
  	struct vmxnet3_hw *hw = dev->data->dev_private;
  	uint32_t *vf_table = hw->shared->devRead.rxFilterConf.vfTable;
-@@ -1284,9 +1337,18 @@ vmxnet3_dev_promiscuous_enable(struct rt
+@@ -1313,9 +1366,18 @@ vmxnet3_dev_promiscuous_enable(struct rt
  	return 0;
  }
  
@@ -132,7 +132,7 @@ Signed-off-by: George Wilkie <george.wilkie@intl.att.com>
  {
  	struct vmxnet3_hw *hw = dev->data->dev_private;
  	uint32_t *vf_table = hw->shared->devRead.rxFilterConf.vfTable;
-@@ -1303,6 +1365,20 @@ vmxnet3_dev_promiscuous_disable(struct r
+@@ -1332,6 +1394,20 @@ vmxnet3_dev_promiscuous_disable(struct r
  	return 0;
  }
  
