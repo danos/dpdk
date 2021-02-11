@@ -155,8 +155,8 @@
  /*
   * Reset all rules.
   * Note that RT structures are not affected.
---- a/lib/librte_acl/rte_acl_version.map
-+++ b/lib/librte_acl/rte_acl_version.map
+--- a/lib/librte_acl/version.map
++++ b/lib/librte_acl/version.map
 @@ -6,6 +6,7 @@
  	rte_acl_classify;
  	rte_acl_classify_alg;

@@ -1,6 +1,6 @@
 --- a/lib/librte_acl/meson.build
 +++ b/lib/librte_acl/meson.build
-@@ -5,6 +5,8 @@
+@@ -5,6 +5,8 @@ sources = files('acl_bld.c', 'acl_gen.c'
  		'rte_acl.c', 'tb_mem.c')
  headers = files('rte_acl.h', 'rte_acl_osdep.h')
  
@@ -11,9 +11,9 @@
  
 --- a/lib/librte_acl/acl.h
 +++ b/lib/librte_acl/acl.h
-@@ -163,10 +163,23 @@
- 	/** Socket ID to allocate memory from. */
+@@ -171,10 +171,23 @@ struct rte_acl_ctx {
  	enum rte_acl_classify_alg alg;
+ 	uint32_t           first_load_sz;
  	void               *rules;
 +	unsigned int        flags;
 +	struct rte_hash    *ht;
@@ -37,10 +37,10 @@
  	uint64_t            no_match;
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -6,6 +6,10 @@
- #include <rte_string_fns.h>
+@@ -7,6 +7,10 @@
  #include <rte_acl.h>
  #include <rte_tailq.h>
+ #include <rte_vect.h>
 +#include <rte_hash.h>
 +#include <rte_jhash.h>
 +#include <rte_random.h>
@@ -48,7 +48,7 @@
  
  #include "acl.h"
  
-@@ -202,10 +206,39 @@
+@@ -359,10 +363,39 @@ rte_acl_free(struct rte_acl_ctx *ctx)
  	rte_mcfg_tailq_write_unlock();
  
  	rte_free(ctx->mem);
@@ -88,7 +88,7 @@
  struct rte_acl_ctx *
  rte_acl_create(const struct rte_acl_param *param)
  {
-@@ -223,10 +256,19 @@
+@@ -380,10 +413,19 @@ rte_acl_create(const struct rte_acl_para
  		return NULL;
  	}
  
@@ -109,7 +109,7 @@
  
  	/* get EAL TAILQ lock. */
  	rte_mcfg_tailq_write_lock();
-@@ -238,41 +280,190 @@
+@@ -395,41 +437,190 @@ rte_acl_create(const struct rte_acl_para
  			break;
  	}
  
@@ -144,15 +144,12 @@
 +	ctx->max_rules = param->max_rule_num;
 +	ctx->rule_sz = param->rule_size;
 +	ctx->socket_id = param->socket_id;
-+	ctx->alg = rte_acl_default_classify;
++	ctx->alg = acl_get_best_alg();
 +	ctx->flags = param->flags;
 +	strlcpy(ctx->name, param->name, sizeof(ctx->name));
 +
 +	te->data = (void *) ctx;
- 
--		if (te == NULL) {
--			RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
--			goto exit;
++
 +	TAILQ_INSERT_TAIL(acl_list, te, next);
 +
 +	rte_mcfg_tailq_write_unlock();
@@ -265,7 +262,10 @@
 +		if (ret != -ENOENT)
 +			return -EEXIST;
 +	}
-+
+ 
+-		if (te == NULL) {
+-			RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
+-			goto exit;
 +	for (i=0, pos = rules; i < num; i++, pos += ctx->rule_sz) {
 +
 +		rule = acl_rule_create(ctx);
@@ -279,12 +279,6 @@
 -		ctx = rte_zmalloc_socket(name, sz, RTE_CACHE_LINE_SIZE, param->socket_id);
 +		memset(rule, 0, ctx->rule_sz);
 +		memcpy(rule, pos, ctx->rule_sz);
-+
-+		ret = rte_hash_add_key_data(ctx->ht, rule, (void *) rule);
-+		if (ret < 0) {
-+			RTE_LOG(ERR, ACL, "adding rule #%d to hash-table on socket %d for %s failed: %s\n",
-+				i, ctx->socket_id, ctx->name,
-+				rte_strerror(rte_errno));
  
 -		if (ctx == NULL) {
 -			RTE_LOG(ERR, ACL,
@@ -292,6 +286,12 @@
 -				sz, param->socket_id, name);
 -			rte_free(te);
 -			goto exit;
++		ret = rte_hash_add_key_data(ctx->ht, rule, (void *) rule);
++		if (ret < 0) {
++			RTE_LOG(ERR, ACL, "adding rule #%d to hash-table on socket %d for %s failed: %s\n",
++				i, ctx->socket_id, ctx->name,
++				rte_strerror(rte_errno));
++
 +			num = i;
 +
 +			goto error;
@@ -301,7 +301,7 @@
 -		ctx->max_rules = param->max_rule_num;
 -		ctx->rule_sz = param->rule_size;
 -		ctx->socket_id = param->socket_id;
--		ctx->alg = rte_acl_default_classify;
+-		ctx->alg = acl_get_best_alg();
 -		strlcpy(ctx->name, param->name, sizeof(ctx->name));
  
 -		te->data = (void *) ctx;
@@ -324,7 +324,7 @@
  }
  
  static int
-@@ -283,6 +474,9 @@
+@@ -440,6 +631,9 @@ acl_add_rules(struct rte_acl_ctx *ctx, c
  	if (num + ctx->num_rules > ctx->max_rules)
  		return -ENOMEM;
  
@@ -334,7 +334,7 @@
  	pos = ctx->rules;
  	pos += ctx->rule_sz * ctx->num_rules;
  	memcpy(pos, rules, num * ctx->rule_sz);
-@@ -334,8 +528,24 @@
+@@ -491,8 +685,24 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
  void
  rte_acl_reset_rules(struct rte_acl_ctx *ctx)
  {
@@ -361,7 +361,7 @@
  }
  
  /*
-@@ -366,6 +576,7 @@
+@@ -524,6 +734,7 @@ rte_acl_dump(const struct rte_acl_ctx *c
  	printf("  num_rules=%"PRIu32"\n", ctx->num_rules);
  	printf("  num_categories=%"PRIu32"\n", ctx->num_categories);
  	printf("  num_tries=%"PRIu32"\n", ctx->num_tries);
@@ -371,7 +371,7 @@
  /*
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -122,6 +122,10 @@
+@@ -122,6 +122,10 @@ RTE_ACL_RULE_DEF(rte_acl_rule,);
  /** Max number of characters in name.*/
  #define	RTE_ACL_NAMESIZE		32
  
@@ -382,7 +382,7 @@
  /**
   * Parameters used when creating the ACL context.
   */
-@@ -130,8 +134,15 @@
+@@ -130,8 +134,15 @@ struct rte_acl_param {
  	int         socket_id;    /**< Socket ID to allocate memory for. */
  	uint32_t    rule_size;    /**< Size of each rule. */
  	uint32_t    max_rule_num; /**< Maximum number of rules. */
@@ -398,7 +398,7 @@
  
  /**
   * Create a new ACL context.
-@@ -193,6 +204,22 @@
+@@ -193,6 +204,22 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
  	uint32_t num);
  
  /**
@@ -431,7 +431,7 @@
  #include "tb_mem.h"
  #include "acl.h"
  
-@@ -1433,13 +1434,36 @@
+@@ -1433,13 +1434,36 @@ acl_build_log(const struct acl_build_con
  	}
  }
  
@@ -469,7 +469,7 @@
  	size_t ofs, sz;
  
  	fn = bcx->cfg.num_fields;
-@@ -1453,17 +1477,19 @@
+@@ -1453,17 +1477,19 @@ acl_build_rules(struct acl_build_context
  	num = 0;
  	head = NULL;
  
@@ -500,7 +500,7 @@
  		}
  	}
  
-@@ -1595,6 +1621,9 @@
+@@ -1626,6 +1652,9 @@ rte_acl_build(struct rte_acl_ctx *ctx, c
  
  	acl_build_reset(ctx);
  
@@ -510,9 +510,9 @@
  	if (cfg->max_size == 0) {
  		n = NODE_MIN;
  		max_size = SIZE_MAX;
---- a/lib/librte_acl/rte_acl_version.map
-+++ b/lib/librte_acl/rte_acl_version.map
-@@ -7,6 +7,7 @@
+--- a/lib/librte_acl/version.map
++++ b/lib/librte_acl/version.map
+@@ -7,6 +7,7 @@ DPDK_21 {
  	rte_acl_classify_alg;
  	rte_acl_classify_scalar;
  	rte_acl_create;

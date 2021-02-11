@@ -1,6 +1,6 @@
 --- a/lib/librte_acl/acl.h
 +++ b/lib/librte_acl/acl.h
-@@ -156,6 +156,19 @@
+@@ -163,6 +163,20 @@ struct rte_acl_bld_trie {
  	struct rte_acl_node *trie;
  };
  
@@ -15,12 +15,13 @@
 +	void               *mem;
 +	size_t              mem_sz;
 +	struct rte_acl_config config; /* copy of build config. */
++	struct rte_acl_ctx *acx;
 +};
 +
  struct rte_acl_ctx {
  	char                name[RTE_ACL_NAMESIZE];
  	/** Name of the ACL context. */
-@@ -177,19 +190,7 @@
+@@ -185,19 +199,7 @@ struct rte_acl_ctx {
  	uint32_t            num_rules;
  	uint32_t            num_categories;
  
@@ -43,7 +44,7 @@
  int rte_acl_gen(struct rte_acl_ctx *ctx, struct rte_acl_trie *trie,
 --- a/lib/librte_acl/acl_bld.c
 +++ b/lib/librte_acl/acl_bld.c
-@@ -773,9 +773,11 @@
+@@ -773,9 +773,11 @@ acl_merge_trie(struct acl_build_context
  static void
  acl_build_reset(struct rte_acl_ctx *ctx)
  {
@@ -58,7 +59,7 @@
  }
  
  static void
-@@ -1503,7 +1505,7 @@
+@@ -1503,7 +1505,7 @@ acl_build_rules(struct acl_build_context
   * Copy data_indexes for each trie into RT location.
   */
  static void
@@ -67,7 +68,7 @@
  {
  	uint32_t i, n, ofs;
  
-@@ -1614,6 +1616,9 @@
+@@ -1645,6 +1647,9 @@ rte_acl_build(struct rte_acl_ctx *ctx, c
  	uint32_t n;
  	size_t max_size;
  	struct acl_build_context bcx;
@@ -77,7 +78,7 @@
  
  	rc = acl_check_bld_param(ctx, cfg);
  	if (rc != 0)
-@@ -1642,13 +1647,13 @@
+@@ -1673,16 +1678,16 @@ rte_acl_build(struct rte_acl_ctx *ctx, c
  			rc = rte_acl_gen(ctx, bcx.tries, bcx.bld_tries,
  				bcx.num_tries, bcx.cfg.num_categories,
  				RTE_ACL_MAX_FIELDS * RTE_DIM(bcx.tries) *
@@ -88,6 +89,9 @@
 -				acl_set_data_indexes(ctx);
 +				acl_set_data_indexes(ctx->rcx);
  
+ 				/* determine can we always do 4B load */
+ 				ctx->first_load_sz = get_first_load_size(cfg);
+ 
  				/* copy in build config. */
 -				ctx->config = *cfg;
 +				ctx->rcx->config = *cfg;
@@ -96,7 +100,7 @@
  
 --- a/lib/librte_acl/acl_gen.c
 +++ b/lib/librte_acl/acl_gen.c
-@@ -52,7 +52,7 @@
+@@ -52,7 +52,7 @@ acl_gen_log_stats(const struct rte_acl_c
  		indices->dfa_index * sizeof(uint64_t),
  		counts->match,
  		counts->match * sizeof(struct rte_acl_match_results),
@@ -105,7 +109,7 @@
  		max_size);
  }
  
-@@ -456,6 +456,7 @@
+@@ -456,6 +456,7 @@ rte_acl_gen(struct rte_acl_ctx *ctx, str
  	struct rte_acl_match_results *match;
  	struct acl_node_counters counts;
  	struct rte_acl_indices indices;
@@ -113,7 +117,7 @@
  
  	no_match = RTE_ACL_NODE_MATCH;
  
-@@ -486,6 +487,15 @@
+@@ -486,6 +487,15 @@ rte_acl_gen(struct rte_acl_ctx *ctx, str
  		return -ENOMEM;
  	}
  
@@ -129,7 +133,7 @@
  	/* Fill the runtime structure */
  	match_index = indices.match_start;
  	node_array = (uint64_t *)((uintptr_t)mem +
-@@ -516,16 +526,23 @@
+@@ -516,16 +526,26 @@ rte_acl_gen(struct rte_acl_ctx *ctx, str
  			trie[n].root_index = node_bld_trie[n].trie->node_index;
  	}
  
@@ -154,6 +158,9 @@
 +	rcx->trans_table = node_array;
 +	memcpy(rcx->trie, trie, sizeof(rcx->trie));
 +
++	/* back pointer to acx/rte_acl_ctx */
++	rcx->acx = ctx;
++
 +	/* This is not thread-safe. */
 +	if (prev_rcx)
 +		rte_free(prev_rcx);
@@ -164,7 +171,7 @@
  	return 0;
 --- a/lib/librte_acl/acl_run.h
 +++ b/lib/librte_acl/acl_run.h
-@@ -108,7 +108,7 @@
+@@ -108,7 +108,7 @@ alloc_completion(struct completion *p, u
   */
  static inline void
  resolve_single_priority(uint64_t transition, int n,
@@ -173,7 +180,7 @@
  	const struct rte_acl_match_results *p)
  {
  	if (parms[n].cmplt->count == ctx->num_tries ||
-@@ -126,7 +126,7 @@
+@@ -126,7 +126,7 @@ resolve_single_priority(uint64_t transit
   */
  static inline uint64_t
  acl_start_next_trie(struct acl_flow_data *flows, struct parms *parms, int n,
@@ -182,7 +189,7 @@
  {
  	uint64_t transition;
  
-@@ -190,7 +190,7 @@
+@@ -190,7 +190,7 @@ acl_set_flow(struct acl_flow_data *flows
  }
  
  typedef void (*resolve_priority_t)
@@ -191,7 +198,7 @@
  	struct parms *parms, const struct rte_acl_match_results *p,
  	uint32_t categories);
  
-@@ -201,7 +201,7 @@
+@@ -201,7 +201,7 @@ typedef void (*resolve_priority_t)
   */
  static inline uint64_t
  acl_match_check(uint64_t transition, int slot,
@@ -215,7 +222,7 @@
  	if (likely(num >= MAX_SEARCHES_AVX16))
  		return search_avx2x16(ctx, data, results, num, categories);
  	else if (num >= MAX_SEARCHES_SSE8)
-@@ -20,6 +22,6 @@
+@@ -20,6 +22,6 @@ rte_acl_classify_avx2(const struct rte_a
  	else if (num >= MAX_SEARCHES_SSE4)
  		return search_sse_4(ctx, data, results, num, categories);
  	else
@@ -225,7 +232,7 @@
  }
 --- a/lib/librte_acl/acl_run_avx2.h
 +++ b/lib/librte_acl/acl_run_avx2.h
-@@ -87,7 +87,7 @@
+@@ -87,7 +87,7 @@ transition8(ymm_t next_input, const uint
   * tr_hi contains high 32 bits for 8 transition.
   */
  static inline void
@@ -234,7 +241,7 @@
  	struct parms *parms, struct acl_flow_data *flows, uint32_t slot,
  	ymm_t matches, ymm_t *tr_lo, ymm_t *tr_hi)
  {
-@@ -131,7 +131,7 @@
+@@ -131,7 +131,7 @@ acl_process_matches_avx2x8(const struct
  }
  
  static inline void
@@ -243,7 +250,7 @@
  	struct acl_flow_data *flows, uint32_t slot,
  	ymm_t *tr_lo, ymm_t *tr_hi, ymm_t match_mask)
  {
-@@ -157,7 +157,7 @@
+@@ -157,7 +157,7 @@ acl_match_check_avx2x8(const struct rte_
   * Execute trie traversal for up to 16 flows in parallel.
   */
  static inline int
@@ -263,7 +270,7 @@
  	const struct rte_acl_match_results *p, uint32_t categories)
  {
  	uint32_t i;
-@@ -107,7 +107,7 @@
+@@ -107,7 +107,7 @@ scalar_transition(const uint64_t *trans_
  }
  
  int
@@ -272,7 +279,7 @@
  	uint32_t *results, uint32_t num, uint32_t categories)
  {
  	int n;
-@@ -117,6 +117,7 @@
+@@ -117,6 +117,7 @@ rte_acl_classify_scalar(const struct rte
  	uint64_t index_array[MAX_SEARCHES_SCALAR];
  	struct completion cmplt[MAX_SEARCHES_SCALAR];
  	struct parms parms[MAX_SEARCHES_SCALAR];
@@ -282,7 +289,7 @@
  		categories, ctx->trans_table);
 --- a/lib/librte_acl/acl_run_sse.h
 +++ b/lib/librte_acl/acl_run_sse.h
-@@ -52,9 +52,9 @@
+@@ -52,9 +52,9 @@ static const rte_xmm_t xmm_range_base =
   * its priority for each category.
   */
  static inline void
@@ -295,7 +302,7 @@
  {
  	uint32_t x;
  	xmm_t results, priority, results1, priority1, selector;
-@@ -96,7 +96,7 @@
+@@ -96,7 +96,7 @@ resolve_priority_sse(uint64_t transition
   * Extract transitions from an XMM register and check for any matches
   */
  static void
@@ -304,7 +311,7 @@
  	struct parms *parms, struct acl_flow_data *flows)
  {
  	uint64_t transition1, transition2;
-@@ -121,9 +121,9 @@
+@@ -121,9 +121,9 @@ acl_process_matches(xmm_t *indices, int
   * Check for any match in 4 transitions (contained in 2 SSE registers)
   */
  static __rte_always_inline void
@@ -317,7 +324,7 @@
  {
  	xmm_t temp;
  
-@@ -191,7 +191,7 @@
+@@ -191,7 +191,7 @@ transition4(xmm_t next_input, const uint
   * Execute trie traversal with 8 traversals in parallel
   */
  static inline int
@@ -326,7 +333,7 @@
  	uint32_t *results, uint32_t total_packets, uint32_t categories)
  {
  	int n;
-@@ -280,7 +280,7 @@
+@@ -280,7 +280,7 @@ search_sse_8(const struct rte_acl_ctx *c
   * Execute trie traversal with 4 traversals in parallel
   */
  static inline int
@@ -337,7 +344,7 @@
  	int n;
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -205,7 +205,11 @@
+@@ -362,7 +362,11 @@ rte_acl_free(struct rte_acl_ctx *ctx)
  
  	rte_mcfg_tailq_write_unlock();
  
@@ -350,7 +357,7 @@
  	if (ctx->ht)
  		rte_hash_free(ctx->ht);
  	rte_free(ctx);
-@@ -647,9 +651,11 @@
+@@ -804,9 +808,11 @@ rte_acl_reset_rules(struct rte_acl_ctx *
  void
  rte_acl_reset(struct rte_acl_ctx *ctx)
  {
@@ -363,7 +370,7 @@
  	}
  }
  
-@@ -668,7 +674,7 @@
+@@ -826,7 +832,7 @@ rte_acl_dump(const struct rte_acl_ctx *c
  	printf("  rule_size=%"PRIu32"\n", ctx->rule_sz);
  	printf("  num_rules=%"PRIu32"\n", ctx->num_rules);
  	printf("  num_categories=%"PRIu32"\n", ctx->num_categories);
@@ -374,7 +381,7 @@
  
 --- a/lib/librte_acl/acl_run_sse.c
 +++ b/lib/librte_acl/acl_run_sse.c
-@@ -9,9 +9,9 @@
+@@ -9,9 +9,9 @@ rte_acl_classify_sse(const struct rte_ac
  	uint32_t *results, uint32_t num, uint32_t categories)
  {
  	if (likely(num >= MAX_SEARCHES_SSE8))
@@ -386,3 +393,83 @@
  	else
  		return rte_acl_classify_scalar(ctx, data, results, num,
  			categories);
+--- a/lib/librte_acl/acl_run_avx512x8.h
++++ b/lib/librte_acl/acl_run_avx512x8.h
+@@ -205,7 +205,7 @@ _F_(gather_bytes)(__m256i zero, const __
+  * Use two sets of metadata, each serves 8 flows max.
+  */
+ static inline int
+-search_avx512x8x2(const struct rte_acl_ctx *ctx, const uint8_t **data,
++search_avx512x8x2(const struct rte_acl_rt_ctx *ctx, const uint8_t **data,
+ 	uint32_t *results, uint32_t total_packets, uint32_t categories)
+ {
+ 	uint32_t i, *pm;
+--- a/lib/librte_acl/acl_run_avx512.c
++++ b/lib/librte_acl/acl_run_avx512.c
+@@ -19,13 +19,13 @@ struct acl_flow_avx512 {
+ };
+ 
+ static inline void
+-acl_set_flow_avx512(struct acl_flow_avx512 *flow, const struct rte_acl_ctx *ctx,
++acl_set_flow_avx512(struct acl_flow_avx512 *flow, const struct rte_acl_rt_ctx *ctx,
+ 	uint32_t trie, const uint8_t *data[], uint32_t *matches,
+ 	uint32_t total_packets)
+ {
+ 	flow->num_packets = 0;
+ 	flow->total_packets = total_packets;
+-	flow->first_load_sz = ctx->first_load_sz;
++	flow->first_load_sz = ctx->acx->first_load_sz;
+ 	flow->root_index = ctx->trie[trie].root_index;
+ 	flow->trans = ctx->trans_table;
+ 	flow->data_index = ctx->trie[trie].data_index;
+@@ -110,10 +110,11 @@ resolve_mcle8_avx512x1(uint32_t result[]
+ #include "acl_run_avx512x8.h"
+ 
+ int
+-rte_acl_classify_avx512x16(const struct rte_acl_ctx *ctx, const uint8_t **data,
++rte_acl_classify_avx512x16(const struct rte_acl_ctx *acx, const uint8_t **data,
+ 	uint32_t *results, uint32_t num, uint32_t categories)
+ {
+ 	const uint32_t max_iter = MAX_SEARCHES_AVX16 * MAX_SEARCHES_AVX16;
++	struct rte_acl_rt_ctx *ctx = acx->rcx;
+ 
+ 	/* split huge lookup (gt 256) into series of fixed size ones */
+ 	while (num > max_iter) {
+@@ -131,16 +132,17 @@ rte_acl_classify_avx512x16(const struct
+ 	if (num >= MAX_SEARCHES_SSE4)
+ 		return search_sse_4(ctx, data, results, num, categories);
+ 
+-	return rte_acl_classify_scalar(ctx, data, results, num, categories);
++	return rte_acl_classify_scalar(acx, data, results, num, categories);
+ }
+ 
+ #include "acl_run_avx512x16.h"
+ 
+ int
+-rte_acl_classify_avx512x32(const struct rte_acl_ctx *ctx, const uint8_t **data,
++rte_acl_classify_avx512x32(const struct rte_acl_ctx *acx, const uint8_t **data,
+ 	uint32_t *results, uint32_t num, uint32_t categories)
+ {
+ 	const uint32_t max_iter = MAX_SEARCHES_AVX16 * MAX_SEARCHES_AVX16;
++	struct rte_acl_rt_ctx *ctx = acx->rcx;
+ 
+ 	/* split huge lookup (gt 256) into series of fixed size ones */
+ 	while (num > max_iter) {
+@@ -160,5 +162,5 @@ rte_acl_classify_avx512x32(const struct
+ 	if (num >= MAX_SEARCHES_SSE4)
+ 		return search_sse_4(ctx, data, results, num, categories);
+ 
+-	return rte_acl_classify_scalar(ctx, data, results, num, categories);
++	return rte_acl_classify_scalar(acx, data, results, num, categories);
+ }
+--- a/lib/librte_acl/acl_run_avx512x16.h
++++ b/lib/librte_acl/acl_run_avx512x16.h
+@@ -290,7 +290,7 @@ resolve_mcgt8_avx512x1(uint32_t result[]
+  * Use two sets of metadata, each serves 16 flows max.
+  */
+ static inline int
+-search_avx512x16x2(const struct rte_acl_ctx *ctx, const uint8_t **data,
++search_avx512x16x2(const struct rte_acl_rt_ctx *ctx, const uint8_t **data,
+ 	uint32_t *results, uint32_t total_packets, uint32_t categories)
+ {
+ 	uint32_t i, *pm;
