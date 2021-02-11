@@ -14,13 +14,11 @@ Signed-off-by: Chas Williams <3chas3@gmail.com>
  drivers/net/bonding/rte_eth_bond_pmd.c | 8 ++------
  1 file changed, 2 insertions(+), 6 deletions(-)
 
-diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
-index 612a64599..4d42acd96 100644
 --- a/drivers/net/bonding/rte_eth_bond_pmd.c
 +++ b/drivers/net/bonding/rte_eth_bond_pmd.c
-@@ -1693,10 +1693,6 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
- 	/* Stop slave */
- 	rte_eth_dev_stop(slave_eth_dev->data->port_id);
+@@ -1699,10 +1699,6 @@ slave_configure(struct rte_eth_dev *bond
+ 		RTE_BOND_LOG(ERR, "rte_eth_dev_stop: port %u, err (%d)",
+ 			     slave_eth_dev->data->port_id, errval);
  
 -	/* Enable interrupts on slave device if supported */
 -	if (slave_eth_dev->data->dev_flags & RTE_ETH_DEV_INTR_LSC)
@@ -29,7 +27,7 @@ index 612a64599..4d42acd96 100644
  	/* If RSS is enabled for bonding, try to enable it for slaves  */
  	if (bonded_eth_dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) {
  		if (internals->rss_key_len != 0) {
-@@ -1838,7 +1834,7 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
+@@ -1844,7 +1840,7 @@ slave_configure(struct rte_eth_dev *bond
  	}
  
  	/* If lsc interrupt is set, check initial slave's link status */
@@ -38,7 +36,7 @@ index 612a64599..4d42acd96 100644
  		slave_eth_dev->dev_ops->link_update(slave_eth_dev, 0);
  		bond_ethdev_lsc_event_callback(slave_eth_dev->data->port_id,
  			RTE_ETH_EVENT_INTR_LSC, &bonded_eth_dev->data->port_id,
-@@ -1895,7 +1891,7 @@ slave_add(struct bond_dev_private *internals,
+@@ -1901,7 +1897,7 @@ slave_add(struct bond_dev_private *inter
  	/* Mark slave devices that don't support interrupts so we can
  	 * compensate when we start the bond
  	 */
@@ -47,6 +45,3 @@ index 612a64599..4d42acd96 100644
  		slave_details->link_status_poll_enabled = 1;
  	}
  
--- 
-2.24.1
-
