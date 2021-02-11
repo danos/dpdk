@@ -10,7 +10,7 @@ Signed-off-by: Simon Barber <sbarber@vyatta.att-mail.com>
 
 --- a/lib/librte_net/rte_ether.h
 +++ b/lib/librte_net/rte_ether.h
-@@ -354,16 +354,58 @@ static inline int rte_vlan_insert(struct
+@@ -350,20 +350,62 @@ static inline int rte_vlan_insert(struct
  	struct rte_vlan_hdr *vh;
  
  	/* Can't insert header if mbuf is shared */
@@ -22,6 +22,10 @@ Signed-off-by: Simon Barber <sbarber@vyatta.att-mail.com>
 +		struct rte_mbuf *copy, *m0;
 +		int err;
  
+-	/* Can't insert header if the first segment is too short */
+-	if (rte_pktmbuf_data_len(*m) < 2 * RTE_ETHER_ADDR_LEN)
+-		return -EINVAL;
+-
 -	oh = rte_pktmbuf_mtod(*m, struct rte_ether_hdr *);
 -	nh = (struct rte_ether_hdr *)
 -		rte_pktmbuf_prepend(*m, sizeof(struct rte_vlan_hdr));
@@ -31,7 +35,8 @@ Signed-off-by: Simon Barber <sbarber@vyatta.att-mail.com>
 +		copy = rte_pktmbuf_clone(*m, (*m)->pool);
 +		if (unlikely(copy == NULL))
 +			return -ENOMEM;
-+
+ 
+-	memmove(nh, oh, 2 * RTE_ETHER_ADDR_LEN);
 +		m0 = rte_pktmbuf_alloc((*m)->pool);
 +		if (unlikely(m0 == NULL)) {
 +			rte_pktmbuf_free(copy);
@@ -43,7 +48,7 @@ Signed-off-by: Simon Barber <sbarber@vyatta.att-mail.com>
 +		m0->hash = copy->hash;
 +		m0->ol_flags = copy->ol_flags & ~IND_ATTACHED_MBUF;
 +		m0->packet_type = copy->packet_type;
-+		m0->timestamp = copy->timestamp;
++		rte_mbuf_dynfield_copy(m0, copy);
 +
 +		/* copy eth hdr, leave space to append vlan */
 +		oh = rte_pktmbuf_mtod(copy, struct rte_ether_hdr *);
@@ -51,7 +56,7 @@ Signed-off-by: Simon Barber <sbarber@vyatta.att-mail.com>
 +		memcpy(nh, oh, 2 * RTE_ETHER_ADDR_LEN);
 +		rte_pktmbuf_adj(copy, 2 * RTE_ETHER_ADDR_LEN);
 +		rte_pktmbuf_pkt_len(m0) = 2 * RTE_ETHER_ADDR_LEN
-+					+ sizeof(struct rte_vlan_hdr);
++					  + sizeof(struct rte_vlan_hdr);
 +		rte_pktmbuf_data_len(m0) = rte_pktmbuf_pkt_len(m0);
 +
 +		/* link new header to cloned data */
@@ -65,15 +70,18 @@ Signed-off-by: Simon Barber <sbarber@vyatta.att-mail.com>
 +		rte_pktmbuf_free(*m);
 +		*m = m0;
 +	} else {
++		/* Can't insert header if the first segment is too short */
++		if (rte_pktmbuf_data_len(*m) < 2 * RTE_ETHER_ADDR_LEN)
++			return -EINVAL;
++
 +		oh = rte_pktmbuf_mtod(*m, struct rte_ether_hdr *);
 +		nh = (struct rte_ether_hdr *)
 +			rte_pktmbuf_prepend(*m, sizeof(struct rte_vlan_hdr));
 +		if (nh == NULL)
 +			return -ENOSPC;
++
 +		memmove(nh, oh, 2 * RTE_ETHER_ADDR_LEN);
 +	}
- 
--	memmove(nh, oh, 2 * RTE_ETHER_ADDR_LEN);
  	nh->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN);
  
  	vh = (struct rte_vlan_hdr *) (nh + 1);
