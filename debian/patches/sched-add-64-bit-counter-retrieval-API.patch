@@ -214,8 +214,8 @@ Signed-off-by: Alan Dewar <alan.dewar@intl.att.com>
   * Scheduler hierarchy path write to packet descriptor. Typically
   * called by the packet classification stage.
   *
---- a/lib/librte_sched/rte_sched_version.map
-+++ b/lib/librte_sched/rte_sched_version.map
+--- a/lib/librte_sched/version.map
++++ b/lib/librte_sched/version.map
 @@ -31,9 +31,11 @@ DPDK_2.0 {
  	rte_sched_port_pkt_write;
  	rte_sched_port_pkt_write_v2;

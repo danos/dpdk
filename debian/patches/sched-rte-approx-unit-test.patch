@@ -1,16 +1,6 @@
---- a/app/test/Makefile
-+++ b/app/test/Makefile
-@@ -171,6 +171,7 @@ SRCS-$(CONFIG_RTE_LIBRTE_NET) += test_cr
- 
- ifeq ($(CONFIG_RTE_LIBRTE_SCHED),y)
- SRCS-y += test_red.c
-+SRCS-y += test_rte_approx_int.c
- SRCS-y += test_sched.c
- endif
- 
 --- a/app/test/autotest_data.py
 +++ b/app/test/autotest_data.py
-@@ -303,6 +303,12 @@ parallel_test_list = [
+@@ -310,6 +310,12 @@ parallel_test_list = [
          "Report":  None,
      },
      {
@@ -25,22 +15,14 @@
          "Func":    default_autotest,
 --- a/app/test/meson.build
 +++ b/app/test/meson.build
-@@ -101,6 +101,7 @@ test_sources = files('commands.c',
- 	'test_rib6.c',
- 	'test_ring.c',
- 	'test_ring_perf.c',
-+	'test_rte_approx_int.c',
- 	'test_rwlock.c',
- 	'test_sched.c',
- 	'test_service_cores.c',
-@@ -210,6 +211,7 @@ fast_tests = [
+@@ -237,6 +237,7 @@ fast_tests = [
          ['rwlock_rda_autotest', true],
          ['rwlock_rds_wrm_autotest', true],
          ['rwlock_rde_wro_autotest', true],
 +        ['sched_approxtest', true],
          ['sched_autotest', true],
+ 		['security_autotest', false],
          ['spinlock_autotest', true],
-         ['stack_autotest', false],
 --- /dev/null
 +++ b/app/test/test_rte_approx_int.c
 @@ -0,0 +1,139 @@
@@ -183,11 +165,13 @@
 +
 +
 +
---- a/lib/librte_sched/rte_sched_version.map
-+++ b/lib/librte_sched/rte_sched_version.map
-@@ -44,4 +44,5 @@ EXPERIMENTAL {
- 	global:
+--- a/lib/librte_sched/version.map
++++ b/lib/librte_sched/version.map
+@@ -45,6 +45,7 @@ EXPERIMENTAL {
  
+ 	rte_sched_subport_pipe_profile_add;
  	rte_sched_port_pipe_profile_add;
 +	rte_approx_int;
+ 	# added in 20.11
+ 	rte_sched_port_subport_profile_add;
  };

@@ -529,8 +529,8 @@ Signed-off-by: Alan Robertson <alan.robertson@intl.att.com>
  #ifdef __cplusplus
  }
  #endif
---- a/lib/librte_sched/rte_sched_version.map
-+++ b/lib/librte_sched/rte_sched_version.map
+--- a/lib/librte_sched/version.map
++++ b/lib/librte_sched/version.map
 @@ -2,7 +2,11 @@ DPDK_20.0 {
  	global:
  

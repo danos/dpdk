@@ -184,9 +184,9 @@ up to 8192 packets long.
  
  	/* avg < min_th: do not mark the packet  */
  	if (red->avg < red_cfg->min_th) {
---- a/lib/librte_sched/rte_sched_version.map
-+++ b/lib/librte_sched/rte_sched_version.map
-@@ -4,10 +4,13 @@ DPDK_2.0 {
+--- a/lib/librte_sched/version.map
++++ b/lib/librte_sched/version.map
+@@ -4,10 +4,13 @@ DPDK_21 {
  	rte_approx;
  	rte_red_config_init;
  	rte_red_log2_1_minus_Wq;

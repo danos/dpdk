@@ -1,8 +1,8 @@
 --- a/config/rte_config.h
 +++ b/config/rte_config.h
-@@ -119,4 +119,9 @@
- /* QEDE PMD defines */
- #define RTE_LIBRTE_QEDE_FW ""
+@@ -153,4 +153,9 @@
+ #define RTE_LIBRTE_PMD_DLB2_SW_CREDIT_QUANTA 32
+ #define RTE_PMD_DLB2_DEFAULT_DEPTH_THRESH 256
  
 +#define RTE_SCHED_RED
 +#define RTE_SCHED_COLLECT_STATS

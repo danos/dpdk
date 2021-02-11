@@ -493,8 +493,8 @@
  rte_sched_pipe_config(struct rte_sched_port *port,
  	uint32_t subport_id,
  	uint32_t pipe_id,
---- a/lib/librte_sched/rte_sched_version.map
-+++ b/lib/librte_sched/rte_sched_version.map
+--- a/lib/librte_sched/version.map
++++ b/lib/librte_sched/version.map
 @@ -13,15 +13,18 @@ DPDK_2.0 {
  	rte_red_set_scaling;
  	rte_sched_pipe_config;
