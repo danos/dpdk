@@ -2,9 +2,12 @@
 dpdk-dev: binary-or-shlib-defines-rpath usr/bin/dpdk-test-crypto-perf XXXXXXX
 dpdk-dev: binary-or-shlib-defines-rpath usr/bin/dpdk-test X
 dpdk-dev: binary-without-manpage usr/bin/cpu_layout.py
+dpdk-dev: binary-without-manpage usr/bin/dpdk-ipsec-secgw
 dpdk-dev: binary-without-manpage usr/bin/dpdk-l3fwd
+dpdk-dev: binary-without-manpage usr/bin/dpdk-l3fwd-acl
 dpdk-dev: binary-without-manpage usr/bin/dpdk-pdump
 dpdk-dev: binary-without-manpage usr/bin/dpdk-proc-info
+dpdk-dev: binary-without-manpage usr/bin/dpdk-telemetry.py
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test-acl
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test-bbdev
@@ -12,9 +15,12 @@ dpdk-dev: binary-without-manpage usr/bin/dpdk-test-cmdline
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test-compress-perf
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test-crypto-perf
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test-eventdev
+dpdk-dev: binary-without-manpage usr/bin/dpdk-test-fib
+dpdk-dev: binary-without-manpage usr/bin/dpdk-test-flow-perf
 dpdk-dev: binary-without-manpage usr/bin/dpdk-test-pipeline
-dpdk-dev: binary-without-manpage usr/bin/dpdk-test-sad
 dpdk-dev: binary-without-manpage usr/bin/dpdk-testpmd
+dpdk-dev: binary-without-manpage usr/bin/dpdk-test-regex
+dpdk-dev: binary-without-manpage usr/bin/dpdk-test-sad
 dpdk-dev: no-manual-page usr/bin/dpdk-pdump
 dpdk-dev: no-manual-page usr/bin/dpdk-proc-info
 dpdk-dev: no-manual-page usr/bin/dpdk-telemetry.py
@@ -32,4 +38,5 @@ dpdk-dev: no-manual-page usr/bin/dpdk-test-regex
 dpdk-dev: no-manual-page usr/bin/dpdk-test-sad
 dpdk-dev: no-manual-page usr/bin/dpdk-testpmd
 # upstream ships it as such, avoid overrides that create incompatibility between distros
+dpdk-dev: script-with-language-extension usr/bin/cpu_layout.py
 dpdk-dev: script-with-language-extension usr/bin/dpdk-telemetry.py
