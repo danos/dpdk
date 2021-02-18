@@ -1,0 +1,63 @@
+From b96555a262fde4a1ae0ce026e9ef611675ed4350 Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Thu, 18 Feb 2021 11:00:12 -0500
+Subject: [PATCH] net/bonding: fix potential endless loop on closing
+
+If stop fails, we skip it and also continue to attempt to remove the
+device from the bonding group. This removal will likely fail but you
+should only remove stopped device and a failure to stop indicates a
+deeper problem. This second failure increments skipped again and we
+are now past the check in the while.
+
+To avoid this issue, do not attempt any further cleanup if we can't
+stop the device.
+
+Fixes: fb0379bc5db3 ("net/bonding: check stop call status")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chas Williams <chas3@att.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 12 +++++-------
+ 1 file changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 5241c6008..78b0a356c 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -2122,28 +2122,26 @@ bond_ethdev_close(struct rte_eth_dev *dev)
+ {
+ 	struct bond_dev_private *internals = dev->data->dev_private;
+ 	uint16_t bond_port_id = internals->port_id;
+-	int skipped = 0;
++	int slave_id;
+ 	struct rte_flow_error ferror;
+ 
+ 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+ 		return 0;
+ 
+ 	RTE_BOND_LOG(INFO, "Closing bonded device %s", dev->device->name);
+-	while (internals->slave_count != skipped) {
+-		uint16_t port_id = internals->slaves[skipped].port_id;
++	for (slave_id = 0; slave_id < internals->slave_count; slave_id++) {
++		uint16_t port_id = internals->slaves[slave_id].port_id;
+ 
+ 		if (rte_eth_dev_stop(port_id) != 0) {
+ 			RTE_BOND_LOG(ERR, "Failed to stop device on port %u",
+ 				     port_id);
+-			skipped++;
++			continue;
+ 		}
+ 
+-		if (rte_eth_bond_slave_remove(bond_port_id, port_id) != 0) {
++		if (rte_eth_bond_slave_remove(bond_port_id, port_id) != 0)
+ 			RTE_BOND_LOG(ERR,
+ 				     "Failed to remove port %d from bonded device %s",
+ 				     port_id, dev->device->name);
+-			skipped++;
+-		}
+ 	}
+ 	bond_flow_ops.flush(dev, &ferror);
+ 	bond_ethdev_free_queues(dev);
+-- 
+2.30.0
+
