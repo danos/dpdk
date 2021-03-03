@@ -1,6 +1,6 @@
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -69,6 +69,21 @@
+@@ -69,6 +69,25 @@
  	/**< max memory limit for internal run-time structures. */
  };
  
@@ -14,15 +14,19 @@
 +
 +/** ACL RCU QSBR configuration. */
 +struct rte_acl_rcu_config {
-+	struct rte_rcu_qsbr *v;
-+	/** < RCU QSBR variable. Mode of RCU QSBR: RTE_ACL_QSBR_MODE_xxx */
++	struct rte_rcu_qsbr *v; /**< RCU QSBR variable. */
 +	enum rte_acl_qsbr_mode mode;
++	/**< Mode of RCU QSBR: RTE_ACL_QSBR_MODE_xxx */
++	unsigned int thread_id;
++	/**< Thread ID of the caller if it is registered to report quiescent
++	 * state on this QS variable. If not, pass RTE_QSBR_THRID_INVALID.
++	 */
 +};
 +
  /**
   * Defines the value of a field for a rule.
   */
-@@ -181,6 +196,25 @@
+@@ -181,6 +200,25 @@
  rte_acl_free(struct rte_acl_ctx *ctx);
  
  /**
@@ -61,7 +65,7 @@
  	return classify_fns[alg](ctx, data, results, num, categories);
  }
  
-@@ -178,6 +182,27 @@
+@@ -178,6 +182,28 @@
  	return ctx;
  }
  
@@ -82,6 +86,7 @@
 +
 +	ctx->rcu_mode = cfg->mode;
 +	ctx->v = cfg->v;
++	ctx->rcu_thread_id = cfg->thread_id;
 +
 +	return 0;
 +}
@@ -101,13 +106,15 @@
  	rte_acl_set_ctx_classify;
 --- a/lib/librte_acl/acl.h
 +++ b/lib/librte_acl/acl.h
-@@ -190,6 +190,10 @@
+@@ -190,6 +190,12 @@
  	uint32_t            num_rules;
  	uint32_t            num_categories;
  
 +	/* RCU config. */
 +	struct rte_rcu_qsbr *v;          /* RCU QSBR variable. */
 +	enum rte_acl_qsbr_mode rcu_mode; /* Blocking, defer queue. */
++	unsigned int rcu_thread_id;
++	/* thread ID to report quiescent state on */
 +
  	struct rte_acl_rt_ctx *rcx;
  };
@@ -129,7 +136,7 @@
 -	/* This is not thread-safe. */
 +	/* Wait until the active runtime context is unused. */
 +	if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_SYNC)
-+		rte_rcu_qsbr_synchronize(ctx->v, RTE_QSBR_THRID_INVALID);
++		rte_rcu_qsbr_synchronize(ctx->v, ctx->rcu_thread_id);
 +
 +	__atomic_store_n(&ctx->rcx, rcx, __ATOMIC_RELAXED);
 +
