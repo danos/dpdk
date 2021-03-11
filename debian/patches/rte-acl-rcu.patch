@@ -1,6 +1,6 @@
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -69,6 +69,21 @@ struct rte_acl_config {
+@@ -69,6 +69,25 @@
  	/**< max memory limit for internal run-time structures. */
  };
  
@@ -14,15 +14,19 @@
 +
 +/** ACL RCU QSBR configuration. */
 +struct rte_acl_rcu_config {
-+	struct rte_rcu_qsbr *v;
-+	/** < RCU QSBR variable. Mode of RCU QSBR: RTE_ACL_QSBR_MODE_xxx */
++	struct rte_rcu_qsbr *v; /** < RCU QSBR variable. */
 +	enum rte_acl_qsbr_mode mode;
++	/**< Mode of RCU QSBR: RTE_ACL_QSBR_MODE_xxx */
++	unsigned int thread_id;
++	/**< Thread ID of the caller if it is registered to report quiescent
++	 * state on this QS variable. If not, pass RTE_QSBR_THRID_INVALID.
++	 */
 +};
 +
  /**
   * Defines the value of a field for a rule.
   */
-@@ -181,6 +196,25 @@ void
+@@ -181,6 +200,25 @@
  rte_acl_free(struct rte_acl_ctx *ctx);
  
  /**
@@ -50,7 +54,7 @@
   *
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -300,6 +300,10 @@ rte_acl_classify_alg(const struct rte_ac
+@@ -300,6 +300,10 @@
  			((RTE_ACL_RESULTS_MULTIPLIER - 1) & categories) != 0)
  		return -EINVAL;
  
@@ -61,7 +65,7 @@
  	return classify_fns[alg](ctx, data, results, num, categories);
  }
  
-@@ -335,6 +339,27 @@ rte_acl_find_existing(const char *name)
+@@ -335,6 +339,28 @@
  	return ctx;
  }
  
@@ -82,6 +86,7 @@
 +
 +	ctx->rcu_mode = cfg->mode;
 +	ctx->v = cfg->v;
++	ctx->rcu_thread_id = cfg->thread_id;
 +
 +	return 0;
 +}
@@ -91,7 +96,7 @@
  {
 --- a/lib/librte_acl/version.map
 +++ b/lib/librte_acl/version.map
-@@ -13,6 +13,7 @@ DPDK_21 {
+@@ -13,6 +13,7 @@
  	rte_acl_find_existing;
  	rte_acl_free;
  	rte_acl_list_dump;
@@ -101,13 +106,15 @@
  	rte_acl_set_ctx_classify;
 --- a/lib/librte_acl/acl.h
 +++ b/lib/librte_acl/acl.h
-@@ -199,6 +199,10 @@ struct rte_acl_ctx {
+@@ -199,6 +199,12 @@
  	uint32_t            num_rules;
  	uint32_t            num_categories;
  
 +	/* RCU config. */
 +	struct rte_rcu_qsbr *v;          /* RCU QSBR variable. */
 +	enum rte_acl_qsbr_mode rcu_mode; /* Blocking, defer queue. */
++	unsigned int rcu_thread_id;
++	/* thread ID to report quiescent state on */
 +
  	struct rte_acl_rt_ctx *rcx;
  };
@@ -122,14 +129,14 @@
  #include "acl.h"
  
  #define	QRANGE_MIN	((uint8_t)INT8_MIN)
-@@ -541,12 +542,15 @@ rte_acl_gen(struct rte_acl_ctx *ctx, str
+@@ -541,12 +542,15 @@
  	/* back pointer to acx/rte_acl_ctx */
  	rcx->acx = ctx;
  
 -	/* This is not thread-safe. */
 +	/* Wait until the active runtime context is unused. */
 +	if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_SYNC)
-+		rte_rcu_qsbr_synchronize(ctx->v, RTE_QSBR_THRID_INVALID);
++		rte_rcu_qsbr_synchronize(ctx->v, ctx->rcu_thread_id);
 +
 +	__atomic_store_n(&ctx->rcx, rcx, __ATOMIC_RELAXED);
 +
@@ -143,7 +150,7 @@
  }
 --- a/lib/librte_acl/meson.build
 +++ b/lib/librte_acl/meson.build
-@@ -5,7 +5,7 @@ sources = files('acl_bld.c', 'acl_gen.c'
+@@ -5,7 +5,7 @@
  		'rte_acl.c', 'tb_mem.c')
  headers = files('rte_acl.h', 'rte_acl_osdep.h')
  
