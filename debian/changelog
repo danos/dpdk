@@ -1,3 +1,9 @@
+dpdk (19.11.4-0vyatta16) unstable; urgency=medium
+
+  * Update symbol versions for release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 12 Mar 2021 11:38:26 -0500
+
 dpdk (19.11.4-0vyatta15) unstable; urgency=medium
 
   [ Daniel Gollub ]
