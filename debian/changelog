@@ -1,3 +1,10 @@
+dpdk (19.11.4-0vyatta15) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: report thread id to the RCU QS variable
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 12 Mar 2021 11:36:28 -0500
+
 dpdk (19.11.4-0vyatta14) unstable; urgency=medium
 
   [ Nicholas Brown ]
