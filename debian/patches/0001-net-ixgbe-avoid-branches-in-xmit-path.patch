@@ -1,0 +1,56 @@
+From 4dea224a0575247de5a0f8e819765027b2a34862 Mon Sep 17 00:00:00 2001
+From: "Charles (Chas) Williams" <ciwillia@vyatta.att-mail.com>
+Date: Tue, 27 Apr 2021 13:20:19 -0400
+Subject: [PATCH] net/ixgbe: avoid branches in xmit path
+
+It is slightly more efficient to enforce a power of 2 queue size so
+that we can avoid the branch to check for queue wraparound.
+
+Signed-off-by: Chas Williams <ciwillia@vyatta.att-mail.com>
+---
+ drivers/net/ixgbe/ixgbe_rxtx.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/ixgbe/ixgbe_rxtx.c b/drivers/net/ixgbe/ixgbe_rxtx.c
+index d69f36e977..1e1bb4eefd 100644
+--- a/drivers/net/ixgbe/ixgbe_rxtx.c
++++ b/drivers/net/ixgbe/ixgbe_rxtx.c
+@@ -642,6 +642,7 @@ ixgbe_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
+ 	uint16_t tx_id;
+ 	uint16_t tx_last;
+ 	uint16_t nb_tx;
++	uint16_t tx_mask;
+ 	uint16_t nb_used;
+ 	uint64_t tx_ol_req;
+ 	uint32_t ctx = 0;
+@@ -659,6 +660,7 @@ ixgbe_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
+ 	tx_id   = txq->tx_tail;
+ 	txe = &sw_ring[tx_id];
+ 	txp = NULL;
++	tx_mask = txq->nb_tx_desc - 1;
+ 
+ 	/* Determine if the descriptor ring needs to be cleaned. */
+ 	if (txq->nb_tx_free < txq->tx_free_thresh)
+@@ -733,8 +735,7 @@ ixgbe_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
+ 		tx_last = (uint16_t) (tx_id + nb_used - 1);
+ 
+ 		/* Circular ring */
+-		if (tx_last >= txq->nb_tx_desc)
+-			tx_last = (uint16_t) (tx_last - txq->nb_tx_desc);
++		tx_last = tx_last & tx_mask;
+ 
+ 		PMD_TX_LOG(DEBUG, "port_id=%u queue_id=%u pktlen=%u"
+ 			   " tx_first=%u tx_last=%u",
+@@ -2632,7 +2633,8 @@ ixgbe_dev_tx_queue_setup(struct rte_eth_dev *dev,
+ 	 */
+ 	if (nb_desc % IXGBE_TXD_ALIGN != 0 ||
+ 			(nb_desc > IXGBE_MAX_RING_DESC) ||
+-			(nb_desc < IXGBE_MIN_RING_DESC)) {
++			(nb_desc < IXGBE_MIN_RING_DESC) ||
++			!rte_is_power_of_2(nb_desc)) {
+ 		return -EINVAL;
+ 	}
+ 
+-- 
+2.30.2
+
