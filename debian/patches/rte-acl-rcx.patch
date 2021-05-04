@@ -43,22 +43,27 @@
  int rte_acl_gen(struct rte_acl_ctx *ctx, struct rte_acl_trie *trie,
 --- a/lib/librte_acl/acl_bld.c
 +++ b/lib/librte_acl/acl_bld.c
-@@ -773,9 +773,11 @@
- static void
- acl_build_reset(struct rte_acl_ctx *ctx)
- {
+@@ -765,19 +765,6 @@
+ 	return 0;
+ }
+ 
+-/*
+- * Reset current runtime fields before next build:
+- *  - free allocated RT memory.
+- *  - reset all RT related fields to zero.
+- */
+-static void
+-acl_build_reset(struct rte_acl_ctx *ctx)
+-{
 -	rte_free(ctx->mem);
 -	memset(&ctx->num_categories, 0,
 -		sizeof(*ctx) - offsetof(struct rte_acl_ctx, num_categories));
-+	if (ctx->rcx == NULL)
-+		return;
-+
-+	rte_free(ctx->rcx->mem);
-+	memset(ctx->rcx, 0, sizeof(struct rte_acl_rt_ctx));
- }
- 
+-}
+-
  static void
-@@ -1503,7 +1505,7 @@
+ acl_gen_full_range(struct acl_build_context *context, struct rte_acl_node *root,
+ 	struct rte_acl_node *end, int size, int level)
+@@ -1503,7 +1490,7 @@
   * Copy data_indexes for each trie into RT location.
   */
  static void
@@ -67,7 +72,7 @@
  {
  	uint32_t i, n, ofs;
  
-@@ -1614,6 +1616,9 @@
+@@ -1614,13 +1601,14 @@
  	uint32_t n;
  	size_t max_size;
  	struct acl_build_context bcx;
@@ -77,7 +82,14 @@
  
  	rc = acl_check_bld_param(ctx, cfg);
  	if (rc != 0)
-@@ -1642,13 +1647,13 @@
+ 		return rc;
+ 
+-	acl_build_reset(ctx);
+-
+ 	if (ctx->num_rules == 0)
+ 		return 0;
+ 
+@@ -1642,13 +1630,13 @@
  			rc = rte_acl_gen(ctx, bcx.tries, bcx.bld_tries,
  				bcx.num_tries, bcx.cfg.num_categories,
  				RTE_ACL_MAX_FIELDS * RTE_DIM(bcx.tries) *
@@ -129,7 +141,7 @@
  	/* Fill the runtime structure */
  	match_index = indices.match_start;
  	node_array = (uint64_t *)((uintptr_t)mem +
-@@ -516,16 +526,23 @@
+@@ -516,16 +526,25 @@
  			trie[n].root_index = node_bld_trie[n].trie->node_index;
  	}
  
@@ -155,8 +167,10 @@
 +	memcpy(rcx->trie, trie, sizeof(rcx->trie));
 +
 +	/* This is not thread-safe. */
-+	if (prev_rcx)
++	if (prev_rcx) {
++		rte_free(prev_rcx->mem);
 +		rte_free(prev_rcx);
++	}
 +
 +	ctx->rcx = rcx;
  
