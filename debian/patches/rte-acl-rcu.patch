@@ -165,22 +165,3 @@
  
  if dpdk_conf.has('RTE_ARCH_X86')
  	sources += files('acl_run_sse.c')
---- a/lib/meson.build
-+++ b/lib/meson.build
-@@ -12,6 +12,7 @@
- 	'kvargs', # eal depends on kvargs
- 	'eal', # everything depends on eal
- 	'ring', 'mempool', 'mbuf', 'net', 'meter', 'ethdev', 'pci', # core
-+	'rcu', # rcu depends on this
- 	'cmdline',
- 	'metrics', # bitrate/latency stats depends on this
- 	'hash',    # efd depends on this
-@@ -22,7 +23,7 @@
- 	'gro', 'gso', 'ip_frag', 'jobstats',
- 	'kni', 'latencystats', 'lpm', 'member',
- 	'power', 'pdump', 'rawdev',
--	'rcu', 'rib', 'reorder', 'sched', 'security', 'stack', 'vhost',
-+	'rib', 'reorder', 'sched', 'security', 'stack', 'vhost',
- 	# ipsec lib depends on net, crypto and security
- 	'ipsec',
- 	#fib lib depends on rib

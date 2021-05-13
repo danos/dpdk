@@ -1,0 +1,156 @@
+From 03d24a16f722dfe1cbdda5ad4252a7e428b70304 Mon Sep 17 00:00:00 2001
+From: Thomas Monjalon <thomas@monjalon.net>
+Date: Thu, 23 Jan 2020 09:30:22 +0100
+Subject: [PATCH] ring: fix namespace prefix of inline functions
+
+When adding custom element size feature, some internal inline functions
+were added in a public header without rte_ prefix.
+It is fixed by adding __rte_ring_.
+
+Fixes: cc4b218790f6 ("ring: support configurable element size")
+
+Reported-by: David Marchand <david.marchand@redhat.com>
+Signed-off-by: Thomas Monjalon <thomas@monjalon.net>
+Acked-by: Honnappa Nagarahalli <honnappa.nagarahalli@arm.com>
+Acked-by: Olivier Matz <olivier.matz@6wind.com>
+---
+ lib/librte_ring/rte_ring_elem.h | 42 +++++++++++++++++----------------
+ 1 file changed, 22 insertions(+), 20 deletions(-)
+
+--- a/lib/librte_ring/rte_ring_elem.h
++++ b/lib/librte_ring/rte_ring_elem.h
+@@ -114,8 +114,8 @@
+ 			unsigned int count, int socket_id, unsigned int flags);
+ 
+ static __rte_always_inline void
+-enqueue_elems_32(struct rte_ring *r, const uint32_t size, uint32_t idx,
+-		const void *obj_table, uint32_t n)
++__rte_ring_enqueue_elems_32(struct rte_ring *r, const uint32_t size,
++		uint32_t idx, const void *obj_table, uint32_t n)
+ {
+ 	unsigned int i;
+ 	uint32_t *ring = (uint32_t *)&r[1];
+@@ -157,7 +157,7 @@
+ }
+ 
+ static __rte_always_inline void
+-enqueue_elems_64(struct rte_ring *r, uint32_t prod_head,
++__rte_ring_enqueue_elems_64(struct rte_ring *r, uint32_t prod_head,
+ 		const void *obj_table, uint32_t n)
+ {
+ 	unsigned int i;
+@@ -190,7 +190,7 @@
+ }
+ 
+ static __rte_always_inline void
+-enqueue_elems_128(struct rte_ring *r, uint32_t prod_head,
++__rte_ring_enqueue_elems_128(struct rte_ring *r, uint32_t prod_head,
+ 		const void *obj_table, uint32_t n)
+ {
+ 	unsigned int i;
+@@ -223,16 +223,16 @@
+  * single and multi producer enqueue functions.
+  */
+ static __rte_always_inline void
+-enqueue_elems(struct rte_ring *r, uint32_t prod_head, const void *obj_table,
+-		uint32_t esize, uint32_t num)
++__rte_ring_enqueue_elems(struct rte_ring *r, uint32_t prod_head,
++		const void *obj_table, uint32_t esize, uint32_t num)
+ {
+ 	/* 8B and 16B copies implemented individually to retain
+ 	 * the current performance.
+ 	 */
+ 	if (esize == 8)
+-		enqueue_elems_64(r, prod_head, obj_table, num);
++		__rte_ring_enqueue_elems_64(r, prod_head, obj_table, num);
+ 	else if (esize == 16)
+-		enqueue_elems_128(r, prod_head, obj_table, num);
++		__rte_ring_enqueue_elems_128(r, prod_head, obj_table, num);
+ 	else {
+ 		uint32_t idx, scale, nr_idx, nr_num, nr_size;
+ 
+@@ -242,13 +242,14 @@
+ 		idx = prod_head & r->mask;
+ 		nr_idx = idx * scale;
+ 		nr_size = r->size * scale;
+-		enqueue_elems_32(r, nr_size, nr_idx, obj_table, nr_num);
++		__rte_ring_enqueue_elems_32(r, nr_size, nr_idx,
++				obj_table, nr_num);
+ 	}
+ }
+ 
+ static __rte_always_inline void
+-dequeue_elems_32(struct rte_ring *r, const uint32_t size, uint32_t idx,
+-		void *obj_table, uint32_t n)
++__rte_ring_dequeue_elems_32(struct rte_ring *r, const uint32_t size,
++		uint32_t idx, void *obj_table, uint32_t n)
+ {
+ 	unsigned int i;
+ 	uint32_t *ring = (uint32_t *)&r[1];
+@@ -290,7 +291,7 @@
+ }
+ 
+ static __rte_always_inline void
+-dequeue_elems_64(struct rte_ring *r, uint32_t prod_head,
++__rte_ring_dequeue_elems_64(struct rte_ring *r, uint32_t prod_head,
+ 		void *obj_table, uint32_t n)
+ {
+ 	unsigned int i;
+@@ -323,7 +324,7 @@
+ }
+ 
+ static __rte_always_inline void
+-dequeue_elems_128(struct rte_ring *r, uint32_t prod_head,
++__rte_ring_dequeue_elems_128(struct rte_ring *r, uint32_t prod_head,
+ 		void *obj_table, uint32_t n)
+ {
+ 	unsigned int i;
+@@ -352,16 +353,16 @@
+  * single and multi producer enqueue functions.
+  */
+ static __rte_always_inline void
+-dequeue_elems(struct rte_ring *r, uint32_t cons_head, void *obj_table,
+-		uint32_t esize, uint32_t num)
++__rte_ring_dequeue_elems(struct rte_ring *r, uint32_t cons_head,
++		void *obj_table, uint32_t esize, uint32_t num)
+ {
+ 	/* 8B and 16B copies implemented individually to retain
+ 	 * the current performance.
+ 	 */
+ 	if (esize == 8)
+-		dequeue_elems_64(r, cons_head, obj_table, num);
++		__rte_ring_dequeue_elems_64(r, cons_head, obj_table, num);
+ 	else if (esize == 16)
+-		dequeue_elems_128(r, cons_head, obj_table, num);
++		__rte_ring_dequeue_elems_128(r, cons_head, obj_table, num);
+ 	else {
+ 		uint32_t idx, scale, nr_idx, nr_num, nr_size;
+ 
+@@ -371,7 +372,8 @@
+ 		idx = cons_head & r->mask;
+ 		nr_idx = idx * scale;
+ 		nr_size = r->size * scale;
+-		dequeue_elems_32(r, nr_size, nr_idx, obj_table, nr_num);
++		__rte_ring_dequeue_elems_32(r, nr_size, nr_idx,
++				obj_table, nr_num);
+ 	}
+ }
+ 
+@@ -428,7 +430,7 @@
+ 	if (n == 0)
+ 		goto end;
+ 
+-	enqueue_elems(r, prod_head, obj_table, esize, n);
++	__rte_ring_enqueue_elems(r, prod_head, obj_table, esize, n);
+ 
+ 	update_tail(&r->prod, prod_head, prod_next, is_sp, 1);
+ end:
+@@ -475,7 +477,7 @@
+ 	if (n == 0)
+ 		goto end;
+ 
+-	dequeue_elems(r, cons_head, obj_table, esize, n);
++	__rte_ring_dequeue_elems(r, cons_head, obj_table, esize, n);
+ 
+ 	update_tail(&r->cons, cons_head, cons_next, is_sc, 0);
+ 

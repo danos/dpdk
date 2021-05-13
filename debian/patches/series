@@ -10,6 +10,17 @@
 
 # Backport from dpdk stable
 
+# Ring backports
+ring-support-configurable-element-size.patch
+ring-prepare-ring-to-allow-new-sync-schemes.patch
+ring-introduce-RTS-ring-mode.patch
+ring-introduce-HTS-ring-mode.patch
+ring-introduce-peek-style-API.patch
+ring-fix-namespace-prefix-of-inline-functions.patch
+
+# RCU backports
+rcu-add-resource-reclamation-APIs.patch
+
 # Backport from dpdk-net-next
 0001-net-virtio-fix-tagging-when-not-using-Tx-preparation.patch
 
@@ -65,4 +76,3 @@ net-bonding-stop-all-members-in-bond-ethdev-stop.patch
 # IXGBE MBUF Patch
 ixgbe-set-sbp-bad-on-rx-error.patch
 mlx5-adjust-stride-number-and-size.patch
-rcu-add-resource-reclamation-APIs.patch
