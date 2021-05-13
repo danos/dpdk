@@ -1,0 +1,632 @@
+From 706d306ea39c982193a0cedb37fd4bf8cae84972 Mon Sep 17 00:00:00 2001
+From: Honnappa Nagarahalli <honnappa.nagarahalli@arm.com>
+Date: Tue, 21 Apr 2020 22:30:03 -0500
+Subject: [PATCH] rcu: add resource reclamation APIs
+
+Add resource reclamation using defer queues to make it simple for
+applications and libraries to integrate rte_rcu library.
+
+Signed-off-by: Honnappa Nagarahalli <honnappa.nagarahalli@arm.com>
+Reviewed-by: Ola Liljedahl <ola.liljedahl@arm.com>
+Reviewed-by: Ruifeng Wang <ruifeng.wang@arm.com>
+Acked-by: Konstantin Ananyev <konstantin.ananyev@intel.com>
+---
+ lib/Makefile                       |   2 +-
+ lib/librte_rcu/Makefile            |   2 +-
+ lib/librte_rcu/meson.build         |   2 +
+ lib/librte_rcu/rcu_qsbr_pvt.h      |  66 +++++++++
+ lib/librte_rcu/rte_rcu_qsbr.c      | 227 ++++++++++++++++++++++++++++-
+ lib/librte_rcu/rte_rcu_qsbr.h      | 194 +++++++++++++++++++++++-
+ lib/librte_rcu/rte_rcu_version.map |   4 +
+ lib/meson.build                    |   6 +-
+ 8 files changed, 497 insertions(+), 6 deletions(-)
+ create mode 100644 lib/librte_rcu/rcu_qsbr_pvt.h
+
+--- a/lib/Makefile
++++ b/lib/Makefile
+@@ -117,7 +117,7 @@
+ DIRS-$(CONFIG_RTE_LIBRTE_TELEMETRY) += librte_telemetry
+ DEPDIRS-librte_telemetry := librte_eal librte_metrics librte_ethdev
+ DIRS-$(CONFIG_RTE_LIBRTE_RCU) += librte_rcu
+-DEPDIRS-librte_rcu := librte_eal
++DEPDIRS-librte_rcu := librte_eal librte_ring
+ 
+ ifeq ($(CONFIG_RTE_EXEC_ENV_LINUX),y)
+ DIRS-$(CONFIG_RTE_LIBRTE_KNI) += librte_kni
+--- a/lib/librte_rcu/Makefile
++++ b/lib/librte_rcu/Makefile
+@@ -8,7 +8,7 @@
+ 
+ CFLAGS += -DALLOW_EXPERIMENTAL_API
+ CFLAGS += $(WERROR_FLAGS) -I$(SRCDIR) -O3
+-LDLIBS += -lrte_eal
++LDLIBS += -lrte_eal -lrte_ring
+ 
+ EXPORT_MAP := rte_rcu_version.map
+ 
+--- a/lib/librte_rcu/meson.build
++++ b/lib/librte_rcu/meson.build
+@@ -6,6 +6,8 @@
+ sources = files('rte_rcu_qsbr.c')
+ headers = files('rte_rcu_qsbr.h')
+ 
++deps += ['ring']
++
+ # for clang 32-bit compiles we need libatomic for 64-bit atomic ops
+ if cc.get_id() == 'clang' and dpdk_conf.get('RTE_ARCH_64') == false
+ 	ext_deps += cc.find_library('atomic')
+--- /dev/null
++++ b/lib/librte_rcu/rcu_qsbr_pvt.h
+@@ -0,0 +1,66 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright (c) 2020 Arm Limited
++ */
++
++#ifndef _RTE_RCU_QSBR_PVT_H_
++#define _RTE_RCU_QSBR_PVT_H_
++
++/**
++ * This file is private to the RCU library. It should not be included
++ * by the user of this library.
++ */
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <rte_ring.h>
++#include <rte_ring_elem.h>
++
++#include "rte_rcu_qsbr.h"
++
++/* Defer queue structure.
++ * This structure holds the defer queue. The defer queue is used to
++ * hold the deleted entries from the data structure that are not
++ * yet freed.
++ */
++struct rte_rcu_qsbr_dq {
++	struct rte_rcu_qsbr *v; /**< RCU QSBR variable used by this queue.*/
++	struct rte_ring *r;     /**< RCU QSBR defer queue. */
++	uint32_t size;
++	/**< Number of elements in the defer queue */
++	uint32_t esize;
++	/**< Size (in bytes) of data, including the token, stored on the
++	 *   defer queue.
++	 */
++	uint32_t trigger_reclaim_limit;
++	/**< Trigger automatic reclamation after the defer queue
++	 *   has at least these many resources waiting.
++	 */
++	uint32_t max_reclaim_size;
++	/**< Reclaim at the max these many resources during auto
++	 *   reclamation.
++	 */
++	rte_rcu_qsbr_free_resource_t free_fn;
++	/**< Function to call to free the resource. */
++	void *p;
++	/**< Pointer passed to the free function. Typically, this is the
++	 *   pointer to the data structure to which the resource to free
++	 *   belongs.
++	 */
++};
++
++/* Internal structure to represent the element on the defer queue.
++ * Use alias as a character array is type casted to a variable
++ * of this structure type.
++ */
++typedef struct {
++	uint64_t token;  /**< Token */
++	uint8_t elem[0]; /**< Pointer to user element */
++} __attribute__((__may_alias__)) __rte_rcu_qsbr_dq_elem_t;
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _RTE_RCU_QSBR_PVT_H_ */
+--- a/lib/librte_rcu/rte_rcu_qsbr.c
++++ b/lib/librte_rcu/rte_rcu_qsbr.c
+@@ -1,6 +1,6 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+  *
+- * Copyright (c) 2018 Arm Limited
++ * Copyright (c) 2018-2020 Arm Limited
+  */
+ 
+ #include <stdio.h>
+@@ -18,8 +18,10 @@
+ #include <rte_per_lcore.h>
+ #include <rte_lcore.h>
+ #include <rte_errno.h>
++#include <rte_ring_elem.h>
+ 
+ #include "rte_rcu_qsbr.h"
++#include "rcu_qsbr_pvt.h"
+ 
+ /* Get the memory size of QSBR variable */
+ size_t
+@@ -269,6 +271,229 @@
+ 
+ 	return 0;
+ }
++
++/* Create a queue used to store the data structure elements that can
++ * be freed later. This queue is referred to as 'defer queue'.
++ */
++struct rte_rcu_qsbr_dq *
++rte_rcu_qsbr_dq_create(const struct rte_rcu_qsbr_dq_parameters *params)
++{
++	struct rte_rcu_qsbr_dq *dq;
++	uint32_t qs_fifo_size;
++	unsigned int flags;
++
++	if (params == NULL || params->free_fn == NULL ||
++		params->v == NULL || params->name == NULL ||
++		params->size == 0 || params->esize == 0 ||
++		(params->esize % 4 != 0)) {
++		rte_log(RTE_LOG_ERR, rte_rcu_log_type,
++			"%s(): Invalid input parameter\n", __func__);
++		rte_errno = EINVAL;
++
++		return NULL;
++	}
++	/* If auto reclamation is configured, reclaim limit
++	 * should be a valid value.
++	 */
++	if ((params->trigger_reclaim_limit <= params->size) &&
++	    (params->max_reclaim_size == 0)) {
++		rte_log(RTE_LOG_ERR, rte_rcu_log_type,
++			"%s(): Invalid input parameter, size = %u, trigger_reclaim_limit = %u, max_reclaim_size = %u\n",
++			__func__, params->size, params->trigger_reclaim_limit,
++			params->max_reclaim_size);
++		rte_errno = EINVAL;
++
++		return NULL;
++	}
++
++	dq = rte_zmalloc(NULL, sizeof(struct rte_rcu_qsbr_dq),
++			 RTE_CACHE_LINE_SIZE);
++	if (dq == NULL) {
++		rte_errno = ENOMEM;
++
++		return NULL;
++	}
++
++	/* Decide the flags for the ring.
++	 * If MT safety is requested, use RTS for ring enqueue as most
++	 * use cases involve dq-enqueue happening on the control plane.
++	 * Ring dequeue is always HTS due to the possibility of revert.
++	 */
++	flags = RING_F_MP_RTS_ENQ;
++	if (params->flags & RTE_RCU_QSBR_DQ_MT_UNSAFE)
++		flags = RING_F_SP_ENQ;
++	flags |= RING_F_MC_HTS_DEQ;
++	/* round up qs_fifo_size to next power of two that is not less than
++	 * max_size.
++	 */
++	qs_fifo_size = rte_align32pow2(params->size + 1);
++	/* Add token size to ring element size */
++	dq->r = rte_ring_create_elem(params->name,
++			__RTE_QSBR_TOKEN_SIZE + params->esize,
++			qs_fifo_size, SOCKET_ID_ANY, flags);
++	if (dq->r == NULL) {
++		rte_log(RTE_LOG_ERR, rte_rcu_log_type,
++			"%s(): defer queue create failed\n", __func__);
++		rte_free(dq);
++		return NULL;
++	}
++
++	dq->v = params->v;
++	dq->size = params->size;
++	dq->esize = __RTE_QSBR_TOKEN_SIZE + params->esize;
++	dq->trigger_reclaim_limit = params->trigger_reclaim_limit;
++	dq->max_reclaim_size = params->max_reclaim_size;
++	dq->free_fn = params->free_fn;
++	dq->p = params->p;
++
++	return dq;
++}
++
++/* Enqueue one resource to the defer queue to free after the grace
++ * period is over.
++ */
++int rte_rcu_qsbr_dq_enqueue(struct rte_rcu_qsbr_dq *dq, void *e)
++{
++	__rte_rcu_qsbr_dq_elem_t *dq_elem;
++	uint32_t cur_size;
++
++	if (dq == NULL || e == NULL) {
++		rte_log(RTE_LOG_ERR, rte_rcu_log_type,
++			"%s(): Invalid input parameter\n", __func__);
++		rte_errno = EINVAL;
++
++		return 1;
++	}
++
++	char data[dq->esize];
++	dq_elem = (__rte_rcu_qsbr_dq_elem_t *)data;
++	/* Start the grace period */
++	dq_elem->token = rte_rcu_qsbr_start(dq->v);
++
++	/* Reclaim resources if the queue size has hit the reclaim
++	 * limit. This helps the queue from growing too large and
++	 * allows time for reader threads to report their quiescent state.
++	 */
++	cur_size = rte_ring_count(dq->r);
++	if (cur_size > dq->trigger_reclaim_limit) {
++		rte_log(RTE_LOG_INFO, rte_rcu_log_type,
++			"%s(): Triggering reclamation\n", __func__);
++		rte_rcu_qsbr_dq_reclaim(dq, dq->max_reclaim_size,
++						NULL, NULL, NULL);
++	}
++
++	/* Enqueue the token and resource. Generating the token and
++	 * enqueuing (token + resource) on the queue is not an
++	 * atomic operation. When the defer queue is shared by multiple
++	 * writers, this might result in tokens enqueued out of order
++	 * on the queue. So, some tokens might wait longer than they
++	 * are required to be reclaimed.
++	 */
++	memcpy(dq_elem->elem, e, dq->esize - __RTE_QSBR_TOKEN_SIZE);
++	/* Check the status as enqueue might fail since the other threads
++	 * might have used up the freed space.
++	 * Enqueue uses the configured flags when the DQ was created.
++	 */
++	if (rte_ring_enqueue_elem(dq->r, data, dq->esize) != 0) {
++		rte_log(RTE_LOG_ERR, rte_rcu_log_type,
++			"%s(): Enqueue failed\n", __func__);
++		/* Note that the token generated above is not used.
++		 * Other than wasting tokens, it should not cause any
++		 * other issues.
++		 */
++		rte_log(RTE_LOG_INFO, rte_rcu_log_type,
++			"%s(): Skipped enqueuing token = %"PRIu64"\n",
++			__func__, dq_elem->token);
++
++		rte_errno = ENOSPC;
++		return 1;
++	}
++
++	rte_log(RTE_LOG_INFO, rte_rcu_log_type,
++		"%s(): Enqueued token = %"PRIu64"\n", __func__, dq_elem->token);
++
++	return 0;
++}
++
++/* Reclaim resources from the defer queue. */
++int
++rte_rcu_qsbr_dq_reclaim(struct rte_rcu_qsbr_dq *dq, unsigned int n,
++			unsigned int *freed, unsigned int *pending,
++			unsigned int *available)
++{
++	uint32_t cnt;
++	__rte_rcu_qsbr_dq_elem_t *dq_elem;
++
++	if (dq == NULL || n == 0) {
++		rte_log(RTE_LOG_ERR, rte_rcu_log_type,
++			"%s(): Invalid input parameter\n", __func__);
++		rte_errno = EINVAL;
++
++		return 1;
++	}
++
++	cnt = 0;
++
++	char data[dq->esize];
++	/* Check reader threads quiescent state and reclaim resources */
++	while (cnt < n &&
++		rte_ring_dequeue_bulk_elem_start(dq->r, &data,
++					dq->esize, 1, available) != 0) {
++		dq_elem = (__rte_rcu_qsbr_dq_elem_t *)data;
++
++		/* Reclaim the resource */
++		if (rte_rcu_qsbr_check(dq->v, dq_elem->token, false) != 1) {
++			rte_ring_dequeue_elem_finish(dq->r, 0);
++			break;
++		}
++		rte_ring_dequeue_elem_finish(dq->r, 1);
++
++		rte_log(RTE_LOG_INFO, rte_rcu_log_type,
++			"%s(): Reclaimed token = %"PRIu64"\n",
++			__func__, dq_elem->token);
++
++		dq->free_fn(dq->p, dq_elem->elem, 1);
++
++		cnt++;
++	}
++
++	rte_log(RTE_LOG_INFO, rte_rcu_log_type,
++		"%s(): Reclaimed %u resources\n", __func__, cnt);
++
++	if (freed != NULL)
++		*freed = cnt;
++	if (pending != NULL)
++		*pending = rte_ring_count(dq->r);
++
++	return 0;
++}
++
++/* Delete a defer queue. */
++int
++rte_rcu_qsbr_dq_delete(struct rte_rcu_qsbr_dq *dq)
++{
++	unsigned int pending;
++
++	if (dq == NULL) {
++		rte_log(RTE_LOG_DEBUG, rte_rcu_log_type,
++			"%s(): Invalid input parameter\n", __func__);
++
++		return 0;
++	}
++
++	/* Reclaim all the resources */
++	rte_rcu_qsbr_dq_reclaim(dq, ~0, NULL, &pending, NULL);
++	if (pending != 0) {
++		rte_errno = EAGAIN;
++
++		return 1;
++	}
++
++	rte_ring_free(dq->r);
++	rte_free(dq);
++
++	return 0;
++}
+ 
+ int rte_rcu_log_type;
+ 
+--- a/lib/librte_rcu/rte_rcu_qsbr.h
++++ b/lib/librte_rcu/rte_rcu_qsbr.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright (c) 2018 Arm Limited
++ * Copyright (c) 2018-2020 Arm Limited
+  */
+ 
+ #ifndef _RTE_RCU_QSBR_H_
+@@ -39,6 +39,7 @@
+ #include <rte_lcore.h>
+ #include <rte_debug.h>
+ #include <rte_atomic.h>
++#include <rte_ring.h>
+ 
+ extern int rte_rcu_log_type;
+ 
+@@ -89,6 +90,7 @@
+ #define __RTE_QSBR_CNT_THR_OFFLINE 0
+ #define __RTE_QSBR_CNT_INIT 1
+ #define __RTE_QSBR_CNT_MAX ((uint64_t)~0)
++#define __RTE_QSBR_TOKEN_SIZE sizeof(uint64_t)
+ 
+ /* RTE Quiescent State variable structure.
+  * This structure has two elements that vary in size based on the
+@@ -120,6 +122,86 @@
+ } __rte_cache_aligned;
+ 
+ /**
++ * Call back function called to free the resources.
++ *
++ * @param p
++ *   Pointer provided while creating the defer queue
++ * @param e
++ *   Pointer to the resource data stored on the defer queue
++ * @param n
++ *   Number of resources to free. Currently, this is set to 1.
++ *
++ * @return
++ *   None
++ */
++typedef void (*rte_rcu_qsbr_free_resource_t)(void *p, void *e, unsigned int n);
++
++#define RTE_RCU_QSBR_DQ_NAMESIZE RTE_RING_NAMESIZE
++
++/**
++ * Various flags supported.
++ */
++/**< Enqueue and reclaim operations are multi-thread safe by default.
++ *   The call back functions registered to free the resources are
++ *   assumed to be multi-thread safe.
++ *   Set this flag if multi-thread safety is not required.
++ */
++#define RTE_RCU_QSBR_DQ_MT_UNSAFE 1
++
++/**
++ * Parameters used when creating the defer queue.
++ */
++struct rte_rcu_qsbr_dq_parameters {
++	const char *name;
++	/**< Name of the queue. */
++	uint32_t flags;
++	/**< Flags to control API behaviors */
++	uint32_t size;
++	/**< Number of entries in queue. Typically, this will be
++	 *   the same as the maximum number of entries supported in the
++	 *   lock free data structure.
++	 *   Data structures with unbounded number of entries is not
++	 *   supported currently.
++	 */
++	uint32_t esize;
++	/**< Size (in bytes) of each element in the defer queue.
++	 *   This has to be multiple of 4B.
++	 */
++	uint32_t trigger_reclaim_limit;
++	/**< Trigger automatic reclamation after the defer queue
++	 *   has at least these many resources waiting. This auto
++	 *   reclamation is triggered in rte_rcu_qsbr_dq_enqueue API
++	 *   call.
++	 *   If this is greater than 'size', auto reclamation is
++	 *   not triggered.
++	 *   If this is set to 0, auto reclamation is triggered
++	 *   in every call to rte_rcu_qsbr_dq_enqueue API.
++	 */
++	uint32_t max_reclaim_size;
++	/**< When automatic reclamation is enabled, reclaim at the max
++	 *   these many resources. This should contain a valid value, if
++	 *   auto reclamation is on. Setting this to 'size' or greater will
++	 *   reclaim all possible resources currently on the defer queue.
++	 */
++	rte_rcu_qsbr_free_resource_t free_fn;
++	/**< Function to call to free the resource. */
++	void *p;
++	/**< Pointer passed to the free function. Typically, this is the
++	 *   pointer to the data structure to which the resource to free
++	 *   belongs. This can be NULL.
++	 */
++	struct rte_rcu_qsbr *v;
++	/**< RCU QSBR variable to use for this defer queue */
++};
++
++/* RTE defer queue structure.
++ * This structure holds the defer queue. The defer queue is used to
++ * hold the deleted entries from the data structure that are not
++ * yet freed.
++ */
++struct rte_rcu_qsbr_dq;
++
++/**
+  * @warning
+  * @b EXPERIMENTAL: this API may change without prior notice
+  *
+@@ -697,6 +779,116 @@
+ int
+ rte_rcu_qsbr_dump(FILE *f, struct rte_rcu_qsbr *v);
+ 
++/**
++ * @warning
++ * @b EXPERIMENTAL: this API may change without prior notice
++ *
++ * Create a queue used to store the data structure elements that can
++ * be freed later. This queue is referred to as 'defer queue'.
++ *
++ * @param params
++ *   Parameters to create a defer queue.
++ * @return
++ *   On success - Valid pointer to defer queue
++ *   On error - NULL
++ *   Possible rte_errno codes are:
++ *   - EINVAL - NULL parameters are passed
++ *   - ENOMEM - Not enough memory
++ */
++__rte_experimental
++struct rte_rcu_qsbr_dq *
++rte_rcu_qsbr_dq_create(const struct rte_rcu_qsbr_dq_parameters *params);
++
++/**
++ * @warning
++ * @b EXPERIMENTAL: this API may change without prior notice
++ *
++ * Enqueue one resource to the defer queue and start the grace period.
++ * The resource will be freed later after at least one grace period
++ * is over.
++ *
++ * If the defer queue is full, it will attempt to reclaim resources.
++ * It will also reclaim resources at regular intervals to avoid
++ * the defer queue from growing too big.
++ *
++ * Multi-thread safety is provided as the defer queue configuration.
++ * When multi-thread safety is requested, it is possible that the
++ * resources are not stored in their order of deletion. This results
++ * in resources being held in the defer queue longer than they should.
++ *
++ * @param dq
++ *   Defer queue to allocate an entry from.
++ * @param e
++ *   Pointer to resource data to copy to the defer queue. The size of
++ *   the data to copy is equal to the element size provided when the
++ *   defer queue was created.
++ * @return
++ *   On success - 0
++ *   On error - 1 with rte_errno set to
++ *   - EINVAL - NULL parameters are passed
++ *   - ENOSPC - Defer queue is full. This condition can not happen
++ *		if the defer queue size is equal (or larger) than the
++ *		number of elements in the data structure.
++ */
++__rte_experimental
++int
++rte_rcu_qsbr_dq_enqueue(struct rte_rcu_qsbr_dq *dq, void *e);
++
++/**
++ * @warning
++ * @b EXPERIMENTAL: this API may change without prior notice
++ *
++ * Free resources from the defer queue.
++ *
++ * This API is multi-thread safe.
++ *
++ * @param dq
++ *   Defer queue to free an entry from.
++ * @param n
++ *   Maximum number of resources to free.
++ * @param freed
++ *   Number of resources that were freed.
++ * @param pending
++ *   Number of resources pending on the defer queue. This number might not
++ *   be accurate if multi-thread safety is configured.
++ * @param available
++ *   Number of resources that can be added to the defer queue.
++ *   This number might not be accurate if multi-thread safety is configured.
++ * @return
++ *   On successful reclamation of at least 1 resource - 0
++ *   On error - 1 with rte_errno set to
++ *   - EINVAL - NULL parameters are passed
++ */
++__rte_experimental
++int
++rte_rcu_qsbr_dq_reclaim(struct rte_rcu_qsbr_dq *dq, unsigned int n,
++	unsigned int *freed, unsigned int *pending, unsigned int *available);
++
++/**
++ * @warning
++ * @b EXPERIMENTAL: this API may change without prior notice
++ *
++ * Delete a defer queue.
++ *
++ * It tries to reclaim all the resources on the defer queue.
++ * If any of the resources have not completed the grace period
++ * the reclamation stops and returns immediately. The rest of
++ * the resources are not reclaimed and the defer queue is not
++ * freed.
++ *
++ * @param dq
++ *   Defer queue to delete.
++ * @return
++ *   On success - 0
++ *   On error - 1
++ *   Possible rte_errno codes are:
++ *   - EAGAIN - Some of the resources have not completed at least 1 grace
++ *		period, try again.
++ */
++__rte_experimental
++int
++rte_rcu_qsbr_dq_delete(struct rte_rcu_qsbr_dq *dq);
++
+ #ifdef __cplusplus
+ }
+ #endif
+--- a/lib/librte_rcu/rte_rcu_version.map
++++ b/lib/librte_rcu/rte_rcu_version.map
+@@ -8,6 +8,10 @@
+ 	rte_rcu_qsbr_synchronize;
+ 	rte_rcu_qsbr_thread_register;
+ 	rte_rcu_qsbr_thread_unregister;
++	rte_rcu_qsbr_dq_create;
++	rte_rcu_qsbr_dq_enqueue;
++	rte_rcu_qsbr_dq_reclaim;
++	rte_rcu_qsbr_dq_delete;
+ 
+ 	local: *;
+ };
+--- a/lib/meson.build
++++ b/lib/meson.build
+@@ -11,8 +11,9 @@
+ libraries = [
+ 	'kvargs', # eal depends on kvargs
+ 	'eal', # everything depends on eal
+-	'ring', 'mempool', 'mbuf', 'net', 'meter', 'ethdev', 'pci', # core
++	'ring',
+ 	'rcu', # rcu depends on this
++	'mempool', 'mbuf', 'net', 'meter', 'ethdev', 'pci', # core
+ 	'cmdline',
+ 	'metrics', # bitrate/latency stats depends on this
+ 	'hash',    # efd depends on this
