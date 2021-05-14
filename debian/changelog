@@ -1,3 +1,14 @@
+dpdk (19.11.4-0vyatta18) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rcu: backport resource reclamation APIs
+  * ring: 20.11.x backports for RCU QSBR resource reclamation APIs
+
+  [ Charles (Chas) Williams ]
+  * Update symbol versions for release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 14 May 2021 09:44:43 -0400
+
 dpdk (19.11.4-0vyatta17) unstable; urgency=medium
 
   [ Daniel Gollub ]
