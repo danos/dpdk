@@ -3,7 +3,7 @@ Priority: optional
 Maintainer: Vyatta Package Maintainers <DL-vyatta-help@att.com>
 Build-Depends: debhelper (>= 10.3~),
                dh-python,
-               dh-signobs,
+               dh-signobs <!noobs>,
                dkms,
                ibverbs-providers,
                doxygen <!nodoc>,

@@ -1,3 +1,5 @@
 # dpdk is a massive package by the way as defined by upstream
 # accept the long lists
 dpdk source: field-too-long
+
+dpdk source: invalid-profile-name-in-source-relation noobs [build-depends: dh-signobs <!noobs>]
