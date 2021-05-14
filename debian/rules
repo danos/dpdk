@@ -91,11 +91,19 @@ build:
 	fi
 	sh debian/prep-modules $(KSRC)/build
 	cat debian/control.modules >> debian/control
+ifeq ($(filter noobs,$(DEB_BUILD_PROFILES)),)
 	dh $@ --with python3,signobs --buildsystem=meson
+else
+	dh $@ --with python3 --buildsystem=meson
+endif
 endif
 
 %:
+ifeq ($(filter noobs,$(DEB_BUILD_PROFILES)),)
 	dh $@ --with python3,signobs --buildsystem=meson
+else
+	dh $@ --with python3 --buildsystem=meson
+endif
 
 override_dh_gencontrol:
 	dh_gencontrol

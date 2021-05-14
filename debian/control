@@ -4,7 +4,7 @@ Maintainer: Vyatta Package Maintainers <DL-vyatta-help@att.com>
 Build-Depends: chrpath,
                debhelper-compat (= 12),
                dh-python,
-               dh-signobs,
+               dh-signobs <!noobs>,
                ibverbs-providers,
                doxygen <!nodoc>,
                graphviz <!nodoc>,
