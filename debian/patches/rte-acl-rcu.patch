@@ -129,15 +129,11 @@
  #include "acl.h"
  
  #define	QRANGE_MIN	((uint8_t)INT8_MIN)
-@@ -538,14 +539,20 @@
+@@ -538,14 +539,16 @@
  	rcx->trans_table = node_array;
  	memcpy(rcx->trie, trie, sizeof(rcx->trie));
  
 -	/* This is not thread-safe. */
-+	/* Wait until the active runtime context is unused. */
-+	if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_SYNC)
-+		rte_rcu_qsbr_synchronize(ctx->v, ctx->rcu_thread_id);
-+
 +	__atomic_store_n(&ctx->rcx, rcx, __ATOMIC_RELAXED);
 +
  	if (prev_rcx) {
