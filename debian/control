@@ -239,6 +239,7 @@ Section: libdevel
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
+Provides: librte-acl-rcu-qsbr-dq-support-dev
 Depends: libbpf-dev,
          libbsd-dev,
          libibverbs-dev,
@@ -274,6 +275,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
+Provides: rte-acl-rebuild-support, rte-acl-rcu-qsbr-dq-support
 Description: Data Plane Development Kit (librte-acl runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.

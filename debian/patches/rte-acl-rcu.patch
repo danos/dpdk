@@ -1,6 +1,6 @@
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -69,6 +69,25 @@
+@@ -69,6 +69,35 @@
  	/**< max memory limit for internal run-time structures. */
  };
  
@@ -14,19 +14,29 @@
 +
 +/** ACL RCU QSBR configuration. */
 +struct rte_acl_rcu_config {
-+	struct rte_rcu_qsbr *v; /** < RCU QSBR variable. */
++	struct rte_rcu_qsbr *v; /**< RCU QSBR variable. */
 +	enum rte_acl_qsbr_mode mode;
 +	/**< Mode of RCU QSBR: RTE_ACL_QSBR_MODE_xxx */
 +	unsigned int thread_id;
 +	/**< Thread ID of the caller if it is registered to report quiescent
 +	 * state on this QS variable. If not, pass RTE_QSBR_THRID_INVALID.
 +	 */
++	uint32_t dq_size; /**<Defer queue size. */
++	uint32_t dq_trigger_reclaim_limit;
++	/**<Threshold to trigger defer queue automatic reclamation.
++	 * Set to 0, to trigger reclamation on every rte_acl_build call.
++	 */
++	uint32_t dq_max_reclaim_size;
++	/**<When a threshold to trigger automatic reclation of the defer queue
++	 * is set, this is the maximum number of rte_acl_build runntime contexts
++	 * being reclaimed.
++	 */
 +};
 +
  /**
   * Defines the value of a field for a rule.
   */
-@@ -181,6 +200,25 @@
+@@ -181,6 +210,25 @@
  rte_acl_free(struct rte_acl_ctx *ctx);
  
  /**
@@ -54,7 +64,15 @@
   *
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -300,6 +300,10 @@
+@@ -10,6 +10,7 @@
+ #include <rte_jhash.h>
+ #include <rte_random.h>
+ #include <rte_mempool.h>
++#include <rte_rcu_qsbr.h>
+ 
+ #include "acl.h"
+ 
+@@ -143,6 +144,10 @@
  			((RTE_ACL_RESULTS_MULTIPLIER - 1) & categories) != 0)
  		return -EINVAL;
  
@@ -65,21 +83,39 @@
  	return classify_fns[alg](ctx, data, results, num, categories);
  }
  
-@@ -335,6 +339,28 @@
+@@ -178,6 +183,46 @@
  	return ctx;
  }
  
 +int
 +rte_acl_rcu_qsbr_add(struct rte_acl_ctx *ctx, struct rte_acl_rcu_config *cfg)
 +{
++	char rcu_dq_name[RTE_RCU_QSBR_DQ_NAMESIZE];
++	struct rte_rcu_qsbr_dq_parameters params;
++
 +	if (ctx == NULL || cfg == NULL)
 +		return -EINVAL;
 +
 +	if (cfg->mode == RTE_ACL_QSBR_MODE_SYNC) {
 +		/* Nothing to do. */
 +	} else if (cfg->mode == RTE_ACL_QSBR_MODE_DQ) {
-+		/* Not yet implemented. */
-+		return -EINVAL;
++		memset(&params, 0, sizeof(params));
++		snprintf(rcu_dq_name, sizeof(rcu_dq_name), "ACL_RCU_%s",
++			 ctx->name);
++		params.name = rcu_dq_name;
++		params.flags = 0;
++		params.free_fn = rte_acl_rcu_qsbr_free_rcx;
++		params.v = cfg->v;
++		params.size = cfg->dq_size;
++		params.esize = sizeof(struct rte_acl_rcu_dq_entry);
++		params.trigger_reclaim_limit = cfg->dq_trigger_reclaim_limit;
++		params.max_reclaim_size = cfg->dq_max_reclaim_size;
++		ctx->dq = rte_rcu_qsbr_dq_create(&params);
++		if (ctx->dq == NULL) {
++			RTE_LOG(ERR, ACL, "ACL defer queue creation failed: %s\n",
++				rte_strerror(rte_errno));
++			return -rte_errno;
++		}
 +	} else {
 +		return -EINVAL;
 +	}
@@ -94,8 +130,37 @@
  void
  rte_acl_free(struct rte_acl_ctx *ctx)
  {
---- a/lib/librte_acl/version.map
-+++ b/lib/librte_acl/version.map
+@@ -205,6 +250,9 @@
+ 
+ 	rte_mcfg_tailq_write_unlock();
+ 
++	if (ctx->dq)
++		rte_rcu_qsbr_dq_delete(ctx->dq);
++
+ 	if (ctx->rcx) {
+ 		rte_free(ctx->rcx->mem);
+ 		rte_free(ctx->rcx);
+@@ -653,10 +701,14 @@
+ {
+ 	struct rte_acl_rt_ctx *rcx = ctx->rcx;
+ 
+-	if (ctx != NULL) {
+-		rte_acl_reset_rules(ctx);
+-		rte_acl_build(ctx, rcx ? &rcx->config: NULL);
+-	}
++	if (!ctx)
++		return;
++
++	rte_acl_reset_rules(ctx);
++	rte_acl_build(ctx, rcx ? &rcx->config: NULL);
++
++	if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_DQ)
++		rte_rcu_qsbr_dq_reclaim(ctx->dq, ~0, NULL, NULL, NULL);
+ }
+ 
+ /*
+--- a/lib/librte_acl/rte_acl_version.map
++++ b/lib/librte_acl/rte_acl_version.map
 @@ -13,6 +13,7 @@
  	rte_acl_find_existing;
  	rte_acl_free;
@@ -106,12 +171,13 @@
  	rte_acl_set_ctx_classify;
 --- a/lib/librte_acl/acl.h
 +++ b/lib/librte_acl/acl.h
-@@ -199,6 +199,12 @@
+@@ -190,9 +190,23 @@
  	uint32_t            num_rules;
  	uint32_t            num_categories;
  
 +	/* RCU config. */
 +	struct rte_rcu_qsbr *v;          /* RCU QSBR variable. */
++	struct rte_rcu_qsbr_dq *dq;      /* RCU QSBR defer queue. */
 +	enum rte_acl_qsbr_mode rcu_mode; /* Blocking, defer queue. */
 +	unsigned int rcu_thread_id;
 +	/* thread ID to report quiescent state on */
@@ -119,6 +185,16 @@
  	struct rte_acl_rt_ctx *rcx;
  };
  
++struct rte_acl_rcu_dq_entry {
++	struct rte_acl_rt_ctx *rcx;
++};
++
++void
++rte_acl_rcu_qsbr_free_rcx(void *p, void *e, unsigned int n);
++
+ int rte_acl_gen(struct rte_acl_ctx *ctx, struct rte_acl_trie *trie,
+ 	struct rte_acl_bld_trie *node_bld_trie, uint32_t num_tries,
+ 	uint32_t num_categories, uint32_t data_index_sz, size_t max_size);
 --- a/lib/librte_acl/acl_gen.c
 +++ b/lib/librte_acl/acl_gen.c
 @@ -3,6 +3,7 @@
@@ -129,25 +205,71 @@
  #include "acl.h"
  
  #define	QRANGE_MIN	((uint8_t)INT8_MIN)
-@@ -541,12 +542,15 @@
- 	/* back pointer to acx/rte_acl_ctx */
- 	rcx->acx = ctx;
+@@ -441,6 +442,23 @@
+ 	indices->match_index = 1;
+ }
+ 
++void
++rte_acl_rcu_qsbr_free_rcx(void *p, void *e, unsigned int n)
++{
++	struct rte_acl_rcu_dq_entry rcu_dq_entry =
++		*((struct rte_acl_rcu_dq_entry *)e);
++	RTE_SET_USED(p);
++	RTE_SET_USED(n);
++
++	struct rte_acl_rt_ctx *rcx = rcu_dq_entry.rcx;
++
++	if (!rcx)
++		return;
++
++	rte_free(rcx->mem);
++	rte_free(rcx);
++}
++
+ /*
+  * Generate the runtime structure using build structure
+  */
+@@ -457,6 +475,7 @@
+ 	struct acl_node_counters counts;
+ 	struct rte_acl_indices indices;
+ 	struct rte_acl_rt_ctx *rcx, *prev_rcx = ctx->rcx;
++	struct rte_acl_rcu_dq_entry rcu_dq_entry;
+ 
+ 	no_match = RTE_ACL_NODE_MATCH;
+ 
+@@ -538,13 +557,27 @@
+ 	rcx->trans_table = node_array;
+ 	memcpy(rcx->trie, trie, sizeof(rcx->trie));
  
 -	/* This is not thread-safe. */
-+	/* Wait until the active runtime context is unused. */
-+	if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_SYNC)
-+		rte_rcu_qsbr_synchronize(ctx->v, ctx->rcu_thread_id);
-+
 +	__atomic_store_n(&ctx->rcx, rcx, __ATOMIC_RELAXED);
 +
- 	if (prev_rcx)
- 		rte_free(prev_rcx);
+ 	if (prev_rcx) {
+-		rte_free(prev_rcx->mem);
+-		rte_free(prev_rcx);
+-	}
++		if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_SYNC) {
++			/* Wait until the active runtime context is unused. */
++			rte_rcu_qsbr_synchronize(ctx->v, ctx->rcu_thread_id);
++			rte_free(prev_rcx);
++		} else if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_DQ) {
++			/* Push into QSBR FIFO */
++			rcu_dq_entry.rcx = prev_rcx;
++			if (rte_rcu_qsbr_dq_enqueue(ctx->dq, &rcu_dq_entry) != 0) {
++				RTE_LOG(ERR, ACL, "Pushing to DQ failed: %s\n",
++					rte_strerror(rte_errno));
++				return -rte_errno;
++			}
  
 -	ctx->rcx = rcx;
--
++		} else {
++			RTE_LOG(ERR, ACL, "unsupported RCU mode\n");
++			return -EINVAL;
++		}
++	}
+ 
  	acl_gen_log_stats(ctx, &counts, &indices, max_size);
  	return 0;
- }
 --- a/lib/librte_acl/meson.build
 +++ b/lib/librte_acl/meson.build
 @@ -5,7 +5,7 @@
