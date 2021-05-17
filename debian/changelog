@@ -1,3 +1,13 @@
+dpdk (19.11.4-0vyatta19) unstable; urgency=medium
+
+  [ James Wheatley ]
+  * Add noobs build profile (Closes: VRVDR-53810)
+
+  [ Charles (Chas) Williams ]
+  * Update symbol versions for release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 17 May 2021 09:26:10 -0400
+
 dpdk (19.11.4-0vyatta18) unstable; urgency=medium
 
   [ Daniel Gollub ]
