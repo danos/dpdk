@@ -1,3 +1,15 @@
+dpdk (19.11.4-0vyatta20) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: remove redundant rcu sync call
+  * debian: fix rte-acl-rebuild-support provides
+  * rte-acl: DPDK QSBR RCU Defer Queue support
+
+  [ Charles (Chas) Williams ]
+  * Update symbol versions for release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 17 May 2021 14:52:41 -0400
+
 dpdk (19.11.4-0vyatta19) unstable; urgency=medium
 
   [ James Wheatley ]
