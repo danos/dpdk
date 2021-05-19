@@ -1,6 +1,6 @@
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -69,6 +69,35 @@
+@@ -69,6 +69,35 @@ struct rte_acl_config {
  	/**< max memory limit for internal run-time structures. */
  };
  
@@ -36,7 +36,7 @@
  /**
   * Defines the value of a field for a rule.
   */
-@@ -181,6 +210,25 @@
+@@ -181,6 +210,25 @@ void
  rte_acl_free(struct rte_acl_ctx *ctx);
  
  /**
@@ -64,7 +64,7 @@
   *
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -10,6 +10,7 @@
+@@ -11,6 +11,7 @@
  #include <rte_jhash.h>
  #include <rte_random.h>
  #include <rte_mempool.h>
@@ -72,7 +72,7 @@
  
  #include "acl.h"
  
-@@ -143,6 +144,10 @@
+@@ -300,6 +301,10 @@ rte_acl_classify_alg(const struct rte_ac
  			((RTE_ACL_RESULTS_MULTIPLIER - 1) & categories) != 0)
  		return -EINVAL;
  
@@ -83,7 +83,7 @@
  	return classify_fns[alg](ctx, data, results, num, categories);
  }
  
-@@ -178,6 +183,46 @@
+@@ -335,6 +340,46 @@ rte_acl_find_existing(const char *name)
  	return ctx;
  }
  
@@ -130,7 +130,7 @@
  void
  rte_acl_free(struct rte_acl_ctx *ctx)
  {
-@@ -205,6 +250,9 @@
+@@ -362,6 +407,9 @@ rte_acl_free(struct rte_acl_ctx *ctx)
  
  	rte_mcfg_tailq_write_unlock();
  
@@ -140,7 +140,7 @@
  	if (ctx->rcx) {
  		rte_free(ctx->rcx->mem);
  		rte_free(ctx->rcx);
-@@ -653,10 +701,14 @@
+@@ -810,10 +858,14 @@ rte_acl_reset(struct rte_acl_ctx *ctx)
  {
  	struct rte_acl_rt_ctx *rcx = ctx->rcx;
  
@@ -159,19 +159,9 @@
  }
  
  /*
---- a/lib/librte_acl/rte_acl_version.map
-+++ b/lib/librte_acl/rte_acl_version.map
-@@ -13,6 +13,7 @@
- 	rte_acl_find_existing;
- 	rte_acl_free;
- 	rte_acl_list_dump;
-+	rte_acl_rcu_qsbr_add;
- 	rte_acl_reset;
- 	rte_acl_reset_rules;
- 	rte_acl_set_ctx_classify;
 --- a/lib/librte_acl/acl.h
 +++ b/lib/librte_acl/acl.h
-@@ -190,9 +190,23 @@
+@@ -199,9 +199,23 @@ struct rte_acl_ctx {
  	uint32_t            num_rules;
  	uint32_t            num_categories;
  
@@ -205,7 +195,7 @@
  #include "acl.h"
  
  #define	QRANGE_MIN	((uint8_t)INT8_MIN)
-@@ -441,6 +442,23 @@
+@@ -441,6 +442,23 @@ acl_calc_counts_indices(struct acl_node_
  	indices->match_index = 1;
  }
  
@@ -229,7 +219,7 @@
  /*
   * Generate the runtime structure using build structure
   */
-@@ -457,6 +475,7 @@
+@@ -457,6 +475,7 @@ rte_acl_gen(struct rte_acl_ctx *ctx, str
  	struct acl_node_counters counts;
  	struct rte_acl_indices indices;
  	struct rte_acl_rt_ctx *rcx, *prev_rcx = ctx->rcx;
@@ -237,17 +227,16 @@
  
  	no_match = RTE_ACL_NODE_MATCH;
  
-@@ -538,13 +557,27 @@
- 	rcx->trans_table = node_array;
- 	memcpy(rcx->trie, trie, sizeof(rcx->trie));
+@@ -541,11 +560,27 @@ rte_acl_gen(struct rte_acl_ctx *ctx, str
+ 	/* back pointer to acx/rte_acl_ctx */
+ 	rcx->acx = ctx;
  
 -	/* This is not thread-safe. */
+-	if (prev_rcx)
+-		rte_free(prev_rcx);
 +	__atomic_store_n(&ctx->rcx, rcx, __ATOMIC_RELAXED);
 +
- 	if (prev_rcx) {
--		rte_free(prev_rcx->mem);
--		rte_free(prev_rcx);
--	}
++	if (prev_rcx) {
 +		if (ctx->rcu_mode == RTE_ACL_QSBR_MODE_SYNC) {
 +			/* Wait until the active runtime context is unused. */
 +			rte_rcu_qsbr_synchronize(ctx->v, ctx->rcu_thread_id);
@@ -272,7 +261,7 @@
  	return 0;
 --- a/lib/librte_acl/meson.build
 +++ b/lib/librte_acl/meson.build
-@@ -5,7 +5,7 @@
+@@ -5,7 +5,7 @@ sources = files('acl_bld.c', 'acl_gen.c'
  		'rte_acl.c', 'tb_mem.c')
  headers = files('rte_acl.h', 'rte_acl_osdep.h')
  
@@ -281,3 +270,13 @@
  
  if dpdk_conf.has('RTE_ARCH_X86')
  	sources += files('acl_run_sse.c')
+--- a/lib/librte_acl/version.map
++++ b/lib/librte_acl/version.map
+@@ -13,6 +13,7 @@ DPDK_21 {
+ 	rte_acl_find_existing;
+ 	rte_acl_free;
+ 	rte_acl_list_dump;
++	rte_acl_rcu_qsbr_add;
+ 	rte_acl_reset;
+ 	rte_acl_reset_rules;
+ 	rte_acl_set_ctx_classify;
