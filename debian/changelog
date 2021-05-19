@@ -1,3 +1,9 @@
+dpdk (20.11-2vyatta4) unstable; urgency=medium
+
+  * rte-acl: DPDK QSBR RCU Defer Queue support
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 19 May 2021 08:36:00 -0400
+
 dpdk (20.11-2vyatta3) unstable; urgency=medium
 
   [ Nicholas Brown ]
