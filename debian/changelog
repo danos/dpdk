@@ -1,3 +1,14 @@
+dpdk (20.11-2vyatta3) unstable; urgency=medium
+
+  [ Nicholas Brown ]
+  * d/rules update dpdk_config_options for make 4.3
+
+  [ Daniel Gollub ]
+  * rte-acl: report thread id to the RCU QS variable
+  * rte-acl: DPDK QSBR RCU Defer Queue support
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 19 May 2021 08:15:05 -0400
+
 dpdk (20.11-2vyatta2) unstable; urgency=medium
 
   * net/bonding: fix potential endless loop on closing (Bugfix:
