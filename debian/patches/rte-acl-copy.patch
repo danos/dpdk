@@ -28,7 +28,7 @@
   * Note that internal run-time structures are not affected.
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -496,17 +496,14 @@
+@@ -653,17 +653,14 @@
  	return 0;
  }
  
@@ -49,7 +49,7 @@
  	for (i = 0; i != num; i++) {
  		rv = (const struct rte_acl_rule *)
  			((uintptr_t)rules + i * ctx->rule_sz);
-@@ -518,9 +515,105 @@
+@@ -675,9 +672,105 @@
  		}
  	}
  
@@ -140,7 +140,7 @@
 +	    0 == src_ctx->rule_sz)
 +		return -EINVAL;
 +
-+	if (dst_ctx->flags |= src_ctx->flags) {
++	if (dst_ctx->flags != src_ctx->flags) {
 +		RTE_LOG(ERR, ACL,
 +			"Copying only supported between ACLs with same flags\n");
 +		return -EINVAL;
