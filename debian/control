@@ -239,7 +239,8 @@ Section: libdevel
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
-Provides: librte-acl-rcu-qsbr-dq-support-dev
+Provides: librte-acl-rcu-qsbr-dq-support-dev,
+          librte-crytpodev-session-sym-pool-empty-dev
 Depends: libbpf-dev,
          libbsd-dev,
          libibverbs-dev,
@@ -745,6 +746,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
+Provides: rte-crytpodev-session-sym-pool-empty
 Description: Data Plane Development Kit (librte-cryptodev runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
  in user-space and communicate directly with dedicated network interfaces.

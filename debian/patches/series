@@ -43,6 +43,9 @@ rte-acl-copy.patch
 rte-acl-rcx.patch
 rte-acl-rcu.patch
 
+# cryptodev enhancements
+rte-cryptodev-mempool.patch
+
 # Bonding
 bonding-polled-slave-muxstate.patch
 

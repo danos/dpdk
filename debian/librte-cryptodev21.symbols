@@ -17,6 +17,7 @@ librte_cryptodev.so.21 librte-cryptodev21 #MINVER#
  __rte_cryptodev_trace_sym_session_free@EXPERIMENTAL 20.08
  __rte_cryptodev_trace_sym_session_init@EXPERIMENTAL 20.08
  __rte_cryptodev_trace_sym_session_pool_create@EXPERIMENTAL 20.08
+ __rte_cryptodev_trace_sym_session_pool_create_empty@EXPERIMENTAL 20.11
  rte_crypto_aead_algorithm_strings@DPDK_21 20.11
  rte_crypto_aead_operation_strings@DPDK_21 20.11
  rte_crypto_asym_op_strings@EXPERIMENTAL 18.08
@@ -92,5 +93,6 @@ librte_cryptodev.so.21 librte-cryptodev21 #MINVER#
  rte_cryptodev_sym_session_get_user_data@EXPERIMENTAL 18.08
  rte_cryptodev_sym_session_init@DPDK_21 20.11
  rte_cryptodev_sym_session_pool_create@EXPERIMENTAL 19.08
+ rte_cryptodev_sym_session_pool_create_empty@EXPERIMENTAL 20.11
  rte_cryptodev_sym_session_set_user_data@EXPERIMENTAL 18.08
  rte_cryptodevs@DPDK_21 20.11

@@ -1,0 +1,173 @@
+From: Daniel Gollub <dgollub@att.com>
+Date: Wed, 26 May 2021 18:52:10 +0200
+Subject: [PATCH] cryptodev: initial support for symmetric empty mempool
+
+Support for dynamically growing cryptodev symmetric session pools.
+
+Behavior change for rte_cryptodev_sym_session_create:
+Don't log an error message in case the pool runs empty.
+
+Signed-off-by: Daniel Gollub <dgollub@att.com>
+
+--- a/lib/librte_cryptodev/rte_cryptodev.c
++++ b/lib/librte_cryptodev/rte_cryptodev.c
+@@ -1397,7 +1397,7 @@
+ }
+ 
+ struct rte_mempool *
+-rte_cryptodev_sym_session_pool_create(const char *name, uint32_t nb_elts,
++rte_cryptodev_sym_session_pool_create_empty(const char *name, uint32_t nb_elts,
+ 	uint32_t elt_size, uint32_t cache_size, uint16_t user_data_size,
+ 	int socket_id)
+ {
+@@ -1412,9 +1412,8 @@
+ 	else
+ 		obj_sz = elt_size;
+ 
+-	mp = rte_mempool_create(name, nb_elts, obj_sz, cache_size,
++	mp = rte_mempool_create_empty(name, nb_elts, obj_sz, cache_size,
+ 			(uint32_t)(sizeof(*pool_priv)),
+-			NULL, NULL, NULL, NULL,
+ 			socket_id, 0);
+ 	if (mp == NULL) {
+ 		CDEV_LOG_ERR("%s(name=%s) failed, rte_errno=%d\n",
+@@ -1433,9 +1432,44 @@
+ 	pool_priv->nb_drivers = nb_drivers;
+ 	pool_priv->user_data_sz = user_data_size;
+ 
++	rte_cryptodev_trace_sym_session_pool_create_empty(name, nb_elts,
++		elt_size, cache_size, user_data_size, mp);
++
++	return mp;
++}
++
++struct rte_mempool *
++rte_cryptodev_sym_session_pool_create(const char *name, uint32_t nb_elts,
++	uint32_t elt_size, uint32_t cache_size, uint16_t user_data_size,
++	int socket_id)
++{
++	int ret;
++	struct rte_mempool *mp;
++
++	mp = rte_cryptodev_sym_session_pool_create_empty(name, nb_elts,
++							 elt_size,
++							 cache_size,
++							 user_data_size,
++							 socket_id);
++	if (mp == NULL)
++		return NULL;
++
++	ret = rte_mempool_set_ops_byname(mp, "ring_mp_mc", NULL);
++	if (ret)
++		goto fail;
++
++
++	if (rte_mempool_populate_default(mp) < 0)
++		goto fail;
++
+ 	rte_cryptodev_trace_sym_session_pool_create(name, nb_elts,
+ 		elt_size, cache_size, user_data_size, mp);
++
+ 	return mp;
++
++fail:
++	rte_mempool_free(mp);
++	return NULL;
+ }
+ 
+ static unsigned int
+@@ -1480,7 +1514,6 @@
+ 
+ 	/* Allocate a session structure from the session pool */
+ 	if (rte_mempool_get(mp, (void **)&sess)) {
+-		CDEV_LOG_ERR("couldn't get object from session mempool");
+ 		return NULL;
+ 	}
+ 
+--- a/lib/librte_cryptodev/rte_cryptodev.h
++++ b/lib/librte_cryptodev/rte_cryptodev.h
+@@ -1020,6 +1020,41 @@
+ };
+ 
+ /**
++ * Create an empty symmetric session mempool.
++ *
++ * The mempool is allocated and initialized, but it is not populated: no memory
++ * is allocated for the mempool elements.
++ *
++ * @param name
++ *   The unique mempool name.
++ * @param nb_elts
++ *   The number of elements in the mempool.
++ * @param elt_size
++ *   The size of the element. This value will be ignored if it is smaller than
++ *   the minimum session header size required for the system. For the user who
++ *   wanst to use the same mempool for sym session and session private data it
++ *   can be the maximum value of all existing devices' private data and session
++ *   header sizes.
++ * @param cache_size
++ *   The number of per-lcore cache elements
++ * @param priv_size
++ *   The private data size of each session.
++ * @param socket_id
++ *   The *socket_id* argument is the socket identifier in the case of
++ *   NUMA. The value can be *SOCKET_ID_ANY* if there is no NUMA
++ *   constraint for the reserved zone.
++ *
++ * @return
++ *  The pointer on the empty symmetric session mempool. NULL on error with
++ *  rte_errno set appropriately.
++ */
++__rte_experimental
++struct rte_mempool *
++rte_cryptodev_sym_session_pool_create_empty(const char *name, uint32_t nb_elts,
++	uint32_t elt_size, uint32_t cache_size, uint16_t priv_size,
++	int socket_id);
++
++/**
+  * Create a symmetric session mempool.
+  *
+  * @param name
+--- a/lib/librte_cryptodev/version.map
++++ b/lib/librte_cryptodev/version.map
+@@ -109,4 +109,6 @@
+ 	rte_cryptodev_raw_enqueue;
+ 	rte_cryptodev_raw_enqueue_burst;
+ 	rte_cryptodev_raw_enqueue_done;
++	rte_cryptodev_sym_session_pool_create_empty;
++	__rte_cryptodev_trace_sym_session_pool_create_empty;
+ };
+--- a/lib/librte_cryptodev/cryptodev_trace_points.c
++++ b/lib/librte_cryptodev/cryptodev_trace_points.c
+@@ -24,6 +24,9 @@
+ RTE_TRACE_POINT_REGISTER(rte_cryptodev_trace_sym_session_pool_create,
+ 	lib.cryptodev.sym.pool.create)
+ 
++RTE_TRACE_POINT_REGISTER(rte_cryptodev_trace_sym_session_pool_create_empty,
++	lib.cryptodev.sym.pool.create_empty)
++
+ RTE_TRACE_POINT_REGISTER(rte_cryptodev_trace_sym_session_create,
+ 	lib.cryptodev.sym.create)
+ 
+--- a/lib/librte_cryptodev/rte_cryptodev_trace.h
++++ b/lib/librte_cryptodev/rte_cryptodev_trace.h
+@@ -73,6 +73,19 @@
+ )
+ 
+ RTE_TRACE_POINT(
++	rte_cryptodev_trace_sym_session_pool_create_empty,
++	RTE_TRACE_POINT_ARGS(const char *name, uint32_t nb_elts,
++		uint32_t elt_size, uint32_t cache_size,
++		uint16_t user_data_size, void *mempool),
++	rte_trace_point_emit_string(name);
++	rte_trace_point_emit_u32(nb_elts);
++	rte_trace_point_emit_u32(elt_size);
++	rte_trace_point_emit_u32(cache_size);
++	rte_trace_point_emit_u16(user_data_size);
++	rte_trace_point_emit_ptr(mempool);
++)
++
++RTE_TRACE_POINT(
+ 	rte_cryptodev_trace_sym_session_create,
+ 	RTE_TRACE_POINT_ARGS(void *mempool,
+ 		struct rte_cryptodev_sym_session *sess),
