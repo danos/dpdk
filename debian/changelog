@@ -1,3 +1,10 @@
+dpdk (20.11-2vyatta6) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: correct invalid copy_rules sanity check for acx flags
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 26 May 2021 08:13:17 -0400
+
 dpdk (20.11-2vyatta5) unstable; urgency=medium
 
   [ Charles (Chas) Williams ]
