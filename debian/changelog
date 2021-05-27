@@ -1,3 +1,10 @@
+dpdk (20.11-2vyatta7) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * cryptodev: initial support for symmetric empty mempool
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Thu, 27 May 2021 13:17:08 -0400
+
 dpdk (20.11-2vyatta6) unstable; urgency=medium
 
   [ Daniel Gollub ]
