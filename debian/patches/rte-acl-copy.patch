@@ -49,7 +49,7 @@
  	for (i = 0; i != num; i++) {
  		rv = (const struct rte_acl_rule *)
  			((uintptr_t)rules + i * ctx->rule_sz);
-@@ -681,9 +678,107 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
+@@ -681,9 +678,136 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
  		}
  	}
  
@@ -78,36 +78,65 @@
 +acl_copy_rules_ht(struct rte_acl_ctx *dst_ctx,
 +		  const struct rte_acl_ctx *src_ctx)
 +{
++
++#define MAX_BATCH 512
++	uint32_t bulk_sz, nb_rules;
 +	uint32_t iter = 0, nb_copied = 0;
 +	struct rte_acl_rule *src_rule, *rule;
++	struct rte_acl_rule *rules[MAX_BATCH];
 +	int err, ret;
 +	void *key;
 +
-+	if (!dst_ctx->ht || !src_ctx->ht)
++	if (!dst_ctx->ht || !dst_ctx->rule_pool || !src_ctx->ht)
 +		return -EINVAL;
 +
-+	while (rte_hash_iterate(src_ctx->ht, (void *) &key, (void **) &src_rule,
-+				&iter) >= 0) {
++	nb_rules = src_ctx->num_rules;
 +
-+		rule = acl_rule_create(dst_ctx);
-+		if (!rule) {
-+			RTE_LOG(ERR, ACL, "Rule creation failed for ctx %s : %s\n",
-+				dst_ctx->name, rte_strerror(rte_errno));
-+			ret = -ENOMEM;
-+			goto error;
-+		}
++	if (rte_mempool_avail_count(dst_ctx->rule_pool) < nb_rules)
++		return -ENOBUFS;
 +
-+		memcpy(rule, src_rule, src_ctx->rule_sz);
++	while (nb_rules) {
 +
-+		ret = rte_hash_add_key_data(dst_ctx->ht, rule, (void *) rule);
++		if (nb_rules > MAX_BATCH)
++			bulk_sz = MAX_BATCH;
++		else
++			bulk_sz = nb_rules;
++
++
++		ret = rte_mempool_get_bulk(dst_ctx->rule_pool, (void **)rules,
++					   bulk_sz);
 +		if (ret < 0) {
-+			RTE_LOG(ERR, ACL, "Rule addition failed on ctx %s : %s\n",
++			if (ret == -ENOBUFS)
++				goto error;
++
++			RTE_LOG(ERR, ACL,
++				"Could not allocate memory for destination ctx %s : %s\n",
 +				dst_ctx->name, rte_strerror(-ret));
 +			goto error;
 +		}
 +
-+		nb_copied++;
-+		dst_ctx->num_rules++;
++		while (bulk_sz-- > 0 && rte_hash_iterate(src_ctx->ht,
++							 (void *) &key,
++							 (void **) &src_rule,
++							 &iter) >= 0) {
++
++			rule = rules[bulk_sz];
++
++			memcpy(rule, src_rule, src_ctx->rule_sz);
++
++			ret = rte_hash_add_key_data(dst_ctx->ht, rule,
++						    (void *) rule);
++			if (ret < 0) {
++				RTE_LOG(ERR, ACL,
++					"Rule addition failed on ctx %s : %s\n",
++					dst_ctx->name, rte_strerror(-ret));
++				goto error;
++			}
++
++			nb_copied++;
++			nb_rules--;
++			dst_ctx->num_rules++;
++		}
 +	}
 +	return 0;
 +
