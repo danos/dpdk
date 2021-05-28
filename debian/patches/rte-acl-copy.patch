@@ -1,6 +1,6 @@
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -220,6 +220,25 @@
+@@ -220,6 +220,25 @@ int
  rte_acl_del_rule(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rule);
  
  /**
@@ -28,7 +28,7 @@
   * Note that internal run-time structures are not affected.
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -659,17 +659,14 @@
+@@ -659,17 +659,14 @@ acl_check_rule(const struct rte_acl_rule
  	return 0;
  }
  
@@ -49,7 +49,7 @@
  	for (i = 0; i != num; i++) {
  		rv = (const struct rte_acl_rule *)
  			((uintptr_t)rules + i * ctx->rule_sz);
-@@ -681,9 +678,105 @@
+@@ -681,9 +678,107 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
  		}
  	}
  
@@ -78,7 +78,7 @@
 +acl_copy_rules_ht(struct rte_acl_ctx *dst_ctx,
 +		  const struct rte_acl_ctx *src_ctx)
 +{
-+	uint32_t iter = 0;
++	uint32_t iter = 0, nb_copied = 0;
 +	struct rte_acl_rule *src_rule, *rule;
 +	int err, ret;
 +	void *key;
@@ -106,13 +106,15 @@
 +			goto error;
 +		}
 +
++		nb_copied++;
 +		dst_ctx->num_rules++;
 +	}
 +	return 0;
 +
 +error:
-+	while (rte_hash_iterate(dst_ctx->ht, (void *)&key, (void **)&rule,
-+				&iter)) {
++	iter = 0;
++	while (nb_copied-- > 0 && rte_hash_iterate(src_ctx->ht, (void *)&key,
++						   (void **)&rule, &iter) >= 0) {
 +		err = rte_hash_del_key(dst_ctx->ht, (const void *)rule);
 +		if (err < 0) {
 +			RTE_LOG(ERR, ACL,
@@ -157,7 +159,7 @@
   * Note that RT structures are not affected.
 --- a/lib/librte_acl/version.map
 +++ b/lib/librte_acl/version.map
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,7 @@ DPDK_21 {
  	rte_acl_classify;
  	rte_acl_classify_alg;
  	rte_acl_classify_scalar;
