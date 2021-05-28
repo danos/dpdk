@@ -109,7 +109,7 @@
  
  	/* get EAL TAILQ lock. */
  	rte_mcfg_tailq_write_lock();
-@@ -395,41 +437,190 @@ rte_acl_create(const struct rte_acl_para
+@@ -395,41 +437,196 @@ rte_acl_create(const struct rte_acl_para
  			break;
  	}
  
@@ -147,7 +147,10 @@
 +	ctx->alg = acl_get_best_alg();
 +	ctx->flags = param->flags;
 +	strlcpy(ctx->name, param->name, sizeof(ctx->name));
-+
+ 
+-		if (te == NULL) {
+-			RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
+-			goto exit;
 +	te->data = (void *) ctx;
 +
 +	TAILQ_INSERT_TAIL(acl_list, te, next);
@@ -210,6 +213,9 @@
 +	ret = rte_hash_lookup_data(ctx->ht, (const void *) rule,
 +				   (void **) &res);
 +	if (ret < 0) {
++		if (ret == -ENOENT)
++			return ret;
++
 +		RTE_LOG(ERR, ACL, "lookup of rule on socket %d for %s failed: %s\n",
 +				ctx->socket_id, ctx->name,
 +				rte_strerror(-ret));
@@ -262,23 +268,29 @@
 +		if (ret != -ENOENT)
 +			return -EEXIST;
 +	}
- 
--		if (te == NULL) {
--			RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
--			goto exit;
++
 +	for (i=0, pos = rules; i < num; i++, pos += ctx->rule_sz) {
 +
 +		rule = acl_rule_create(ctx);
 +		if (!rule) {
++			if (rte_errno == ENOENT)
++				return -rte_errno;
++
 +			RTE_LOG(ERR, ACL, "creating rule #%d on socket %d for %s failed: %s\n",
 +				i, ctx->socket_id, ctx->name,
 +				rte_strerror(rte_errno));
-+			return -ENOMEM;
++			return -rte_errno;
  		}
  
 -		ctx = rte_zmalloc_socket(name, sz, RTE_CACHE_LINE_SIZE, param->socket_id);
 +		memset(rule, 0, ctx->rule_sz);
 +		memcpy(rule, pos, ctx->rule_sz);
++
++		ret = rte_hash_add_key_data(ctx->ht, rule, (void *) rule);
++		if (ret < 0) {
++			RTE_LOG(ERR, ACL, "adding rule #%d to hash-table on socket %d for %s failed: %s\n",
++				i, ctx->socket_id, ctx->name,
++				rte_strerror(rte_errno));
  
 -		if (ctx == NULL) {
 -			RTE_LOG(ERR, ACL,
@@ -286,12 +298,6 @@
 -				sz, param->socket_id, name);
 -			rte_free(te);
 -			goto exit;
-+		ret = rte_hash_add_key_data(ctx->ht, rule, (void *) rule);
-+		if (ret < 0) {
-+			RTE_LOG(ERR, ACL, "adding rule #%d to hash-table on socket %d for %s failed: %s\n",
-+				i, ctx->socket_id, ctx->name,
-+				rte_strerror(rte_errno));
-+
 +			num = i;
 +
 +			goto error;
@@ -324,7 +330,7 @@
  }
  
  static int
-@@ -440,6 +631,9 @@ acl_add_rules(struct rte_acl_ctx *ctx, c
+@@ -440,6 +637,9 @@ acl_add_rules(struct rte_acl_ctx *ctx, c
  	if (num + ctx->num_rules > ctx->max_rules)
  		return -ENOMEM;
  
@@ -334,7 +340,7 @@
  	pos = ctx->rules;
  	pos += ctx->rule_sz * ctx->num_rules;
  	memcpy(pos, rules, num * ctx->rule_sz);
-@@ -491,8 +685,24 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
+@@ -491,8 +691,24 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
  void
  rte_acl_reset_rules(struct rte_acl_ctx *ctx)
  {
@@ -361,7 +367,7 @@
  }
  
  /*
-@@ -524,6 +734,7 @@ rte_acl_dump(const struct rte_acl_ctx *c
+@@ -524,6 +740,7 @@ rte_acl_dump(const struct rte_acl_ctx *c
  	printf("  num_rules=%"PRIu32"\n", ctx->num_rules);
  	printf("  num_categories=%"PRIu32"\n", ctx->num_categories);
  	printf("  num_tries=%"PRIu32"\n", ctx->num_tries);

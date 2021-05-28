@@ -140,7 +140,7 @@
  	if (ctx->rcx) {
  		rte_free(ctx->rcx->mem);
  		rte_free(ctx->rcx);
-@@ -810,10 +858,14 @@ rte_acl_reset(struct rte_acl_ctx *ctx)
+@@ -816,10 +864,14 @@ rte_acl_reset(struct rte_acl_ctx *ctx)
  {
  	struct rte_acl_rt_ctx *rcx = ctx->rcx;
  
