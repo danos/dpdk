@@ -13,44 +13,39 @@ Fixes: 3f8fb604748b ("net/virtio: add Tx preparation")
 
 --- a/drivers/net/virtio/virtio_rxtx.c
 +++ b/drivers/net/virtio/virtio_rxtx.c
-@@ -1705,6 +1705,7 @@ virtio_xmit_pkts_prepare(void *tx_queue
- 		}
- #endif
- 
-+#ifndef RTE_ETHDEV_TX_PREPARE_NOOP
- 		/* Do VLAN tag insertion */
- 		if (unlikely(m->ol_flags & PKT_TX_VLAN_PKT)) {
- 			error = rte_vlan_insert(&m);
-@@ -1718,6 +1719,7 @@ virtio_xmit_pkts_prepare(void *tx_queue
- 				break;
- 			}
- 		}
-+#endif
- 
- 		error = rte_net_intel_cksum_prepare(m);
- 		if (unlikely(error)) {
-@@ -1759,6 +1761,21 @@ virtio_xmit_pkts_packed(void *tx_queue,
- 		struct rte_mbuf *txm = tx_pkts[nb_tx];
- 		int can_push = 0, use_indirect = 0, slots, need;
+@@ -1755,6 +1755,10 @@ virtio_xmit_pkts_packed(void *tx_queue,
+ 		virtio_xmit_cleanup_packed(vq, nb_pkts - vq->vq_free_cnt,
+ 					   in_order);
  
 +#ifdef RTE_ETHDEV_TX_PREPARE_NOOP
-+		/* Do VLAN tag insertion */
-+		if (unlikely(txm->ol_flags & PKT_TX_VLAN_PKT)) {
-+			int error;
-+
-+			error = rte_vlan_insert(&txm);
-+			if (unlikely(error)) {
-+				rte_pktmbuf_free(txm);
-+				continue;
-+			}
-+			/* vlan_insert may add a header mbuf */
-+			tx_pkts[nb_tx] = txm;
-+		}
++	nb_pkts = virtio_xmit_pkts_prepare(tx_queue, tx_pkts, nb_pkts);
 +#endif
 +
- 		/* optimize ring usage */
- 		if ((vtpci_with_feature(hw, VIRTIO_F_ANY_LAYOUT) ||
- 		      vtpci_with_feature(hw, VIRTIO_F_VERSION_1)) &&
+ 	for (nb_tx = 0; nb_tx < nb_pkts; nb_tx++) {
+ 		struct rte_mbuf *txm = tx_pkts[nb_tx];
+ 		int can_push = 0, use_indirect = 0, slots, need;
+@@ -1836,6 +1840,10 @@ virtio_xmit_pkts(void *tx_queue, struct
+ 	if (likely(nb_used > vq->vq_nentries - vq->vq_free_thresh))
+ 		virtio_xmit_cleanup(vq, nb_used);
+ 
++#ifdef RTE_ETHDEV_TX_PREPARE_NOOP
++	nb_pkts = virtio_xmit_pkts_prepare(tx_queue, tx_pkts, nb_pkts);
++#endif
++
+ 	for (nb_tx = 0; nb_tx < nb_pkts; nb_tx++) {
+ 		struct rte_mbuf *txm = tx_pkts[nb_tx];
+ 		int can_push = 0, use_indirect = 0, slots, need;
+@@ -1938,6 +1946,10 @@ virtio_xmit_pkts_inorder(void *tx_queue,
+ 	if (likely(nb_used > vq->vq_nentries - vq->vq_free_thresh))
+ 		virtio_xmit_cleanup_inorder(vq, nb_used);
+ 
++#ifdef RTE_ETHDEV_TX_PREPARE_NOOP
++	nb_pkts = virtio_xmit_pkts_prepare(tx_queue, tx_pkts, nb_pkts);
++#endif
++
+ 	for (nb_tx = 0; nb_tx < nb_pkts; nb_tx++) {
+ 		struct rte_mbuf *txm = tx_pkts[nb_tx];
+ 		int slots;
 --- a/config/rte_config.h
 +++ b/config/rte_config.h
 @@ -58,6 +58,8 @@
@@ -62,3 +57,16 @@ Fixes: 3f8fb604748b ("net/virtio: add Tx preparation")
  
  /* cryptodev defines */
  #define RTE_CRYPTO_MAX_DEVS 64
+--- a/drivers/net/virtio/virtio_rxtx_packed_avx.c
++++ b/drivers/net/virtio/virtio_rxtx_packed_avx.c
+@@ -264,6 +264,10 @@ virtio_xmit_pkts_packed_vec(void *tx_que
+ 	if (unlikely(nb_pkts < 1))
+ 		return nb_pkts;
+ 
++#ifdef RTE_ETHDEV_TX_PREPARE_NOOP
++	nb_pkts = virtio_xmit_pkts_prepare(tx_queue, tx_pkts, nb_pkts);
++#endif
++
+ 	PMD_TX_LOG(DEBUG, "%d packets to xmit", nb_pkts);
+ 
+ 	if (vq->vq_free_cnt <= vq->vq_nentries - vq->vq_free_thresh)
