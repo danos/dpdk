@@ -140,17 +140,19 @@
  	if (ctx->rcx) {
  		rte_free(ctx->rcx->mem);
  		rte_free(ctx->rcx);
-@@ -653,10 +701,14 @@
+@@ -653,11 +701,15 @@
  {
- 	struct rte_acl_rt_ctx *rcx = ctx->rcx;
+ 	struct rte_acl_rt_ctx *rcx;
  
 -	if (ctx != NULL) {
+-		rcx = ctx->rcx;
 -		rte_acl_reset_rules(ctx);
 -		rte_acl_build(ctx, rcx ? &rcx->config: NULL);
 -	}
 +	if (!ctx)
 +		return;
 +
++	rcx = ctx->rcx;
 +	rte_acl_reset_rules(ctx);
 +	rte_acl_build(ctx, rcx ? &rcx->config: NULL);
 +

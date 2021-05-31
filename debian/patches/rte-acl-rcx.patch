@@ -364,20 +364,21 @@
  	if (ctx->ht)
  		rte_hash_free(ctx->ht);
  	rte_free(ctx);
-@@ -647,9 +651,11 @@
+@@ -647,9 +651,12 @@
  void
  rte_acl_reset(struct rte_acl_ctx *ctx)
  {
-+	struct rte_acl_rt_ctx *rcx = ctx->rcx;
++	struct rte_acl_rt_ctx *rcx;
 +
  	if (ctx != NULL) {
++		rcx = ctx->rcx;
  		rte_acl_reset_rules(ctx);
 -		rte_acl_build(ctx, &ctx->config);
 +		rte_acl_build(ctx, rcx ? &rcx->config: NULL);
  	}
  }
  
-@@ -668,7 +674,7 @@
+@@ -668,7 +675,7 @@
  	printf("  rule_size=%"PRIu32"\n", ctx->rule_sz);
  	printf("  num_rules=%"PRIu32"\n", ctx->num_rules);
  	printf("  num_categories=%"PRIu32"\n", ctx->num_categories);
