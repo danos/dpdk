@@ -1,3 +1,15 @@
+dpdk (20.11-2vyatta9) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: prepare add/del methods for growing pools
+  * rte-acl: fix error-path in rte_acl_copy_rules method
+  * rte-acl: allocate all memory before copying rules in
+    rte_acl_copy_rules
+  * rte-acl: avoid pre-mature derference of ctx in rte_acl_reset
+  * rte-acl: reduce the HT load when completely filled
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 01 Jun 2021 11:01:09 -0400
+
 dpdk (20.11-2vyatta8) unstable; urgency=medium
 
   * virtio: fix all xmit routines (Bugfix: VRVDR-55233)
