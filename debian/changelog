@@ -1,3 +1,9 @@
+dpdk (20.11-2vyatta8) unstable; urgency=medium
+
+  * virtio: fix all xmit routines (Bugfix: VRVDR-55233)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 01 Jun 2021 06:24:18 -0400
+
 dpdk (20.11-2vyatta7) unstable; urgency=medium
 
   [ Daniel Gollub ]
