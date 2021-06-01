@@ -71,7 +71,7 @@
 +	}
 +
 +	struct rte_hash_parameters hash_params = {
-+		.entries = param->max_rule_num,
++		.entries = param->max_rule_num  * 1.5, /* max load 75% */
 +		.key_len = param->hash_key_len,
 +		.hash_func = param->hash_func,
 +		.hash_func_init_val = 0,
