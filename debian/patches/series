@@ -21,6 +21,9 @@ ring-fix-namespace-prefix-of-inline-functions.patch
 # RCU backports
 rcu-add-resource-reclamation-APIs.patch
 
+# netvsc backports
+0001-net-netvsc-fix-rndis-packet-addresses.patch
+
 # Backport from dpdk-net-next
 0001-net-virtio-fix-tagging-when-not-using-Tx-preparation.patch
 
