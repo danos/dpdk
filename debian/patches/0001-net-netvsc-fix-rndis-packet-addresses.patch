@@ -1,0 +1,34 @@
+From d9fecbe97ba7c1ad0dedf33910d8b4e4e444979a Mon Sep 17 00:00:00 2001
+From: Long Li <longli@microsoft.com>
+Date: Fri, 18 Sep 2020 11:53:47 -0700
+Subject: [PATCH] net/netvsc: fix rndis packet addresses
+
+The address should be calculated before type cast, not after.
+
+Fixes: cc0251813277 ("net/netvsc: split send buffers from Tx descriptors")
+Cc: stable@dpdk.org
+
+Reported-by: Souvik Dey <sodey@rbbn.com>
+Signed-off-by: Long Li <longli@microsoft.com>
+---
+ drivers/net/netvsc/hn_rxtx.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/netvsc/hn_rxtx.c b/drivers/net/netvsc/hn_rxtx.c
+index 3e8d3b407d..65f1abae51 100644
+--- a/drivers/net/netvsc/hn_rxtx.c
++++ b/drivers/net/netvsc/hn_rxtx.c
+@@ -160,8 +160,8 @@ static void hn_txd_init(struct rte_mempool *mp __rte_unused,
+ 
+ 	txd->queue_id = txq->queue_id;
+ 	txd->chim_index = NVS_CHIM_IDX_INVALID;
+-	txd->rndis_pkt = (struct rndis_packet_msg *)(char *)txq->tx_rndis
+-		+ idx * HN_RNDIS_PKT_ALIGNED;
++	txd->rndis_pkt = (struct rndis_packet_msg *)((char *)txq->tx_rndis
++		+ idx * HN_RNDIS_PKT_ALIGNED);
+ }
+ 
+ int
+-- 
+2.25.1
+

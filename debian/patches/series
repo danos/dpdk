@@ -10,6 +10,9 @@
 
 # Backport from dpdk stable
 
+# netvsc backports
+0001-net-netvsc-fix-rndis-packet-addresses.patch
+
 # Backport from dpdk-net-next
 0001-net-virtio-fix-tagging-when-not-using-Tx-preparation.patch
 
