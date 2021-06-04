@@ -1,3 +1,10 @@
+dpdk (19.11.4-0vyatta22) unstable; urgency=medium
+
+  * Move patch to the correction location
+  * Update symbol versions for release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 04 Jun 2021 11:13:34 -0400
+
 dpdk (19.11.4-0vyatta21) unstable; urgency=medium
 
   [ Alan Dewar ]
