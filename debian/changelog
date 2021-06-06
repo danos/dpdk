@@ -1,3 +1,13 @@
+dpdk (19.11.4-0vyatta9.2) unstable; urgency=medium
+
+  [ Alan Dewar ]
+  * netvsc - fix rndis tx packet address calculation (Fixes: VRVDR-55126)
+
+  [ Charles (Chas) Williams ]
+  * Update sched symbol versions for next release
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Sun, 06 Jun 2021 07:12:10 -0400
+
 dpdk (19.11.4-0vyatta9.1) unstable; urgency=medium
 
   [ Sameer Agrawal ]
