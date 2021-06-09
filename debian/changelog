@@ -1,3 +1,9 @@
+dpdk (20.11-2vyatta10) unstable; urgency=medium
+
+  * Restore missing libdpdk-dbg (Bugfix: VRVDR-55317)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 09 Jun 2021 10:43:32 -0400
+
 dpdk (20.11-2vyatta9) unstable; urgency=medium
 
   [ Daniel Gollub ]
