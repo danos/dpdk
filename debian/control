@@ -234,6 +234,14 @@ Description: Data Plane Development Kit (documentation)
  .
  This package contains the complete set of documentation and guides.
 
+Package: libdpdk-dbg
+Section: debug
+Architecture: all
+Depends: ${librte:Depends}, ${misc:Depends}
+Description: Data Plane Development Kit debug symbols
+ Virtual package to provide a single dependency point for
+ debug symbols for all DPDK libraries
+
 Package: libdpdk-dev
 Section: libdevel
 Architecture: amd64 arm64 armhf i386 ppc64el
