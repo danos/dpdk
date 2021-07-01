@@ -28,7 +28,7 @@
   * Note that internal run-time structures are not affected.
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -659,17 +659,14 @@ acl_check_rule(const struct rte_acl_rule
+@@ -658,17 +658,14 @@ acl_check_rule(const struct rte_acl_rule
  	return 0;
  }
  
@@ -49,7 +49,7 @@
  	for (i = 0; i != num; i++) {
  		rv = (const struct rte_acl_rule *)
  			((uintptr_t)rules + i * ctx->rule_sz);
-@@ -681,9 +678,136 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
+@@ -680,9 +677,136 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
  		}
  	}
  
