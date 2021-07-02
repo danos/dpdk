@@ -1,3 +1,10 @@
+dpdk (20.11-2vyatta11) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: don't insert incomplete acx in the rte_acl_list
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 02 Jul 2021 10:31:41 -0400
+
 dpdk (20.11-2vyatta10) unstable; urgency=medium
 
   * Restore missing libdpdk-dbg (Bugfix: VRVDR-55317)
