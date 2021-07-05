@@ -48,7 +48,7 @@
  
  #include "acl.h"
  
-@@ -202,18 +206,48 @@
+@@ -202,18 +206,57 @@
  	rte_mcfg_tailq_write_unlock();
  
  	rte_free(ctx->mem);
@@ -63,6 +63,7 @@
 +{
 +	int ret;
 +	char hash_name[RTE_HASH_NAMESIZE];
++	struct rte_hash *ht;
 +
 +	ret = snprintf(hash_name, sizeof(hash_name), "ht_%s", param->name);
 +	if (ret < 0 || ret >= RTE_HASH_NAMESIZE) {
@@ -82,7 +83,15 @@
 +	};
 +
 +
-+	return rte_hash_create(&hash_params);
++
++	ht = rte_hash_create(&hash_params);
++	if (!ht)
++		return NULL;
++
++	if (param->hash_cmp_func)
++		rte_hash_set_cmp_func(ht, param->hash_cmp_func);
++
++	return ht;
 +}
 +
  struct rte_acl_ctx *
@@ -379,26 +388,31 @@
  /*
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -122,6 +122,10 @@
+@@ -122,6 +122,14 @@
  /** Max number of characters in name.*/
  #define	RTE_ACL_NAMESIZE		32
  
-+/** Type of function to compare the rule hash key */
++/** Type of function that can be used for calculating the hash value. */
 +typedef uint32_t (*rte_acl_hash_function)(const void *key, uint32_t key_len,
 +					  uint32_t init_val);
++
++/** Type of function to compare the rule hash key */
++typedef int (*rte_acl_hash_cmp_eq_t)(const void *key1, const void *key2,
++				     size_t key_len);
 +
  /**
   * Parameters used when creating the ACL context.
   */
-@@ -130,8 +134,15 @@
+@@ -130,8 +134,16 @@
  	int         socket_id;    /**< Socket ID to allocate memory for. */
  	uint32_t    rule_size;    /**< Size of each rule. */
  	uint32_t    max_rule_num; /**< Maximum number of rules. */
 +
-+	unsigned int flags;              /**< Flags of the ACL context. */
-+	struct rte_mempool *rule_pool;   /**< Memory pool for ACLs, used with ACL_F_USE_HASHTABLE. */
-+	uint32_t hash_key_len;           /**< Length of hash key. */
-+	rte_acl_hash_function hash_func; /**< Function used to calculate hash. */
++	unsigned int flags;                  /**< Flags of the ACL context. */
++	struct rte_mempool *rule_pool;       /**< Memory pool for ACLs, used with ACL_F_USE_HASHTABLE. */
++	uint32_t hash_key_len;               /**< Length of hash key. */
++	rte_acl_hash_function hash_func;     /**< Function used to calculate hash. */
++	rte_acl_hash_cmp_eq_t hash_cmp_func; /**< Function used to compare keys of hash-table. */
  };
  
 +#define ACL_F_USE_HASHTABLE 0x0001 /**< Use hashtable for ACL context entries. */

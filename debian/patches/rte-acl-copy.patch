@@ -1,6 +1,6 @@
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -220,6 +220,25 @@
+@@ -225,6 +225,25 @@
  rte_acl_del_rule(struct rte_acl_ctx *ctx, const struct rte_acl_rule *rule);
  
  /**
@@ -28,7 +28,7 @@
   * Note that internal run-time structures are not affected.
 --- a/lib/librte_acl/rte_acl.c
 +++ b/lib/librte_acl/rte_acl.c
-@@ -495,17 +495,14 @@
+@@ -504,17 +504,14 @@
  	return 0;
  }
  
@@ -49,7 +49,7 @@
  	for (i = 0; i != num; i++) {
  		rv = (const struct rte_acl_rule *)
  			((uintptr_t)rules + i * ctx->rule_sz);
-@@ -517,9 +514,105 @@
+@@ -526,9 +523,105 @@
  		}
  	}
  
