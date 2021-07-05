@@ -48,7 +48,7 @@
  
  #include "acl.h"
  
-@@ -359,18 +363,48 @@ rte_acl_free(struct rte_acl_ctx *ctx)
+@@ -359,18 +363,57 @@ rte_acl_free(struct rte_acl_ctx *ctx)
  	rte_mcfg_tailq_write_unlock();
  
  	rte_free(ctx->mem);
@@ -63,6 +63,7 @@
 +{
 +	int ret;
 +	char hash_name[RTE_HASH_NAMESIZE];
++	struct rte_hash *ht;
 +
 +	ret = snprintf(hash_name, sizeof(hash_name), "ht_%s", param->name);
 +	if (ret < 0 || ret >= RTE_HASH_NAMESIZE) {
@@ -82,7 +83,15 @@
 +	};
 +
 +
-+	return rte_hash_create(&hash_params);
++
++	ht = rte_hash_create(&hash_params);
++	if (!ht)
++		return NULL;
++
++	if (param->hash_cmp_func)
++		rte_hash_set_cmp_func(ht, param->hash_cmp_func);
++
++	return ht;
 +}
 +
  struct rte_acl_ctx *
@@ -98,7 +107,7 @@
  
  	acl_list = RTE_TAILQ_CAST(rte_acl_tailq.head, rte_acl_list);
  
-@@ -380,10 +414,29 @@ rte_acl_create(const struct rte_acl_para
+@@ -380,10 +423,29 @@ rte_acl_create(const struct rte_acl_para
  		return NULL;
  	}
  
@@ -129,7 +138,7 @@
  
  	/* get EAL TAILQ lock. */
  	rte_mcfg_tailq_write_lock();
-@@ -395,41 +448,184 @@ rte_acl_create(const struct rte_acl_para
+@@ -395,41 +457,184 @@ rte_acl_create(const struct rte_acl_para
  			break;
  	}
  
@@ -338,7 +347,7 @@
  }
  
  static int
-@@ -440,6 +636,9 @@ acl_add_rules(struct rte_acl_ctx *ctx, c
+@@ -440,6 +645,9 @@ acl_add_rules(struct rte_acl_ctx *ctx, c
  	if (num + ctx->num_rules > ctx->max_rules)
  		return -ENOMEM;
  
@@ -348,7 +357,7 @@
  	pos = ctx->rules;
  	pos += ctx->rule_sz * ctx->num_rules;
  	memcpy(pos, rules, num * ctx->rule_sz);
-@@ -491,8 +690,24 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
+@@ -491,8 +699,24 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
  void
  rte_acl_reset_rules(struct rte_acl_ctx *ctx)
  {
@@ -375,7 +384,7 @@
  }
  
  /*
-@@ -524,6 +739,7 @@ rte_acl_dump(const struct rte_acl_ctx *c
+@@ -524,6 +748,7 @@ rte_acl_dump(const struct rte_acl_ctx *c
  	printf("  num_rules=%"PRIu32"\n", ctx->num_rules);
  	printf("  num_categories=%"PRIu32"\n", ctx->num_categories);
  	printf("  num_tries=%"PRIu32"\n", ctx->num_tries);
@@ -385,26 +394,31 @@
  /*
 --- a/lib/librte_acl/rte_acl.h
 +++ b/lib/librte_acl/rte_acl.h
-@@ -122,6 +122,10 @@ RTE_ACL_RULE_DEF(rte_acl_rule,);
+@@ -122,6 +122,14 @@ RTE_ACL_RULE_DEF(rte_acl_rule,);
  /** Max number of characters in name.*/
  #define	RTE_ACL_NAMESIZE		32
  
-+/** Type of function to compare the rule hash key */
++/** Type of function that can be used for calculating the hash value. */
 +typedef uint32_t (*rte_acl_hash_function)(const void *key, uint32_t key_len,
 +					  uint32_t init_val);
++
++/** Type of function to compare the rule hash key */
++typedef int (*rte_acl_hash_cmp_eq_t)(const void *key1, const void *key2,
++				     size_t key_len);
 +
  /**
   * Parameters used when creating the ACL context.
   */
-@@ -130,8 +134,15 @@ struct rte_acl_param {
+@@ -130,8 +138,16 @@ struct rte_acl_param {
  	int         socket_id;    /**< Socket ID to allocate memory for. */
  	uint32_t    rule_size;    /**< Size of each rule. */
  	uint32_t    max_rule_num; /**< Maximum number of rules. */
 +
-+	unsigned int flags;              /**< Flags of the ACL context. */
-+	struct rte_mempool *rule_pool;   /**< Memory pool for ACLs, used with ACL_F_USE_HASHTABLE. */
-+	uint32_t hash_key_len;           /**< Length of hash key. */
-+	rte_acl_hash_function hash_func; /**< Function used to calculate hash. */
++	unsigned int flags;                  /**< Flags of the ACL context. */
++	struct rte_mempool *rule_pool;       /**< Memory pool for ACLs, used with ACL_F_USE_HASHTABLE. */
++	uint32_t hash_key_len;               /**< Length of hash key. */
++	rte_acl_hash_function hash_func;     /**< Function used to calculate hash. */
++	rte_acl_hash_cmp_eq_t hash_cmp_func; /**< Function used to compare keys of hash-table. */
  };
  
 +#define ACL_F_USE_HASHTABLE 0x0001 /**< Use hashtable for ACL context entries. */
@@ -412,7 +426,7 @@
  
  /**
   * Create a new ACL context.
-@@ -193,6 +204,22 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
+@@ -193,6 +209,22 @@ rte_acl_add_rules(struct rte_acl_ctx *ct
  	uint32_t num);
  
  /**

@@ -36,7 +36,7 @@
  /**
   * Defines the value of a field for a rule.
   */
-@@ -181,6 +210,25 @@ void
+@@ -186,6 +215,25 @@ void
  rte_acl_free(struct rte_acl_ctx *ctx);
  
  /**
@@ -140,7 +140,7 @@
  	if (ctx->rcx) {
  		rte_free(ctx->rcx->mem);
  		rte_free(ctx->rcx);
-@@ -846,11 +894,15 @@ rte_acl_reset(struct rte_acl_ctx *ctx)
+@@ -855,11 +903,15 @@ rte_acl_reset(struct rte_acl_ctx *ctx)
  {
  	struct rte_acl_rt_ctx *rcx;
  
