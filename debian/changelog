@@ -1,3 +1,10 @@
+dpdk (20.11-2vyatta12) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: introduce hash-cmp-func parameter
+
+ -- Srinivas Narayan <narayan@vyatta.att-mail.com>  Tue, 06 Jul 2021 18:54:39 +0100
+
 dpdk (20.11-2vyatta11) unstable; urgency=medium
 
   [ Daniel Gollub ]
