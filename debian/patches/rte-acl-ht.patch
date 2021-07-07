@@ -48,7 +48,7 @@
  
  #include "acl.h"
  
-@@ -202,10 +206,39 @@
+@@ -202,18 +206,48 @@
  	rte_mcfg_tailq_write_unlock();
  
  	rte_free(ctx->mem);
@@ -88,7 +88,17 @@
  struct rte_acl_ctx *
  rte_acl_create(const struct rte_acl_param *param)
  {
-@@ -223,10 +256,19 @@
+ 	size_t sz;
+-	struct rte_acl_ctx *ctx;
++	struct rte_acl_ctx *ctx = NULL;
+ 	struct rte_acl_list *acl_list;
+ 	struct rte_tailq_entry *te;
+ 	char name[sizeof(ctx->name)];
++	struct rte_hash *ht = NULL;
+ 
+ 	acl_list = RTE_TAILQ_CAST(rte_acl_tailq.head, rte_acl_list);
+ 
+@@ -223,10 +257,29 @@
  		return NULL;
  	}
  
@@ -101,6 +111,16 @@
 +
  	snprintf(name, sizeof(name), "ACL_%s", param->name);
  
++	if (param->flags & ACL_F_USE_HASHTABLE) {
++		ht = acl_create_hashtable(param);
++		if (ht == NULL) {
++			RTE_LOG(ERR, ACL, "creation of hash-table on socket %d for %s failed: %s\n",
++				param->socket_id, name,
++				rte_strerror(rte_errno));
++			return NULL;
++		}
++	}
++
  	/* calculate amount of memory required for pattern set. */
 -	sz = sizeof(*ctx) + param->max_rule_num * param->rule_size;
 +	sz = sizeof(*ctx);
@@ -109,13 +129,13 @@
  
  	/* get EAL TAILQ lock. */
  	rte_mcfg_tailq_write_lock();
-@@ -238,41 +280,190 @@
+@@ -238,41 +291,178 @@
  			break;
  	}
  
 +	if (te) {
-+		rte_mcfg_tailq_write_unlock();
-+		return ctx;
++		rte_hash_free(ht);
++		goto exit;
 +	}
 +
  	/* if ACL with such name doesn't exist, then create a new one. */
@@ -127,18 +147,35 @@
 +		RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
 +		goto error;
 +	}
-+
+ 
+-		if (te == NULL) {
+-			RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
+-			goto exit;
+-		}
 +	ctx = rte_zmalloc_socket(name, sz, RTE_CACHE_LINE_SIZE, param->socket_id);
-+
+ 
+-		ctx = rte_zmalloc_socket(name, sz, RTE_CACHE_LINE_SIZE, param->socket_id);
 +	if (ctx == NULL) {
 +		RTE_LOG(ERR, ACL,
 +			"allocation of %zu bytes on socket %d for %s failed\n",
 +			sz, param->socket_id, name);
-+		rte_free(te);
 +		goto error;
 +	}
-+
-+
+ 
+-		if (ctx == NULL) {
+-			RTE_LOG(ERR, ACL,
+-				"allocation of %zu bytes on socket %d for %s failed\n",
+-				sz, param->socket_id, name);
+-			rte_free(te);
+-			goto exit;
+-		}
+-		/* init new allocated context. */
+-		ctx->rules = ctx + 1;
+-		ctx->max_rules = param->max_rule_num;
+-		ctx->rule_sz = param->rule_size;
+-		ctx->socket_id = param->socket_id;
+-		ctx->alg = rte_acl_default_classify;
+-		strlcpy(ctx->name, param->name, sizeof(ctx->name));
 +	/* init new allocated context. */
 +	ctx->rules = (param->flags & ACL_F_USE_HASHTABLE) ? NULL : ctx + 1;
 +	ctx->max_rules = param->max_rule_num;
@@ -146,36 +183,26 @@
 +	ctx->socket_id = param->socket_id;
 +	ctx->alg = rte_acl_default_classify;
 +	ctx->flags = param->flags;
++	ctx->rule_pool = param->rule_pool;
++	ctx->ht = ht;
 +	strlcpy(ctx->name, param->name, sizeof(ctx->name));
-+
+ 
+-		te->data = (void *) ctx;
 +	te->data = (void *) ctx;
  
--		if (te == NULL) {
--			RTE_LOG(ERR, ACL, "Cannot allocate tailq entry!\n");
--			goto exit;
+-		TAILQ_INSERT_TAIL(acl_list, te, next);
+-	}
 +	TAILQ_INSERT_TAIL(acl_list, te, next);
-+
-+	rte_mcfg_tailq_write_unlock();
-+
-+	if (!(param->flags & ACL_F_USE_HASHTABLE))
-+		return ctx;
-+
-+	ctx->rule_pool = param->rule_pool;
-+
-+	ctx->ht = acl_create_hashtable(param);
-+	if (ctx->ht == NULL) {
-+		RTE_LOG(ERR, ACL, "creation of hash-table on socket %d for %s failed: %s\n",
-+			param->socket_id, name,
-+			rte_strerror(rte_errno));
-+		rte_free(te);
-+		rte_free(ctx);
-+		goto error;
-+	}
-+
-+	return ctx;
+ 
+ exit:
+ 	rte_mcfg_tailq_write_unlock();
+ 	return ctx;
 +
 +error:
 +	rte_mcfg_tailq_write_unlock();
++	rte_hash_free(ht);
++	rte_free(te);
++	rte_free(ctx);
 +	return NULL;
 +}
 +
@@ -274,9 +301,8 @@
 +				i, ctx->socket_id, ctx->name,
 +				rte_strerror(rte_errno));
 +			return -ENOMEM;
- 		}
- 
--		ctx = rte_zmalloc_socket(name, sz, RTE_CACHE_LINE_SIZE, param->socket_id);
++		}
++
 +		memset(rule, 0, ctx->rule_sz);
 +		memcpy(rule, pos, ctx->rule_sz);
 +
@@ -285,46 +311,28 @@
 +			RTE_LOG(ERR, ACL, "adding rule #%d to hash-table on socket %d for %s failed: %s\n",
 +				i, ctx->socket_id, ctx->name,
 +				rte_strerror(rte_errno));
- 
--		if (ctx == NULL) {
--			RTE_LOG(ERR, ACL,
--				"allocation of %zu bytes on socket %d for %s failed\n",
--				sz, param->socket_id, name);
--			rte_free(te);
--			goto exit;
++
 +			num = i;
 +
 +			goto error;
- 		}
--		/* init new allocated context. */
--		ctx->rules = ctx + 1;
--		ctx->max_rules = param->max_rule_num;
--		ctx->rule_sz = param->rule_size;
--		ctx->socket_id = param->socket_id;
--		ctx->alg = rte_acl_default_classify;
--		strlcpy(ctx->name, param->name, sizeof(ctx->name));
- 
--		te->data = (void *) ctx;
++		}
++
 +		ctx->num_rules++;
 +	}
 +
 +	return 0;
 +
 +error:
- 
--		TAILQ_INSERT_TAIL(acl_list, te, next);
++
 +	for (i=0, pos = rules; i < num; i++, pos += ctx->rule_sz) {
 +		acl_del_rule_ht(ctx, rule);
- 	}
- 
--exit:
--	rte_mcfg_tailq_write_unlock();
--	return ctx;
++	}
++
 +	return ret;
  }
  
  static int
-@@ -283,6 +474,9 @@
+@@ -283,6 +473,9 @@
  	if (num + ctx->num_rules > ctx->max_rules)
  		return -ENOMEM;
  
@@ -334,7 +342,7 @@
  	pos = ctx->rules;
  	pos += ctx->rule_sz * ctx->num_rules;
  	memcpy(pos, rules, num * ctx->rule_sz);
-@@ -334,8 +528,24 @@
+@@ -334,8 +527,24 @@
  void
  rte_acl_reset_rules(struct rte_acl_ctx *ctx)
  {
@@ -361,7 +369,7 @@
  }
  
  /*
-@@ -366,6 +576,7 @@
+@@ -366,6 +575,7 @@
  	printf("  num_rules=%"PRIu32"\n", ctx->num_rules);
  	printf("  num_categories=%"PRIu32"\n", ctx->num_categories);
  	printf("  num_tries=%"PRIu32"\n", ctx->num_tries);
