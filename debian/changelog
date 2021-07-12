@@ -1,3 +1,12 @@
+dpdk (19.11.4-0vyatta23) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: avoid pre-mature derference of ctx in rte_acl_reset
+  * rte-acl: don't insert incomplete acx in the rte_acl_list
+  * rte-acl: introduce hash-cmp-func parameter
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 12 Jul 2021 11:21:36 -0400
+
 dpdk (19.11.4-0vyatta22) unstable; urgency=medium
 
   * Move patch to the correction location
