@@ -1,0 +1,147 @@
+Subject: Cache ACL rule bitmask generation to speed-up rte_acl_build calls
+
+
+--- a/lib/librte_acl/acl.h
++++ b/lib/librte_acl/acl.h
+@@ -220,6 +220,10 @@
+ 	struct rte_acl_bld_trie *node_bld_trie, uint32_t num_tries,
+ 	uint32_t num_categories, uint32_t data_index_sz, size_t max_size);
+ 
++/* mask hash-table */
++int rte_acl_create_mask_ht(void);
++void rte_acl_destroy_mask_ht(void);
++
+ typedef int (*rte_acl_classify_t)
+ (const struct rte_acl_ctx *, const uint8_t **, uint32_t *, uint32_t, uint32_t);
+ 
+--- a/lib/librte_acl/acl_bld.c
++++ b/lib/librte_acl/acl_bld.c
+@@ -7,6 +7,8 @@
+ #include "tb_mem.h"
+ #include "acl.h"
+ 
++#include <rte_jhash.h>
++
+ #define	ACL_POOL_ALIGN		8
+ #define	ACL_POOL_ALLOC_MIN	1024
+ 
+@@ -96,6 +98,55 @@
+ acl_deref_ptr(struct acl_build_context *context,
+ 	struct rte_acl_node *node, int index);
+ 
++
++/* mask hash-table */
++
++#define MASK_HT_MAX_ELEMS (1 << 12)
++
++static struct rte_acl_bitset acl_mask_table[MASK_HT_MAX_ELEMS] __rte_cache_aligned;
++
++static struct rte_hash *rte_acl_mask_ht;
++
++int rte_acl_create_mask_ht(void)
++{
++	int ret;
++	char hash_name[] = "ACL_MASK_HT";
++	struct rte_hash *ht;
++
++	if (rte_acl_mask_ht)
++		return 0;
++
++	struct rte_hash_parameters hash_params = {
++		.entries = MASK_HT_MAX_ELEMS,
++		.key_len = sizeof(uint16_t),
++		.hash_func = rte_jhash,
++		.hash_func_init_val = 0,
++		.name = hash_name,
++		.socket_id = SOCKET_ID_ANY,
++		.reserved = 0,
++		.extra_flag = 0
++	};
++
++	rte_acl_mask_ht = rte_hash_create(&hash_params);
++	if (!rte_acl_mask_ht) {
++		RTE_LOG(ERR, ACL, "creation of mask hash-table failed: %s\n",
++			rte_strerror(rte_errno));
++
++		return -rte_errno;
++	}
++
++	return 0;
++}
++
++void rte_acl_destroy_mask_ht(void)
++{
++	if (rte_acl_mask_ht == NULL)
++		return;
++
++	rte_hash_free(rte_acl_mask_ht);
++	rte_acl_mask_ht = NULL;
++}
++
+ static void *
+ acl_build_alloc(struct acl_build_context *context, size_t n, size_t s)
+ {
+@@ -335,11 +386,21 @@
+ /*
+  * Generate a bitset from a byte value and mask.
+  */
+-static int
++static void
+ acl_gen_mask(struct rte_acl_bitset *bitset, uint32_t value, uint32_t mask)
+ {
+-	int range = 0;
+ 	uint32_t n;
++	int ret = 0;
++	uint16_t key;
++
++	if (rte_acl_mask_ht) {
++		key = ((uint8_t) mask << 8) | (uint8_t) value;
++		ret = rte_hash_lookup(rte_acl_mask_ht, (const void *) &key);
++		if (ret >= 0) {
++			memcpy(bitset, &acl_mask_table[ret], sizeof(*bitset));
++			return;
++		}
++	}
+ 
+ 	/* clear the bitset values */
+ 	for (n = 0; n < RTE_ACL_BIT_SET_SIZE; n++)
+@@ -348,12 +409,25 @@
+ 	/* for each bit in value/mask, add bit to set */
+ 	for (n = 0; n < UINT8_MAX + 1; n++) {
+ 		if ((n & mask) == value) {
+-			range++;
+ 			bitset->bits[n / (sizeof(bits_t) * 8)] |=
+ 				1U << (n % (sizeof(bits_t) * CHAR_BIT));
+ 		}
+ 	}
+-	return range;
++
++	if (rte_acl_mask_ht) {
++		key = ((uint8_t) mask << 8) | (uint8_t) value;
++
++		/* fail caching gracefully */
++		ret = rte_hash_add_key(rte_acl_mask_ht, &key);
++		if (ret < 0) {
++			RTE_LOG(DEBUG, ACL,
++				"Failed to cache bitset for value: %x / mask: %x: %s\n",
++				value, mask, rte_strerror(-ret));
++			return;
++		}
++
++		memcpy(&acl_mask_table[ret], bitset, sizeof(*bitset));
++	}
+ }
+ 
+ /*
+--- a/lib/librte_acl/rte_acl.c
++++ b/lib/librte_acl/rte_acl.c
+@@ -494,6 +494,9 @@
+ 		}
+ 	}
+ 
++	if (rte_acl_create_mask_ht() < 0)
++		return NULL;
++
+ 	/* calculate amount of memory required for pattern set. */
+ 	sz = sizeof(*ctx);
+ 	if (!(param->flags & ACL_F_USE_HASHTABLE))
