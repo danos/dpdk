@@ -43,6 +43,7 @@ rte-acl-copy.patch
 rte-acl-rcx.patch
 rte-acl-rcu.patch
 rte-acl-tune-tb.patch
+rte-acl-tune-range.patch
 
 # cryptodev enhancements
 rte-cryptodev-mempool.patch

@@ -1,0 +1,24 @@
+Subject: Optimize for 5-tuple IPsec policies tunnel-mode with full port-range
+
+--- a/lib/librte_acl/acl_bld.c
++++ b/lib/librte_acl/acl_bld.c
+@@ -313,6 +313,11 @@ acl_add_ptr_range(struct acl_build_conte
+ 	uint32_t n;
+ 	struct rte_acl_bitset bitset;
+ 
++	if (low == 0 && high == UINT8_MAX) {
++		memset(&bitset, ~0, sizeof(bitset));
++		goto done;
++	}
++
+ 	/* clear the bitset values */
+ 	for (n = 0; n < RTE_ACL_BIT_SET_SIZE; n++)
+ 		bitset.bits[n] = 0;
+@@ -323,6 +328,7 @@ acl_add_ptr_range(struct acl_build_conte
+ 			bitset.bits[n / (sizeof(bits_t) * 8)] |=
+ 				1U << (n % (sizeof(bits_t) * CHAR_BIT));
+ 
++done:
+ 	return acl_add_ptr(context, root, node, &bitset);
+ }
+ 
