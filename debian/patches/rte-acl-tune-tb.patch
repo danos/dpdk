@@ -1,0 +1,13 @@
+Subject: Optimize rte_acl_build for building small tries at high-rate
+
+--- a/lib/librte_acl/acl_bld.c
++++ b/lib/librte_acl/acl_bld.c
+@@ -8,7 +8,7 @@
+ #include "acl.h"
+ 
+ #define	ACL_POOL_ALIGN		8
+-#define	ACL_POOL_ALLOC_MIN	0x800000
++#define	ACL_POOL_ALLOC_MIN	1024
+ 
+ /* number of pointers per alloc */
+ #define ACL_PTR_ALLOC	32
