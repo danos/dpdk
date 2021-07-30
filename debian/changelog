@@ -1,3 +1,14 @@
+dpdk (20.11-2vyatta13) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: Optimize rte_acl_build for building small tries at high-rate
+  * rte-acl: Optimize for 5-tuple IPsec policies tunnel-mode with full
+    port-range
+  * rte-acl: Cache ACL rule bitmask generation to speed-up rte_acl_build
+    calls
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Fri, 30 Jul 2021 10:40:44 -0400
+
 dpdk (20.11-2vyatta12) unstable; urgency=medium
 
   [ Daniel Gollub ]
