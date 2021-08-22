@@ -27,11 +27,11 @@
 	uint32_t tmp, of;						       \
 									       \
 	of = vgetq_lane_u32((rss_flags), (pi)) |			       \
-		   bnxt_ol_flags_table[vgetq_lane_u32((ol_idx), (pi))];	       \
+		   rxr->ol_flags_table[vgetq_lane_u32((ol_idx), (pi))];	       \
 									       \
 	tmp = vgetq_lane_u32((errors), (pi));				       \
 	if (tmp)							       \
-		of |= bnxt_ol_flags_err_table[tmp];			       \
+		of |= rxr->ol_flags_err_table[tmp];			       \
 	(ol_flags) = of;						       \
 }
 
@@ -58,7 +58,8 @@
 
 static void
 descs_to_mbufs(uint32x4_t mm_rxcmp[4], uint32x4_t mm_rxcmp1[4],
-	       uint64x2_t mb_init, struct rte_mbuf **mbuf)
+	       uint64x2_t mb_init, struct rte_mbuf **mbuf,
+	       struct bnxt_rx_ring_info *rxr)
 {
 	const uint8x16_t shuf_msk = {
 		0xFF, 0xFF, 0xFF, 0xFF,    /* pkt_type (zeroes) */
@@ -79,7 +80,7 @@ descs_to_mbufs(uint32x4_t mm_rxcmp[4], uint32x4_t mm_rxcmp1[4],
 	const uint32x4_t flags2_index_mask = vdupq_n_u32(0x1F);
 	const uint32x4_t flags2_error_mask = vdupq_n_u32(0x0F);
 	uint32x4_t flags_type, flags2, index, errors, rss_flags;
-	uint32x4_t tmp, ptype_idx;
+	uint32x4_t tmp, ptype_idx, is_tunnel;
 	uint64x2_t t0, t1;
 	uint32_t ol_flags;
 
@@ -116,10 +117,14 @@ descs_to_mbufs(uint32x4_t mm_rxcmp[4], uint32x4_t mm_rxcmp1[4],
 						    vget_low_u64(t1)));
 
 	/* Compute ol_flags and checksum error indexes for four packets. */
+	is_tunnel = vandq_u32(flags2, vdupq_n_u32(4));
+	is_tunnel = vshlq_n_u32(is_tunnel, 3);
 	errors = vandq_u32(vshrq_n_u32(errors, 4), flags2_error_mask);
 	errors = vandq_u32(errors, flags2);
 
 	index = vbicq_u32(flags2, errors);
+	errors = vorrq_u32(errors, vshrq_n_u32(is_tunnel, 1));
+	index = vorrq_u32(index, is_tunnel);
 
 	/* Update mbuf rearm_data for four packets. */
 	GET_OL_FLAGS(rss_flags, index, errors, 0, ol_flags);
@@ -286,7 +291,8 @@ bnxt_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts,
 			goto out;
 		}
 
-		descs_to_mbufs(rxcmp, rxcmp1, mb_init, &rx_pkts[nb_rx_pkts]);
+		descs_to_mbufs(rxcmp, rxcmp1, mb_init, &rx_pkts[nb_rx_pkts],
+			       rxr);
 		nb_rx_pkts += num_valid;
 
 		if (num_valid < RTE_BNXT_DESCS_PER_LOOP)

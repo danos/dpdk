@@ -28,7 +28,7 @@
 
 #define DRV_MODULE_VER_MAJOR	2
 #define DRV_MODULE_VER_MINOR	2
-#define DRV_MODULE_VER_SUBMINOR	0
+#define DRV_MODULE_VER_SUBMINOR	1
 
 #define ENA_IO_TXQ_IDX(q)	(2 * (q))
 #define ENA_IO_RXQ_IDX(q)	(2 * (q) + 1)
@@ -50,6 +50,8 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 #define ENA_MIN_RING_DESC	128
+
+#define ENA_PTYPE_HAS_HASH	(RTE_PTYPE_L4_TCP | RTE_PTYPE_L4_UDP)
 
 enum ethtool_stringset {
 	ETH_SS_TEST             = 0,
@@ -314,6 +316,11 @@ static inline void ena_rx_mbuf_prepare(struct rte_mbuf *mbuf,
 		else
 			ol_flags |= PKT_RX_L4_CKSUM_GOOD;
 
+	if (likely((packet_type & ENA_PTYPE_HAS_HASH) && !ena_rx_ctx->frag)) {
+		ol_flags |= PKT_RX_RSS_HASH;
+		mbuf->hash.rss = ena_rx_ctx->hash;
+	}
+
 	mbuf->ol_flags = ol_flags;
 	mbuf->packet_type = packet_type;
 }
@@ -378,20 +385,6 @@ static inline void ena_tx_mbuf_prepare(struct rte_mbuf *mbuf,
 	} else {
 		ena_tx_ctx->meta_valid = false;
 	}
-}
-
-static inline int validate_rx_req_id(struct ena_ring *rx_ring, uint16_t req_id)
-{
-	if (likely(req_id < rx_ring->ring_size))
-		return 0;
-
-	PMD_DRV_LOG(ERR, "Invalid rx req_id: %hu\n", req_id);
-
-	rx_ring->adapter->reset_reason = ENA_REGS_RESET_INV_RX_REQ_ID;
-	rx_ring->adapter->trigger_reset = true;
-	++rx_ring->rx_stats.bad_req_id;
-
-	return -EFAULT;
 }
 
 static int validate_tx_req_id(struct ena_ring *tx_ring, u16 req_id)
@@ -781,8 +774,10 @@ static void ena_tx_queue_release_bufs(struct ena_ring *ring)
 	for (i = 0; i < ring->ring_size; ++i) {
 		struct ena_tx_buffer *tx_buf = &ring->tx_buffer_info[i];
 
-		if (tx_buf->mbuf)
+		if (tx_buf->mbuf) {
 			rte_pktmbuf_free(tx_buf->mbuf);
+			tx_buf->mbuf = NULL;
+		}
 	}
 }
 
@@ -1246,6 +1241,10 @@ static int ena_queue_start(struct ena_ring *ring)
 		PMD_INIT_LOG(ERR, "Failed to populate rx ring !");
 		return ENA_COM_FAULT;
 	}
+	/* Flush per-core RX buffers pools cache as they can be used on other
+	 * cores as well.
+	 */
+	rte_mempool_cache_flush(NULL, ring->mb_pool);
 
 	return 0;
 }
@@ -1283,15 +1282,13 @@ static int ena_tx_queue_setup(struct rte_eth_dev *dev,
 		return -EINVAL;
 	}
 
-	if (nb_desc == RTE_ETH_DEV_FALLBACK_TX_RINGSIZE)
-		nb_desc = adapter->max_tx_ring_size;
-
 	txq->port_id = dev->data->port_id;
 	txq->next_to_clean = 0;
 	txq->next_to_use = 0;
 	txq->ring_size = nb_desc;
 	txq->size_mask = nb_desc - 1;
 	txq->numa_socket_id = socket_id;
+	txq->pkts_without_db = false;
 
 	txq->tx_buffer_info = rte_zmalloc("txq->tx_buffer_info",
 					  sizeof(struct ena_tx_buffer) *
@@ -1355,9 +1352,6 @@ static int ena_rx_queue_setup(struct rte_eth_dev *dev,
 			queue_idx);
 		return ENA_COM_FAULT;
 	}
-
-	if (nb_desc == RTE_ETH_DEV_FALLBACK_RX_RINGSIZE)
-		nb_desc = adapter->max_rx_ring_size;
 
 	if (!rte_is_power_of_2(nb_desc)) {
 		PMD_DRV_LOG(ERR,
@@ -1466,7 +1460,7 @@ static int ena_populate_rx_queue(struct ena_ring *rxq, unsigned int count)
 		"bad ring state\n");
 
 	/* get resources for incoming packets */
-	rc = rte_mempool_get_bulk(rxq->mb_pool, (void **)mbufs, count);
+	rc = rte_pktmbuf_alloc_bulk(rxq->mb_pool, mbufs, count);
 	if (unlikely(rc < 0)) {
 		rte_atomic64_inc(&rxq->adapter->drv_stats->rx_nombuf);
 		++rxq->rx_stats.mbuf_alloc_fail;
@@ -1482,10 +1476,6 @@ static int ena_populate_rx_queue(struct ena_ring *rxq, unsigned int count)
 			rte_prefetch0(mbufs[i + 4]);
 
 		req_id = rxq->empty_rx_reqs[next_to_use];
-		rc = validate_rx_req_id(rxq, req_id);
-		if (unlikely(rc))
-			break;
-
 		rx_info = &rxq->rx_buffer_info[req_id];
 
 		rc = ena_add_single_rx_desc(rxq->ena_com_io_sq, mbuf, req_id);
@@ -1499,8 +1489,7 @@ static int ena_populate_rx_queue(struct ena_ring *rxq, unsigned int count)
 	if (unlikely(i < count)) {
 		PMD_DRV_LOG(WARNING, "refilled rx qid %d with only %d "
 			"buffers (from %d)\n", rxq->id, i, count);
-		rte_mempool_put_bulk(rxq->mb_pool, (void **)(&mbufs[i]),
-				     count - i);
+		rte_pktmbuf_free_bulk(&mbufs[i], count - i);
 		++rxq->rx_stats.refill_partial;
 	}
 
@@ -1972,6 +1961,9 @@ static int ena_dev_configure(struct rte_eth_dev *dev)
 
 	adapter->state = ENA_ADAPTER_STATE_CONFIG;
 
+	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
+		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
+
 	adapter->tx_selected_offloads = dev->data->dev_conf.txmode.offloads;
 	adapter->rx_selected_offloads = dev->data->dev_conf.rxmode.offloads;
 	return 0;
@@ -2048,6 +2040,7 @@ static int ena_infos_get(struct rte_eth_dev *dev,
 
 	/* Inform framework about available features */
 	dev_info->rx_offload_capa = rx_feat;
+	dev_info->rx_offload_capa |= DEV_RX_OFFLOAD_RSS_HASH;
 	dev_info->rx_queue_offload_capa = rx_feat;
 	dev_info->tx_offload_capa = tx_feat;
 	dev_info->tx_queue_offload_capa = tx_feat;
@@ -2080,6 +2073,9 @@ static int ena_infos_get(struct rte_eth_dev *dev,
 	dev_info->tx_desc_lim.nb_mtu_seg_max = RTE_MIN(ENA_PKT_MAX_BUFS,
 					adapter->max_tx_sgl_size);
 
+	dev_info->default_rxportconf.ring_size = ENA_DEFAULT_RING_SIZE;
+	dev_info->default_txportconf.ring_size = ENA_DEFAULT_RING_SIZE;
+
 	return 0;
 }
 
@@ -2110,8 +2106,6 @@ static struct rte_mbuf *ena_rx_mbuf(struct ena_ring *rx_ring,
 
 	len = ena_bufs[buf].len;
 	req_id = ena_bufs[buf].req_id;
-	if (unlikely(validate_rx_req_id(rx_ring, req_id)))
-		return NULL;
 
 	rx_info = &rx_ring->rx_buffer_info[req_id];
 
@@ -2135,10 +2129,6 @@ static struct rte_mbuf *ena_rx_mbuf(struct ena_ring *rx_ring,
 		++buf;
 		len = ena_bufs[buf].len;
 		req_id = ena_bufs[buf].req_id;
-		if (unlikely(validate_rx_req_id(rx_ring, req_id))) {
-			rte_mbuf_raw_free(mbuf_head);
-			return NULL;
-		}
 
 		rx_info = &rx_ring->rx_buffer_info[req_id];
 		RTE_ASSERT(rx_info->mbuf != NULL);
@@ -2226,10 +2216,16 @@ static uint16_t eth_ena_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 				    &ena_rx_ctx);
 		if (unlikely(rc)) {
 			PMD_DRV_LOG(ERR, "ena_com_rx_pkt error %d\n", rc);
-			rx_ring->adapter->reset_reason =
-				ENA_REGS_RESET_TOO_MANY_RX_DESCS;
+			if (rc == ENA_COM_NO_SPACE) {
+				++rx_ring->rx_stats.bad_desc_num;
+				rx_ring->adapter->reset_reason =
+					ENA_REGS_RESET_TOO_MANY_RX_DESCS;
+			} else {
+				++rx_ring->rx_stats.bad_req_id;
+				rx_ring->adapter->reset_reason =
+					ENA_REGS_RESET_INV_RX_REQ_ID;
+			}
 			rx_ring->adapter->trigger_reset = true;
-			++rx_ring->rx_stats.bad_desc_num;
 			return 0;
 		}
 
@@ -2256,8 +2252,6 @@ static uint16_t eth_ena_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
 			rte_atomic64_inc(&rx_ring->adapter->drv_stats->ierrors);
 			++rx_ring->rx_stats.bad_csum;
 		}
-
-		mbuf->hash.rss = ena_rx_ctx.hash;
 
 		rx_pkts[completed] = mbuf;
 		rx_ring->rx_stats.bytes += mbuf->pkt_len;
@@ -2373,8 +2367,8 @@ static void ena_update_hints(struct ena_adapter *adapter,
 	}
 }
 
-static int ena_check_and_linearize_mbuf(struct ena_ring *tx_ring,
-					struct rte_mbuf *mbuf)
+static int ena_check_space_and_linearize_mbuf(struct ena_ring *tx_ring,
+					      struct rte_mbuf *mbuf)
 {
 	struct ena_com_dev *ena_dev;
 	int num_segments, header_len, rc;
@@ -2384,13 +2378,21 @@ static int ena_check_and_linearize_mbuf(struct ena_ring *tx_ring,
 	header_len = mbuf->data_len;
 
 	if (likely(num_segments < tx_ring->sgl_size))
-		return 0;
+		goto checkspace;
 
 	if (ena_dev->tx_mem_queue_type == ENA_ADMIN_PLACEMENT_POLICY_DEV &&
 	    (num_segments == tx_ring->sgl_size) &&
 	    (header_len < tx_ring->tx_max_header_size))
-		return 0;
+		goto checkspace;
 
+	/* Checking for space for 2 additional metadata descriptors due to
+	 * possible header split and metadata descriptor. Linearization will
+	 * be needed so we reduce the segments number from num_segments to 1
+	 */
+	if (!ena_com_sq_have_enough_space(tx_ring->ena_com_io_sq, 3)) {
+		PMD_DRV_LOG(DEBUG, "Not enough space in the tx queue\n");
+		return ENA_COM_NO_MEM;
+	}
 	++tx_ring->tx_stats.linearize;
 	rc = rte_pktmbuf_linearize(mbuf);
 	if (unlikely(rc)) {
@@ -2400,7 +2402,19 @@ static int ena_check_and_linearize_mbuf(struct ena_ring *tx_ring,
 		return rc;
 	}
 
-	return rc;
+	return 0;
+
+checkspace:
+	/* Checking for space for 2 additional metadata descriptors due to
+	 * possible header split and metadata descriptor
+	 */
+	if (!ena_com_sq_have_enough_space(tx_ring->ena_com_io_sq,
+					  num_segments + 2)) {
+		PMD_DRV_LOG(DEBUG, "Not enough space in the tx queue\n");
+		return ENA_COM_NO_MEM;
+	}
+
+	return 0;
 }
 
 static void ena_tx_map_mbuf(struct ena_ring *tx_ring,
@@ -2487,7 +2501,7 @@ static int ena_xmit_mbuf(struct ena_ring *tx_ring, struct rte_mbuf *mbuf)
 	int nb_hw_desc;
 	int rc;
 
-	rc = ena_check_and_linearize_mbuf(tx_ring, mbuf);
+	rc = ena_check_space_and_linearize_mbuf(tx_ring, mbuf);
 	if (unlikely(rc))
 		return rc;
 
@@ -2515,6 +2529,8 @@ static int ena_xmit_mbuf(struct ena_ring *tx_ring, struct rte_mbuf *mbuf)
 			"llq tx max burst size of queue %d achieved, writing doorbell to send burst\n",
 			tx_ring->id);
 		ena_com_write_sq_doorbell(tx_ring->ena_com_io_sq);
+		tx_ring->tx_stats.doorbells++;
+		tx_ring->pkts_without_db = false;
 	}
 
 	/* prepare the packet's descriptors to dma engine */
@@ -2593,13 +2609,10 @@ static uint16_t eth_ena_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 		return 0;
 	}
 
-	nb_pkts = RTE_MIN(ena_com_free_q_entries(tx_ring->ena_com_io_sq),
-		nb_pkts);
-
 	for (sent_idx = 0; sent_idx < nb_pkts; sent_idx++) {
 		if (ena_xmit_mbuf(tx_ring, tx_pkts[sent_idx]))
 			break;
-
+		tx_ring->pkts_without_db = true;
 		rte_prefetch0(tx_pkts[ENA_IDX_ADD_MASKED(sent_idx, 4,
 			tx_ring->size_mask)]);
 	}
@@ -2608,10 +2621,11 @@ static uint16_t eth_ena_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts,
 		ena_com_free_q_entries(tx_ring->ena_com_io_sq);
 
 	/* If there are ready packets to be xmitted... */
-	if (sent_idx > 0) {
+	if (likely(tx_ring->pkts_without_db)) {
 		/* ...let HW do its best :-) */
 		ena_com_write_sq_doorbell(tx_ring->ena_com_io_sq);
 		tx_ring->tx_stats.doorbells++;
+		tx_ring->pkts_without_db = false;
 	}
 
 	ena_tx_cleanup(tx_ring);
@@ -2857,7 +2871,7 @@ static int ena_process_bool_devarg(const char *key,
 	}
 
 	/* Now, assign it to the proper adapter field. */
-	if (strcmp(key, ENA_DEVARG_LARGE_LLQ_HDR))
+	if (strcmp(key, ENA_DEVARG_LARGE_LLQ_HDR) == 0)
 		adapter->use_large_llq_hdr = bool_value;
 
 	return 0;
@@ -2868,6 +2882,7 @@ static int ena_parse_devargs(struct ena_adapter *adapter,
 {
 	static const char * const allowed_args[] = {
 		ENA_DEVARG_LARGE_LLQ_HDR,
+		NULL,
 	};
 	struct rte_kvargs *kvlist;
 	int rc;
@@ -2965,7 +2980,7 @@ static void ena_notification(void *data,
 			aenq_e->aenq_common_desc.group,
 			ENA_ADMIN_NOTIFICATION);
 
-	switch (aenq_e->aenq_common_desc.syndrom) {
+	switch (aenq_e->aenq_common_desc.syndrome) {
 	case ENA_ADMIN_UPDATE_HINTS:
 		hints = (struct ena_admin_ena_hw_hints *)
 			(&aenq_e->inline_data_w4);
@@ -2973,7 +2988,7 @@ static void ena_notification(void *data,
 		break;
 	default:
 		PMD_DRV_LOG(ERR, "Invalid aenq notification link state %d\n",
-			aenq_e->aenq_common_desc.syndrom);
+			aenq_e->aenq_common_desc.syndrome);
 	}
 }
 

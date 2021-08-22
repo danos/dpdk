@@ -183,8 +183,6 @@ nic_stats_display(portid_t port_id)
 								diff_ns;
 	uint64_t mpps_rx, mpps_tx, mbps_rx, mbps_tx;
 	struct rte_eth_stats stats;
-	struct rte_port *port = &ports[port_id];
-	uint8_t i;
 
 	static const char *nic_stats_border = "########################";
 
@@ -196,46 +194,12 @@ nic_stats_display(portid_t port_id)
 	printf("\n  %s NIC statistics for port %-2d %s\n",
 	       nic_stats_border, port_id, nic_stats_border);
 
-	if ((!port->rx_queue_stats_mapping_enabled) && (!port->tx_queue_stats_mapping_enabled)) {
-		printf("  RX-packets: %-10"PRIu64" RX-missed: %-10"PRIu64" RX-bytes:  "
-		       "%-"PRIu64"\n",
-		       stats.ipackets, stats.imissed, stats.ibytes);
-		printf("  RX-errors: %-"PRIu64"\n", stats.ierrors);
-		printf("  RX-nombuf:  %-10"PRIu64"\n",
-		       stats.rx_nombuf);
-		printf("  TX-packets: %-10"PRIu64" TX-errors: %-10"PRIu64" TX-bytes:  "
-		       "%-"PRIu64"\n",
-		       stats.opackets, stats.oerrors, stats.obytes);
-	}
-	else {
-		printf("  RX-packets:              %10"PRIu64"    RX-errors: %10"PRIu64
-		       "    RX-bytes: %10"PRIu64"\n",
-		       stats.ipackets, stats.ierrors, stats.ibytes);
-		printf("  RX-errors:  %10"PRIu64"\n", stats.ierrors);
-		printf("  RX-nombuf:               %10"PRIu64"\n",
-		       stats.rx_nombuf);
-		printf("  TX-packets:              %10"PRIu64"    TX-errors: %10"PRIu64
-		       "    TX-bytes: %10"PRIu64"\n",
-		       stats.opackets, stats.oerrors, stats.obytes);
-	}
-
-	if (port->rx_queue_stats_mapping_enabled) {
-		printf("\n");
-		for (i = 0; i < RTE_ETHDEV_QUEUE_STAT_CNTRS; i++) {
-			printf("  Stats reg %2d RX-packets: %10"PRIu64
-			       "    RX-errors: %10"PRIu64
-			       "    RX-bytes: %10"PRIu64"\n",
-			       i, stats.q_ipackets[i], stats.q_errors[i], stats.q_ibytes[i]);
-		}
-	}
-	if (port->tx_queue_stats_mapping_enabled) {
-		printf("\n");
-		for (i = 0; i < RTE_ETHDEV_QUEUE_STAT_CNTRS; i++) {
-			printf("  Stats reg %2d TX-packets: %10"PRIu64
-			       "                             TX-bytes: %10"PRIu64"\n",
-			       i, stats.q_opackets[i], stats.q_obytes[i]);
-		}
-	}
+	printf("  RX-packets: %-10"PRIu64" RX-missed: %-10"PRIu64" RX-bytes:  "
+	       "%-"PRIu64"\n", stats.ipackets, stats.imissed, stats.ibytes);
+	printf("  RX-errors: %-"PRIu64"\n", stats.ierrors);
+	printf("  RX-nombuf:  %-10"PRIu64"\n", stats.rx_nombuf);
+	printf("  TX-packets: %-10"PRIu64" TX-errors: %-10"PRIu64" TX-bytes:  "
+	       "%-"PRIu64"\n", stats.opackets, stats.oerrors, stats.obytes);
 
 	diff_ns = 0;
 	if (clock_gettime(CLOCK_TYPE_ID, &cur_time) == 0) {
@@ -396,54 +360,6 @@ nic_xstats_clear(portid_t port_id)
 		       __func__, port_id, strerror(ret));
 		return;
 	}
-}
-
-void
-nic_stats_mapping_display(portid_t port_id)
-{
-	struct rte_port *port = &ports[port_id];
-	uint16_t i;
-
-	static const char *nic_stats_mapping_border = "########################";
-
-	if (port_id_is_invalid(port_id, ENABLED_WARN)) {
-		print_valid_ports();
-		return;
-	}
-
-	if ((!port->rx_queue_stats_mapping_enabled) && (!port->tx_queue_stats_mapping_enabled)) {
-		printf("Port id %d - either does not support queue statistic mapping or"
-		       " no queue statistic mapping set\n", port_id);
-		return;
-	}
-
-	printf("\n  %s NIC statistics mapping for port %-2d %s\n",
-	       nic_stats_mapping_border, port_id, nic_stats_mapping_border);
-
-	if (port->rx_queue_stats_mapping_enabled) {
-		for (i = 0; i < nb_rx_queue_stats_mappings; i++) {
-			if (rx_queue_stats_mappings[i].port_id == port_id) {
-				printf("  RX-queue %2d mapped to Stats Reg %2d\n",
-				       rx_queue_stats_mappings[i].queue_id,
-				       rx_queue_stats_mappings[i].stats_counter_id);
-			}
-		}
-		printf("\n");
-	}
-
-
-	if (port->tx_queue_stats_mapping_enabled) {
-		for (i = 0; i < nb_tx_queue_stats_mappings; i++) {
-			if (tx_queue_stats_mappings[i].port_id == port_id) {
-				printf("  TX-queue %2d mapped to Stats Reg %2d\n",
-				       tx_queue_stats_mappings[i].queue_id,
-				       tx_queue_stats_mappings[i].stats_counter_id);
-			}
-		}
-	}
-
-	printf("  %s####################################%s\n",
-	       nic_stats_mapping_border, nic_stats_mapping_border);
 }
 
 void
@@ -1518,7 +1434,7 @@ port_mtu_set(portid_t port_id, uint16_t mtu)
 		 * device supports jumbo frame.
 		 */
 		eth_overhead = dev_info.max_rx_pktlen - dev_info.max_mtu;
-		if (mtu > RTE_ETHER_MAX_LEN - eth_overhead) {
+		if (mtu > RTE_ETHER_MTU) {
 			rte_port->dev_conf.rxmode.offloads |=
 						DEV_RX_OFFLOAD_JUMBO_FRAME;
 			rte_port->dev_conf.rxmode.max_rx_pkt_len =
@@ -1963,6 +1879,7 @@ port_shared_action_query(portid_t port_id, uint32_t id)
 		return -EINVAL;
 	switch (psa->type) {
 	case RTE_FLOW_ACTION_TYPE_RSS:
+	case RTE_FLOW_ACTION_TYPE_AGE:
 		data = &default_data;
 		break;
 	default:
@@ -1979,6 +1896,20 @@ port_shared_action_query(portid_t port_id, uint32_t id)
 			       *((uint32_t *)data));
 		data = NULL;
 		break;
+	case RTE_FLOW_ACTION_TYPE_AGE:
+		if (!ret) {
+			struct rte_flow_query_age *resp = data;
+
+			printf("AGE:\n"
+			       " aged: %u\n"
+			       " sec_since_last_hit_valid: %u\n"
+			       " sec_since_last_hit: %" PRIu32 "\n",
+			       resp->aged,
+			       resp->sec_since_last_hit_valid,
+			       resp->sec_since_last_hit);
+		}
+		data = NULL;
+		break;
 	default:
 		printf("Shared action %u (type: %d) on port %u doesn't support"
 		       " query\n", id, psa->type, port_id);
@@ -1986,6 +1917,7 @@ port_shared_action_query(portid_t port_id, uint32_t id)
 	}
 	return ret;
 }
+
 static struct port_flow_tunnel *
 port_flow_tunnel_offload_cmd_prep(portid_t port_id,
 				  const struct rte_flow_item *pattern,
@@ -2183,6 +2115,9 @@ port_flow_create(portid_t port_id,
 	memset(&error, 0x22, sizeof(error));
 	flow = rte_flow_create(port_id, attr, pattern, actions, &error);
 	if (!flow) {
+		if (tunnel_ops->enabled)
+			port_flow_tunnel_offload_cmd_release(port_id,
+							     tunnel_ops, pft);
 		free(pf);
 		return port_flow_complain(&error);
 	}
@@ -2573,7 +2508,7 @@ tx_queue_id_is_invalid(queueid_t txq_id)
 {
 	if (txq_id < nb_txq)
 		return 0;
-	printf("Invalid TX queue %d (must be < nb_rxq=%d)\n", txq_id, nb_txq);
+	printf("Invalid TX queue %d (must be < nb_txq=%d)\n", txq_id, nb_txq);
 	return 1;
 }
 
@@ -3031,7 +2966,7 @@ port_rss_hash_conf_show(portid_t port_id, int show_rss_key)
 
 void
 port_rss_hash_key_update(portid_t port_id, char rss_type[], uint8_t *hash_key,
-			 uint hash_key_len)
+			 uint8_t hash_key_len)
 {
 	struct rte_eth_rss_conf rss_conf;
 	int diag;
@@ -3221,6 +3156,21 @@ rss_fwd_config_setup(void)
 	}
 }
 
+static uint16_t
+get_fwd_port_total_tc_num(void)
+{
+	struct rte_eth_dcb_info dcb_info;
+	uint16_t total_tc_num = 0;
+	unsigned int i;
+
+	for (i = 0; i < nb_fwd_ports; i++) {
+		(void)rte_eth_dev_get_dcb_info(fwd_ports_ids[i], &dcb_info);
+		total_tc_num += dcb_info.nb_tcs;
+	}
+
+	return total_tc_num;
+}
+
 /**
  * For the DCB forwarding test, each core is assigned on each traffic class.
  *
@@ -3240,12 +3190,42 @@ dcb_fwd_config_setup(void)
 	lcoreid_t  lc_id;
 	uint16_t nb_rx_queue, nb_tx_queue;
 	uint16_t i, j, k, sm_id = 0;
+	uint16_t total_tc_num;
+	struct rte_port *port;
 	uint8_t tc = 0;
+	portid_t pid;
+	int ret;
+
+	/*
+	 * The fwd_config_setup() is called when the port is RTE_PORT_STARTED
+	 * or RTE_PORT_STOPPED.
+	 *
+	 * Re-configure ports to get updated mapping between tc and queue in
+	 * case the queue number of the port is changed. Skip for started ports
+	 * since modifying queue number and calling dev_configure need to stop
+	 * ports first.
+	 */
+	for (pid = 0; pid < nb_fwd_ports; pid++) {
+		if (port_is_started(pid) == 1)
+			continue;
+
+		port = &ports[pid];
+		ret = rte_eth_dev_configure(pid, nb_rxq, nb_txq,
+					    &port->dev_conf);
+		if (ret < 0) {
+			printf("Failed to re-configure port %d, ret = %d.\n",
+				pid, ret);
+			return;
+		}
+	}
 
 	cur_fwd_config.nb_fwd_lcores = (lcoreid_t) nb_fwd_lcores;
 	cur_fwd_config.nb_fwd_ports = nb_fwd_ports;
 	cur_fwd_config.nb_fwd_streams =
 		(streamid_t) (nb_rxq * cur_fwd_config.nb_fwd_ports);
+	total_tc_num = get_fwd_port_total_tc_num();
+	if (cur_fwd_config.nb_fwd_lcores > total_tc_num)
+		cur_fwd_config.nb_fwd_lcores = total_tc_num;
 
 	/* reinitialize forwarding streams */
 	init_fwd_streams();
@@ -3367,6 +3347,10 @@ icmp_echo_config_setup(void)
 void
 fwd_config_setup(void)
 {
+	struct rte_port *port;
+	portid_t pt_id;
+	unsigned int i;
+
 	cur_fwd_config.fwd_eng = cur_fwd_eng;
 	if (strcmp(cur_fwd_eng->fwd_mode_name, "icmpecho") == 0) {
 		icmp_echo_config_setup();
@@ -3374,9 +3358,24 @@ fwd_config_setup(void)
 	}
 
 	if ((nb_rxq > 1) && (nb_txq > 1)){
-		if (dcb_config)
+		if (dcb_config) {
+			for (i = 0; i < nb_fwd_ports; i++) {
+				pt_id = fwd_ports_ids[i];
+				port = &ports[pt_id];
+				if (!port->dcb_flag) {
+					printf("In DCB mode, all forwarding ports must "
+						"be configured in this mode.\n");
+					return;
+				}
+			}
+			if (nb_fwd_lcores == 1) {
+				printf("In DCB mode,the nb forwarding cores "
+					"should be larger than 1.\n");
+				return;
+			}
+
 			dcb_fwd_config_setup();
-		else
+		} else
 			rss_fwd_config_setup();
 	}
 	else
@@ -3785,7 +3784,7 @@ show_fec_capability(unsigned int num, struct rte_eth_fec_capa *speed_fec_capa)
 		printf("%s : ",
 			rte_eth_link_speed_to_str(speed_fec_capa[i].speed));
 
-		for (j = RTE_ETH_FEC_AUTO; j < RTE_DIM(fec_mode_name); j++) {
+		for (j = 0; j < RTE_DIM(fec_mode_name); j++) {
 			if (RTE_ETH_FEC_MODE_TO_CAPA(j) &
 						speed_fec_capa[i].capa)
 				printf("%s ", fec_mode_name[j].name);
@@ -3910,13 +3909,15 @@ nb_segs_is_invalid(unsigned int nb_segs)
 	RTE_ETH_FOREACH_DEV(port_id) {
 		for (queue_id = 0; queue_id < nb_txq; queue_id++) {
 			ret = get_tx_ring_size(port_id, queue_id, &ring_size);
-
-			if (ret)
-				return true;
-
+			if (ret) {
+				/* Port may not be initialized yet, can't say
+				 * the port is invalid in this stage.
+				 */
+				continue;
+			}
 			if (ring_size < nb_segs) {
-				printf("nb segments per TX packets=%u >= "
-				       "TX queue(%u) ring_size=%u - ignored\n",
+				printf("nb segments per TX packets=%u >= TX "
+				       "queue(%u) ring_size=%u - txpkts ignored\n",
 				       nb_segs, queue_id, ring_size);
 				return true;
 			}
@@ -3932,12 +3933,26 @@ set_tx_pkt_segments(unsigned int *seg_lengths, unsigned int nb_segs)
 	uint16_t tx_pkt_len;
 	unsigned int i;
 
-	if (nb_segs_is_invalid(nb_segs))
+	/*
+	 * For single segment settings failed check is ignored.
+	 * It is a very basic capability to send the single segment
+	 * packets, suppose it is always supported.
+	 */
+	if (nb_segs > 1 && nb_segs_is_invalid(nb_segs)) {
+		printf("Tx segment size(%u) is not supported - txpkts ignored\n",
+			nb_segs);
 		return;
+	}
+
+	if (nb_segs > RTE_MAX_SEGS_PER_PKT) {
+		printf("Tx segment size(%u) is bigger than max number of segment(%u)\n",
+			nb_segs, RTE_MAX_SEGS_PER_PKT);
+		return;
+	}
 
 	/*
 	 * Check that each segment length is greater or equal than
-	 * the mbuf data sise.
+	 * the mbuf data size.
 	 * Check also that the total packet length is greater or equal than the
 	 * size of an empty UDP/IP packet (sizeof(struct rte_ether_hdr) +
 	 * 20 + 8).
@@ -4528,8 +4543,7 @@ tx_vlan_pvid_set(portid_t port_id, uint16_t vlan_id, int on)
 void
 set_qmap(portid_t port_id, uint8_t is_rx, uint16_t queue_id, uint8_t map_value)
 {
-	uint16_t i;
-	uint8_t existing_mapping_found = 0;
+	int ret;
 
 	if (port_id_is_invalid(port_id, ENABLED_WARN))
 		return;
@@ -4539,40 +4553,23 @@ set_qmap(portid_t port_id, uint8_t is_rx, uint16_t queue_id, uint8_t map_value)
 
 	if (map_value >= RTE_ETHDEV_QUEUE_STAT_CNTRS) {
 		printf("map_value not in required range 0..%d\n",
-				RTE_ETHDEV_QUEUE_STAT_CNTRS - 1);
+		       RTE_ETHDEV_QUEUE_STAT_CNTRS - 1);
 		return;
 	}
 
-	if (!is_rx) { /*then tx*/
-		for (i = 0; i < nb_tx_queue_stats_mappings; i++) {
-			if ((tx_queue_stats_mappings[i].port_id == port_id) &&
-			    (tx_queue_stats_mappings[i].queue_id == queue_id)) {
-				tx_queue_stats_mappings[i].stats_counter_id = map_value;
-				existing_mapping_found = 1;
-				break;
-			}
+	if (!is_rx) { /* tx */
+		ret = rte_eth_dev_set_tx_queue_stats_mapping(port_id, queue_id,
+							     map_value);
+		if (ret) {
+			printf("failed to set tx queue stats mapping.\n");
+			return;
 		}
-		if (!existing_mapping_found) { /* A new additional mapping... */
-			tx_queue_stats_mappings[nb_tx_queue_stats_mappings].port_id = port_id;
-			tx_queue_stats_mappings[nb_tx_queue_stats_mappings].queue_id = queue_id;
-			tx_queue_stats_mappings[nb_tx_queue_stats_mappings].stats_counter_id = map_value;
-			nb_tx_queue_stats_mappings++;
-		}
-	}
-	else { /*rx*/
-		for (i = 0; i < nb_rx_queue_stats_mappings; i++) {
-			if ((rx_queue_stats_mappings[i].port_id == port_id) &&
-			    (rx_queue_stats_mappings[i].queue_id == queue_id)) {
-				rx_queue_stats_mappings[i].stats_counter_id = map_value;
-				existing_mapping_found = 1;
-				break;
-			}
-		}
-		if (!existing_mapping_found) { /* A new additional mapping... */
-			rx_queue_stats_mappings[nb_rx_queue_stats_mappings].port_id = port_id;
-			rx_queue_stats_mappings[nb_rx_queue_stats_mappings].queue_id = queue_id;
-			rx_queue_stats_mappings[nb_rx_queue_stats_mappings].stats_counter_id = map_value;
-			nb_rx_queue_stats_mappings++;
+	} else { /* rx */
+		ret = rte_eth_dev_set_rx_queue_stats_mapping(port_id, queue_id,
+							     map_value);
+		if (ret) {
+			printf("failed to set rx queue stats mapping.\n");
+			return;
 		}
 	}
 }
@@ -5305,7 +5302,8 @@ show_macs(portid_t port_id)
 
 	dev = &rte_eth_devices[port_id];
 
-	rte_eth_dev_info_get(port_id, &dev_info);
+	if (eth_dev_info_get_print_err(port_id, &dev_info))
+		return;
 
 	for (i = 0; i < dev_info.max_mac_addrs; i++) {
 		addr = &dev->data->mac_addrs[i];

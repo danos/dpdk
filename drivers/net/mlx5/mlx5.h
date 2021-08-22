@@ -135,9 +135,9 @@ struct mlx5_local_data {
 extern struct mlx5_shared_data *mlx5_shared_data;
 
 /* Dev ops structs */
-extern const struct eth_dev_ops mlx5_os_dev_ops;
-extern const struct eth_dev_ops mlx5_os_dev_sec_ops;
-extern const struct eth_dev_ops mlx5_os_dev_ops_isolate;
+extern const struct eth_dev_ops mlx5_dev_ops;
+extern const struct eth_dev_ops mlx5_dev_sec_ops;
+extern const struct eth_dev_ops mlx5_dev_ops_isolate;
 
 struct mlx5_counter_ctrl {
 	/* Name of the counter. */
@@ -207,7 +207,6 @@ struct mlx5_dev_config {
 	unsigned int mpls_en:1; /* MPLS over GRE/UDP is enabled. */
 	unsigned int cqe_comp:1; /* CQE compression is enabled. */
 	unsigned int cqe_comp_fmt:3; /* CQE compression format. */
-	unsigned int cqe_pad:1; /* CQE padding is enabled. */
 	unsigned int tso:1; /* Whether TSO is supported. */
 	unsigned int rx_vec_en:1; /* Rx vector is enabled. */
 	unsigned int mr_ext_memseg_en:1;
@@ -258,34 +257,23 @@ struct mlx5_dev_config {
 };
 
 
-/**
- * Type of object being allocated.
- */
-enum mlx5_verbs_alloc_type {
-	MLX5_VERBS_ALLOC_TYPE_NONE,
-	MLX5_VERBS_ALLOC_TYPE_TX_QUEUE,
-	MLX5_VERBS_ALLOC_TYPE_RX_QUEUE,
-};
-
 /* Structure for VF VLAN workaround. */
 struct mlx5_vf_vlan {
 	uint32_t tag:12;
 	uint32_t created:1;
 };
 
-/**
- * Verbs allocator needs a context to know in the callback which kind of
- * resources it is allocating.
- */
-struct mlx5_verbs_alloc_ctx {
-	enum mlx5_verbs_alloc_type type; /* Kind of object being allocated. */
-	const void *obj; /* Pointer to the DPDK object. */
-};
-
 /* Flow drop context necessary due to Verbs API. */
 struct mlx5_drop {
 	struct mlx5_hrxq *hrxq; /* Hash Rx queue queue. */
 	struct mlx5_rxq_obj *rxq; /* Rx queue object. */
+};
+
+/* Loopback dummy queue resources required due to Verbs API. */
+struct mlx5_lb_ctx {
+	struct ibv_qp *qp; /* QP object. */
+	void *ibv_cq; /* Completion queue. */
+	uint16_t refcnt; /* Reference count for representors. */
 };
 
 #define MLX5_COUNTERS_PER_POOL 512
@@ -557,6 +545,8 @@ struct mlx5_aso_age_mng {
 #define MLX5_AGE_TRIGGER		2
 #define MLX5_AGE_SET(age_info, BIT) \
 	((age_info)->flags |= (1 << (BIT)))
+#define MLX5_AGE_UNSET(age_info, BIT) \
+	((age_info)->flags &= ~(1 << (BIT)))
 #define MLX5_AGE_GET(age_info, BIT) \
 	((age_info)->flags & (1 << (BIT)))
 #define GET_PORT_AGE_INFO(priv) \
@@ -708,6 +698,9 @@ struct mlx5_dev_ctx_shared {
 	uint16_t bond_dev; /* Bond primary device id. */
 	uint32_t devx:1; /* Opened with DV. */
 	uint32_t flow_hit_aso_en:1; /* Flow Hit ASO is supported. */
+	uint32_t rq_ts_format:2; /* RQ timestamp formats supported. */
+	uint32_t sq_ts_format:2; /* SQ timestamp formats supported. */
+	uint32_t qp_ts_format:2; /* QP timestamp formats supported. */
 	uint32_t eqn; /* Event Queue number. */
 	uint32_t max_port; /* Maximal IB device port index. */
 	void *ctx; /* Verbs/DV/DevX context. */
@@ -738,7 +731,7 @@ struct mlx5_dev_ctx_shared {
 	struct mlx5_hlist *flow_tbls;
 	struct mlx5_flow_tunnel_hub *tunnel_hub;
 	/* Direct Rules tables for FDB, NIC TX+RX */
-	void *esw_drop_action; /* Pointer to DR E-Switch drop action. */
+	void *dr_drop_action; /* Pointer to DR drop action, any domain. */
 	void *pop_vlan_action; /* Pointer to DR pop VLAN action. */
 	struct mlx5_hlist *encaps_decaps; /* Encap/decap action hash list. */
 	struct mlx5_hlist *modify_cmds;
@@ -765,10 +758,14 @@ struct mlx5_dev_ctx_shared {
 	void *devx_rx_uar; /* DevX UAR for Rx. */
 	struct mlx5_aso_age_mng *aso_age_mng;
 	/* Management data for aging mechanism using ASO Flow Hit. */
+	struct mlx5_lb_ctx self_lb; /* QP to enable self loopback for Devx. */
 	struct mlx5_dev_shared_port port[]; /* per device port data array. */
 };
 
-/* Per-process private structure. */
+/*
+ * Per-process private structure.
+ * Caution, secondary process may rebuild the struct during port start.
+ */
 struct mlx5_proc_priv {
 	size_t uar_table_sz;
 	/* Size of UAR register table. */
@@ -926,6 +923,8 @@ struct mlx5_obj_ops {
 	int (*txq_obj_modify)(struct mlx5_txq_obj *obj,
 			      enum mlx5_txq_modify_type type, uint8_t dev_port);
 	void (*txq_obj_release)(struct mlx5_txq_obj *txq_obj);
+	int (*lb_dummy_queue_create)(struct rte_eth_dev *dev);
+	void (*lb_dummy_queue_release)(struct rte_eth_dev *dev);
 };
 
 #define MLX5_RSS_HASH_FIELDS_LEN RTE_DIM(mlx5_rss_hash_fields)
@@ -949,6 +948,7 @@ struct mlx5_priv {
 	unsigned int mtr_en:1; /* Whether support meter. */
 	unsigned int mtr_reg_share:1; /* Whether support meter REG_C share. */
 	unsigned int sampler_en:1; /* Whether support sampler. */
+	unsigned int lb_used:1; /* Loopback queue is referred to. */
 	uint16_t domain_id; /* Switch domain identifier. */
 	uint16_t vport_id; /* Associated VF vport index (if any). */
 	uint32_t vport_meta_tag; /* Used for vport index match ove VF LAG. */
@@ -957,7 +957,7 @@ struct mlx5_priv {
 	int32_t pf_bond; /* >=0 means PF index in bonding configuration. */
 	unsigned int if_index; /* Associated kernel network device index. */
 	uint32_t bond_ifindex; /**< Bond interface index. */
-	char bond_name[IF_NAMESIZE]; /**< Bond interface name. */
+	char bond_name[MLX5_NAMESIZE]; /**< Bond interface name. */
 	/* RX/TX queues. */
 	unsigned int rxqs_n; /* RX queues array size. */
 	unsigned int txqs_n; /* TX queues array size. */
@@ -989,7 +989,6 @@ struct mlx5_priv {
 	struct mlx5_xstats_ctrl xstats_ctrl; /* Extended stats control. */
 	struct mlx5_stats_ctrl stats_ctrl; /* Stats control. */
 	struct mlx5_dev_config config; /* Device configuration. */
-	struct mlx5_verbs_alloc_ctx verbs_alloc_ctx;
 	/* Context for Verbs allocator. */
 	int nl_socket_rdma; /* Netlink socket (NETLINK_RDMA). */
 	int nl_socket_route; /* Netlink socket (NETLINK_ROUTE). */
@@ -1024,6 +1023,7 @@ struct rte_hairpin_peer_info {
 
 int mlx5_getenv_int(const char *);
 int mlx5_proc_priv_init(struct rte_eth_dev *dev);
+void mlx5_proc_priv_uninit(struct rte_eth_dev *dev);
 int mlx5_udp_tunnel_port_add(struct rte_eth_dev *dev,
 			      struct rte_eth_udp_tunnel *udp_tunnel);
 uint16_t mlx5_eth_find_next(uint16_t port_id, struct rte_pci_device *pci_dev);
@@ -1075,6 +1075,8 @@ int mlx5_dev_configure_rss_reta(struct rte_eth_dev *dev);
 
 /* mlx5_ethdev_os.c */
 
+int mlx5_get_ifname(const struct rte_eth_dev *dev,
+			char (*ifname)[MLX5_NAMESIZE]);
 unsigned int mlx5_ifindex(const struct rte_eth_dev *dev);
 int mlx5_get_mac(struct rte_eth_dev *dev, uint8_t (*mac)[RTE_ETHER_ADDR_LEN]);
 int mlx5_get_mtu(struct rte_eth_dev *dev, uint16_t *mtu);
@@ -1228,8 +1230,6 @@ int mlx5_ctrl_flow(struct rte_eth_dev *dev,
 		   struct rte_flow_item_eth *eth_mask);
 int mlx5_flow_lacp_miss(struct rte_eth_dev *dev);
 struct rte_flow *mlx5_flow_create_esw_table_zero_flow(struct rte_eth_dev *dev);
-int mlx5_flow_create_drop_queue(struct rte_eth_dev *dev);
-void mlx5_flow_delete_drop_queue(struct rte_eth_dev *dev);
 void mlx5_flow_async_pool_query_handle(struct mlx5_dev_ctx_shared *sh,
 				       uint64_t async_id, int status);
 void mlx5_set_query_alarm(struct mlx5_dev_ctx_shared *sh);

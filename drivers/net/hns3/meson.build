@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-# Copyright(c) 2018-2019 Hisilicon Limited
+# Copyright(c) 2018-2021 Hisilicon Limited
 
 if not is_linux
 	build = false
@@ -32,7 +32,6 @@ deps += ['hash']
 if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
 	sources += files('hns3_rxtx_vec.c')
 	if cc.get_define('__ARM_FEATURE_SVE', args: machine_args) != ''
-		cflags = ['-DCC_SVE_SUPPORT']
 		sources += files('hns3_rxtx_vec_sve.c')
 	endif
 endif

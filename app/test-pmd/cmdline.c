@@ -163,7 +163,7 @@ static void cmd_help_long_parsed(void *parsed_result,
 			"Display:\n"
 			"--------\n\n"
 
-			"show port (info|stats|summary|xstats|fdir|stat_qmap|dcb_tc|cap) (port_id|all)\n"
+			"show port (info|stats|summary|xstats|fdir|dcb_tc|cap) (port_id|all)\n"
 			"    Display information for port_id, or all.\n\n"
 
 			"show port port_id (module_eeprom|eeprom)\n"
@@ -177,7 +177,7 @@ static void cmd_help_long_parsed(void *parsed_result,
 			"show port (port_id) rss-hash [key]\n"
 			"    Display the RSS hash functions and RSS hash key of port\n\n"
 
-			"clear port (info|stats|xstats|fdir|stat_qmap) (port_id|all)\n"
+			"clear port (info|stats|xstats|fdir) (port_id|all)\n"
 			"    Clear information for port_id, or all.\n\n"
 
 			"show (rxq|txq) info (port_id) (queue_id)\n"
@@ -1521,6 +1521,9 @@ parse_and_check_speed_duplex(char *speedstr, char *duplexstr, uint32_t *speed)
 		}
 	}
 
+	if (*speed != ETH_LINK_SPEED_AUTONEG)
+		*speed |= ETH_LINK_SPEED_FIXED;
+
 	return 0;
 }
 
@@ -1877,7 +1880,9 @@ cmd_config_max_pkt_len_parsed(void *parsed_result,
 				__rte_unused void *data)
 {
 	struct cmd_config_max_pkt_len_result *res = parsed_result;
+	uint32_t max_rx_pkt_len_backup = 0;
 	portid_t pid;
+	int ret;
 
 	if (!all_ports_stopped()) {
 		printf("Please stop all ports first\n");
@@ -1886,7 +1891,6 @@ cmd_config_max_pkt_len_parsed(void *parsed_result,
 
 	RTE_ETH_FOREACH_DEV(pid) {
 		struct rte_port *port = &ports[pid];
-		uint64_t rx_offloads = port->dev_conf.rxmode.offloads;
 
 		if (!strcmp(res->name, "max-pkt-len")) {
 			if (res->value < RTE_ETHER_MIN_LEN) {
@@ -1897,12 +1901,18 @@ cmd_config_max_pkt_len_parsed(void *parsed_result,
 			if (res->value == port->dev_conf.rxmode.max_rx_pkt_len)
 				return;
 
+			ret = eth_dev_info_get_print_err(pid, &port->dev_info);
+			if (ret != 0) {
+				printf("rte_eth_dev_info_get() failed for port %u\n",
+					pid);
+				return;
+			}
+
+			max_rx_pkt_len_backup = port->dev_conf.rxmode.max_rx_pkt_len;
+
 			port->dev_conf.rxmode.max_rx_pkt_len = res->value;
-			if (res->value > RTE_ETHER_MAX_LEN)
-				rx_offloads |= DEV_RX_OFFLOAD_JUMBO_FRAME;
-			else
-				rx_offloads &= ~DEV_RX_OFFLOAD_JUMBO_FRAME;
-			port->dev_conf.rxmode.offloads = rx_offloads;
+			if (update_jumbo_frame_offload(pid) != 0)
+				port->dev_conf.rxmode.max_rx_pkt_len = max_rx_pkt_len_backup;
 		} else {
 			printf("Unknown parameter\n");
 			return;
@@ -2798,6 +2808,10 @@ cmd_setup_rxtx_queue_parsed(
 		if (!numa_support || socket_id == NUMA_NO_CONFIG)
 			socket_id = port->socket_id;
 
+		if (port->nb_tx_desc[res->qid] < tx_pkt_nb_segs) {
+			printf("Failed to setup TX queue: not enough descriptors\n");
+			return;
+		}
 		ret = rte_eth_tx_queue_setup(res->portid,
 					     res->qid,
 					     port->nb_tx_desc[res->qid],
@@ -3782,6 +3796,7 @@ cmd_set_rxoffs_parsed(void *parsed_result,
 				  MAX_SEGS_BUFFER_SPLIT, seg_offsets, 0);
 	if (nb_segs > 0)
 		set_rx_pkt_offsets(seg_offsets, nb_segs);
+	cmd_reconfig_device_queue(RTE_PORT_ALL, 0, 1);
 }
 
 cmdline_parse_token_string_t cmd_set_rxoffs_keyword =
@@ -3828,6 +3843,7 @@ cmd_set_rxpkts_parsed(void *parsed_result,
 				  MAX_SEGS_BUFFER_SPLIT, seg_lengths, 0);
 	if (nb_segs > 0)
 		set_rx_pkt_segments(seg_lengths, nb_segs);
+	cmd_reconfig_device_queue(RTE_PORT_ALL, 0, 1);
 }
 
 cmdline_parse_token_string_t cmd_set_rxpkts_keyword =
@@ -4552,7 +4568,7 @@ cmd_config_queue_tx_offloads(struct rte_port *port)
 	int k;
 
 	/* Apply queue tx offloads configuration */
-	for (k = 0; k < port->dev_info.max_rx_queues; k++)
+	for (k = 0; k < port->dev_info.max_tx_queues; k++)
 		port->tx_conf[k].offloads =
 			port->dev_conf.txmode.offloads;
 }
@@ -7555,9 +7571,6 @@ static void cmd_showportall_parsed(void *parsed_result,
 		RTE_ETH_FOREACH_DEV(i)
 			fdir_get_infos(i);
 #endif
-	else if (!strcmp(res->what, "stat_qmap"))
-		RTE_ETH_FOREACH_DEV(i)
-			nic_stats_mapping_display(i);
 	else if (!strcmp(res->what, "dcb_tc"))
 		RTE_ETH_FOREACH_DEV(i)
 			port_dcb_info_display(i);
@@ -7573,14 +7586,14 @@ cmdline_parse_token_string_t cmd_showportall_port =
 	TOKEN_STRING_INITIALIZER(struct cmd_showportall_result, port, "port");
 cmdline_parse_token_string_t cmd_showportall_what =
 	TOKEN_STRING_INITIALIZER(struct cmd_showportall_result, what,
-				 "info#summary#stats#xstats#fdir#stat_qmap#dcb_tc#cap");
+				 "info#summary#stats#xstats#fdir#dcb_tc#cap");
 cmdline_parse_token_string_t cmd_showportall_all =
 	TOKEN_STRING_INITIALIZER(struct cmd_showportall_result, all, "all");
 cmdline_parse_inst_t cmd_showportall = {
 	.f = cmd_showportall_parsed,
 	.data = NULL,
 	.help_str = "show|clear port "
-		"info|summary|stats|xstats|fdir|stat_qmap|dcb_tc|cap all",
+		"info|summary|stats|xstats|fdir|dcb_tc|cap all",
 	.tokens = {
 		(void *)&cmd_showportall_show,
 		(void *)&cmd_showportall_port,
@@ -7622,8 +7635,6 @@ static void cmd_showport_parsed(void *parsed_result,
 	else if (!strcmp(res->what, "fdir"))
 		 fdir_get_infos(res->portnum);
 #endif
-	else if (!strcmp(res->what, "stat_qmap"))
-		nic_stats_mapping_display(res->portnum);
 	else if (!strcmp(res->what, "dcb_tc"))
 		port_dcb_info_display(res->portnum);
 	else if (!strcmp(res->what, "cap"))
@@ -7637,7 +7648,7 @@ cmdline_parse_token_string_t cmd_showport_port =
 	TOKEN_STRING_INITIALIZER(struct cmd_showport_result, port, "port");
 cmdline_parse_token_string_t cmd_showport_what =
 	TOKEN_STRING_INITIALIZER(struct cmd_showport_result, what,
-				 "info#summary#stats#xstats#fdir#stat_qmap#dcb_tc#cap");
+				 "info#summary#stats#xstats#fdir#dcb_tc#cap");
 cmdline_parse_token_num_t cmd_showport_portnum =
 	TOKEN_NUM_INITIALIZER(struct cmd_showport_result, portnum, RTE_UINT16);
 
@@ -7645,7 +7656,7 @@ cmdline_parse_inst_t cmd_showport = {
 	.f = cmd_showport_parsed,
 	.data = NULL,
 	.help_str = "show|clear port "
-		"info|summary|stats|xstats|fdir|stat_qmap|dcb_tc|cap "
+		"info|summary|stats|xstats|fdir|dcb_tc|cap "
 		"<port_id>",
 	.tokens = {
 		(void *)&cmd_showport_show,
@@ -9092,7 +9103,7 @@ cmdline_parse_inst_t cmd_vf_rate_limit = {
 
 /* *** CONFIGURE TUNNEL UDP PORT *** */
 struct cmd_tunnel_udp_config {
-	cmdline_fixed_string_t cmd;
+	cmdline_fixed_string_t rx_vxlan_port;
 	cmdline_fixed_string_t what;
 	uint16_t udp_port;
 	portid_t port_id;
@@ -9108,9 +9119,7 @@ cmd_tunnel_udp_config_parsed(void *parsed_result,
 	int ret;
 
 	tunnel_udp.udp_port = res->udp_port;
-
-	if (!strcmp(res->cmd, "rx_vxlan_port"))
-		tunnel_udp.prot_type = RTE_TUNNEL_TYPE_VXLAN;
+	tunnel_udp.prot_type = RTE_TUNNEL_TYPE_VXLAN;
 
 	if (!strcmp(res->what, "add"))
 		ret = rte_eth_dev_udp_tunnel_port_add(res->port_id,
@@ -9123,9 +9132,9 @@ cmd_tunnel_udp_config_parsed(void *parsed_result,
 		printf("udp tunneling add error: (%s)\n", strerror(-ret));
 }
 
-cmdline_parse_token_string_t cmd_tunnel_udp_config_cmd =
+cmdline_parse_token_string_t cmd_tunnel_udp_config_rx_vxlan_port =
 	TOKEN_STRING_INITIALIZER(struct cmd_tunnel_udp_config,
-				cmd, "rx_vxlan_port");
+				rx_vxlan_port, "rx_vxlan_port");
 cmdline_parse_token_string_t cmd_tunnel_udp_config_what =
 	TOKEN_STRING_INITIALIZER(struct cmd_tunnel_udp_config,
 				what, "add#rm");
@@ -9142,7 +9151,7 @@ cmdline_parse_inst_t cmd_tunnel_udp_config = {
 	.help_str = "rx_vxlan_port add|rm <udp_port> <port_id>: "
 		"Add/Remove a tunneling UDP port filter",
 	.tokens = {
-		(void *)&cmd_tunnel_udp_config_cmd,
+		(void *)&cmd_tunnel_udp_config_rx_vxlan_port,
 		(void *)&cmd_tunnel_udp_config_what,
 		(void *)&cmd_tunnel_udp_config_udp_port,
 		(void *)&cmd_tunnel_udp_config_port_id,
@@ -9548,7 +9557,7 @@ dump_socket_mem(FILE *f)
 	fprintf(f,
 		"Total   : size(M) total: %.6lf alloc: %.6lf(%.3lf%%) free: %.6lf \tcount alloc: %-4u free: %u\n",
 		(double)total / (1024 * 1024), (double)alloc / (1024 * 1024),
-		(double)alloc * 100 / (double)total,
+		total ? ((double)alloc * 100 / (double)total) : 0,
 		(double)free / (1024 * 1024),
 		n_alloc, n_free);
 	if (last_allocs)
@@ -16611,7 +16620,8 @@ cmd_show_rx_tx_desc_status_parsed(void *parsed_result,
 		rc = rte_eth_rx_descriptor_status(res->cmd_pid, res->cmd_qid,
 					     res->cmd_did);
 		if (rc < 0) {
-			printf("Invalid queueid = %d\n", res->cmd_qid);
+			printf("Invalid input: queue id = %d, desc id = %d\n",
+			       res->cmd_qid, res->cmd_did);
 			return;
 		}
 		if (rc == RTE_ETH_RX_DESC_AVAIL)
@@ -16624,7 +16634,8 @@ cmd_show_rx_tx_desc_status_parsed(void *parsed_result,
 		rc = rte_eth_tx_descriptor_status(res->cmd_pid, res->cmd_qid,
 					     res->cmd_did);
 		if (rc < 0) {
-			printf("Invalid queueid = %d\n", res->cmd_qid);
+			printf("Invalid input: queue id = %d, desc id = %d\n",
+			       res->cmd_qid, res->cmd_did);
 			return;
 		}
 		if (rc == RTE_ETH_TX_DESC_FULL)
@@ -17112,6 +17123,7 @@ cmdline_read_from_file(const char *filename)
 void
 prompt(void)
 {
+	int ret;
 	/* initialize non-constant commands */
 	cmd_set_fwd_mode_init();
 	cmd_set_fwd_retry_mode_init();
@@ -17119,15 +17131,23 @@ prompt(void)
 	testpmd_cl = cmdline_stdin_new(main_ctx, "testpmd> ");
 	if (testpmd_cl == NULL)
 		return;
+
+	ret = atexit(prompt_exit);
+	if (ret != 0)
+		printf("Cannot set exit function for cmdline\n");
+
 	cmdline_interact(testpmd_cl);
-	cmdline_stdin_exit(testpmd_cl);
+	if (ret != 0)
+		cmdline_stdin_exit(testpmd_cl);
 }
 
 void
 prompt_exit(void)
 {
-	if (testpmd_cl != NULL)
+	if (testpmd_cl != NULL) {
 		cmdline_quit(testpmd_cl);
+		cmdline_stdin_exit(testpmd_cl);
+	}
 }
 
 static void

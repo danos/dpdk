@@ -143,7 +143,7 @@ struct ethtool_link_settings {
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 int
-mlx5_get_ifname(const struct rte_eth_dev *dev, char (*ifname)[IF_NAMESIZE])
+mlx5_get_ifname(const struct rte_eth_dev *dev, char (*ifname)[MLX5_NAMESIZE])
 {
 	struct mlx5_priv *priv = dev->data->dev_private;
 	unsigned int ifindex;
@@ -151,7 +151,7 @@ mlx5_get_ifname(const struct rte_eth_dev *dev, char (*ifname)[IF_NAMESIZE])
 	MLX5_ASSERT(priv);
 	MLX5_ASSERT(priv->sh);
 	if (priv->bond_ifindex > 0) {
-		memcpy(ifname, priv->bond_name, IF_NAMESIZE);
+		memcpy(ifname, priv->bond_name, MLX5_NAMESIZE);
 		return 0;
 	}
 	ifindex = mlx5_ifindex(dev);
@@ -1169,7 +1169,7 @@ mlx5_get_module_info(struct rte_eth_dev *dev,
 	};
 	int ret = 0;
 
-	if (!dev || !modinfo) {
+	if (!dev) {
 		DRV_LOG(WARNING, "missing argument, cannot get module info");
 		rte_errno = EINVAL;
 		return -rte_errno;
@@ -1203,7 +1203,7 @@ int mlx5_get_module_eeprom(struct rte_eth_dev *dev,
 	struct ifreq ifr;
 	int ret = 0;
 
-	if (!dev || !info) {
+	if (!dev) {
 		DRV_LOG(WARNING, "missing argument, cannot get module eeprom");
 		rte_errno = EINVAL;
 		return -rte_errno;

@@ -673,9 +673,15 @@ static int bnxt_hwrm_ptp_qcfg(struct bnxt *bp)
 	return 0;
 }
 
-void bnxt_hwrm_free_vf_info(struct bnxt *bp)
+void bnxt_free_vf_info(struct bnxt *bp)
 {
 	int i;
+
+	if (bp->pf == NULL)
+		return;
+
+	if (bp->pf->vf_info == NULL)
+		return;
 
 	for (i = 0; i < bp->pf->max_vfs; i++) {
 		rte_free(bp->pf->vf_info[i].vlan_table);
@@ -687,6 +693,50 @@ void bnxt_hwrm_free_vf_info(struct bnxt *bp)
 	bp->pf->vf_info = NULL;
 }
 
+static int bnxt_alloc_vf_info(struct bnxt *bp, uint16_t max_vfs)
+{
+	struct bnxt_child_vf_info *vf_info = bp->pf->vf_info;
+	int i;
+
+	if (vf_info)
+		bnxt_free_vf_info(bp);
+
+	vf_info = rte_zmalloc("bnxt_vf_info", sizeof(*vf_info) * max_vfs, 0);
+	if (vf_info == NULL) {
+		PMD_DRV_LOG(ERR, "Failed to alloc vf info\n");
+		return -ENOMEM;
+	}
+
+	bp->pf->max_vfs = max_vfs;
+	for (i = 0; i < max_vfs; i++) {
+		vf_info[i].fid = bp->pf->first_vf_id + i;
+		vf_info[i].vlan_table = rte_zmalloc("VF VLAN table",
+						    getpagesize(), getpagesize());
+		if (vf_info[i].vlan_table == NULL) {
+			PMD_DRV_LOG(ERR, "Failed to alloc VLAN table for VF %d\n", i);
+			goto err;
+		}
+		rte_mem_lock_page(vf_info[i].vlan_table);
+
+		vf_info[i].vlan_as_table = rte_zmalloc("VF VLAN AS table",
+						       getpagesize(), getpagesize());
+		if (vf_info[i].vlan_as_table == NULL) {
+			PMD_DRV_LOG(ERR, "Failed to alloc VLAN AS table for VF %d\n", i);
+			goto err;
+		}
+		rte_mem_lock_page(vf_info[i].vlan_as_table);
+
+		STAILQ_INIT(&vf_info[i].filter);
+	}
+
+	bp->pf->vf_info = vf_info;
+
+	return 0;
+err:
+	bnxt_free_vf_info(bp);
+	return -ENOMEM;
+}
+
 static int __bnxt_hwrm_func_qcaps(struct bnxt *bp)
 {
 	int rc = 0;
@@ -694,7 +744,6 @@ static int __bnxt_hwrm_func_qcaps(struct bnxt *bp)
 	struct hwrm_func_qcaps_output *resp = bp->hwrm_cmd_resp_addr;
 	uint16_t new_max_vfs;
 	uint32_t flags;
-	int i;
 
 	HWRM_PREP(&req, HWRM_FUNC_QCAPS, BNXT_USE_CHIMP_MB);
 
@@ -712,42 +761,9 @@ static int __bnxt_hwrm_func_qcaps(struct bnxt *bp)
 		bp->pf->total_vfs = rte_le_to_cpu_16(resp->max_vfs);
 		new_max_vfs = bp->pdev->max_vfs;
 		if (new_max_vfs != bp->pf->max_vfs) {
-			if (bp->pf->vf_info)
-				bnxt_hwrm_free_vf_info(bp);
-			bp->pf->vf_info = rte_zmalloc("bnxt_vf_info",
-			    sizeof(bp->pf->vf_info[0]) * new_max_vfs, 0);
-			if (bp->pf->vf_info == NULL) {
-				PMD_DRV_LOG(ERR, "Alloc vf info fail\n");
-				return -ENOMEM;
-			}
-			bp->pf->max_vfs = new_max_vfs;
-			for (i = 0; i < new_max_vfs; i++) {
-				bp->pf->vf_info[i].fid =
-					bp->pf->first_vf_id + i;
-				bp->pf->vf_info[i].vlan_table =
-					rte_zmalloc("VF VLAN table",
-						    getpagesize(),
-						    getpagesize());
-				if (bp->pf->vf_info[i].vlan_table == NULL)
-					PMD_DRV_LOG(ERR,
-					"Fail to alloc VLAN table for VF %d\n",
-					i);
-				else
-					rte_mem_lock_page(
-						bp->pf->vf_info[i].vlan_table);
-				bp->pf->vf_info[i].vlan_as_table =
-					rte_zmalloc("VF VLAN AS table",
-						    getpagesize(),
-						    getpagesize());
-				if (bp->pf->vf_info[i].vlan_as_table == NULL)
-					PMD_DRV_LOG(ERR,
-					"Alloc VLAN AS table for VF %d fail\n",
-					i);
-				else
-					rte_mem_lock_page(
-					      bp->pf->vf_info[i].vlan_as_table);
-				STAILQ_INIT(&bp->pf->vf_info[i].filter);
-			}
+			rc = bnxt_alloc_vf_info(bp, new_max_vfs);
+			if (rc)
+				goto unlock;
 		}
 	}
 
@@ -806,6 +822,7 @@ static int __bnxt_hwrm_func_qcaps(struct bnxt *bp)
 	if (flags & HWRM_FUNC_QCAPS_OUTPUT_FLAGS_LINK_ADMIN_STATUS_SUPPORTED)
 		bp->fw_cap |= BNXT_FW_CAP_LINK_ADMIN;
 
+unlock:
 	HWRM_UNLOCK();
 
 	return rc;
@@ -816,6 +833,9 @@ int bnxt_hwrm_func_qcaps(struct bnxt *bp)
 	int rc;
 
 	rc = __bnxt_hwrm_func_qcaps(bp);
+	if (rc == -ENOMEM)
+		return rc;
+
 	if (!rc && bp->hwrm_spec_code >= HWRM_SPEC_CODE_1_8_3) {
 		rc = bnxt_alloc_ctx_mem(bp);
 		if (rc)
@@ -1095,10 +1115,16 @@ int bnxt_hwrm_ver_get(struct bnxt *bp, uint32_t timeout)
 	else
 		HWRM_CHECK_RESULT();
 
-	PMD_DRV_LOG(INFO, "%d.%d.%d:%d.%d.%d\n",
+	if (resp->flags & HWRM_VER_GET_OUTPUT_FLAGS_DEV_NOT_RDY) {
+		rc = -EAGAIN;
+		goto error;
+	}
+
+	PMD_DRV_LOG(INFO, "%d.%d.%d:%d.%d.%d.%d\n",
 		resp->hwrm_intf_maj_8b, resp->hwrm_intf_min_8b,
 		resp->hwrm_intf_upd_8b, resp->hwrm_fw_maj_8b,
-		resp->hwrm_fw_min_8b, resp->hwrm_fw_bld_8b);
+		resp->hwrm_fw_min_8b, resp->hwrm_fw_bld_8b,
+		resp->hwrm_fw_rsvd_8b);
 	bp->fw_ver = (resp->hwrm_fw_maj_8b << 24) |
 		     (resp->hwrm_fw_min_8b << 16) |
 		     (resp->hwrm_fw_bld_8b << 8) |
@@ -1127,6 +1153,7 @@ int bnxt_hwrm_ver_get(struct bnxt *bp, uint32_t timeout)
 	if (bp->max_req_len > resp->max_req_win_len) {
 		PMD_DRV_LOG(ERR, "Unsupported request length\n");
 		rc = -EINVAL;
+		goto error;
 	}
 	bp->max_req_len = rte_le_to_cpu_16(resp->max_req_win_len);
 	bp->hwrm_max_ext_req_len = rte_le_to_cpu_16(resp->max_ext_req_len);
@@ -1136,28 +1163,8 @@ int bnxt_hwrm_ver_get(struct bnxt *bp, uint32_t timeout)
 	max_resp_len = rte_le_to_cpu_16(resp->max_resp_len);
 	dev_caps_cfg = rte_le_to_cpu_32(resp->dev_caps_cfg);
 
-	if (bp->max_resp_len != max_resp_len) {
-		sprintf(type, "bnxt_hwrm_" PCI_PRI_FMT,
-			bp->pdev->addr.domain, bp->pdev->addr.bus,
-			bp->pdev->addr.devid, bp->pdev->addr.function);
-
-		rte_free(bp->hwrm_cmd_resp_addr);
-
-		bp->hwrm_cmd_resp_addr = rte_malloc(type, max_resp_len, 0);
-		if (bp->hwrm_cmd_resp_addr == NULL) {
-			rc = -ENOMEM;
-			goto error;
-		}
-		bp->hwrm_cmd_resp_dma_addr =
-			rte_malloc_virt2iova(bp->hwrm_cmd_resp_addr);
-		if (bp->hwrm_cmd_resp_dma_addr == RTE_BAD_IOVA) {
-			PMD_DRV_LOG(ERR,
-			"Unable to map response buffer to physical memory.\n");
-			rc = -ENOMEM;
-			goto error;
-		}
-		bp->max_resp_len = max_resp_len;
-	}
+	RTE_VERIFY(max_resp_len <= bp->max_resp_len);
+	bp->max_resp_len = max_resp_len;
 
 	if ((dev_caps_cfg &
 		HWRM_VER_GET_OUTPUT_DEV_CAPS_CFG_SHORT_CMD_SUPPORTED) &&
@@ -1393,7 +1400,7 @@ int bnxt_hwrm_port_phy_qcaps(struct bnxt *bp)
 
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req), BNXT_USE_CHIMP_MB);
 
-	HWRM_CHECK_RESULT();
+	HWRM_CHECK_RESULT_SILENT();
 
 	bp->port_cnt = resp->port_cnt;
 	if (resp->supported_speeds_auto_mode)
@@ -1764,8 +1771,7 @@ int bnxt_hwrm_stat_clear(struct bnxt *bp, struct bnxt_cp_ring_info *cpr)
 	return rc;
 }
 
-int bnxt_hwrm_stat_ctx_alloc(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
-				unsigned int idx __rte_unused)
+static int bnxt_hwrm_stat_ctx_alloc(struct bnxt *bp, struct bnxt_cp_ring_info *cpr)
 {
 	int rc;
 	struct hwrm_stat_ctx_alloc_input req = {.req_type = 0 };
@@ -1788,8 +1794,7 @@ int bnxt_hwrm_stat_ctx_alloc(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	return rc;
 }
 
-int bnxt_hwrm_stat_ctx_free(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
-				unsigned int idx __rte_unused)
+static int bnxt_hwrm_stat_ctx_free(struct bnxt *bp, struct bnxt_cp_ring_info *cpr)
 {
 	int rc;
 	struct hwrm_stat_ctx_free_input req = {.req_type = 0 };
@@ -1997,12 +2002,6 @@ config_mru:
 	if (vnic->bd_stall)
 		req.flags |=
 		    rte_cpu_to_le_32(HWRM_VNIC_CFG_INPUT_FLAGS_BD_STALL_MODE);
-	if (vnic->roce_dual)
-		req.flags |= rte_cpu_to_le_32(
-			HWRM_VNIC_QCFG_OUTPUT_FLAGS_ROCE_DUAL_VNIC_MODE);
-	if (vnic->roce_only)
-		req.flags |= rte_cpu_to_le_32(
-			HWRM_VNIC_QCFG_OUTPUT_FLAGS_ROCE_ONLY_VNIC_MODE);
 	if (vnic->rss_dflt_cr)
 		req.flags |= rte_cpu_to_le_32(
 			HWRM_VNIC_QCFG_OUTPUT_FLAGS_RSS_DFLT_CR_MODE);
@@ -2050,10 +2049,6 @@ int bnxt_hwrm_vnic_qcfg(struct bnxt *bp, struct bnxt_vnic_info *vnic,
 			HWRM_VNIC_QCFG_OUTPUT_FLAGS_VLAN_STRIP_MODE;
 	vnic->bd_stall = rte_le_to_cpu_32(resp->flags) &
 			HWRM_VNIC_QCFG_OUTPUT_FLAGS_BD_STALL_MODE;
-	vnic->roce_dual = rte_le_to_cpu_32(resp->flags) &
-			HWRM_VNIC_QCFG_OUTPUT_FLAGS_ROCE_DUAL_VNIC_MODE;
-	vnic->roce_only = rte_le_to_cpu_32(resp->flags) &
-			HWRM_VNIC_QCFG_OUTPUT_FLAGS_ROCE_ONLY_VNIC_MODE;
 	vnic->rss_dflt_cr = rte_le_to_cpu_32(resp->flags) &
 			HWRM_VNIC_QCFG_OUTPUT_FLAGS_RSS_DFLT_CR_MODE;
 
@@ -2464,7 +2459,7 @@ bnxt_free_all_hwrm_stat_ctxs(struct bnxt *bp)
 				bp->grp_info[i].fw_stats_ctx = -1;
 		}
 		if (cpr->hw_stats_ctx_id != HWRM_NA_SIGNATURE) {
-			rc = bnxt_hwrm_stat_ctx_free(bp, cpr, i);
+			rc = bnxt_hwrm_stat_ctx_free(bp, cpr);
 			cpr->hw_stats_ctx_id = HWRM_NA_SIGNATURE;
 			if (rc)
 				return rc;
@@ -2491,7 +2486,7 @@ int bnxt_alloc_all_hwrm_stat_ctxs(struct bnxt *bp)
 			cpr = rxq->cp_ring;
 		}
 
-		rc = bnxt_hwrm_stat_ctx_alloc(bp, cpr, i);
+		rc = bnxt_hwrm_stat_ctx_alloc(bp, cpr);
 
 		if (rc)
 			return rc;
@@ -2653,7 +2648,7 @@ int bnxt_alloc_hwrm_resources(struct bnxt *bp)
 
 	sprintf(type, "bnxt_hwrm_" PCI_PRI_FMT, pdev->addr.domain,
 		pdev->addr.bus, pdev->addr.devid, pdev->addr.function);
-	bp->max_resp_len = HWRM_MAX_RESP_LEN;
+	bp->max_resp_len = BNXT_PAGE_SIZE;
 	bp->hwrm_cmd_resp_addr = rte_malloc(type, bp->max_resp_len, 0);
 	if (bp->hwrm_cmd_resp_addr == NULL)
 		return -ENOMEM;
@@ -3231,7 +3226,7 @@ int bnxt_hwrm_parent_pf_qcfg(struct bnxt *bp)
 
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req), BNXT_USE_CHIMP_MB);
 
-	HWRM_CHECK_RESULT();
+	HWRM_CHECK_RESULT_SILENT();
 
 	memcpy(bp->parent->mac_addr, resp->mac_address, RTE_ETHER_ADDR_LEN);
 	bp->parent->vnic = rte_le_to_cpu_16(resp->dflt_vnic_id);
@@ -3240,7 +3235,7 @@ int bnxt_hwrm_parent_pf_qcfg(struct bnxt *bp)
 
 	/* FIXME: Temporary workaround - remove when firmware issue is fixed. */
 	if (bp->parent->vnic == 0) {
-		PMD_DRV_LOG(ERR, "Error: parent VNIC unavailable.\n");
+		PMD_DRV_LOG(DEBUG, "parent VNIC unavailable.\n");
 		/* Use hard-coded values appropriate for current Wh+ fw. */
 		if (bp->parent->fid == 2)
 			bp->parent->vnic = 0x100;
@@ -3455,6 +3450,35 @@ static int bnxt_update_max_resources(struct bnxt *bp,
 	return 0;
 }
 
+/* Update the PF resource values based on how many resources
+ * got allocated to it.
+ */
+static int bnxt_update_max_resources_pf_only(struct bnxt *bp)
+{
+	struct hwrm_func_qcfg_input req = {0};
+	struct hwrm_func_qcfg_output *resp = bp->hwrm_cmd_resp_addr;
+	int rc;
+
+	/* Get the actual allocated values now */
+	HWRM_PREP(&req, HWRM_FUNC_QCFG, BNXT_USE_CHIMP_MB);
+	req.fid = rte_cpu_to_le_16(0xffff);
+	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req), BNXT_USE_CHIMP_MB);
+	HWRM_CHECK_RESULT();
+
+	bp->max_rsscos_ctx = rte_le_to_cpu_16(resp->alloc_rsscos_ctx);
+	bp->max_stat_ctx = rte_le_to_cpu_16(resp->alloc_stat_ctx);
+	bp->max_cp_rings = rte_le_to_cpu_16(resp->alloc_cmpl_rings);
+	bp->max_tx_rings = rte_le_to_cpu_16(resp->alloc_tx_rings);
+	bp->max_rx_rings = rte_le_to_cpu_16(resp->alloc_rx_rings);
+	bp->max_l2_ctx = rte_le_to_cpu_16(resp->alloc_l2_ctx);
+	bp->max_ring_grps = rte_le_to_cpu_16(resp->alloc_hw_ring_grps);
+	bp->max_vnics = rte_le_to_cpu_16(resp->alloc_vnics);
+
+	HWRM_UNLOCK();
+
+	return 0;
+}
+
 int bnxt_hwrm_func_qcfg_current_vf_vlan(struct bnxt *bp, int vf)
 {
 	struct hwrm_func_qcfg_input req = {0};
@@ -3554,8 +3578,13 @@ int bnxt_hwrm_allocate_pf_only(struct bnxt *bp)
 		  HWRM_FUNC_CFG_INPUT_FLAGS_STD_TX_RING_MODE_DISABLE);
 	bp->pf->func_cfg_flags |=
 		HWRM_FUNC_CFG_INPUT_FLAGS_STD_TX_RING_MODE_DISABLE;
+
 	rc = bnxt_hwrm_pf_func_cfg(bp, &pf_resc);
-	rc = __bnxt_hwrm_func_qcaps(bp);
+	if (rc)
+		return rc;
+
+	rc = bnxt_update_max_resources_pf_only(bp);
+
 	return rc;
 }
 
@@ -4210,7 +4239,7 @@ int bnxt_hwrm_port_led_qcaps(struct bnxt *bp)
 	req.port_id = bp->pf->port_id;
 	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req), BNXT_USE_CHIMP_MB);
 
-	HWRM_CHECK_RESULT();
+	HWRM_CHECK_RESULT_SILENT();
 
 	if (resp->num_leds > 0 && resp->num_leds < BNXT_MAX_LED) {
 		unsigned int i;
@@ -4320,6 +4349,7 @@ int bnxt_get_nvram_directory(struct bnxt *bp, uint32_t len, uint8_t *data)
 		return -ENOMEM;
 	dma_handle = rte_malloc_virt2iova(buf);
 	if (dma_handle == RTE_BAD_IOVA) {
+		rte_free(buf);
 		PMD_DRV_LOG(ERR,
 			"unable to map response address to physical memory\n");
 		return -ENOMEM;
@@ -4354,6 +4384,7 @@ int bnxt_hwrm_get_nvram_item(struct bnxt *bp, uint32_t index,
 
 	dma_handle = rte_malloc_virt2iova(buf);
 	if (dma_handle == RTE_BAD_IOVA) {
+		rte_free(buf);
 		PMD_DRV_LOG(ERR,
 			"unable to map response address to physical memory\n");
 		return -ENOMEM;
@@ -4407,6 +4438,7 @@ int bnxt_hwrm_flash_nvram(struct bnxt *bp, uint16_t dir_type,
 
 	dma_handle = rte_malloc_virt2iova(buf);
 	if (dma_handle == RTE_BAD_IOVA) {
+		rte_free(buf);
 		PMD_DRV_LOG(ERR,
 			"unable to map response address to physical memory\n");
 		return -ENOMEM;
@@ -4892,37 +4924,35 @@ int bnxt_vnic_rss_configure(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 {
 	unsigned int rss_idx, fw_idx, i;
 
+	if (vnic->fw_vnic_id == INVALID_HW_RING_ID)
+		return 0;
+
 	if (!(vnic->rss_table && vnic->hash_type))
 		return 0;
 
 	if (BNXT_CHIP_THOR(bp))
 		return bnxt_vnic_rss_configure_thor(bp, vnic);
 
-	if (vnic->fw_vnic_id == INVALID_HW_RING_ID)
-		return 0;
-
-	if (vnic->rss_table && vnic->hash_type) {
-		/*
-		 * Fill the RSS hash & redirection table with
-		 * ring group ids for all VNICs
-		 */
-		for (rss_idx = 0, fw_idx = 0; rss_idx < HW_HASH_INDEX_SIZE;
-			rss_idx++, fw_idx++) {
-			for (i = 0; i < bp->rx_cp_nr_rings; i++) {
-				fw_idx %= bp->rx_cp_nr_rings;
-				if (vnic->fw_grp_ids[fw_idx] !=
-				    INVALID_HW_RING_ID)
-					break;
-				fw_idx++;
-			}
-			if (i == bp->rx_cp_nr_rings)
-				return 0;
-			vnic->rss_table[rss_idx] = vnic->fw_grp_ids[fw_idx];
+	/*
+	 * Fill the RSS hash & redirection table with
+	 * ring group ids for all VNICs
+	 */
+	for (rss_idx = 0, fw_idx = 0; rss_idx < HW_HASH_INDEX_SIZE;
+	     rss_idx++, fw_idx++) {
+		for (i = 0; i < bp->rx_cp_nr_rings; i++) {
+			fw_idx %= bp->rx_cp_nr_rings;
+			if (vnic->fw_grp_ids[fw_idx] != INVALID_HW_RING_ID)
+				break;
+			fw_idx++;
 		}
-		return bnxt_hwrm_vnic_rss_cfg(bp, vnic);
+
+		if (i == bp->rx_cp_nr_rings)
+			return 0;
+
+		vnic->rss_table[rss_idx] = vnic->fw_grp_ids[fw_idx];
 	}
 
-	return 0;
+	return bnxt_hwrm_vnic_rss_cfg(bp, vnic);
 }
 
 static void bnxt_hwrm_set_coal_params(struct bnxt_coal *hw_coal,
@@ -5782,5 +5812,33 @@ int bnxt_hwrm_cfa_pair_free(struct bnxt *bp, struct bnxt_representor *rep_bp)
 	HWRM_UNLOCK();
 	PMD_DRV_LOG(DEBUG, "%s %d freed\n", BNXT_REP_PF(rep_bp) ? "PFR" : "VFR",
 		    rep_bp->vf_id);
+	return rc;
+}
+
+
+int bnxt_hwrm_poll_ver_get(struct bnxt *bp)
+{
+	struct hwrm_ver_get_input req = {.req_type = 0 };
+	struct hwrm_ver_get_output *resp = bp->hwrm_cmd_resp_addr;
+	int rc = 0;
+
+	bp->max_req_len = HWRM_MAX_REQ_LEN;
+	bp->max_resp_len = BNXT_PAGE_SIZE;
+	bp->hwrm_cmd_timeout = SHORT_HWRM_CMD_TIMEOUT;
+
+	HWRM_PREP(&req, HWRM_VER_GET, BNXT_USE_CHIMP_MB);
+	req.hwrm_intf_maj = HWRM_VERSION_MAJOR;
+	req.hwrm_intf_min = HWRM_VERSION_MINOR;
+	req.hwrm_intf_upd = HWRM_VERSION_UPDATE;
+
+	rc = bnxt_hwrm_send_message(bp, &req, sizeof(req), BNXT_USE_CHIMP_MB);
+
+	HWRM_CHECK_RESULT_SILENT();
+
+	if (resp->flags & HWRM_VER_GET_OUTPUT_FLAGS_DEV_NOT_RDY)
+		rc = -EAGAIN;
+
+	HWRM_UNLOCK();
+
 	return rc;
 }

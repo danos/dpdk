@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2018-2019 Hisilicon Limited.
+ * Copyright(c) 2018-2021 HiSilicon Limited.
  */
 
 #include <linux/pci_regs.h>
@@ -153,9 +153,12 @@ hns3vf_enable_msix(const struct rte_pci_device *device, bool op)
 		if (ret < 0) {
 			PMD_INIT_LOG(ERR, "failed to write PCI offset 0x%x",
 				    (pos + PCI_MSIX_FLAGS));
+			return -ENXIO;
 		}
+
 		return 0;
 	}
+
 	return -ENXIO;
 }
 
@@ -779,6 +782,7 @@ hns3vf_dev_configure(struct rte_eth_dev *dev)
 	uint16_t nb_rx_q = dev->data->nb_rx_queues;
 	uint16_t nb_tx_q = dev->data->nb_tx_queues;
 	struct rte_eth_rss_conf rss_conf;
+	uint32_t max_rx_pkt_len;
 	uint16_t mtu;
 	bool gro_en;
 	int ret;
@@ -831,12 +835,18 @@ hns3vf_dev_configure(struct rte_eth_dev *dev)
 	 * according to the maximum RX packet length.
 	 */
 	if (conf->rxmode.offloads & DEV_RX_OFFLOAD_JUMBO_FRAME) {
-		/*
-		 * Security of max_rx_pkt_len is guaranteed in dpdk frame.
-		 * Maximum value of max_rx_pkt_len is HNS3_MAX_FRAME_LEN, so it
-		 * can safely assign to "uint16_t" type variable.
-		 */
-		mtu = (uint16_t)HNS3_PKTLEN_TO_MTU(conf->rxmode.max_rx_pkt_len);
+		max_rx_pkt_len = conf->rxmode.max_rx_pkt_len;
+		if (max_rx_pkt_len > HNS3_MAX_FRAME_LEN ||
+		    max_rx_pkt_len <= HNS3_DEFAULT_FRAME_LEN) {
+			hns3_err(hw, "maximum Rx packet length must be greater "
+				 "than %u and less than %u when jumbo frame enabled.",
+				 (uint16_t)HNS3_DEFAULT_FRAME_LEN,
+				 (uint16_t)HNS3_MAX_FRAME_LEN);
+			ret = -EINVAL;
+			goto cfg_err;
+		}
+
+		mtu = (uint16_t)HNS3_PKTLEN_TO_MTU(max_rx_pkt_len);
 		ret = hns3vf_dev_mtu_set(dev, mtu);
 		if (ret)
 			goto cfg_err;
@@ -928,7 +938,7 @@ hns3vf_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
 		rte_spinlock_unlock(&hw->lock);
 		return ret;
 	}
-	if (frame_size > RTE_ETHER_MAX_LEN)
+	if (mtu > RTE_ETHER_MTU)
 		dev->data->dev_conf.rxmode.offloads |=
 						DEV_RX_OFFLOAD_JUMBO_FRAME;
 	else
@@ -1020,9 +1030,7 @@ hns3vf_dev_infos_get(struct rte_eth_dev *eth_dev, struct rte_eth_dev_info *info)
 		.offloads = 0,
 	};
 
-	info->vmdq_queue_num = 0;
-
-	info->reta_size = HNS3_RSS_IND_TBL_SIZE;
+	info->reta_size = hw->rss_ind_tbl_size;
 	info->hash_key_size = HNS3_RSS_KEY_SIZE;
 	info->flow_type_rss_offloads = HNS3_ETH_RSS_SUPPORT;
 	info->default_rxportconf.ring_size = HNS3_DEFAULT_RING_DESC;
@@ -1060,7 +1068,6 @@ hns3vf_check_event_cause(struct hns3_adapter *hns, uint32_t *clearval)
 
 	/* Fetch the events from their corresponding regs */
 	cmdq_stat_reg = hns3_read_dev(hw, HNS3_VECTOR0_CMDQ_STAT_REG);
-
 	if (BIT(HNS3_VECTOR0_RST_INT_B) & cmdq_stat_reg) {
 		rst_ing_reg = hns3_read_dev(hw, HNS3_FUN_RST_ING);
 		hns3_warn(hw, "resetting reg: 0x%x", rst_ing_reg);
@@ -1104,9 +1111,6 @@ hns3vf_interrupt_handler(void *param)
 	struct hns3_hw *hw = &hns->hw;
 	enum hns3vf_evt_cause event_cause;
 	uint32_t clearval;
-
-	if (hw->irq_thread_id == 0)
-		hw->irq_thread_id = pthread_self();
 
 	/* Disable interrupt */
 	hns3vf_disable_irq0(hw);
@@ -1155,6 +1159,20 @@ hns3vf_parse_dev_specifications(struct hns3_hw *hw, struct hns3_cmd_desc *desc)
 }
 
 static int
+hns3vf_check_dev_specifications(struct hns3_hw *hw)
+{
+	if (hw->rss_ind_tbl_size == 0 ||
+	    hw->rss_ind_tbl_size > HNS3_RSS_IND_TBL_SIZE_MAX) {
+		hns3_warn(hw, "the size of hash lookup table configured (%u)"
+			      " exceeds the maximum(%u)", hw->rss_ind_tbl_size,
+			      HNS3_RSS_IND_TBL_SIZE_MAX);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int
 hns3vf_query_dev_specifications(struct hns3_hw *hw)
 {
 	struct hns3_cmd_desc desc[HNS3_QUERY_DEV_SPECS_BD_NUM];
@@ -1174,7 +1192,7 @@ hns3vf_query_dev_specifications(struct hns3_hw *hw)
 
 	hns3vf_parse_dev_specifications(hw, desc);
 
-	return 0;
+	return hns3vf_check_dev_specifications(hw);
 }
 
 static int
@@ -1417,31 +1435,18 @@ hns3vf_set_tc_queue_mapping(struct hns3_adapter *hns, uint16_t nb_rx_q,
 {
 	struct hns3_hw *hw = &hns->hw;
 
-	if (nb_rx_q < hw->num_tc) {
-		hns3_err(hw, "number of Rx queues(%u) is less than tcs(%u).",
-			 nb_rx_q, hw->num_tc);
-		return -EINVAL;
-	}
-
-	if (nb_tx_q < hw->num_tc) {
-		hns3_err(hw, "number of Tx queues(%u) is less than tcs(%u).",
-			 nb_tx_q, hw->num_tc);
-		return -EINVAL;
-	}
-
 	return hns3_queue_to_tc_mapping(hw, nb_rx_q, nb_tx_q);
 }
 
 static void
 hns3vf_request_link_info(struct hns3_hw *hw)
 {
-	uint8_t resp_msg;
 	int ret;
 
 	if (rte_atomic16_read(&hw->reset.resetting))
 		return;
 	ret = hns3_send_mbx_msg(hw, HNS3_MBX_GET_LINK_STATUS, 0, NULL, 0, false,
-				&resp_msg, sizeof(resp_msg));
+				NULL, 0);
 	if (ret)
 		hns3_err(hw, "Failed to fetch link status from PF: %d", ret);
 }
@@ -1637,11 +1642,10 @@ hns3vf_keep_alive_handler(void *param)
 	struct rte_eth_dev *eth_dev = (struct rte_eth_dev *)param;
 	struct hns3_adapter *hns = eth_dev->data->dev_private;
 	struct hns3_hw *hw = &hns->hw;
-	uint8_t respmsg;
 	int ret;
 
 	ret = hns3_send_mbx_msg(hw, HNS3_MBX_KEEP_ALIVE, 0, NULL, 0,
-				false, &respmsg, sizeof(uint8_t));
+				false, NULL, 0);
 	if (ret)
 		hns3_err(hw, "VF sends keeping alive cmd failed(=%d)",
 			 ret);
@@ -1743,13 +1747,6 @@ hns3vf_init_hardware(struct hns3_adapter *hns)
 		goto err_init_hardware;
 	}
 
-	ret = hns3vf_set_alive(hw, true);
-	if (ret) {
-		PMD_INIT_LOG(ERR, "Failed to VF send alive to PF: %d", ret);
-		goto err_init_hardware;
-	}
-
-	hns3vf_request_link_info(hw);
 	return 0;
 
 err_init_hardware:
@@ -1841,6 +1838,12 @@ hns3vf_init_vf(struct rte_eth_dev *eth_dev)
 
 	hns3_set_default_rss_args(hw);
 
+	ret = hns3vf_set_alive(hw, true);
+	if (ret) {
+		PMD_INIT_LOG(ERR, "Failed to VF send alive to PF: %d", ret);
+		goto err_set_tc_queue;
+	}
+
 	return 0;
 
 err_set_tc_queue:
@@ -1891,6 +1894,17 @@ hns3vf_do_stop(struct hns3_adapter *hns)
 	int ret;
 
 	hw->mac.link_status = ETH_LINK_DOWN;
+
+	/*
+	 * The "hns3vf_do_stop" function will also be called by .stop_service to
+	 * prepare reset. At the time of global or IMP reset, the command cannot
+	 * be sent to stop the tx/rx queues. The mbuf in Tx/Rx queues may be
+	 * accessed during the reset process. So the mbuf can not be released
+	 * during reset and is required to be released after the reset is
+	 * completed.
+	 */
+	if (rte_atomic16_read(&hw->reset.resetting) == 0)
+		hns3_dev_release_mbufs(hns);
 
 	if (rte_atomic16_read(&hw->reset.disable_cmd) == 0) {
 		hns3vf_configure_mac_addr(hns, true);
@@ -1961,7 +1975,6 @@ hns3vf_dev_stop(struct rte_eth_dev *dev)
 		hns3_stop_tqps(hw);
 		hns3vf_do_stop(hns);
 		hns3vf_unmap_rx_interrupt(dev);
-		hns3_dev_release_mbufs(hns);
 		hw->adapter_state = HNS3_NIC_CONFIGURED;
 	}
 	hns3_rx_scattered_reset(dev);
@@ -1978,8 +1991,11 @@ hns3vf_dev_close(struct rte_eth_dev *eth_dev)
 	struct hns3_hw *hw = &hns->hw;
 	int ret = 0;
 
-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
+		rte_free(eth_dev->process_private);
+		eth_dev->process_private = NULL;
 		return 0;
+	}
 
 	if (hw->adapter_state == HNS3_NIC_STARTED)
 		ret = hns3vf_dev_stop(eth_dev);
@@ -2019,8 +2035,11 @@ hns3vf_fw_version_get(struct rte_eth_dev *eth_dev, char *fw_version,
 				      HNS3_FW_VERSION_BYTE1_S),
 		       hns3_get_field(version, HNS3_FW_VERSION_BYTE0_M,
 				      HNS3_FW_VERSION_BYTE0_S));
+	if (ret < 0)
+		return -EINVAL;
+
 	ret += 1; /* add the size of '\0' */
-	if (fw_size < (uint32_t)ret)
+	if (fw_size < (size_t)ret)
 		return ret;
 	else
 		return 0;
@@ -2046,12 +2065,17 @@ hns3vf_dev_link_update(struct rte_eth_dev *eth_dev,
 	case ETH_SPEED_NUM_50G:
 	case ETH_SPEED_NUM_100G:
 	case ETH_SPEED_NUM_200G:
-		new_link.link_speed = mac->link_speed;
+		if (mac->link_status)
+			new_link.link_speed = mac->link_speed;
 		break;
 	default:
-		new_link.link_speed = ETH_SPEED_NUM_100M;
+		if (mac->link_status)
+			new_link.link_speed = ETH_SPEED_NUM_UNKNOWN;
 		break;
 	}
+
+	if (!mac->link_status)
+		new_link.link_speed = ETH_SPEED_NUM_NONE;
 
 	new_link.link_duplex = mac->link_duplex;
 	new_link.link_status = mac->link_status ? ETH_LINK_UP : ETH_LINK_DOWN;
@@ -2200,11 +2224,8 @@ hns3vf_dev_start(struct rte_eth_dev *dev)
 		return ret;
 	}
 	ret = hns3vf_map_rx_interrupt(dev);
-	if (ret) {
-		hw->adapter_state = HNS3_NIC_CONFIGURED;
-		rte_spinlock_unlock(&hw->lock);
-		return ret;
-	}
+	if (ret)
+		goto map_rx_inter_err;
 
 	/*
 	 * There are three register used to control the status of a TQP
@@ -2218,19 +2239,12 @@ hns3vf_dev_start(struct rte_eth_dev *dev)
 	 * status of queue in the dpdk framework.
 	 */
 	ret = hns3_start_all_txqs(dev);
-	if (ret) {
-		hw->adapter_state = HNS3_NIC_CONFIGURED;
-		rte_spinlock_unlock(&hw->lock);
-		return ret;
-	}
+	if (ret)
+		goto map_rx_inter_err;
 
 	ret = hns3_start_all_rxqs(dev);
-	if (ret) {
-		hns3_stop_all_txqs(dev);
-		hw->adapter_state = HNS3_NIC_CONFIGURED;
-		rte_spinlock_unlock(&hw->lock);
-		return ret;
-	}
+	if (ret)
+		goto start_all_rxqs_fail;
 
 	hw->adapter_state = HNS3_NIC_STARTED;
 	rte_spinlock_unlock(&hw->lock);
@@ -2238,7 +2252,7 @@ hns3vf_dev_start(struct rte_eth_dev *dev)
 	hns3_rx_scattered_calc(dev);
 	hns3_set_rxtx_function(dev);
 	hns3_mp_req_start_rxtx(dev);
-	rte_eal_alarm_set(HNS3VF_SERVICE_INTERVAL, hns3vf_service_handler, dev);
+	hns3vf_service_handler(dev);
 
 	hns3vf_restore_filter(dev);
 
@@ -2250,6 +2264,15 @@ hns3vf_dev_start(struct rte_eth_dev *dev)
 	 * packets and refresh all queue status.
 	 */
 	hns3_start_tqps(hw);
+
+	return ret;
+
+start_all_rxqs_fail:
+	hns3_stop_all_txqs(dev);
+map_rx_inter_err:
+	(void)hns3vf_do_stop(hns);
+	hw->adapter_state = HNS3_NIC_CONFIGURED;
+	rte_spinlock_unlock(&hw->lock);
 
 	return ret;
 }
@@ -2338,7 +2361,7 @@ hns3vf_wait_hardware_ready(struct hns3_adapter *hns)
 		hns3_warn(hw, "hardware is ready, delay 1 sec for PF reset complete");
 		return -EAGAIN;
 	} else if (wait_data->result == HNS3_WAIT_TIMEOUT) {
-		gettimeofday(&tv, NULL);
+		hns3_clock_gettime(&tv);
 		hns3_warn(hw, "Reset step4 hardware not ready after reset time=%ld.%.6ld",
 			  tv.tv_sec, tv.tv_usec);
 		return -ETIME;
@@ -2348,7 +2371,7 @@ hns3vf_wait_hardware_ready(struct hns3_adapter *hns)
 	wait_data->hns = hns;
 	wait_data->check_completion = is_vf_reset_done;
 	wait_data->end_ms = (uint64_t)HNS3VF_RESET_WAIT_CNT *
-				      HNS3VF_RESET_WAIT_MS + get_timeofday_ms();
+				HNS3VF_RESET_WAIT_MS + hns3_clock_gettime_ms();
 	wait_data->interval = HNS3VF_RESET_WAIT_MS * USEC_PER_MSEC;
 	wait_data->count = HNS3VF_RESET_WAIT_CNT;
 	wait_data->result = HNS3_WAIT_REQUEST;
@@ -2360,15 +2383,17 @@ static int
 hns3vf_prepare_reset(struct hns3_adapter *hns)
 {
 	struct hns3_hw *hw = &hns->hw;
-	int ret = 0;
+	int ret;
 
 	if (hw->reset.level == HNS3_VF_FUNC_RESET) {
 		ret = hns3_send_mbx_msg(hw, HNS3_MBX_RESET, 0, NULL,
 					0, true, NULL, 0);
+		if (ret)
+			return ret;
 	}
 	rte_atomic16_set(&hw->reset.disable_cmd, 1);
 
-	return ret;
+	return 0;
 }
 
 static int
@@ -2524,6 +2549,13 @@ hns3vf_restore_conf(struct hns3_adapter *hns)
 		hns3_info(hw, "hns3vf dev restart successful!");
 	} else if (hw->adapter_state == HNS3_NIC_STOPPING)
 		hw->adapter_state = HNS3_NIC_CONFIGURED;
+
+	ret = hns3vf_set_alive(hw, true);
+	if (ret) {
+		hns3_err(hw, "failed to VF send alive to PF: %d", ret);
+		goto err_vlan_table;
+	}
+
 	return 0;
 
 err_vlan_table:
@@ -2592,14 +2624,13 @@ hns3vf_reset_service(void *param)
 	 */
 	reset_level = hns3vf_get_reset_level(hw, &hw->reset.pending);
 	if (reset_level != HNS3_NONE_RESET) {
-		gettimeofday(&tv_start, NULL);
+		hns3_clock_gettime(&tv_start);
 		hns3_reset_process(hns, reset_level);
-		gettimeofday(&tv, NULL);
+		hns3_clock_gettime(&tv);
 		timersub(&tv, &tv_start, &tv_delta);
-		msec = tv_delta.tv_sec * MSEC_PER_SEC +
-		       tv_delta.tv_usec / USEC_PER_MSEC;
+		msec = hns3_clock_calctime_ms(&tv_delta);
 		if (msec > HNS3_RESET_PROCESS_MS)
-			hns3_err(hw, "%d handle long time delta %" PRIx64
+			hns3_err(hw, "%d handle long time delta %" PRIu64
 				 " ms time=%ld.%.6ld",
 				 hw->reset.level, msec, tv.tv_sec, tv.tv_usec);
 	}
@@ -2735,8 +2766,7 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
 		return -ENOMEM;
 	}
 
-	/* initialize flow filter lists */
-	hns3_filterlist_init(eth_dev);
+	hns3_flow_init(eth_dev);
 
 	hns3_set_rxtx_function(eth_dev);
 	eth_dev->dev_ops = &hns3vf_eth_dev_ops;
@@ -2849,8 +2879,11 @@ hns3vf_dev_uninit(struct rte_eth_dev *eth_dev)
 
 	PMD_INIT_FUNC_TRACE();
 
-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		return -EPERM;
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
+		rte_free(eth_dev->process_private);
+		eth_dev->process_private = NULL;
+		return 0;
+	}
 
 	if (hw->adapter_state < HNS3_NIC_CLOSING)
 		hns3vf_dev_close(eth_dev);

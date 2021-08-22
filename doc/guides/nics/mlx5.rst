@@ -433,13 +433,17 @@ Driver options
   A nonzero value enables the compression of CQE on RX side. This feature
   allows to save PCI bandwidth and improve performance. Enabled by default.
   Different compression formats are supported in order to achieve the best
-  performance for different traffic patterns. Hash RSS format is the default.
+  performance for different traffic patterns. Default format depends on
+  Multi-Packet Rx queue configuration: Hash RSS format is used in case
+  MPRQ is disabled, Checksum format is used in case MPRQ is enabled.
 
   Specifying 2 as a ``rxq_cqe_comp_en`` value selects Flow Tag format for
   better compression rate in case of RTE Flow Mark traffic.
   Specifying 3 as a ``rxq_cqe_comp_en`` value selects Checksum format.
   Specifying 4 as a ``rxq_cqe_comp_en`` value selects L3/L4 Header format for
   better compression rate in case of mixed TCP/UDP and IPv4/IPv6 traffic.
+  CQE compression format selection requires DevX to be enabled. If there is
+  no DevX enabled/supported the value is reset to 1 by default.
 
   Supported on:
 
@@ -447,24 +451,6 @@ Driver options
     ConnectX-6 Lx, BlueField and BlueField-2.
   - POWER9 and ARMv8 with ConnectX-4 Lx, ConnectX-5, ConnectX-6, ConnectX-6 Dx,
     ConnectX-6 Lx, BlueField and BlueField-2.
-
-- ``rxq_cqe_pad_en`` parameter [int]
-
-  A nonzero value enables 128B padding of CQE on RX side. The size of CQE
-  is aligned with the size of a cacheline of the core. If cacheline size is
-  128B, the CQE size is configured to be 128B even though the device writes
-  only 64B data on the cacheline. This is to avoid unnecessary cache
-  invalidation by device's two consecutive writes on to one cacheline.
-  However in some architecture, it is more beneficial to update entire
-  cacheline with padding the rest 64B rather than striding because
-  read-modify-write could drop performance a lot. On the other hand,
-  writing extra data will consume more PCIe bandwidth and could also drop
-  the maximum throughput. It is recommended to empirically set this
-  parameter. Disabled by default.
-
-  Supported on:
-
-  - CPU having 128B cacheline with ConnectX-5 and BlueField.
 
 - ``rxq_pkt_pad_en`` parameter [int]
 
@@ -825,7 +811,7 @@ Driver options
   +------+-----------+-----------+-------------+-------------+
   | 1    | 24 bits   | vary 0-32 | 32 bits     | yes         |
   +------+-----------+-----------+-------------+-------------+
-  | 2    | vary 0-32 | 32 bits   | 32 bits     | yes         |
+  | 2    | vary 0-24 | 32 bits   | 32 bits     | yes         |
   +------+-----------+-----------+-------------+-------------+
 
   If there is no E-Switch configuration the ``dv_xmeta_en`` parameter is
@@ -836,6 +822,17 @@ Driver options
   The Direct Verbs/Rules (engaged with ``dv_flow_en`` = 1) supports all
   of the extensive metadata features. The legacy Verbs supports FLAG and
   MARK metadata actions over NIC Rx steering domain only.
+
+  Setting META value to zero in flow action means there is no item provided
+  and receiving datapath will not report in mbufs the metadata are present.
+  Setting MARK value to zero in flow action means the zero FDIR ID value
+  will be reported on packet receiving.
+
+  For the MARK action the last 16 values in the full range are reserved for
+  internal PMD purposes (to emulate FLAG action). The valid range for the
+  MARK action values is 0-0xFFEF for the 16-bit mode and 0-xFFFFEF
+  for the 24-bit mode, the flows with the MARK action value outside
+  the specified range will be rejected.
 
 - ``dv_flow_en`` parameter [int]
 
@@ -1390,7 +1387,8 @@ Supported hardware offloads
    Rx timestamp   17.11  4.14    16     4.2-1 12.21.1000 ConnectX-4
    TSO            17.11  4.14    16     4.2-1 12.21.1000 ConnectX-4
    LRO            19.08  N/A     N/A    4.6-4 16.25.6406 ConnectX-5
-   Buffer Split   20.11  N/A     N/A    5.1-2 22.28.2006 ConnectX-6 Dx
+   Tx scheduling  20.08  N/A     N/A    5.1-2 22.28.2006 ConnectX-6 Dx
+   Buffer Split   20.11  N/A     N/A    5.1-2 16.28.2006 ConnectX-5
    ============== ===== ===== ========= ===== ========== =============
 
 .. table:: Minimal SW/HW versions for rte_flow offloads

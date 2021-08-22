@@ -149,6 +149,10 @@ eal_parse_args(int argc, char **argv)
 			return -1;
 		}
 
+		/* eal_log_level_parse() already handled this option */
+		if (opt == OPT_LOG_LEVEL_NUM)
+			continue;
+
 		ret = eal_parse_common_option(opt, optarg, internal_conf);
 		/* common parser is not happy */
 		if (ret < 0) {
@@ -264,6 +268,7 @@ rte_eal_init(int argc, char **argv)
 	const struct rte_config *config = rte_eal_get_configuration();
 	struct internal_config *internal_conf =
 		eal_get_internal_configuration();
+	int ret;
 
 	rte_eal_log_init(NULL, 0);
 
@@ -387,9 +392,10 @@ rte_eal_init(int argc, char **argv)
 	}
 
 	/* Initialize services so drivers can register services during probe. */
-	if (rte_service_init()) {
+	ret = rte_service_init();
+	if (ret) {
 		rte_eal_init_alert("rte_service_init() failed");
-		rte_errno = ENOEXEC;
+		rte_errno = -ret;
 		return -1;
 	}
 

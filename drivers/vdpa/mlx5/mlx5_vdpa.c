@@ -295,6 +295,8 @@ mlx5_vdpa_dev_close(int vid)
 	}
 	priv->configured = 0;
 	priv->vid = 0;
+	/* The mutex may stay locked after event thread cancel - initiate it. */
+	pthread_mutex_init(&priv->vq_config_lock, NULL);
 	DRV_LOG(INFO, "vDPA device %d was closed.", vid);
 	return ret;
 }
@@ -733,6 +735,7 @@ mlx5_vdpa_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 	priv->caps = attr.vdpa;
 	priv->log_max_rqt_size = attr.log_max_rqt_size;
 	priv->num_lag_ports = attr.num_lag_ports;
+	priv->qp_ts_format = attr.qp_ts_format;
 	if (attr.num_lag_ports == 0)
 		priv->num_lag_ports = 1;
 	priv->ctx = ctx;
@@ -802,6 +805,8 @@ mlx5_vdpa_pci_remove(struct rte_pci_device *pci_dev)
 			mlx5_glue->dv_free_var(priv->var);
 			priv->var = NULL;
 		}
+		if (priv->vdev)
+			rte_vdpa_unregister_device(priv->vdev);
 		mlx5_glue->close_device(priv->ctx);
 		pthread_mutex_destroy(&priv->vq_config_lock);
 		rte_free(priv);

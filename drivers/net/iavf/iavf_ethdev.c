@@ -372,8 +372,10 @@ iavf_dev_configure(struct rte_eth_dev *dev)
 	} else {
 		/* Check if large VF is already enabled. If so, disable and
 		 * release redundant queue resource.
+		 * Or check if enough queue pairs. If not, request them from PF.
 		 */
-		if (vf->lv_enabled) {
+		if (vf->lv_enabled ||
+		    num_queue_pairs > vf->vsi_res->num_queue_pairs) {
 			ret = iavf_queues_req_reset(dev, num_queue_pairs);
 			if (ret)
 				return ret;
@@ -418,23 +420,23 @@ iavf_init_rxq(struct rte_eth_dev *dev, struct iavf_rx_queue *rxq)
 	 * correctly.
 	 */
 	if (dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_JUMBO_FRAME) {
-		if (max_pkt_len <= RTE_ETHER_MAX_LEN ||
+		if (max_pkt_len <= IAVF_ETH_MAX_LEN ||
 		    max_pkt_len > IAVF_FRAME_SIZE_MAX) {
 			PMD_DRV_LOG(ERR, "maximum packet length must be "
 				    "larger than %u and smaller than %u, "
 				    "as jumbo frame is enabled",
-				    (uint32_t)RTE_ETHER_MAX_LEN,
+				    (uint32_t)IAVF_ETH_MAX_LEN,
 				    (uint32_t)IAVF_FRAME_SIZE_MAX);
 			return -EINVAL;
 		}
 	} else {
 		if (max_pkt_len < RTE_ETHER_MIN_LEN ||
-		    max_pkt_len > RTE_ETHER_MAX_LEN) {
+		    max_pkt_len > IAVF_ETH_MAX_LEN) {
 			PMD_DRV_LOG(ERR, "maximum packet length must be "
 				    "larger than %u and smaller than %u, "
 				    "as jumbo frame is disabled",
 				    (uint32_t)RTE_ETHER_MIN_LEN,
-				    (uint32_t)RTE_ETHER_MAX_LEN);
+				    (uint32_t)IAVF_ETH_MAX_LEN);
 			return -EINVAL;
 		}
 	}
@@ -570,15 +572,15 @@ static int iavf_config_rx_queues_irqs(struct rte_eth_dev *dev,
 			/* If Rx interrupt is reuquired, and we can use
 			 * multi interrupts, then the vec is from 1
 			 */
-			vf->nb_msix = RTE_MIN(vf->vf_res->max_vectors,
-					      intr_handle->nb_efd);
+			vf->nb_msix = RTE_MIN(intr_handle->nb_efd,
+				 (uint16_t)(vf->vf_res->max_vectors - 1));
 			vf->msix_base = IAVF_RX_VEC_START;
 			vec = IAVF_RX_VEC_START;
 			for (i = 0; i < dev->data->nb_rx_queues; i++) {
 				qv_map[i].queue_id = i;
 				qv_map[i].vector_id = vec;
 				intr_handle->intr_vec[i] = vec++;
-				if (vec >= vf->nb_msix)
+				if (vec >= vf->nb_msix + IAVF_RX_VEC_START)
 					vec = IAVF_RX_VEC_START;
 			}
 			vf->qv_map = qv_map;
@@ -952,7 +954,7 @@ iavf_dev_add_mac_addr(struct rte_eth_dev *dev, struct rte_ether_addr *addr,
 		return -EINVAL;
 	}
 
-	err = iavf_add_del_eth_addr(adapter, addr, true);
+	err = iavf_add_del_eth_addr(adapter, addr, true, VIRTCHNL_ETHER_ADDR_EXTRA);
 	if (err) {
 		PMD_DRV_LOG(ERR, "fail to add MAC address");
 		return -EIO;
@@ -974,7 +976,7 @@ iavf_dev_del_mac_addr(struct rte_eth_dev *dev, uint32_t index)
 
 	addr = &dev->data->mac_addrs[index];
 
-	err = iavf_add_del_eth_addr(adapter, addr, false);
+	err = iavf_add_del_eth_addr(adapter, addr, false, VIRTCHNL_ETHER_ADDR_EXTRA);
 	if (err)
 		PMD_DRV_LOG(ERR, "fail to delete MAC address");
 
@@ -1167,7 +1169,7 @@ iavf_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
 		return -EBUSY;
 	}
 
-	if (frame_size > RTE_ETHER_MAX_LEN)
+	if (frame_size > IAVF_ETH_MAX_LEN)
 		dev->data->dev_conf.rxmode.offloads |=
 				DEV_RX_OFFLOAD_JUMBO_FRAME;
 	else
@@ -1186,17 +1188,15 @@ iavf_dev_set_default_mac_addr(struct rte_eth_dev *dev,
 	struct iavf_adapter *adapter =
 		IAVF_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
 	struct iavf_hw *hw = IAVF_DEV_PRIVATE_TO_HW(adapter);
-	struct rte_ether_addr *perm_addr, *old_addr;
+	struct rte_ether_addr *old_addr;
 	int ret;
 
 	old_addr = (struct rte_ether_addr *)hw->mac.addr;
-	perm_addr = (struct rte_ether_addr *)hw->mac.perm_addr;
 
-	/* If the MAC address is configured by host, skip the setting */
-	if (rte_is_valid_assigned_ether_addr(perm_addr))
-		return -EPERM;
+	if (rte_is_same_ether_addr(old_addr, mac_addr))
+		return 0;
 
-	ret = iavf_add_del_eth_addr(adapter, old_addr, false);
+	ret = iavf_add_del_eth_addr(adapter, old_addr, false, VIRTCHNL_ETHER_ADDR_PRIMARY);
 	if (ret)
 		PMD_DRV_LOG(ERR, "Fail to delete old MAC:"
 			    " %02X:%02X:%02X:%02X:%02X:%02X",
@@ -1207,7 +1207,7 @@ iavf_dev_set_default_mac_addr(struct rte_eth_dev *dev,
 			    old_addr->addr_bytes[4],
 			    old_addr->addr_bytes[5]);
 
-	ret = iavf_add_del_eth_addr(adapter, mac_addr, true);
+	ret = iavf_add_del_eth_addr(adapter, mac_addr, true, VIRTCHNL_ETHER_ADDR_PRIMARY);
 	if (ret)
 		PMD_DRV_LOG(ERR, "Fail to add new MAC:"
 			    " %02X:%02X:%02X:%02X:%02X:%02X",

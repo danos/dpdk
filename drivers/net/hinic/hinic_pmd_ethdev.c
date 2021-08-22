@@ -75,6 +75,9 @@
 #define HINIC_PKTLEN_TO_MTU(pktlen)	\
 	((pktlen) - (ETH_HLEN + ETH_CRC_LEN))
 
+/* The max frame size with default MTU */
+#define HINIC_ETH_MAX_LEN (RTE_ETHER_MTU + ETH_HLEN + ETH_CRC_LEN)
+
 /* lro numer limit for one packet */
 #define HINIC_LRO_WQE_NUM_DEFAULT	8
 
@@ -1556,7 +1559,7 @@ static int hinic_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 
 	/* update max frame size */
 	frame_size = HINIC_MTU_TO_PKTLEN(mtu);
-	if (frame_size > RTE_ETHER_MAX_LEN)
+	if (frame_size > HINIC_ETH_MAX_LEN)
 		dev->data->dev_conf.rxmode.offloads |=
 			DEV_RX_OFFLOAD_JUMBO_FRAME;
 	else
@@ -3082,6 +3085,10 @@ static const struct eth_dev_ops hinic_pmd_vf_ops = {
 	.filter_ctrl                   = hinic_dev_filter_ctrl,
 };
 
+static const struct eth_dev_ops hinic_dev_sec_ops = {
+	.dev_infos_get                 = hinic_dev_infos_get,
+};
+
 static int hinic_func_init(struct rte_eth_dev *eth_dev)
 {
 	struct rte_pci_device *pci_dev;
@@ -3096,6 +3103,7 @@ static int hinic_func_init(struct rte_eth_dev *eth_dev)
 
 	/* EAL is SECONDARY and eth_dev is already created */
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
+		eth_dev->dev_ops = &hinic_dev_sec_ops;
 		PMD_DRV_LOG(INFO, "Initialize %s in secondary process",
 			    eth_dev->data->name);
 

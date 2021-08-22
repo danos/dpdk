@@ -125,11 +125,8 @@ if cc.find_library('m', required : false).found()
 	dpdk_extra_ldflags += '-lm'
 endif
 
-# for linux link against dl, for bsd execinfo
 if is_linux
 	link_lib = 'dl'
-elif is_freebsd
-	link_lib = 'execinfo'
 else
 	link_lib = ''
 endif
@@ -159,8 +156,14 @@ if fdt_dep.found() and cc.has_header('fdt.h')
 	dpdk_extra_ldflags += '-lfdt'
 endif
 
+libexecinfo = cc.find_library('libexecinfo', required: false)
+if libexecinfo.found() and cc.has_header('execinfo.h')
+	add_project_link_arguments('-lexecinfo', language: 'c')
+	dpdk_extra_ldflags += '-lexecinfo'
+endif
+
 # check for libbsd
-libbsd = dependency('libbsd', required: false)
+libbsd = dependency('libbsd', required: false, method: 'pkg-config')
 if libbsd.found()
 	dpdk_conf.set('RTE_USE_LIBBSD', 1)
 endif
@@ -302,4 +305,13 @@ if get_option('b_lto')
 		add_project_arguments('-Wno-lto-type-mismatch', language: 'c')
 		add_project_link_arguments('-Wno-lto-type-mismatch', language: 'c')
 	endif
+endif
+
+if get_option('default_library') == 'both'
+	error( '''
+    Unsupported value "both" for "default_library" option.
+
+    NOTE: DPDK always builds both shared and static libraries.  Please set
+    "default_library" to either "static" or "shared" to select default linkage
+    for apps and any examples.''')
 endif

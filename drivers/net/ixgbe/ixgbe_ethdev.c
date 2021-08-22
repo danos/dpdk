@@ -3338,6 +3338,13 @@ ixgbe_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 			  hw_stats->fccrc +
 			  hw_stats->fclast;
 
+	/*
+	 * 82599 errata, UDP frames with a 0 checksum can be marked as checksum
+	 * errors.
+	 */
+	if (hw->mac.type != ixgbe_mac_82599EB)
+		stats->ierrors += hw_stats->xec;
+
 	/* Tx Errors */
 	stats->oerrors  = 0;
 	return 0;
@@ -3801,9 +3808,11 @@ ixgbe_fw_version_get(struct rte_eth_dev *dev, char *fw_version, size_t fw_size)
 
 	etrack_id = (eeprom_verh << 16) | eeprom_verl;
 	ret = snprintf(fw_version, fw_size, "0x%08x", etrack_id);
+	if (ret < 0)
+		return -EINVAL;
 
 	ret += 1; /* add the size of '\0' */
-	if (fw_size < (u32)ret)
+	if (fw_size < (size_t)ret)
 		return ret;
 	else
 		return 0;
@@ -5007,10 +5016,18 @@ ixgbe_dev_rss_reta_update(struct rte_eth_dev *dev,
 	uint32_t reta, r;
 	uint16_t idx, shift;
 	struct ixgbe_adapter *adapter = dev->data->dev_private;
+	struct rte_eth_dev_data *dev_data = dev->data;
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	uint32_t reta_reg;
 
 	PMD_INIT_FUNC_TRACE();
+
+	if (!dev_data->dev_started) {
+		PMD_DRV_LOG(ERR,
+			"port %d must be started before rss reta update",
+			 dev_data->port_id);
+		return -EIO;
+	}
 
 	if (!ixgbe_rss_update_sp(hw->mac.type)) {
 		PMD_DRV_LOG(ERR, "RSS reta update is not supported on this "
@@ -5173,7 +5190,7 @@ ixgbe_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
 	hlreg0 = IXGBE_READ_REG(hw, IXGBE_HLREG0);
 
 	/* switch to jumbo mode if needed */
-	if (frame_size > RTE_ETHER_MAX_LEN) {
+	if (frame_size > IXGBE_ETH_MAX_LEN) {
 		dev->data->dev_conf.rxmode.offloads |=
 			DEV_RX_OFFLOAD_JUMBO_FRAME;
 		hlreg0 |= IXGBE_HLREG0_JUMBOEN;
@@ -6555,7 +6572,8 @@ ixgbevf_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	 * prior to 3.11.33 which contains the following change:
 	 * "ixgbe: Enable jumbo frames support w/ SR-IOV"
 	 */
-	ixgbevf_rlpml_set_vf(hw, max_frame);
+	if (ixgbevf_rlpml_set_vf(hw, max_frame))
+		return -EINVAL;
 
 	/* update max frame size */
 	dev->data->dev_conf.rxmode.max_rx_pkt_len = max_frame;
@@ -7330,9 +7348,6 @@ ixgbe_get_module_eeprom(struct rte_eth_dev *dev,
 	uint8_t databyte = 0xFF;
 	uint8_t *data = info->data;
 	uint32_t i = 0;
-
-	if (info->length == 0)
-		return -EINVAL;
 
 	for (i = info->offset; i < info->offset + info->length; i++) {
 		if (i < RTE_ETH_MODULE_SFF_8079_LEN)

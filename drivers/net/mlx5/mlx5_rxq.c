@@ -346,7 +346,9 @@ rxq_free_elts_sprq(struct mlx5_rxq_ctrl *rxq_ctrl)
 		(1 << rxq->elts_n) * (1 << rxq->strd_num_n) :
 		(1 << rxq->elts_n);
 	const uint16_t q_mask = q_n - 1;
-	uint16_t used = q_n - (rxq->rq_ci - rxq->rq_pi);
+	uint16_t elts_ci = mlx5_rxq_mprq_enabled(&rxq_ctrl->rxq) ?
+		rxq->elts_ci : rxq->rq_ci;
+	uint16_t used = q_n - (elts_ci - rxq->rq_pi);
 	uint16_t i;
 
 	DRV_LOG(DEBUG, "port %u Rx queue %u freeing %d WRs",
@@ -359,8 +361,8 @@ rxq_free_elts_sprq(struct mlx5_rxq_ctrl *rxq_ctrl)
 	 */
 	if (mlx5_rxq_check_vec_support(rxq) > 0) {
 		for (i = 0; i < used; ++i)
-			(*rxq->elts)[(rxq->rq_ci + i) & q_mask] = NULL;
-		rxq->rq_pi = rxq->rq_ci;
+			(*rxq->elts)[(elts_ci + i) & q_mask] = NULL;
+		rxq->rq_pi = elts_ci;
 	}
 	for (i = 0; i != q_n; ++i) {
 		if ((*rxq->elts)[i] != NULL)
@@ -402,14 +404,14 @@ mlx5_get_rx_queue_offloads(struct rte_eth_dev *dev)
 	struct mlx5_priv *priv = dev->data->dev_private;
 	struct mlx5_dev_config *config = &priv->config;
 	uint64_t offloads = (DEV_RX_OFFLOAD_SCATTER |
-			     RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT |
 			     DEV_RX_OFFLOAD_TIMESTAMP |
 			     DEV_RX_OFFLOAD_JUMBO_FRAME |
 			     DEV_RX_OFFLOAD_RSS_HASH);
 
+	if (!config->mprq.enabled)
+		offloads |= RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
 	if (config->hw_fcs_strip)
 		offloads |= DEV_RX_OFFLOAD_KEEP_CRC;
-
 	if (config->hw_csum)
 		offloads |= (DEV_RX_OFFLOAD_IPV4_CKSUM |
 			     DEV_RX_OFFLOAD_UDP_CKSUM |
@@ -1689,6 +1691,7 @@ mlx5_rxq_new(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 	LIST_INSERT_HEAD(&priv->rxqsctrl, tmpl, next);
 	return tmpl;
 error:
+	mlx5_mr_btree_free(&tmpl->rxq.mr_ctrl.cache_bh);
 	mlx5_free(tmpl);
 	return NULL;
 }
@@ -2421,7 +2424,9 @@ uint32_t mlx5_hrxq_get(struct rte_eth_dev *dev,
 			return 0;
 		hrxq = container_of(entry, typeof(*hrxq), entry);
 	}
-	return hrxq->idx;
+	if (hrxq)
+		return hrxq->idx;
+	return 0;
 }
 
 /**

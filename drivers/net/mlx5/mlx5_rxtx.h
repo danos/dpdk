@@ -126,7 +126,7 @@ struct mlx5_rxq_data {
 	unsigned int strd_scatter_en:1; /* Scattered packets from a stride. */
 	unsigned int lro:1; /* Enable LRO. */
 	unsigned int dynf_meta:1; /* Dynamic metadata is configured. */
-	unsigned int mcqe_format:3; /* Dynamic metadata is configured. */
+	unsigned int mcqe_format:3; /* CQE compression format. */
 	volatile uint32_t *rq_db;
 	volatile uint32_t *cq_db;
 	uint16_t port_id;
@@ -168,6 +168,7 @@ struct mlx5_rxq_data {
 	uint64_t timestamp_rx_flag; /* Dynamic mbuf flag for timestamp. */
 	uint64_t flow_meta_mask;
 	int32_t flow_meta_offset;
+	uint32_t flow_meta_port_mask;
 	uint32_t rxseg_n; /* Number of split segment descriptions. */
 	struct mlx5_eth_rxseg rxseg[MLX5_MAX_RXQ_NSEG];
 	/* Buffer split segment descriptions - sizes, offsets, pools. */

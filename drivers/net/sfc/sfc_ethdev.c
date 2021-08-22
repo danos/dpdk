@@ -46,14 +46,6 @@ sfc_fw_version_get(struct rte_eth_dev *dev, char *fw_version, size_t fw_size)
 	int ret;
 	int rc;
 
-	/*
-	 * Return value of the callback is likely supposed to be
-	 * equal to or greater than 0, nevertheless, if an error
-	 * occurs, it will be desirable to pass it to the caller
-	 */
-	if ((fw_version == NULL) || (fw_size == 0))
-		return -EINVAL;
-
 	rc = efx_nic_get_fw_version(sa->nic, &enfi);
 	if (rc != 0)
 		return -rc;
@@ -640,10 +632,19 @@ sfc_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 			mac_stats[EFX_MAC_VADAPTER_TX_BROADCAST_BYTES];
 		stats->imissed = mac_stats[EFX_MAC_VADAPTER_RX_BAD_PACKETS];
 		stats->oerrors = mac_stats[EFX_MAC_VADAPTER_TX_BAD_PACKETS];
+
+		/* CRC is included in these stats, but shouldn't be */
+		stats->ibytes -= stats->ipackets * RTE_ETHER_CRC_LEN;
+		stats->obytes -= stats->opackets * RTE_ETHER_CRC_LEN;
 	} else {
 		stats->opackets = mac_stats[EFX_MAC_TX_PKTS];
 		stats->ibytes = mac_stats[EFX_MAC_RX_OCTETS];
 		stats->obytes = mac_stats[EFX_MAC_TX_OCTETS];
+
+		/* CRC is included in these stats, but shouldn't be */
+		stats->ibytes -= mac_stats[EFX_MAC_RX_PKTS] * RTE_ETHER_CRC_LEN;
+		stats->obytes -= mac_stats[EFX_MAC_TX_PKTS] * RTE_ETHER_CRC_LEN;
+
 		/*
 		 * Take into account stats which are whenever supported
 		 * on EF10. If some stat is not supported by current
@@ -1017,7 +1018,7 @@ sfc_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	 * The driver does not use it, but other PMDs update jumbo frame
 	 * flag and max_rx_pkt_len when MTU is set.
 	 */
-	if (mtu > RTE_ETHER_MAX_LEN) {
+	if (mtu > RTE_ETHER_MTU) {
 		struct rte_eth_rxmode *rxmode = &dev->data->dev_conf.rxmode;
 		rxmode->offloads |= DEV_RX_OFFLOAD_JUMBO_FRAME;
 	}

@@ -254,7 +254,9 @@ rte_eth_iterator_init(struct rte_dev_iterator *iter, const char *devargs_str)
 	}
 
 	/* Convert bus args to new syntax for use with new API dev_iterate. */
-	if (strcmp(iter->bus->name, "vdev") == 0) {
+	if ((strcmp(iter->bus->name, "vdev") == 0) ||
+		(strcmp(iter->bus->name, "fslmc") == 0) ||
+		(strcmp(iter->bus->name, "dpaa_bus") == 0)) {
 		bus_param_key = "name";
 	} else if (strcmp(iter->bus->name, "pci") == 0) {
 		bus_param_key = "addr";
@@ -1292,8 +1294,10 @@ rte_eth_dev_configure(uint16_t port_id, uint16_t nb_rx_q, uint16_t nb_tx_q,
 	struct rte_eth_dev *dev;
 	struct rte_eth_dev_info dev_info;
 	struct rte_eth_conf orig_conf;
+	uint16_t overhead_len;
 	int diag;
 	int ret;
+	uint16_t old_mtu;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
 
@@ -1319,9 +1323,19 @@ rte_eth_dev_configure(uint16_t port_id, uint16_t nb_rx_q, uint16_t nb_tx_q,
 		memcpy(&dev->data->dev_conf, dev_conf,
 		       sizeof(dev->data->dev_conf));
 
+	/* Backup mtu for rollback */
+	old_mtu = dev->data->mtu;
+
 	ret = rte_eth_dev_info_get(port_id, &dev_info);
 	if (ret != 0)
 		goto rollback;
+
+	/* Get the real Ethernet overhead length */
+	if (dev_info.max_mtu != UINT16_MAX &&
+	    dev_info.max_rx_pktlen > dev_info.max_mtu)
+		overhead_len = dev_info.max_rx_pktlen - dev_info.max_mtu;
+	else
+		overhead_len = RTE_ETHER_HDR_LEN + RTE_ETHER_CRC_LEN;
 
 	/* If number of queues specified by application for both Rx and Tx is
 	 * zero, use driver preferred values. This cannot be done individually
@@ -1409,12 +1423,17 @@ rte_eth_dev_configure(uint16_t port_id, uint16_t nb_rx_q, uint16_t nb_tx_q,
 			ret = -EINVAL;
 			goto rollback;
 		}
+
+		/* Scale the MTU size to adapt max_rx_pkt_len */
+		dev->data->mtu = dev->data->dev_conf.rxmode.max_rx_pkt_len -
+				overhead_len;
 	} else {
-		if (dev_conf->rxmode.max_rx_pkt_len < RTE_ETHER_MIN_LEN ||
-			dev_conf->rxmode.max_rx_pkt_len > RTE_ETHER_MAX_LEN)
+		uint16_t pktlen = dev_conf->rxmode.max_rx_pkt_len;
+		if (pktlen < RTE_ETHER_MIN_MTU + overhead_len ||
+		    pktlen > RTE_ETHER_MTU + overhead_len)
 			/* Use default value */
 			dev->data->dev_conf.rxmode.max_rx_pkt_len =
-							RTE_ETHER_MAX_LEN;
+						RTE_ETHER_MTU + overhead_len;
 	}
 
 	/*
@@ -1549,6 +1568,8 @@ reset_queues:
 	eth_dev_tx_queue_config(dev, 0);
 rollback:
 	memcpy(&dev->data->dev_conf, &orig_conf, sizeof(dev->data->dev_conf));
+	if (old_mtu != dev->data->mtu)
+		dev->data->mtu = old_mtu;
 
 	rte_ethdev_trace_configure(port_id, nb_rx_q, nb_tx_q, dev_conf, ret);
 	return ret;
@@ -1801,7 +1822,7 @@ rte_eth_dev_close(uint16_t port_id)
 	rte_ethdev_trace_close(port_id);
 	*lasterr = rte_eth_dev_release_port(dev);
 
-	return eth_err(port_id, firsterr);
+	return firsterr;
 }
 
 int
@@ -5239,6 +5260,8 @@ rte_eth_dev_get_reg_info(uint16_t port_id, struct rte_dev_reg_info *info)
 	struct rte_eth_dev *dev;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+	if (info == NULL)
+		return -EINVAL;
 
 	dev = &rte_eth_devices[port_id];
 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->get_reg, -ENOTSUP);
@@ -5263,6 +5286,8 @@ rte_eth_dev_get_eeprom(uint16_t port_id, struct rte_dev_eeprom_info *info)
 	struct rte_eth_dev *dev;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+	if (info == NULL)
+		return -EINVAL;
 
 	dev = &rte_eth_devices[port_id];
 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->get_eeprom, -ENOTSUP);
@@ -5275,6 +5300,8 @@ rte_eth_dev_set_eeprom(uint16_t port_id, struct rte_dev_eeprom_info *info)
 	struct rte_eth_dev *dev;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+	if (info == NULL)
+		return -EINVAL;
 
 	dev = &rte_eth_devices[port_id];
 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->set_eeprom, -ENOTSUP);
@@ -5288,6 +5315,8 @@ rte_eth_dev_get_module_info(uint16_t port_id,
 	struct rte_eth_dev *dev;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+	if (modinfo == NULL)
+		return -EINVAL;
 
 	dev = &rte_eth_devices[port_id];
 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->get_module_info, -ENOTSUP);
@@ -5301,6 +5330,8 @@ rte_eth_dev_get_module_eeprom(uint16_t port_id,
 	struct rte_eth_dev *dev;
 
 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+	if (info == NULL || info->data == NULL || info->length == 0)
+		return -EINVAL;
 
 	dev = &rte_eth_devices[port_id];
 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->get_module_eeprom, -ENOTSUP);
@@ -5692,7 +5723,7 @@ eth_dev_handle_port_link_status(const char *cmd __rte_unused,
 	if (!rte_eth_dev_is_valid_port(port_id))
 		return -1;
 
-	ret = rte_eth_link_get(port_id, &link);
+	ret = rte_eth_link_get_nowait(port_id, &link);
 	if (ret < 0)
 		return -1;
 

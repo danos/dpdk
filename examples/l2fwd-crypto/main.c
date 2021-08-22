@@ -616,11 +616,25 @@ l2fwd_simple_forward(struct rte_mbuf *m, uint16_t portid,
 		struct l2fwd_crypto_options *options)
 {
 	uint16_t dst_port;
+	uint32_t pad_len;
+	struct rte_ipv4_hdr *ip_hdr;
+	uint32_t ipdata_offset = sizeof(struct rte_ether_hdr);
 
+	ip_hdr = (struct rte_ipv4_hdr *)(rte_pktmbuf_mtod(m, char *) +
+					 ipdata_offset);
 	dst_port = l2fwd_dst_ports[portid];
 
 	if (options->mac_updating)
 		l2fwd_mac_updating(m, dst_port);
+
+	if (options->auth_xform.auth.op == RTE_CRYPTO_AUTH_OP_VERIFY)
+		rte_pktmbuf_trim(m, options->auth_xform.auth.digest_length);
+
+	if (options->cipher_xform.cipher.op == RTE_CRYPTO_CIPHER_OP_DECRYPT) {
+		pad_len = m->pkt_len - rte_be_to_cpu_16(ip_hdr->total_length) -
+			  ipdata_offset;
+		rte_pktmbuf_trim(m, pad_len);
+	}
 
 	l2fwd_send_packet(m, dst_port);
 }
@@ -2251,6 +2265,12 @@ initialize_cryptodevs(struct l2fwd_crypto_options *options, unsigned nb_ports,
 		if (enabled_cdevs[cdev_id] == 0)
 			continue;
 
+		if (check_cryptodev_mask(options, cdev_id) < 0)
+			continue;
+
+		if (check_capabilities(options, cdev_id) < 0)
+			continue;
+
 		retval = rte_cryptodev_socket_id(cdev_id);
 
 		if (retval < 0) {
@@ -2804,6 +2824,9 @@ main(int argc, char **argv)
 		if (rte_eal_wait_lcore(lcore_id) < 0)
 			return -1;
 	}
+
+	/* clean up the EAL */
+	rte_eal_cleanup();
 
 	return 0;
 }
