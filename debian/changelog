@@ -1,3 +1,10 @@
+dpdk (20.11.2-2vyatta2) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * rte-acl: avoid non-RCU safe reset of RT structure
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 24 Aug 2021 10:00:52 -0400
+
 dpdk (20.11.2-2vyatta1) unstable; urgency=medium
 
   [ Dmitry Kozlyuk ]
