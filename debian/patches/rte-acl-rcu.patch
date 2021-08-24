@@ -282,3 +282,21 @@
  	rte_acl_reset;
  	rte_acl_reset_rules;
  	rte_acl_set_ctx_classify;
+--- a/lib/librte_acl/acl_bld.c
++++ b/lib/librte_acl/acl_bld.c
+@@ -776,6 +776,15 @@ acl_build_reset(struct rte_acl_ctx *ctx)
+ 	if (ctx->rcx == NULL)
+ 		return;
+ 
++	/* With QSBR RCU configured, in-place rebuilds
++	 * are supported, which doesn't allow releasing 
++	 * the current RT structure/memory, which might be
++	 * still used by other threads for classification
++	 * while the rebuild of the new ACL trie is ongoing.
++	 */
++	if (ctx->v)
++		return;
++
+ 	rte_free(ctx->rcx->mem);
+ 	memset(ctx->rcx, 0, sizeof(struct rte_acl_rt_ctx));
+ }
