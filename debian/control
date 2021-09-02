@@ -593,7 +593,8 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/cryptodevs/qat.html
 Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
+Depends: linux-firmware,
+         ${misc:Depends},
          ${shlibs:Depends},
 Description: Data Plane Development Kit (librte-common-qat runtime library)
  DPDK is a set of libraries for fast packet processing. Applications run
@@ -1591,7 +1592,8 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/bnx2x.html
 Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
+Depends: linux-firmware,
+         ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-net-bnx2x runtime library)
@@ -1633,7 +1635,8 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/cxgbe.html
 Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
+Depends: linux-firmware,
+         ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-net-cxgbe runtime library)
@@ -1817,7 +1820,8 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://doc.dpdk.org/guides/nics/ice.html
 Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
+Depends: linux-firmware,
+         ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-net-ice runtime library)
@@ -1959,7 +1963,8 @@ Package: librte-net-nfp21
 Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
+Depends: linux-firmware,
+         ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-net-nfp runtime library)
@@ -2045,7 +2050,8 @@ Architecture: amd64 arm64 armhf i386 ppc64el
 Multi-Arch: same
 Homepage: https://dpdk.org/doc/guides/nics/qede.html
 Pre-Depends: ${misc:Pre-Depends},
-Depends: ${misc:Depends},
+Depends: linux-firmware,
+         ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: libdpdk0,
 Description: Data Plane Development Kit (librte-net-qede runtime library)
