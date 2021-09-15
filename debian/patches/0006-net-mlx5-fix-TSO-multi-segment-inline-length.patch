@@ -1,0 +1,37 @@
+From 79bd409861b9f2df03e2607295d62cb6e232030b Mon Sep 17 00:00:00 2001
+From: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+Date: Sun, 20 Jun 2021 09:30:28 +0300
+Subject: [PATCH 06/34] net/mlx5: fix TSO multi-segment inline length
+
+[ upstream commit 52e1ece50aaf526b900120283284834b0a59e3ce ]
+
+The inline data length for TSO ethernet segment should be
+calculated from the TSO header instead of the inline size
+configured by txq_inline_min devarg or reported by the NIC.
+It is imposed by the nature of TSO offload - inline header
+is being duplicated to every output TCP packet.
+
+Fixes: cacb44a09962 ("net/mlx5: add no-inline Tx flag")
+
+Signed-off-by: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_rxtx.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/mlx5/mlx5_rxtx.c b/drivers/net/mlx5/mlx5_rxtx.c
+index 64bba34ffc..5ec823b024 100644
+--- a/drivers/net/mlx5/mlx5_rxtx.c
++++ b/drivers/net/mlx5/mlx5_rxtx.c
+@@ -2743,7 +2743,8 @@ mlx5_tx_eseg_mdat(struct mlx5_txq_data *__rte_restrict txq,
+ 		 * Copying may be interrupted inside the routine
+ 		 * if run into no inline hint flag.
+ 		 */
+-		copy = tlen >= txq->inlen_mode ? 0 : (txq->inlen_mode - tlen);
++		copy = tso ? inlen : txq->inlen_mode;
++		copy = tlen >= copy ? 0 : (copy - tlen);
+ 		copy = mlx5_tx_mseg_memcpy(pdst, loc, part, copy, olx);
+ 		tlen += copy;
+ 		if (likely(inlen <= tlen) || copy < part) {
+-- 
+2.20.1
+

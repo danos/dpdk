@@ -1,0 +1,48 @@
+From c1ed88d89bc612daec73f81b3549fe01007efc6c Mon Sep 17 00:00:00 2001
+From: Feifei Wang <feifei.wang2@arm.com>
+Date: Thu, 27 May 2021 17:48:06 +0800
+Subject: [PATCH 07/34] net/mlx5: fix r/w lock usage in DMA unmap
+
+[ upstream commit 1c196da274b82e6f1642bde7b1c407a2066caee1 ]
+
+For mlx5 DMA unmap, write lock should be used for rebuilding memory
+region cache table rather than read lock.
+
+Fixes: 989e999d9305 ("net/mlx5: support PCI device DMA map and unmap")
+
+Signed-off-by: Feifei Wang <feifei.wang2@arm.com>
+Reviewed-by: Ruifeng Wang <ruifeng.wang@arm.com>
+Acked-by: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_mr.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/mlx5/mlx5_mr.c b/drivers/net/mlx5/mlx5_mr.c
+index 2cce3b9fe8..1dd14ddfe5 100644
+--- a/drivers/net/mlx5/mlx5_mr.c
++++ b/drivers/net/mlx5/mlx5_mr.c
+@@ -302,10 +302,10 @@ mlx5_dma_unmap(struct rte_pci_device *pdev, void *addr,
+ 	}
+ 	priv = dev->data->dev_private;
+ 	sh = priv->sh;
+-	rte_rwlock_read_lock(&sh->share_cache.rwlock);
++	rte_rwlock_write_lock(&sh->share_cache.rwlock);
+ 	mr = mlx5_mr_lookup_list(&sh->share_cache, &entry, (uintptr_t)addr);
+ 	if (!mr) {
+-		rte_rwlock_read_unlock(&sh->share_cache.rwlock);
++		rte_rwlock_write_unlock(&sh->share_cache.rwlock);
+ 		DRV_LOG(WARNING, "address 0x%" PRIxPTR " wasn't registered "
+ 				 "to PCI device %p", (uintptr_t)addr,
+ 				 (void *)pdev);
+@@ -330,7 +330,7 @@ mlx5_dma_unmap(struct rte_pci_device *pdev, void *addr,
+ 	DEBUG("broadcasting local cache flush, gen=%d",
+ 	      sh->share_cache.dev_gen);
+ 	rte_smp_wmb();
+-	rte_rwlock_read_unlock(&sh->share_cache.rwlock);
++	rte_rwlock_write_unlock(&sh->share_cache.rwlock);
+ 	return 0;
+ }
+ 
+-- 
+2.20.1
+

@@ -1,0 +1,46 @@
+From 0e61040a35a7b6f68b8c8eaf849bf0fb926e7888 Mon Sep 17 00:00:00 2001
+From: Xiaoyu Min <jackmin@nvidia.com>
+Date: Thu, 1 Jul 2021 13:54:56 +0800
+Subject: [PATCH 09/34] net/mlx5: fix match MPLS over GRE with key
+
+[ upstream commit 4b1cb50a86b73dceade317be4541f2c176c7ca5b ]
+
+Currently PMD needs previous layer information in order to set
+corresponding match field for MPLSoGRE or MPLSoUDP.
+
+GRE_KEY item is missing as supported previous layer when translate
+item MPLS, which causes flow[1] cannot match MPLS over GRE traffic.
+
+According to RFC4023, MPLS over GRE tunnel with optional key
+field needs to be supported too.
+
+By adding missing GRE_KEY as supported previous layer fix problem.
+
+[1]:
+flow create 0 ingress pattern eth / ipv6 / gre k_bit is 1 / gre_key /
+mpls label is 966138 / end actions queue index 1 / mark id 0xa / end
+
+Fixes: a7a0365565a4 ("net/mlx5: match GRE key and present bits")
+
+Signed-off-by: Xiaoyu Min <jackmin@nvidia.com>
+Acked-by: Matan Azrad <matan@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_flow_dv.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/net/mlx5/mlx5_flow_dv.c b/drivers/net/mlx5/mlx5_flow_dv.c
+index f5ceb7a2d5..3dd9c0d52b 100644
+--- a/drivers/net/mlx5/mlx5_flow_dv.c
++++ b/drivers/net/mlx5/mlx5_flow_dv.c
+@@ -7342,6 +7342,8 @@ flow_dv_translate_item_mpls(void *matcher, void *key,
+ 			 MLX5_UDP_PORT_MPLS);
+ 		break;
+ 	case MLX5_FLOW_LAYER_GRE:
++		/* Fall-through. */
++	case MLX5_FLOW_LAYER_GRE_KEY:
+ 		MLX5_SET(fte_match_set_misc, misc_m, gre_protocol, 0xffff);
+ 		MLX5_SET(fte_match_set_misc, misc_v, gre_protocol,
+ 			 RTE_ETHER_TYPE_MPLS);
+-- 
+2.20.1
+

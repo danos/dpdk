@@ -1,0 +1,35 @@
+From 453f8bb23518e6625dc1cb7e9799449a41080055 Mon Sep 17 00:00:00 2001
+From: Dmitry Kozlyuk <dkozlyuk@nvidia.com>
+Date: Wed, 21 Jul 2021 15:51:12 +0300
+Subject: [PATCH 21/34] net/mlx5: fix indirect action modify rollback
+
+[ upstream commit b7c8ea62d00f02c206ec2aded5581c2e0f01c377 ]
+
+mlx5_ind_table_obj_modify() first references queues from the new list,
+then applies the new list to HW. In case of apply failure the function
+dereferenced queues from the old list, while it should be the new list.
+
+Fixes: fa7ad49e96b5 ("net/mlx5: fix shared RSS action update")
+
+Signed-off-by: Dmitry Kozlyuk <dkozlyuk@nvidia.com>
+Acked-by: Matan Azrad <matan@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_rxq.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/mlx5/mlx5_rxq.c b/drivers/net/mlx5/mlx5_rxq.c
+index edf91254b1..002df27ab4 100644
+--- a/drivers/net/mlx5/mlx5_rxq.c
++++ b/drivers/net/mlx5/mlx5_rxq.c
+@@ -2150,7 +2150,7 @@ mlx5_ind_table_obj_modify(struct rte_eth_dev *dev,
+ error:
+ 	err = rte_errno;
+ 	for (j = 0; j < i; j++)
+-		mlx5_rxq_release(dev, ind_tbl->queues[j]);
++		mlx5_rxq_release(dev, queues[j]);
+ 	rte_errno = err;
+ 	DEBUG("Port %u cannot setup indirection table.", dev->data->port_id);
+ 	return ret;
+-- 
+2.20.1
+

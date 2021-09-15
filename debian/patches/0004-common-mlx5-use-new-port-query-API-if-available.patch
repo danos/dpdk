@@ -1,0 +1,163 @@
+From 32b98abf1b42e4d5d8c174a45da827f625d67767 Mon Sep 17 00:00:00 2001
+From: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+Date: Wed, 7 Jul 2021 18:54:27 +0300
+Subject: [PATCH 4/5] common/mlx5: use new port query API if available
+
+[ upstream commit d0cf77e8c2b64319057f5f629a7a595ce6e8b556 ]
+
+In order to get E-Switch vport identifiers the mlx5 PMD relies
+on two approaches:
+  [a] use port query API if it is provided by rdma-core library
+  [b] otherwise, deduce vport ids from the related VF index
+The latter is not reliable and may not work with newer kernel
+drivers and in some configurations (LAG), causing E-Switch
+malfunction. Hence, engaging the port query API is highly
+desirable.
+
+Depending on rdma-core version the port query API is:
+  - very old OFED versions have no query API (approach [b])
+  - rdma-core OFED < 5.5 provides mlx5dv_query_devx_port,
+    HAVE_MLX5DV_DR_DEVX_PORT flag is defined (approach [a])
+  - rdma-core OFED >= 5.5 has mlx5dv_query_port, flag
+    HAVE_MLX5DV_DR_DEVX_PORT_V35 is defined (approach [a])
+  - future OFED versions might remove mlx5dv_query_devx_port
+    and HAVE_MLX5DV_DR_DEVX_PORT will not be defined
+  - Upstream rdma-core < v35 has no port query API (approach [b])
+  - Upstream rdma-core >= v35 has  mlx5dv_query_port, flag
+    HAVE_MLX5DV_DR_DEVX_PORT_V35 is defined (approach [a])
+
+In order to support the new mlx5dv_query_port routine, the
+conditional compilation flag HAVE_MLX5DV_DR_DEVX_PORT_V35
+is introduced by this patch. The flag HAVE_MLX5DV_DR_DEVX_PORT
+is kept for compatibility with previous rdma-core versions.
+
+Despite this patch is not a bugfix (it follows the introduced API
+variation in underlying library), it resolves the compatibility
+issue and is highly desired to be ported to DPDK LTS.
+
+Signed-off-by: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+Acked-by: Matan Azrad <matan@nvidia.com>
+---
+ drivers/common/mlx5/linux/meson.build |  2 +
+ drivers/common/mlx5/linux/mlx5_glue.c | 55 ++++++++++++++++++++++-----
+ drivers/common/mlx5/linux/mlx5_glue.h | 16 +++++++-
+ 3 files changed, 63 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/common/mlx5/linux/meson.build b/drivers/common/mlx5/linux/meson.build
+index fa9686fdaf..8295cfbe41 100644
+--- a/drivers/common/mlx5/linux/meson.build
++++ b/drivers/common/mlx5/linux/meson.build
+@@ -94,6 +94,8 @@ has_sym_args = [
+ 	'IBV_WQ_FLAG_RX_END_PADDING' ],
+ 	[ 'HAVE_MLX5DV_DR_DEVX_PORT', 'infiniband/mlx5dv.h',
+ 	'mlx5dv_query_devx_port' ],
++	[ 'HAVE_MLX5DV_DR_DEVX_PORT_V35', 'infiniband/mlx5dv.h',
++	'mlx5dv_query_port' ],
+ 	[ 'HAVE_IBV_DEVX_OBJ', 'infiniband/mlx5dv.h',
+ 	'mlx5dv_devx_obj_create' ],
+ 	[ 'HAVE_IBV_FLOW_DEVX_COUNTERS', 'infiniband/mlx5dv.h',
+diff --git a/drivers/common/mlx5/linux/mlx5_glue.c b/drivers/common/mlx5/linux/mlx5_glue.c
+index 964f7e74ef..e24bcdfbd1 100644
+--- a/drivers/common/mlx5/linux/mlx5_glue.c
++++ b/drivers/common/mlx5/linux/mlx5_glue.c
+@@ -1087,17 +1087,54 @@ mlx5_glue_devx_wq_query(struct ibv_wq *wq, const void *in, size_t inlen,
+ static int
+ mlx5_glue_devx_port_query(struct ibv_context *ctx,
+ 			  uint32_t port_num,
+-			  struct mlx5dv_devx_port *mlx5_devx_port)
+-{
++			  struct mlx5_port_info *info)
++{
++	int err = 0;
++
++	info->query_flags = 0;
++#ifdef HAVE_MLX5DV_DR_DEVX_PORT_V35
++	/* The DevX port query API is implemented (rdma-core v35 and above). */
++	struct mlx5_ib_uapi_query_port devx_port;
++
++	memset(&devx_port, 0, sizeof(devx_port));
++	err = mlx5dv_query_port(ctx, port_num, &devx_port);
++	if (err)
++		return err;
++	if (devx_port.flags & MLX5DV_QUERY_PORT_VPORT_REG_C0) {
++		info->vport_meta_tag = devx_port.reg_c0.value;
++		info->vport_meta_mask = devx_port.reg_c0.mask;
++		info->query_flags |= MLX5_PORT_QUERY_REG_C0;
++	}
++	if (devx_port.flags & MLX5DV_QUERY_PORT_VPORT) {
++		info->vport_id = devx_port.vport;
++		info->query_flags |= MLX5_PORT_QUERY_VPORT;
++	}
++#else
+ #ifdef HAVE_MLX5DV_DR_DEVX_PORT
+-	return mlx5dv_query_devx_port(ctx, port_num, mlx5_devx_port);
++	/* The legacy DevX port query API is implemented (prior v35). */
++	struct mlx5dv_devx_port devx_port = {
++		.comp_mask = MLX5DV_DEVX_PORT_VPORT |
++			     MLX5DV_DEVX_PORT_MATCH_REG_C_0
++	};
++
++	err = mlx5dv_query_devx_port(ctx, port_num, &devx_port);
++	if (err)
++		return err;
++	if (devx_port.comp_mask & MLX5DV_DEVX_PORT_MATCH_REG_C_0) {
++		info->vport_meta_tag = devx_port.reg_c_0.value;
++		info->vport_meta_mask = devx_port.reg_c_0.mask;
++		info->query_flags |= MLX5_PORT_QUERY_REG_C0;
++	}
++	if (devx_port.comp_mask & MLX5DV_DEVX_PORT_VPORT) {
++		info->vport_id = devx_port.vport_num;
++		info->query_flags |= MLX5_PORT_QUERY_VPORT;
++	}
+ #else
+-	(void)ctx;
+-	(void)port_num;
+-	(void)mlx5_devx_port;
+-	errno = ENOTSUP;
+-	return errno;
+-#endif
++	RTE_SET_USED(ctx);
++	RTE_SET_USED(port_num);
++#endif /* HAVE_MLX5DV_DR_DEVX_PORT */
++#endif /* HAVE_MLX5DV_DR_DEVX_PORT_V35 */
++	return err;
+ }
+ 
+ static int
+diff --git a/drivers/common/mlx5/linux/mlx5_glue.h b/drivers/common/mlx5/linux/mlx5_glue.h
+index 9e385be957..f08c83768c 100644
+--- a/drivers/common/mlx5/linux/mlx5_glue.h
++++ b/drivers/common/mlx5/linux/mlx5_glue.h
+@@ -84,6 +84,20 @@ struct mlx5dv_dr_action;
+ struct mlx5dv_devx_port;
+ #endif
+ 
++#ifndef HAVE_MLX5DV_DR_DEVX_PORT_V35
++struct mlx5dv_port;
++#endif
++
++#define MLX5_PORT_QUERY_VPORT (1u << 0)
++#define MLX5_PORT_QUERY_REG_C0 (1u << 1)
++
++struct mlx5_port_info {
++	uint16_t query_flags;
++	uint16_t vport_id; /* Associated VF vport index (if any). */
++	uint32_t vport_meta_tag; /* Used for vport index match ove VF LAG. */
++	uint32_t vport_meta_mask; /* Used for vport index field match mask. */
++};
++
+ #ifndef HAVE_MLX5_DR_CREATE_ACTION_FLOW_METER
+ struct mlx5dv_dr_flow_meter_attr;
+ #endif
+@@ -311,7 +325,7 @@ struct mlx5_glue {
+ 			     void *out, size_t outlen);
+ 	int (*devx_port_query)(struct ibv_context *ctx,
+ 			       uint32_t port_num,
+-			       struct mlx5dv_devx_port *mlx5_devx_port);
++			       struct mlx5_port_info *info);
+ 	int (*dr_dump_domain)(FILE *file, void *domain);
+ 	int (*devx_query_eqn)(struct ibv_context *context, uint32_t cpus,
+ 			      uint32_t *eqn);
+-- 
+2.20.1
+

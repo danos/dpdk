@@ -1,0 +1,104 @@
+From 3003560e240031c57a11a034357a9aecb82f85d0 Mon Sep 17 00:00:00 2001
+From: Gregory Etelson <getelson@nvidia.com>
+Date: Tue, 20 Jul 2021 18:38:19 +0300
+Subject: [PATCH 26/34] net/mlx5: fix representor interrupt handler
+
+[ upstream commit 494d6863c2464838e8ee65b9a7d3d108145ae08d ]
+
+In mlx5 PMD the PCI device interrupt vector was used by Uplink
+representor exclusively and other VF representors did not support
+interrupt mode.
+All the VFs and Uplink representors are separate ethernet devices
+and must have dedicated interrupt vectors.
+The fix provides each representor with a dedicated interrupt
+vector.
+
+Fixes: 5882bde88da2 ("net/mlx5: fix representor interrupts handler")
+
+Signed-off-by: Gregory Etelson <getelson@nvidia.com>
+Acked-by: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+---
+ drivers/net/mlx5/linux/mlx5_os.c | 25 +++++++++++++++++++++++++
+ drivers/net/mlx5/mlx5.c          |  5 +++++
+ drivers/net/mlx5/mlx5_rxq.c      |  6 ------
+ 3 files changed, 30 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/net/mlx5/linux/mlx5_os.c b/drivers/net/mlx5/linux/mlx5_os.c
+index e25d6ffe22..44af6f1c4e 100644
+--- a/drivers/net/mlx5/linux/mlx5_os.c
++++ b/drivers/net/mlx5/linux/mlx5_os.c
+@@ -2166,6 +2166,31 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
+ 		}
+ 		restore = list[i].eth_dev->data->dev_flags;
+ 		rte_eth_copy_pci_info(list[i].eth_dev, pci_dev);
++		/**
++		 * Each representor has a dedicated interrupts vector.
++		 * rte_eth_copy_pci_info() assigns PF interrupts handle to
++		 * representor eth_dev object because representor and PF
++		 * share the same PCI address.
++		 * Override representor device with a dedicated
++		 * interrupts handle here.
++		 * Representor interrupts handle is released in mlx5_dev_stop().
++		 */
++		if (list[i].info.representor) {
++			struct rte_intr_handle *intr_handle;
++			intr_handle = mlx5_malloc(MLX5_MEM_SYS | MLX5_MEM_ZERO,
++						  sizeof(*intr_handle), 0,
++						  SOCKET_ID_ANY);
++			if (!intr_handle) {
++				DRV_LOG(ERR,
++					"port %u failed to allocate memory for interrupt handler "
++					"Rx interrupts will not be supported",
++					i);
++				rte_errno = ENOMEM;
++				ret = -rte_errno;
++				goto exit;
++			}
++			list[i].eth_dev->intr_handle = intr_handle;
++		}
+ 		/* Restore non-PCI flags cleared by the above call. */
+ 		list[i].eth_dev->data->dev_flags |= restore;
+ 		rte_eth_dev_probing_finish(list[i].eth_dev);
+diff --git a/drivers/net/mlx5/mlx5.c b/drivers/net/mlx5/mlx5.c
+index 7953a27834..bf37e5eaeb 100644
+--- a/drivers/net/mlx5/mlx5.c
++++ b/drivers/net/mlx5/mlx5.c
+@@ -1335,6 +1335,11 @@ mlx5_dev_close(struct rte_eth_dev *dev)
+ 		priv->rxqs_n = 0;
+ 		priv->rxqs = NULL;
+ 	}
++	if (priv->representor) {
++		/* Each representor has a dedicated interrupts handler */
++		mlx5_free(dev->intr_handle);
++		dev->intr_handle = NULL;
++	}
+ 	if (priv->txqs != NULL) {
+ 		/* XXX race condition if mlx5_tx_burst() is still running. */
+ 		usleep(1000);
+diff --git a/drivers/net/mlx5/mlx5_rxq.c b/drivers/net/mlx5/mlx5_rxq.c
+index 002df27ab4..b5268df57d 100644
+--- a/drivers/net/mlx5/mlx5_rxq.c
++++ b/drivers/net/mlx5/mlx5_rxq.c
+@@ -904,9 +904,6 @@ mlx5_rx_intr_vec_enable(struct rte_eth_dev *dev)
+ 	unsigned int count = 0;
+ 	struct rte_intr_handle *intr_handle = dev->intr_handle;
+ 
+-	/* Representor shares dev->intr_handle with PF. */
+-	if (priv->representor)
+-		return 0;
+ 	if (!dev->data->dev_conf.intr_conf.rxq)
+ 		return 0;
+ 	mlx5_rx_intr_vec_disable(dev);
+@@ -987,9 +984,6 @@ mlx5_rx_intr_vec_disable(struct rte_eth_dev *dev)
+ 	unsigned int rxqs_n = priv->rxqs_n;
+ 	unsigned int n = RTE_MIN(rxqs_n, (uint32_t)RTE_MAX_RXTX_INTR_VEC_ID);
+ 
+-	/* Representor shares dev->intr_handle with PF. */
+-	if (priv->representor)
+-		return;
+ 	if (!dev->data->dev_conf.intr_conf.rxq)
+ 		return;
+ 	if (!intr_handle->intr_vec)
+-- 
+2.20.1
+

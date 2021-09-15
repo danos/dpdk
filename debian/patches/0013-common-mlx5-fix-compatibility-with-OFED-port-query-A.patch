@@ -1,0 +1,44 @@
+From 386524e3f5975e632ef6921ecaeafb8288f3d5d3 Mon Sep 17 00:00:00 2001
+From: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+Date: Wed, 7 Jul 2021 18:54:28 +0300
+Subject: [PATCH 13/34] common/mlx5: fix compatibility with OFED port query API
+
+[ upstream commit 0fd928bbbae5e6f89376f9996d5340a861fc14e3 ]
+
+The compilation flag HAVE_MLX5DV_DR_DEVX_PORT depends on presence
+of mlx5dv_query_devx_port routine in rdma-core library.
+
+The mlx5dv_query_devx_port routine exists only in OFED versions
+of rdma-core library and is being planned to be removed and replaced
+with Upstream compatible mlx5dv_query_port.
+
+As mlx5dv_query_devx_port is being removed all the dependencies on
+the HAVE_MLX5DV_DR_DEVX_PORT compilation flag are reconsidered.
+
+The new compilation flag HAVE_MLX5DV_DR_CREATE_DEST_IB_PORT is for
+backward compatibility with older OFED versions.
+
+Fixes: 6cfe84fbe7b1 ("net/mlx5: fix port action for LAG")
+
+Signed-off-by: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+Acked-by: Matan Azrad <matan@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_flow_dv.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/mlx5/mlx5_flow_dv.c b/drivers/net/mlx5/mlx5_flow_dv.c
+index 0ffbdb4ab7..3e5c8d3af9 100644
+--- a/drivers/net/mlx5/mlx5_flow_dv.c
++++ b/drivers/net/mlx5/mlx5_flow_dv.c
+@@ -8498,7 +8498,7 @@ flow_dv_translate_action_port_id(struct rte_eth_dev *dev,
+ 					  RTE_FLOW_ERROR_TYPE_ACTION,
+ 					  NULL,
+ 					  "No eswitch info was found for port");
+-#ifdef HAVE_MLX5DV_DR_DEVX_PORT
++#ifdef HAVE_MLX5DV_DR_CREATE_DEST_IB_PORT
+ 	/*
+ 	 * This parameter is transferred to
+ 	 * mlx5dv_dr_action_create_dest_ib_port().
+-- 
+2.20.1
+

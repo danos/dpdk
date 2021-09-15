@@ -1,0 +1,36 @@
+From 5b34c2ad6f1b413cf21e4f342151dfcf3a7b3061 Mon Sep 17 00:00:00 2001
+From: Xiaoyu Min <jackmin@nvidia.com>
+Date: Wed, 7 Jul 2021 10:32:46 +0800
+Subject: [PATCH 15/34] net/mlx5: fix missing RSS expandable items
+
+[ upstream commit 1c4f7044c6b5e132adda855000415029717b6502 ]
+
+Some RSS expandable items are missing which leads to the expanded
+rte flow rules with wrong patterns.
+
+Fix by adding missed items.
+
+Fixes: d91093b9a2af ("net/mlx5: fix RSS pattern expansion")
+
+Signed-off-by: Xiaoyu Min <jackmin@nvidia.com>
+Acked-by: Matan Azrad <matan@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_flow.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/net/mlx5/mlx5_flow.c b/drivers/net/mlx5/mlx5_flow.c
+index 35a1d04a2e..709592b98e 100644
+--- a/drivers/net/mlx5/mlx5_flow.c
++++ b/drivers/net/mlx5/mlx5_flow.c
+@@ -132,6 +132,8 @@ mlx5_flow_is_rss_expandable_item(const struct rte_flow_item *item)
+ 	case RTE_FLOW_ITEM_TYPE_GRE:
+ 	case RTE_FLOW_ITEM_TYPE_GENEVE:
+ 	case RTE_FLOW_ITEM_TYPE_MPLS:
++	case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
++	case RTE_FLOW_ITEM_TYPE_GRE_KEY:
+ 		return true;
+ 	default:
+ 		break;
+-- 
+2.20.1
+

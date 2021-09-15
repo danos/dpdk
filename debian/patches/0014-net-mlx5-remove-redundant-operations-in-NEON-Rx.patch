@@ -1,0 +1,48 @@
+From 2a5c46697b2b0aa0ff37f18b92ba6aa90d9dcb69 Mon Sep 17 00:00:00 2001
+From: Ruifeng Wang <ruifeng.wang@arm.com>
+Date: Wed, 7 Jul 2021 17:03:06 +0800
+Subject: [PATCH 14/34] net/mlx5: remove redundant operations in NEON Rx
+
+[ upstream commit ff6fcd415f4b2be7572abffa5284978c176d3de4 ]
+
+Mask of entries after the compressed CQE is covered by invalid mask of
+non-compressed valid CQEs. Hence remove redundant calculation on mask.
+The change showed slight performance uplift on N1SDP.
+
+Fixes: 570acdb1da8a ("net/mlx5: add vectorized Rx/Tx burst for ARM")
+
+Signed-off-by: Ruifeng Wang <ruifeng.wang@arm.com>
+Acked-by: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_rxtx_vec_neon.h | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/net/mlx5/mlx5_rxtx_vec_neon.h b/drivers/net/mlx5/mlx5_rxtx_vec_neon.h
+index 2234fbe6b2..ce50a3ccc4 100644
+--- a/drivers/net/mlx5/mlx5_rxtx_vec_neon.h
++++ b/drivers/net/mlx5/mlx5_rxtx_vec_neon.h
+@@ -767,16 +767,15 @@ rxq_cq_process_v(struct mlx5_rxq_data *rxq, volatile struct mlx5_cqe *cq,
+ 		comp_idx = __builtin_clzl(vget_lane_u64(vreinterpret_u64_u16(
+ 					  comp_mask), 0)) /
+ 					  (sizeof(uint16_t) * 8);
+-		/* D.6 mask out entries after the compressed CQE. */
+-		mask = vcreate_u16(comp_idx < MLX5_VPMD_DESCS_PER_LOOP ?
+-				   -1UL >> (comp_idx * sizeof(uint16_t) * 8) :
+-				   0);
+-		invalid_mask = vorr_u16(invalid_mask, mask);
++		invalid_mask = vorr_u16(invalid_mask, comp_mask);
+ 		/* D.7 count non-compressed valid CQEs. */
+ 		n = __builtin_clzl(vget_lane_u64(vreinterpret_u64_u16(
+ 				   invalid_mask), 0)) / (sizeof(uint16_t) * 8);
+ 		nocmp_n += n;
+-		/* D.2 get the final invalid mask. */
++		/*
++		 * D.2 mask out entries after the compressed CQE.
++		 *     get the final invalid mask.
++		 */
+ 		mask = vcreate_u16(n < MLX5_VPMD_DESCS_PER_LOOP ?
+ 				   -1UL >> (n * sizeof(uint16_t) * 8) : 0);
+ 		invalid_mask = vorr_u16(invalid_mask, mask);
+-- 
+2.20.1
+

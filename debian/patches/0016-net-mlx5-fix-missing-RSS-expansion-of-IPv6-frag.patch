@@ -1,0 +1,70 @@
+From a6a787bf7d95934ac9c6ef2354efe885a10db690 Mon Sep 17 00:00:00 2001
+From: Xiaoyu Min <jackmin@nvidia.com>
+Date: Wed, 7 Jul 2021 10:32:47 +0800
+Subject: [PATCH 16/34] net/mlx5: fix missing RSS expansion of IPv6 frag
+
+[ upstream commit 0ed93c13449c0dfc41d957ae809aeceb70d001a3 ]
+
+IPV6_FRAG_EXT item is missed for RSS expansion which causes wrongly
+expanded flows:
+flow create 0 ingress pattern eth / ipv6 / udp dst is 250 / vxlan-gpe /
+ipv6 / ipv6_frag_ext / end actions rss level 2 types ip end / end
+
+Different from other items, IPV6_FRAG_EXT hasn't next field because HW
+only support to do hash of UDP/TCP for non-fragment.
+
+This MLX5_EXPANSION_IPV6_FRAG_EXT node in RSS expansion graph only helps
+RSS expansion function to locate right node in graph from which start
+to expand.
+
+Fixes: 0e5a0d8f7556 ("net/mlx5: support match on IPv6 fragment extension")
+
+Signed-off-by: Xiaoyu Min <jackmin@nvidia.com>
+Acked-by: Matan Azrad <matan@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_flow.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/mlx5/mlx5_flow.c b/drivers/net/mlx5/mlx5_flow.c
+index 709592b98e..4f5a0cf95c 100644
+--- a/drivers/net/mlx5/mlx5_flow.c
++++ b/drivers/net/mlx5/mlx5_flow.c
+@@ -134,6 +134,7 @@ mlx5_flow_is_rss_expandable_item(const struct rte_flow_item *item)
+ 	case RTE_FLOW_ITEM_TYPE_MPLS:
+ 	case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
+ 	case RTE_FLOW_ITEM_TYPE_GRE_KEY:
++	case RTE_FLOW_ITEM_TYPE_IPV6_FRAG_EXT:
+ 		return true;
+ 	default:
+ 		break;
+@@ -453,6 +454,7 @@ enum mlx5_expansion {
+ 	MLX5_EXPANSION_IPV6,
+ 	MLX5_EXPANSION_IPV6_UDP,
+ 	MLX5_EXPANSION_IPV6_TCP,
++	MLX5_EXPANSION_IPV6_FRAG_EXT,
+ };
+ 
+ /** Supported expansion of items. */
+@@ -607,7 +609,8 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
+ 	},
+ 	[MLX5_EXPANSION_IPV6] = {
+ 		.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_IPV6_UDP,
+-						  MLX5_EXPANSION_IPV6_TCP),
++						  MLX5_EXPANSION_IPV6_TCP,
++						  MLX5_EXPANSION_IPV6_FRAG_EXT),
+ 		.type = RTE_FLOW_ITEM_TYPE_IPV6,
+ 		.rss_types = ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6 |
+ 			ETH_RSS_NONFRAG_IPV6_OTHER,
+@@ -620,6 +623,9 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
+ 		.type = RTE_FLOW_ITEM_TYPE_TCP,
+ 		.rss_types = ETH_RSS_NONFRAG_IPV6_TCP,
+ 	},
++	[MLX5_EXPANSION_IPV6_FRAG_EXT] = {
++		.type = RTE_FLOW_ITEM_TYPE_IPV6_FRAG_EXT,
++	},
+ };
+ 
+ static struct rte_flow_shared_action *
+-- 
+2.20.1
+

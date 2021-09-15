@@ -10,6 +10,46 @@
 0001-net-bonding-advertise-rx-vlan-filter-capability.patch
 
 # Backport from dpdk stable
+0001-net-mlx5-fix-RSS-pattern-expansion.patch
+0002-net-mlx5-fix-switchdev-mode-recognition.patch
+0003-net-mlx5-fix-IPIP-multi-tunnel-validation.patch
+0004-net-mlx5-fix-multi-segment-inline-for-the-first-segm.patch
+0005-common-mlx5-fix-memory-region-leak.patch
+0006-net-mlx5-fix-TSO-multi-segment-inline-length.patch
+0007-net-mlx5-fix-r-w-lock-usage-in-DMA-unmap.patch
+0008-net-mlx5-fix-pattern-expansion-in-RSS-flow-rules.patch
+0009-net-mlx5-fix-match-MPLS-over-GRE-with-key.patch
+0010-net-mlx5-remove-unsupported-flow-item-MPLS-over-IP.patch
+0011-net-mlx5-fix-MPLS-RSS-expansion.patch
+0012-common-mlx5-use-new-port-query-API-if-available.patch
+0013-common-mlx5-fix-compatibility-with-OFED-port-query-A.patch
+0014-net-mlx5-remove-redundant-operations-in-NEON-Rx.patch
+0015-net-mlx5-fix-missing-RSS-expandable-items.patch
+0016-net-mlx5-fix-missing-RSS-expansion-of-IPv6-frag.patch
+0017-net-mlx5-fix-threshold-for-mbuf-replenishment-in-MPR.patch
+0018-net-mlx5-fix-typo-in-vectorized-Rx-comments.patch
+0019-net-mlx5-fix-overflow-in-mempool-argument.patch
+0020-net-mlx5-fix-Rx-Tx-queue-checks.patch
+0021-net-mlx5-fix-indirect-action-modify-rollback.patch
+0022-net-mlx5-fix-RoCE-LAG-bond-device-probing.patch
+0023-net-mlx5-fix-RSS-expansion-for-GTP.patch
+0024-net-mlx5-reject-inner-ethernet-matching-in-GTP.patch
+0025-net-mlx5-export-PMD-specific-API-file.patch
+0026-net-mlx5-fix-representor-interrupt-handler.patch
+0027-net-mlx5-fix-queue-leaking-in-hairpin-auto-bind-chec.patch
+0028-net-mlx5-fix-RSS-flow-rule-with-L4-mismatch.patch
+0029-net-mlx5-fix-default-queue-number-in-RSS-flow-rule.patch
+0030-net-mlx5-fix-flow-engine-type-in-function-name.patch
+0031-net-mlx5-fix-timestamp-initialization-on-empty-clock.patch
+0032-net-mlx5-add-Tx-scheduling-check-on-queue-creation.patch
+0033-net-mlx5-workaround-drop-action-with-old-kernel.patch
+0034-net-mlx5-fix-imissed-statistics.patch
+
+0001-common-mlx5-fix-Netlink-port-name-padding-in-probing.patch
+0002-common-mlx5-fix-memory-region-leak.patch
+0003-common-mlx5-fix-Netlink-receive-message-buffer-size.patch
+0004-common-mlx5-use-new-port-query-API-if-available.patch
+0005-common-mlx5-fix-compatibility-with-OFED-port-query-A.patch
 
 # Backport from dpdk-net-next
 0001-net-virtio-fix-tagging-when-not-using-Tx-preparation.patch

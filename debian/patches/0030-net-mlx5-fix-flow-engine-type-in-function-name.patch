@@ -1,0 +1,51 @@
+From 0564825638aed4fa7461b05b366fba474ecd61dd Mon Sep 17 00:00:00 2001
+From: Asaf Penso <asafp@nvidia.com>
+Date: Wed, 28 Jul 2021 12:39:46 +0300
+Subject: [PATCH 30/34] net/mlx5: fix flow engine type in function name
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit e3db2250656883a4de037d3e702187b5dc5b7bfb ]
+
+The concrete function names have a prefix for flow_dv.
+This emphasizes the flow engine is Direct Verbs.
+
+The function flow_get_aged_flows doesn’t have this prefix.
+It creates an inconsistency with the other functions.
+
+Update the function name to include dv.
+
+Fixes: fa2d01c87d2 ("net/mlx5: support flow aging")
+
+Signed-off-by: Asaf Penso <asafp@nvidia.com>
+Acked-by: Matan Azrad <matan@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_flow_dv.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/mlx5/mlx5_flow_dv.c b/drivers/net/mlx5/mlx5_flow_dv.c
+index 5b2e1a9f07..1b9637ac44 100644
+--- a/drivers/net/mlx5/mlx5_flow_dv.c
++++ b/drivers/net/mlx5/mlx5_flow_dv.c
+@@ -12716,7 +12716,7 @@ flow_dv_counter_query(struct rte_eth_dev *dev, uint32_t counter, bool clear,
+  * @note: only stub for now
+  */
+ static int
+-flow_get_aged_flows(struct rte_eth_dev *dev,
++flow_dv_get_aged_flows(struct rte_eth_dev *dev,
+ 		    void **context,
+ 		    uint32_t nb_contexts,
+ 		    struct rte_flow_error *error)
+@@ -12864,7 +12864,7 @@ const struct mlx5_flow_driver_ops mlx5_flow_dv_drv_ops = {
+ 	.counter_alloc = flow_dv_counter_allocate,
+ 	.counter_free = flow_dv_counter_free,
+ 	.counter_query = flow_dv_counter_query,
+-	.get_aged_flows = flow_get_aged_flows,
++	.get_aged_flows = flow_dv_get_aged_flows,
+ 	.action_validate = flow_dv_action_validate,
+ 	.action_create = flow_dv_action_create,
+ 	.action_destroy = flow_dv_action_destroy,
+-- 
+2.20.1
+

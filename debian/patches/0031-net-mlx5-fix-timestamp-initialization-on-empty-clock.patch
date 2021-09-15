@@ -1,0 +1,76 @@
+From f46e2c750ac23a6c6f53b64c99c76a6c02111971 Mon Sep 17 00:00:00 2001
+From: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+Date: Wed, 28 Jul 2021 17:23:35 +0300
+Subject: [PATCH 31/34] net/mlx5: fix timestamp initialization on empty clock
+ queue
+
+[ upstream commit dab07e489cd5be47a017e0b8558b3fe3ee03b979 ]
+
+The committing completions by clock queue might be delayed
+after queue initialization is done and the only Clock Queue
+completion entry (CQE) might keep the invalid status till
+the CQE first update happens.
+
+The mlx5_txpp_update_timestamp() wrongly recognized invalid
+status as error and reported about lost synchronization.
+
+The patch recognizes the invalid status as "not updated yet"
+and accurate scheduling initialization routine waits till
+CQE first update happens.
+
+Some collateral typos in comment are fixed as well.
+
+Fixes: 77522be0a56d ("net/mlx5: introduce clock queue service routine")
+
+Signed-off-by: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_txpp.c | 21 +++++++++++++++------
+ 1 file changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/net/mlx5/mlx5_txpp.c b/drivers/net/mlx5/mlx5_txpp.c
+index 72b0690913..cf11048160 100644
+--- a/drivers/net/mlx5/mlx5_txpp.c
++++ b/drivers/net/mlx5/mlx5_txpp.c
+@@ -676,8 +676,8 @@ mlx5_atomic_read_cqe(rte_int128_t *from, rte_int128_t *ts)
+ {
+ 	/*
+ 	 * The only CQE of Clock Queue is being continuously
+-	 * update by hardware with soecified rate. We have to
+-	 * read timestump and WQE completion index atomically.
++	 * updated by hardware with specified rate. We must
++	 * read timestamp and WQE completion index atomically.
+ 	 */
+ #if defined(RTE_ARCH_X86_64)
+ 	rte_int128_t src;
+@@ -738,15 +738,24 @@ mlx5_txpp_update_timestamp(struct mlx5_dev_ctx_shared *sh)
+ 	} to;
+ 	uint64_t ts;
+ 	uint16_t ci;
++	uint8_t opcode;
+ 
+ 	static_assert(sizeof(struct mlx5_cqe_ts) == sizeof(rte_int128_t),
+ 		      "Wrong timestamp CQE part size");
+ 	mlx5_atomic_read_cqe((rte_int128_t *)&cqe->timestamp, &to.u128);
+-	if (to.cts.op_own >> 4) {
+-		DRV_LOG(DEBUG, "Clock Queue error sync lost.");
+-		__atomic_fetch_add(&sh->txpp.err_clock_queue,
++	opcode = MLX5_CQE_OPCODE(to.cts.op_own);
++	if (opcode) {
++		if (opcode != MLX5_CQE_INVALID) {
++			/*
++			 * Commit the error state if and only if
++			 * we have got at least one actual completion.
++			 */
++			DRV_LOG(DEBUG,
++				"Clock Queue error sync lost (%X).", opcode);
++				__atomic_fetch_add(&sh->txpp.err_clock_queue,
+ 				   1, __ATOMIC_RELAXED);
+-		sh->txpp.sync_lost = 1;
++			sh->txpp.sync_lost = 1;
++		}
+ 		return;
+ 	}
+ 	ci = rte_be_to_cpu_16(to.cts.wqe_counter);
+-- 
+2.20.1
+
