@@ -1,3 +1,11 @@
+dpdk (20.11.2-2vyatta3) unstable; urgency=medium
+
+  [ Sameer Agrawal ]
+  * Bring mlx5 patches from dpdk 20.11.3 in 20.11.2 to address driver link
+    status related issues and for better stability. Fixes VRVDR-52880.
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Wed, 15 Sep 2021 18:46:07 -0400
+
 dpdk (20.11.2-2vyatta2) unstable; urgency=medium
 
   [ Daniel Gollub ]
