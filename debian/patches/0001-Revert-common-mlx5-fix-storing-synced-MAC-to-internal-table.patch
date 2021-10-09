@@ -1,0 +1,45 @@
+From 3061e23acd8ea3593b89cfd7c3885a278c0f51be Mon Sep 17 00:00:00 2001
+From: Sameer Agrawal <sagrawa@mail.eng.vyatta.net>
+Date: Fri, 8 Oct 2021 20:26:26 -0700
+Subject: [PATCH 1/5] Revert "common/mlx5: fix storing synced MAC to internal
+ table"
+
+This reverts commit c278f2836b54fcb218694754922f79194c920546.
+---
+ drivers/common/mlx5/linux/mlx5_nl.c | 20 +++++---------------
+ 1 file changed, 5 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/common/mlx5/linux/mlx5_nl.c b/drivers/common/mlx5/linux/mlx5_nl.c
+index ef7a521379..40d8620300 100644
+--- a/drivers/common/mlx5/linux/mlx5_nl.c
++++ b/drivers/common/mlx5/linux/mlx5_nl.c
+@@ -758,21 +758,11 @@ mlx5_nl_mac_addr_sync(int nlsk_fd, unsigned int iface_idx,
+ 				break;
+ 		if (j != n)
+ 			continue;
+-		if (rte_is_multicast_ether_addr(&macs[i])) {
+-			/* Find the first entry available. */
+-			for (j = MLX5_MAX_UC_MAC_ADDRESSES; j != n; ++j) {
+-				if (rte_is_zero_ether_addr(&mac_addrs[j])) {
+-					mac_addrs[j] = macs[i];
+-					break;
+-				}
+-			}
+-		} else {
+-			/* Find the first entry available. */
+-			for (j = 0; j != MLX5_MAX_UC_MAC_ADDRESSES; ++j) {
+-				if (rte_is_zero_ether_addr(&mac_addrs[j])) {
+-					mac_addrs[j] = macs[i];
+-					break;
+-				}
++		/* Find the first entry available. */
++		for (j = 0; j != n; ++j) {
++			if (rte_is_zero_ether_addr(&mac_addrs[j])) {
++				mac_addrs[j] = macs[i];
++				break;
+ 			}
+ 		}
+ 	}
+-- 
+2.20.1
+
