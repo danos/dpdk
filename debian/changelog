@@ -1,3 +1,11 @@
+dpdk (20.11.2-2vyatta4) unstable; urgency=medium
+
+  [ Sameer Agrawal ]
+  * Revert commit c278f2836b54fcb218694754922f79194c920546 introduced in
+    20.11.1 that breaks mlx driver in azure. VRVDR-56213
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Sun, 10 Oct 2021 12:22:31 -0400
+
 dpdk (20.11.2-2vyatta3) unstable; urgency=medium
 
   [ Sameer Agrawal ]
