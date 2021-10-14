@@ -727,10 +727,11 @@ i40e_write_global_rx_ctl(struct i40e_hw *hw, uint32_t reg_addr,
 			 uint32_t reg_val)
 {
 	uint32_t ori_reg_val;
-	struct rte_eth_dev *dev;
+	struct rte_eth_dev_data *dev_data =
+		((struct i40e_adapter *)hw->back)->pf.dev_data;
+	struct rte_eth_dev *dev = &rte_eth_devices[dev_data->port_id];
 
 	ori_reg_val = i40e_read_rx_ctl(hw, reg_addr);
-	dev = ((struct i40e_adapter *)hw->back)->eth_dev;
 	i40e_write_rx_ctl(hw, reg_addr, reg_val);
 	if (ori_reg_val != reg_val)
 		PMD_DRV_LOG(WARNING,
@@ -1082,6 +1083,7 @@ i40e_init_fdir_filter_list(struct rte_eth_dev *dev)
 	char fdir_hash_name[RTE_HASH_NAMESIZE];
 	uint32_t alloc = hw->func_caps.fd_filters_guaranteed;
 	uint32_t best = hw->func_caps.fd_filters_best_effort;
+	enum i40e_filter_pctype pctype;
 	struct rte_bitmap *bmp = NULL;
 	uint32_t bmp_size;
 	void *mem = NULL;
@@ -1129,6 +1131,10 @@ i40e_init_fdir_filter_list(struct rte_eth_dev *dev)
 		ret = -ENOMEM;
 		goto err_fdir_filter_array_alloc;
 	}
+
+	for (pctype = I40E_FILTER_PCTYPE_NONF_IPV4_UDP;
+	     pctype <= I40E_FILTER_PCTYPE_L2_PAYLOAD; pctype++)
+		pf->fdir.flow_count[pctype] = 0;
 
 	fdir_info->fdir_space_size = alloc + best;
 	fdir_info->fdir_actual_cnt = 0;
@@ -1316,7 +1322,9 @@ i40e_aq_debug_write_global_register(struct i40e_hw *hw,
 				    struct i40e_asq_cmd_details *cmd_details)
 {
 	uint64_t ori_reg_val;
-	struct rte_eth_dev *dev;
+	struct rte_eth_dev_data *dev_data =
+		((struct i40e_adapter *)hw->back)->pf.dev_data;
+	struct rte_eth_dev *dev = &rte_eth_devices[dev_data->port_id];
 	int ret;
 
 	ret = i40e_aq_debug_read_register(hw, reg_addr, &ori_reg_val, NULL);
@@ -1326,7 +1334,6 @@ i40e_aq_debug_write_global_register(struct i40e_hw *hw,
 			    reg_addr);
 		return -EIO;
 	}
-	dev = ((struct i40e_adapter *)hw->back)->eth_dev;
 
 	if (ori_reg_val != reg_val)
 		PMD_DRV_LOG(WARNING,
@@ -1501,7 +1508,6 @@ eth_i40e_dev_init(struct rte_eth_dev *dev, void *init_params __rte_unused)
 	dev->data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 
 	pf->adapter = I40E_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
-	pf->adapter->eth_dev = dev;
 	pf->dev_data = dev->data;
 
 	hw->back = I40E_PF_TO_ADAPTER(pf);
@@ -2034,7 +2040,7 @@ err:
 void
 i40e_vsi_queues_unbind_intr(struct i40e_vsi *vsi)
 {
-	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
+	struct rte_eth_dev *dev = I40E_VSI_TO_ETH_DEV(vsi);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	struct i40e_hw *hw = I40E_VSI_TO_HW(vsi);
@@ -2150,7 +2156,7 @@ __vsi_queues_bind_intr(struct i40e_vsi *vsi, uint16_t msix_vect,
 int
 i40e_vsi_queues_bind_intr(struct i40e_vsi *vsi, uint16_t itr_idx)
 {
-	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
+	struct rte_eth_dev *dev = I40E_VSI_TO_ETH_DEV(vsi);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	struct i40e_hw *hw = I40E_VSI_TO_HW(vsi);
@@ -2226,7 +2232,7 @@ i40e_vsi_queues_bind_intr(struct i40e_vsi *vsi, uint16_t itr_idx)
 void
 i40e_vsi_enable_queues_intr(struct i40e_vsi *vsi)
 {
-	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
+	struct rte_eth_dev *dev = I40E_VSI_TO_ETH_DEV(vsi);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	struct i40e_hw *hw = I40E_VSI_TO_HW(vsi);
@@ -2253,7 +2259,7 @@ i40e_vsi_enable_queues_intr(struct i40e_vsi *vsi)
 void
 i40e_vsi_disable_queues_intr(struct i40e_vsi *vsi)
 {
-	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
+	struct rte_eth_dev *dev = I40E_VSI_TO_ETH_DEV(vsi);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	struct i40e_hw *hw = I40E_VSI_TO_HW(vsi);
@@ -4604,13 +4610,15 @@ i40e_allocate_dma_mem_d(__rte_unused struct i40e_hw *hw,
 			u64 size,
 			u32 alignment)
 {
+	static uint64_t i40e_dma_memzone_id;
 	const struct rte_memzone *mz = NULL;
 	char z_name[RTE_MEMZONE_NAMESIZE];
 
 	if (!mem)
 		return I40E_ERR_PARAM;
 
-	snprintf(z_name, sizeof(z_name), "i40e_dma_%"PRIu64, rte_rand());
+	snprintf(z_name, sizeof(z_name), "i40e_dma_%" PRIu64,
+		__atomic_fetch_add(&i40e_dma_memzone_id, 1, __ATOMIC_RELAXED));
 	mz = rte_memzone_reserve_bounded(z_name, size, SOCKET_ID_ANY,
 			RTE_MEMZONE_IOVA_CONTIG, alignment, RTE_PGSIZE_2M);
 	if (!mz)
@@ -6467,8 +6475,7 @@ i40e_dev_tx_init(struct i40e_pf *pf)
 			break;
 	}
 	if (ret == I40E_SUCCESS)
-		i40e_set_tx_function(container_of(pf, struct i40e_adapter, pf)
-				     ->eth_dev);
+		i40e_set_tx_function(&rte_eth_devices[pf->dev_data->port_id]);
 
 	return ret;
 }
@@ -6496,8 +6503,7 @@ i40e_dev_rx_init(struct i40e_pf *pf)
 		}
 	}
 	if (ret == I40E_SUCCESS)
-		i40e_set_rx_function(container_of(pf, struct i40e_adapter, pf)
-				     ->eth_dev);
+		i40e_set_rx_function(&rte_eth_devices[pf->dev_data->port_id]);
 
 	return ret;
 }
@@ -7936,7 +7942,7 @@ i40e_status_code i40e_replace_mpls_l1_filter(struct i40e_pf *pf)
 	struct i40e_aqc_replace_cloud_filters_cmd  filter_replace;
 	struct i40e_aqc_replace_cloud_filters_cmd_buf  filter_replace_buf;
 	struct i40e_hw *hw = I40E_PF_TO_HW(pf);
-	struct rte_eth_dev *dev = ((struct i40e_adapter *)hw->back)->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[pf->dev_data->port_id];
 	enum i40e_status_code status = I40E_SUCCESS;
 
 	if (pf->support_multi_driver) {
@@ -7997,7 +8003,7 @@ i40e_status_code i40e_replace_mpls_cloud_filter(struct i40e_pf *pf)
 	struct i40e_aqc_replace_cloud_filters_cmd  filter_replace;
 	struct i40e_aqc_replace_cloud_filters_cmd_buf  filter_replace_buf;
 	struct i40e_hw *hw = I40E_PF_TO_HW(pf);
-	struct rte_eth_dev *dev = ((struct i40e_adapter *)hw->back)->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[pf->dev_data->port_id];
 	enum i40e_status_code status = I40E_SUCCESS;
 
 	if (pf->support_multi_driver) {
@@ -8072,7 +8078,7 @@ i40e_replace_gtp_l1_filter(struct i40e_pf *pf)
 	struct i40e_aqc_replace_cloud_filters_cmd  filter_replace;
 	struct i40e_aqc_replace_cloud_filters_cmd_buf  filter_replace_buf;
 	struct i40e_hw *hw = I40E_PF_TO_HW(pf);
-	struct rte_eth_dev *dev = ((struct i40e_adapter *)hw->back)->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[pf->dev_data->port_id];
 	enum i40e_status_code status = I40E_SUCCESS;
 
 	if (pf->support_multi_driver) {
@@ -8160,7 +8166,7 @@ i40e_status_code i40e_replace_gtp_cloud_filter(struct i40e_pf *pf)
 	struct i40e_aqc_replace_cloud_filters_cmd  filter_replace;
 	struct i40e_aqc_replace_cloud_filters_cmd_buf  filter_replace_buf;
 	struct i40e_hw *hw = I40E_PF_TO_HW(pf);
-	struct rte_eth_dev *dev = ((struct i40e_adapter *)hw->back)->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[pf->dev_data->port_id];
 	enum i40e_status_code status = I40E_SUCCESS;
 
 	if (pf->support_multi_driver) {
@@ -8235,7 +8241,7 @@ i40e_replace_port_l1_filter(struct i40e_pf *pf,
 	struct i40e_aqc_replace_cloud_filters_cmd  filter_replace;
 	enum i40e_status_code status = I40E_SUCCESS;
 	struct i40e_hw *hw = I40E_PF_TO_HW(pf);
-	struct rte_eth_dev *dev = ((struct i40e_adapter *)hw->back)->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[pf->dev_data->port_id];
 
 	if (pf->support_multi_driver) {
 		PMD_DRV_LOG(ERR, "Replace l1 filter is not supported.");
@@ -8307,7 +8313,7 @@ i40e_replace_port_cloud_filter(struct i40e_pf *pf,
 	struct i40e_aqc_replace_cloud_filters_cmd  filter_replace;
 	enum i40e_status_code status = I40E_SUCCESS;
 	struct i40e_hw *hw = I40E_PF_TO_HW(pf);
-	struct rte_eth_dev *dev = ((struct i40e_adapter *)hw->back)->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[pf->dev_data->port_id];
 
 	if (pf->support_multi_driver) {
 		PMD_DRV_LOG(ERR, "Replace cloud filter is not supported.");
@@ -9641,9 +9647,10 @@ void
 i40e_check_write_global_reg(struct i40e_hw *hw, uint32_t addr, uint32_t val)
 {
 	uint32_t reg = i40e_read_rx_ctl(hw, addr);
-	struct rte_eth_dev *dev;
+	struct rte_eth_dev_data *dev_data =
+		((struct i40e_adapter *)hw->back)->pf.dev_data;
+	struct rte_eth_dev *dev = &rte_eth_devices[dev_data->port_id];
 
-	dev = ((struct i40e_adapter *)hw->back)->eth_dev;
 	if (reg != val) {
 		i40e_write_rx_ctl(hw, addr, val);
 		PMD_DRV_LOG(WARNING,
@@ -12488,7 +12495,7 @@ i40e_cloud_filter_qinq_create(struct i40e_pf *pf)
 	struct i40e_aqc_replace_cloud_filters_cmd  filter_replace;
 	struct i40e_aqc_replace_cloud_filters_cmd_buf  filter_replace_buf;
 	struct i40e_hw *hw = I40E_PF_TO_HW(pf);
-	struct rte_eth_dev *dev = ((struct i40e_adapter *)hw->back)->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[pf->dev_data->port_id];
 
 	if (pf->support_multi_driver) {
 		PMD_DRV_LOG(ERR, "Replace cloud filter is not supported.");

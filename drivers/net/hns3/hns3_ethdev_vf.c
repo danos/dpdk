@@ -799,13 +799,11 @@ hns3vf_dev_configure(struct rte_eth_dev *dev)
 	 * work as usual. But these fake queues are imperceptible, and can not
 	 * be used by upper applications.
 	 */
-	if (!hns3_dev_indep_txrx_supported(hw)) {
-		ret = hns3_set_fake_rx_or_tx_queues(dev, nb_rx_q, nb_tx_q);
-		if (ret) {
-			hns3_err(hw, "fail to set Rx/Tx fake queues, ret = %d.",
-				 ret);
-			return ret;
-		}
+	ret = hns3_set_fake_rx_or_tx_queues(dev, nb_rx_q, nb_tx_q);
+	if (ret) {
+		hns3_err(hw, "fail to set Rx/Tx fake queues, ret = %d.", ret);
+		hw->cfg_max_queues = 0;
+		return ret;
 	}
 
 	hw->adapter_state = HNS3_NIC_CONFIGURING;
@@ -874,6 +872,7 @@ hns3vf_dev_configure(struct rte_eth_dev *dev)
 	return 0;
 
 cfg_err:
+	hw->cfg_max_queues = 0;
 	(void)hns3_set_fake_rx_or_tx_queues(dev, 0, 0);
 	hw->adapter_state = HNS3_NIC_INITIALIZED;
 
@@ -1117,6 +1116,8 @@ hns3vf_interrupt_handler(void *param)
 
 	/* Read out interrupt causes */
 	event_cause = hns3vf_check_event_cause(hns, &clearval);
+	/* Clear interrupt causes */
+	hns3vf_clear_event_cause(hw, clearval);
 
 	switch (event_cause) {
 	case HNS3VF_VECTOR0_EVENT_RST:
@@ -1128,9 +1129,6 @@ hns3vf_interrupt_handler(void *param)
 	default:
 		break;
 	}
-
-	/* Clear interrupt causes */
-	hns3vf_clear_event_cause(hw, clearval);
 
 	/* Enable interrupt */
 	hns3vf_enable_irq0(hw);
@@ -1502,7 +1500,8 @@ hns3vf_en_hw_strip_rxvtag(struct hns3_hw *hw, bool enable)
 	ret = hns3_send_mbx_msg(hw, HNS3_MBX_SET_VLAN, HNS3_MBX_VLAN_RX_OFF_CFG,
 				&msg_data, sizeof(msg_data), false, NULL, 0);
 	if (ret)
-		hns3_err(hw, "vf enable strip failed, ret =%d", ret);
+		hns3_err(hw, "vf %s strip failed, ret = %d.",
+				enable ? "enable" : "disable", ret);
 
 	return ret;
 }
@@ -1877,6 +1876,7 @@ hns3vf_uninit_vf(struct rte_eth_dev *eth_dev)
 	(void)hns3_config_gro(hw, false);
 	(void)hns3vf_set_alive(hw, false);
 	(void)hns3vf_set_promisc_mode(hw, false, false, false);
+	hns3_flow_uninit(eth_dev);
 	hns3_tqp_stats_uninit(hw);
 	hns3vf_disable_irq0(hw);
 	rte_intr_disable(&pci_dev->intr_handle);
@@ -1968,7 +1968,7 @@ hns3vf_dev_stop(struct rte_eth_dev *dev)
 	/* Disable datapath on secondary process. */
 	hns3_mp_req_stop_rxtx(dev);
 	/* Prevent crashes when queues are still in use. */
-	rte_delay_ms(hw->tqps_num);
+	rte_delay_ms(hw->cfg_max_queues);
 
 	rte_spinlock_lock(&hw->lock);
 	if (rte_atomic16_read(&hw->reset.resetting) == 0) {
@@ -1991,11 +1991,8 @@ hns3vf_dev_close(struct rte_eth_dev *eth_dev)
 	struct hns3_hw *hw = &hns->hw;
 	int ret = 0;
 
-	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
-		rte_free(eth_dev->process_private);
-		eth_dev->process_private = NULL;
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
-	}
 
 	if (hw->adapter_state == HNS3_NIC_STARTED)
 		ret = hns3vf_dev_stop(eth_dev);
@@ -2009,8 +2006,6 @@ hns3vf_dev_close(struct rte_eth_dev *eth_dev)
 	hns3vf_uninit_vf(eth_dev);
 	hns3_free_all_queues(eth_dev);
 	rte_free(hw->reset.wait_data);
-	rte_free(eth_dev->process_private);
-	eth_dev->process_private = NULL;
 	hns3_mp_uninit_primary();
 	hns3_warn(hw, "Close port %u finished", hw->data->port_id);
 
@@ -2411,7 +2406,7 @@ hns3vf_stop_service(struct hns3_adapter *hns)
 	rte_wmb();
 	/* Disable datapath on secondary process. */
 	hns3_mp_req_stop_rxtx(eth_dev);
-	rte_delay_ms(hw->tqps_num);
+	rte_delay_ms(hw->cfg_max_queues);
 
 	rte_spinlock_lock(&hw->lock);
 	if (hw->adapter_state == HNS3_NIC_STARTED ||
@@ -2757,15 +2752,6 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
 
 	PMD_INIT_FUNC_TRACE();
 
-	eth_dev->process_private = (struct hns3_process_private *)
-	    rte_zmalloc_socket("hns3_filter_list",
-			       sizeof(struct hns3_process_private),
-			       RTE_CACHE_LINE_SIZE, eth_dev->device->numa_node);
-	if (eth_dev->process_private == NULL) {
-		PMD_INIT_LOG(ERR, "Failed to alloc memory for process private");
-		return -ENOMEM;
-	}
-
 	hns3_flow_init(eth_dev);
 
 	hns3_set_rxtx_function(eth_dev);
@@ -2865,8 +2851,6 @@ err_mp_init_secondary:
 	eth_dev->rx_pkt_burst = NULL;
 	eth_dev->tx_pkt_burst = NULL;
 	eth_dev->tx_pkt_prepare = NULL;
-	rte_free(eth_dev->process_private);
-	eth_dev->process_private = NULL;
 
 	return ret;
 }
@@ -2879,11 +2863,8 @@ hns3vf_dev_uninit(struct rte_eth_dev *eth_dev)
 
 	PMD_INIT_FUNC_TRACE();
 
-	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
-		rte_free(eth_dev->process_private);
-		eth_dev->process_private = NULL;
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
 		return 0;
-	}
 
 	if (hw->adapter_state < HNS3_NIC_CLOSING)
 		hns3vf_dev_close(eth_dev);

@@ -88,8 +88,10 @@
 	do {								\
 		uint32_t ori_val;					\
 		struct rte_eth_dev *dev;				\
+		struct rte_eth_dev_data *dev_data;			\
 		ori_val = I40E_READ_REG((hw), (reg));			\
-		dev = ((struct i40e_adapter *)hw->back)->eth_dev;	\
+		dev_data = ((struct i40e_adapter *)hw->back)->pf.dev_data; \
+		dev = &rte_eth_devices[dev_data->port_id];		\
 		I40E_PCI_REG_WRITE(I40E_PCI_REG_ADDR((hw),		\
 						     (reg)), (value));	\
 		if (ori_val != value)					\
@@ -786,7 +788,7 @@ struct i40e_fdir_info {
 	bool flex_pit_flag[I40E_MAX_FLXPLD_LAYER];
 	bool flex_mask_flag[I40E_FILTER_PCTYPE_MAX];
 
-	bool inset_flag[I40E_FILTER_PCTYPE_MAX]; /* Mark if input set is set */
+	uint32_t flow_count[I40E_FILTER_PCTYPE_MAX];
 
 	uint32_t flex_flow_count[I40E_MAX_FLXPLD_LAYER];
 };
@@ -1264,7 +1266,6 @@ struct i40e_vf {
 struct i40e_adapter {
 	/* Common for both PF and VF */
 	struct i40e_hw hw;
-	struct rte_eth_dev *eth_dev;
 
 	/* Specific for PF or VF */
 	union {
@@ -1514,7 +1515,7 @@ i40e_get_vsi_from_adapter(struct i40e_adapter *adapter)
 #define I40E_VSI_TO_DEV_DATA(vsi) \
 	(((struct i40e_vsi *)vsi)->adapter->pf.dev_data)
 #define I40E_VSI_TO_ETH_DEV(vsi) \
-	(((struct i40e_vsi *)vsi)->adapter->eth_dev)
+	(&rte_eth_devices[((struct i40e_vsi *)vsi)->adapter->pf.dev_data->port_id])
 
 /* I40E_PF_TO */
 #define I40E_PF_TO_HW(pf) \

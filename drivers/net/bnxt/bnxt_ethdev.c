@@ -583,13 +583,14 @@ static int bnxt_register_fc_ctx_mem(struct bnxt *bp)
 	return rc;
 }
 
-static int bnxt_alloc_ctx_mem_buf(char *type, size_t size,
+static int bnxt_alloc_ctx_mem_buf(struct bnxt *bp, char *type, size_t size,
 				  struct bnxt_ctx_mem_buf_info *ctx)
 {
 	if (!ctx)
 		return -EINVAL;
 
-	ctx->va = rte_zmalloc(type, size, 0);
+	ctx->va = rte_zmalloc_socket(type, size, 0,
+				     bp->eth_dev->device->numa_node);
 	if (ctx->va == NULL)
 		return -ENOMEM;
 	rte_mem_lock_page(ctx->va);
@@ -613,7 +614,7 @@ static int bnxt_init_fc_ctx_mem(struct bnxt *bp)
 	sprintf(type, "bnxt_rx_fc_in_" PCI_PRI_FMT, pdev->addr.domain,
 		pdev->addr.bus, pdev->addr.devid, pdev->addr.function);
 	/* 4 bytes for each counter-id */
-	rc = bnxt_alloc_ctx_mem_buf(type,
+	rc = bnxt_alloc_ctx_mem_buf(bp, type,
 				    max_fc * 4,
 				    &bp->flow_stat->rx_fc_in_tbl);
 	if (rc)
@@ -622,7 +623,7 @@ static int bnxt_init_fc_ctx_mem(struct bnxt *bp)
 	sprintf(type, "bnxt_rx_fc_out_" PCI_PRI_FMT, pdev->addr.domain,
 		pdev->addr.bus, pdev->addr.devid, pdev->addr.function);
 	/* 16 bytes for each counter - 8 bytes pkt_count, 8 bytes byte_count */
-	rc = bnxt_alloc_ctx_mem_buf(type,
+	rc = bnxt_alloc_ctx_mem_buf(bp, type,
 				    max_fc * 16,
 				    &bp->flow_stat->rx_fc_out_tbl);
 	if (rc)
@@ -631,7 +632,7 @@ static int bnxt_init_fc_ctx_mem(struct bnxt *bp)
 	sprintf(type, "bnxt_tx_fc_in_" PCI_PRI_FMT, pdev->addr.domain,
 		pdev->addr.bus, pdev->addr.devid, pdev->addr.function);
 	/* 4 bytes for each counter-id */
-	rc = bnxt_alloc_ctx_mem_buf(type,
+	rc = bnxt_alloc_ctx_mem_buf(bp, type,
 				    max_fc * 4,
 				    &bp->flow_stat->tx_fc_in_tbl);
 	if (rc)
@@ -640,7 +641,7 @@ static int bnxt_init_fc_ctx_mem(struct bnxt *bp)
 	sprintf(type, "bnxt_tx_fc_out_" PCI_PRI_FMT, pdev->addr.domain,
 		pdev->addr.bus, pdev->addr.devid, pdev->addr.function);
 	/* 16 bytes for each counter - 8 bytes pkt_count, 8 bytes byte_count */
-	rc = bnxt_alloc_ctx_mem_buf(type,
+	rc = bnxt_alloc_ctx_mem_buf(bp, type,
 				    max_fc * 16,
 				    &bp->flow_stat->tx_fc_out_tbl);
 	if (rc)
@@ -694,6 +695,38 @@ static int bnxt_update_phy_setting(struct bnxt *bp)
 	}
 
 	return rc;
+}
+
+static void bnxt_free_prev_ring_stats(struct bnxt *bp)
+{
+	rte_free(bp->prev_rx_ring_stats);
+	rte_free(bp->prev_tx_ring_stats);
+
+	bp->prev_rx_ring_stats = NULL;
+	bp->prev_tx_ring_stats = NULL;
+}
+
+static int bnxt_alloc_prev_ring_stats(struct bnxt *bp)
+{
+	bp->prev_rx_ring_stats =  rte_zmalloc("bnxt_prev_rx_ring_stats",
+					      sizeof(struct bnxt_ring_stats) *
+					      bp->rx_cp_nr_rings,
+					      0);
+	if (bp->prev_rx_ring_stats == NULL)
+		return -ENOMEM;
+
+	bp->prev_tx_ring_stats = rte_zmalloc("bnxt_prev_tx_ring_stats",
+					     sizeof(struct bnxt_ring_stats) *
+					     bp->tx_cp_nr_rings,
+					     0);
+	if (bp->prev_tx_ring_stats == NULL)
+		goto error;
+
+	return 0;
+
+error:
+	bnxt_free_prev_ring_stats(bp);
+	return -ENOMEM;
 }
 
 static int bnxt_start_nic(struct bnxt *bp)
@@ -933,7 +966,7 @@ static int bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 	dev_info->max_rx_queues = max_rx_rings;
 	dev_info->max_tx_queues = max_rx_rings;
 	dev_info->reta_size = bnxt_rss_hash_tbl_size(bp);
-	dev_info->hash_key_size = 40;
+	dev_info->hash_key_size = HW_HASH_KEY_SIZE;
 	max_vnics = bp->max_vnics;
 
 	/* MTU specifics */
@@ -954,7 +987,6 @@ static int bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 
 	dev_info->speed_capa = bnxt_get_speed_capabilities(bp);
 
-	/* *INDENT-OFF* */
 	dev_info->default_rxconf = (struct rte_eth_rxconf) {
 		.rx_thresh = {
 			.pthresh = 8,
@@ -976,7 +1008,6 @@ static int bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 	};
 	eth_dev->data->dev_conf.intr_conf.lsc = 1;
 
-	eth_dev->data->dev_conf.intr_conf.rxq = 1;
 	dev_info->rx_desc_lim.nb_min = BNXT_MIN_RING_DESC;
 	dev_info->rx_desc_lim.nb_max = BNXT_MAX_RX_RING_DESC;
 	dev_info->tx_desc_lim.nb_min = BNXT_MIN_RING_DESC;
@@ -989,8 +1020,6 @@ static int bnxt_dev_info_get_op(struct rte_eth_dev *eth_dev,
 				BNXT_PF(bp) ? BNXT_SWITCH_PORT_ID_PF :
 				    BNXT_SWITCH_PORT_ID_TRUSTED_VF;
 	}
-
-	/* *INDENT-ON* */
 
 	/*
 	 * TODO: default_rxconf, default_txconf, rx_desc_lim, and tx_desc_lim
@@ -1435,6 +1464,7 @@ static int bnxt_dev_stop_op(struct rte_eth_dev *eth_dev)
 	bnxt_shutdown_nic(bp);
 	bnxt_hwrm_if_change(bp, false);
 
+	bnxt_free_prev_ring_stats(bp);
 	rte_free(bp->mark_table);
 	bp->mark_table = NULL;
 
@@ -1486,6 +1516,10 @@ static int bnxt_dev_start_op(struct rte_eth_dev *eth_dev)
 	eth_dev->data->scattered_rx = bnxt_scattered_rx(eth_dev);
 
 	rc = bnxt_start_nic(bp);
+	if (rc)
+		goto error;
+
+	rc = bnxt_alloc_prev_ring_stats(bp);
 	if (rc)
 		goto error;
 
@@ -1732,11 +1766,6 @@ out:
 	if (new.link_status != eth_dev->data->dev_link.link_status ||
 	new.link_speed != eth_dev->data->dev_link.link_speed) {
 		rte_eth_linkstatus_set(eth_dev, &new);
-
-		rte_eth_dev_callback_process(eth_dev,
-					     RTE_ETH_EVENT_INTR_LSC,
-					     NULL);
-
 		bnxt_print_link_info(eth_dev);
 	}
 
@@ -1962,7 +1991,6 @@ static int bnxt_reta_query_op(struct rte_eth_dev *eth_dev,
 	if (rc)
 		return rc;
 
-	/* Retrieve from the default VNIC */
 	if (!vnic)
 		return -EINVAL;
 	if (!vnic->rss_table)
@@ -2044,7 +2072,8 @@ static int bnxt_rss_hash_update_op(struct rte_eth_dev *eth_dev,
 
 	if (rss_conf->rss_key_len != HW_HASH_KEY_SIZE) {
 		PMD_DRV_LOG(ERR,
-			    "Invalid hashkey length, should be 16 bytes\n");
+			    "Invalid hashkey length, should be %d bytes\n",
+			    HW_HASH_KEY_SIZE);
 		return -EINVAL;
 	}
 	memcpy(vnic->rss_hash_key, rss_conf->rss_key, rss_conf->rss_key_len);
@@ -3007,7 +3036,7 @@ bnxt_rx_queue_count_op(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 {
 	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
 	struct bnxt_cp_ring_info *cpr;
-	uint32_t desc = 0, raw_cons;
+	uint32_t desc = 0, raw_cons, cp_ring_size;
 	struct bnxt_rx_queue *rxq;
 	struct rx_pkt_cmpl *rxcmp;
 	int rc;
@@ -3019,6 +3048,7 @@ bnxt_rx_queue_count_op(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 	rxq = dev->data->rx_queues[rx_queue_id];
 	cpr = rxq->cp_ring;
 	raw_cons = cpr->cp_raw_cons;
+	cp_ring_size = cpr->cp_ring_struct->ring_size;
 
 	while (1) {
 		uint32_t agg_cnt, cons, cmpl_type;
@@ -3026,7 +3056,7 @@ bnxt_rx_queue_count_op(struct rte_eth_dev *dev, uint16_t rx_queue_id)
 		cons = RING_CMP(cpr->cp_ring_struct, raw_cons);
 		rxcmp = (struct rx_pkt_cmpl *)&cpr->cp_desc_ring[cons];
 
-		if (!CMP_VALID(rxcmp, raw_cons, cpr->cp_ring_struct))
+		if (!bnxt_cpr_cmp_valid(rxcmp, raw_cons, cp_ring_size))
 			break;
 
 		cmpl_type = CMP_TYPE(rxcmp);
@@ -3070,7 +3100,7 @@ bnxt_rx_descriptor_status_op(void *rx_queue, uint16_t offset)
 	struct bnxt_rx_queue *rxq = rx_queue;
 	struct bnxt_cp_ring_info *cpr;
 	struct bnxt_rx_ring_info *rxr;
-	uint32_t desc, raw_cons;
+	uint32_t desc, raw_cons, cp_ring_size;
 	struct bnxt *bp = rxq->bp;
 	struct rx_pkt_cmpl *rxcmp;
 	int rc;
@@ -3084,6 +3114,7 @@ bnxt_rx_descriptor_status_op(void *rx_queue, uint16_t offset)
 
 	rxr = rxq->rx_ring;
 	cpr = rxq->cp_ring;
+	cp_ring_size = cpr->cp_ring_struct->ring_size;
 
 	/*
 	 * For the vector receive case, the completion at the requested
@@ -3100,7 +3131,7 @@ bnxt_rx_descriptor_status_op(void *rx_queue, uint16_t offset)
 		cons = RING_CMP(cpr->cp_ring_struct, raw_cons);
 		rxcmp = (struct rx_pkt_cmpl *)&cpr->cp_desc_ring[cons];
 
-		if (CMP_VALID(rxcmp, raw_cons, cpr->cp_ring_struct))
+		if (bnxt_cpr_cmp_valid(rxcmp, raw_cons, cp_ring_size))
 			return RTE_ETH_RX_DESC_DONE;
 
 		/* Check whether rx desc has an mbuf attached. */
@@ -3126,7 +3157,7 @@ bnxt_rx_descriptor_status_op(void *rx_queue, uint16_t offset)
 		cons = RING_CMP(cpr->cp_ring_struct, raw_cons);
 		rxcmp = (struct rx_pkt_cmpl *)&cpr->cp_desc_ring[cons];
 
-		if (!CMP_VALID(rxcmp, raw_cons, cpr->cp_ring_struct))
+		if (!bnxt_cpr_cmp_valid(rxcmp, raw_cons, cp_ring_size))
 			break;
 
 		cmpl_type = CMP_TYPE(rxcmp);
@@ -3178,41 +3209,47 @@ static int
 bnxt_tx_descriptor_status_op(void *tx_queue, uint16_t offset)
 {
 	struct bnxt_tx_queue *txq = (struct bnxt_tx_queue *)tx_queue;
-	struct bnxt_tx_ring_info *txr;
-	struct bnxt_cp_ring_info *cpr;
-	struct bnxt_sw_tx_bd *tx_buf;
-	struct tx_pkt_cmpl *txcmp;
-	uint32_t cons, cp_cons;
+	struct bnxt_cp_ring_info *cpr = txq->cp_ring;
+	uint32_t ring_mask, raw_cons, nb_tx_pkts = 0;
+	struct cmpl_base *cp_desc_ring;
 	int rc;
-
-	if (!txq)
-		return -EINVAL;
 
 	rc = is_bnxt_in_error(txq->bp);
 	if (rc)
 		return rc;
 
-	cpr = txq->cp_ring;
-	txr = txq->tx_ring;
-
 	if (offset >= txq->nb_tx_desc)
 		return -EINVAL;
 
-	cons = RING_CMP(cpr->cp_ring_struct, offset);
-	txcmp = (struct tx_pkt_cmpl *)&cpr->cp_desc_ring[cons];
-	cp_cons = cpr->cp_raw_cons;
-
-	if (cons > cp_cons) {
-		if (CMPL_VALID(txcmp, cpr->valid))
-			return RTE_ETH_TX_DESC_UNAVAIL;
-	} else {
-		if (CMPL_VALID(txcmp, !cpr->valid))
-			return RTE_ETH_TX_DESC_UNAVAIL;
-	}
-	tx_buf = &txr->tx_buf_ring[cons];
-	if (tx_buf->mbuf == NULL)
+	/* Return "desc done" if descriptor is available for use. */
+	if (bnxt_tx_bds_in_hw(txq) <= offset)
 		return RTE_ETH_TX_DESC_DONE;
 
+	raw_cons = cpr->cp_raw_cons;
+	cp_desc_ring = cpr->cp_desc_ring;
+	ring_mask = cpr->cp_ring_struct->ring_mask;
+
+	/* Check to see if hw has posted a completion for the descriptor. */
+	while (1) {
+		struct tx_cmpl *txcmp;
+		uint32_t cons;
+
+		cons = RING_CMPL(ring_mask, raw_cons);
+		txcmp = (struct tx_cmpl *)&cp_desc_ring[cons];
+
+		if (!bnxt_cpr_cmp_valid(txcmp, raw_cons, ring_mask + 1))
+			break;
+
+		if (CMP_TYPE(txcmp) == TX_CMPL_TYPE_TX_L2)
+			nb_tx_pkts += rte_le_to_cpu_32(txcmp->opaque);
+
+		if (nb_tx_pkts > offset)
+			return RTE_ETH_TX_DESC_DONE;
+
+		raw_cons = NEXT_RAW_CMP(raw_cons);
+	}
+
+	/* Descriptor is pending transmit, not yet completed by hardware. */
 	return RTE_ETH_TX_DESC_FULL;
 }
 
@@ -4096,6 +4133,10 @@ err_start:
 err:
 	bp->flags |= BNXT_FLAG_FATAL_ERROR;
 	bnxt_uninit_resources(bp, false);
+	if (bp->eth_dev->data->dev_conf.intr_conf.rmv)
+		rte_eth_dev_callback_process(bp->eth_dev,
+					     RTE_ETH_EVENT_INTR_RMV,
+					     NULL);
 	PMD_DRV_LOG(ERR, "Failed to recover from FW reset\n");
 }
 
@@ -4405,7 +4446,7 @@ static int bnxt_alloc_ctx_mem_blk(struct bnxt *bp,
 		if (!mz) {
 			mz = rte_memzone_reserve_aligned(mz_name,
 						rmem->nr_pages * 8,
-						SOCKET_ID_ANY,
+						bp->eth_dev->device->numa_node,
 						RTE_MEMZONE_2MB |
 						RTE_MEMZONE_SIZE_HINT_ONLY |
 						RTE_MEMZONE_IOVA_CONTIG,
@@ -4428,7 +4469,7 @@ static int bnxt_alloc_ctx_mem_blk(struct bnxt *bp,
 	if (!mz) {
 		mz = rte_memzone_reserve_aligned(mz_name,
 						 mem_size,
-						 SOCKET_ID_ANY,
+						 bp->eth_dev->device->numa_node,
 						 RTE_MEMZONE_1GB |
 						 RTE_MEMZONE_SIZE_HINT_ONLY |
 						 RTE_MEMZONE_IOVA_CONTIG,
@@ -5652,7 +5693,8 @@ bnxt_dev_init(struct rte_eth_dev *eth_dev, void *params __rte_unused)
 		goto error_free;
 
 	PMD_DRV_LOG(INFO,
-		    DRV_MODULE_NAME "found at mem %" PRIX64 ", node addr %pM\n",
+		    "Found %s device at mem %" PRIX64 ", node addr %pM\n",
+		    DRV_MODULE_NAME,
 		    pci_dev->mem_resource[0].phys_addr,
 		    pci_dev->mem_resource[0].addr);
 
@@ -6106,6 +6148,7 @@ static int bnxt_pci_remove(struct rte_pci_device *pci_dev)
 static struct rte_pci_driver bnxt_rte_pmd = {
 	.id_table = bnxt_pci_id_map,
 	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC |
+			RTE_PCI_DRV_INTR_RMV |
 			RTE_PCI_DRV_PROBE_AGAIN, /* Needed in case of VF-REPs
 						  * and OVS-DPDK
 						  */

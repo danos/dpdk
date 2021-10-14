@@ -919,36 +919,59 @@ bnxt_get_l2_filter(struct bnxt *bp, struct bnxt_filter_info *nf,
 	return l2_filter;
 }
 
-static int bnxt_vnic_prep(struct bnxt *bp, struct bnxt_vnic_info *vnic)
+static void bnxt_vnic_cleanup(struct bnxt *bp, struct bnxt_vnic_info *vnic)
+{
+	if (vnic->rx_queue_cnt > 1)
+		bnxt_hwrm_vnic_ctx_free(bp, vnic);
+
+	bnxt_hwrm_vnic_free(bp, vnic);
+
+	rte_free(vnic->fw_grp_ids);
+	vnic->fw_grp_ids = NULL;
+
+	vnic->rx_queue_cnt = 0;
+}
+
+static int bnxt_vnic_prep(struct bnxt *bp, struct bnxt_vnic_info *vnic,
+			  const struct rte_flow_action *act,
+			  struct rte_flow_error *error)
 {
 	struct rte_eth_conf *dev_conf = &bp->eth_dev->data->dev_conf;
 	uint64_t rx_offloads = dev_conf->rxmode.offloads;
 	int rc;
 
 	if (bp->nr_vnics > bp->max_vnics - 1)
-		return -ENOMEM;
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ATTR_GROUP,
+					  NULL,
+					  "Group id is invalid");
 
 	rc = bnxt_vnic_grp_alloc(bp, vnic);
 	if (rc)
-		goto ret;
+		return rte_flow_error_set(error, -rc,
+					  RTE_FLOW_ERROR_TYPE_ACTION,
+					  act,
+					  "Failed to alloc VNIC group");
 
 	rc = bnxt_hwrm_vnic_alloc(bp, vnic);
 	if (rc) {
-		PMD_DRV_LOG(ERR, "HWRM vnic alloc failure rc: %x\n", rc);
+		rte_flow_error_set(error, -rc,
+				   RTE_FLOW_ERROR_TYPE_ACTION,
+				   act,
+				   "Failed to alloc VNIC");
 		goto ret;
 	}
-	bp->nr_vnics++;
 
 	/* RSS context is required only when there is more than one RSS ring */
 	if (vnic->rx_queue_cnt > 1) {
-		rc = bnxt_hwrm_vnic_ctx_alloc(bp, vnic, 0 /* ctx_idx 0 */);
+		rc = bnxt_hwrm_vnic_ctx_alloc(bp, vnic, 0);
 		if (rc) {
-			PMD_DRV_LOG(ERR,
-				    "HWRM vnic ctx alloc failure: %x\n", rc);
+			rte_flow_error_set(error, -rc,
+					   RTE_FLOW_ERROR_TYPE_ACTION,
+					   act,
+					   "Failed to alloc VNIC context");
 			goto ret;
 		}
-	} else {
-		PMD_DRV_LOG(DEBUG, "No RSS context required\n");
 	}
 
 	if (rx_offloads & DEV_RX_OFFLOAD_VLAN_STRIP)
@@ -957,12 +980,29 @@ static int bnxt_vnic_prep(struct bnxt *bp, struct bnxt_vnic_info *vnic)
 		vnic->vlan_strip = false;
 
 	rc = bnxt_hwrm_vnic_cfg(bp, vnic);
-	if (rc)
+	if (rc) {
+		rte_flow_error_set(error, -rc,
+				   RTE_FLOW_ERROR_TYPE_ACTION,
+				   act,
+				   "Failed to configure VNIC");
 		goto ret;
+	}
 
-	bnxt_hwrm_vnic_plcmode_cfg(bp, vnic);
+	rc = bnxt_hwrm_vnic_plcmode_cfg(bp, vnic);
+	if (rc) {
+		rte_flow_error_set(error, -rc,
+				   RTE_FLOW_ERROR_TYPE_ACTION,
+				   act,
+				   "Failed to configure VNIC plcmode");
+		goto ret;
+	}
+
+	bp->nr_vnics++;
+
+	return 0;
 
 ret:
+	bnxt_vnic_cleanup(bp, vnic);
 	return rc;
 }
 
@@ -1135,16 +1175,9 @@ start:
 
 		PMD_DRV_LOG(DEBUG, "VNIC found\n");
 
-		rc = bnxt_vnic_prep(bp, vnic);
-		if (rc)  {
-			rte_flow_error_set(error,
-					   EINVAL,
-					   RTE_FLOW_ERROR_TYPE_ACTION,
-					   act,
-					   "VNIC prep fail");
-			rc = -rte_errno;
+		rc = bnxt_vnic_prep(bp, vnic, act, error);
+		if (rc)
 			goto ret;
-		}
 
 		PMD_DRV_LOG(DEBUG,
 			    "vnic[%d] = %p vnic->fw_grp_ids = %p\n",
@@ -1355,16 +1388,9 @@ use_vnic:
 		vnic->end_grp_id = rss->queue[rss->queue_num - 1];
 		vnic->func_default = 0;	//This is not a default VNIC.
 
-		rc = bnxt_vnic_prep(bp, vnic);
-		if (rc) {
-			rte_flow_error_set(error,
-					   EINVAL,
-					   RTE_FLOW_ERROR_TYPE_ACTION,
-					   act,
-					   "VNIC prep fail");
-			rc = -rte_errno;
+		rc = bnxt_vnic_prep(bp, vnic, act, error);
+		if (rc)
 			goto ret;
-		}
 
 		PMD_DRV_LOG(DEBUG,
 			    "vnic[%d] = %p vnic->fw_grp_ids = %p\n",
@@ -1529,9 +1555,11 @@ bnxt_flow_validate(struct rte_eth_dev *dev,
 
 	filter = bnxt_get_unused_filter(bp);
 	if (filter == NULL) {
-		PMD_DRV_LOG(ERR, "Not enough resources for a new flow.\n");
+		rte_flow_error_set(error, ENOSPC,
+				   RTE_FLOW_ERROR_TYPE_HANDLE, NULL,
+				   "Not enough resources for a new flow");
 		bnxt_release_flow_lock(bp);
-		return -ENOMEM;
+		return -ENOSPC;
 	}
 
 	ret = bnxt_validate_and_parse_flow(dev, pattern, actions, attr,
@@ -1542,10 +1570,7 @@ bnxt_flow_validate(struct rte_eth_dev *dev,
 	vnic = find_matching_vnic(bp, filter);
 	if (vnic) {
 		if (STAILQ_EMPTY(&vnic->filter)) {
-			rte_free(vnic->fw_grp_ids);
-			bnxt_hwrm_vnic_ctx_free(bp, vnic);
-			bnxt_hwrm_vnic_free(bp, vnic);
-			vnic->rx_queue_cnt = 0;
+			bnxt_vnic_cleanup(bp, vnic);
 			bp->nr_vnics--;
 			PMD_DRV_LOG(DEBUG, "Free VNIC\n");
 		}
@@ -1931,12 +1956,20 @@ static int bnxt_handle_tunnel_redirect_destroy(struct bnxt *bp,
 		/* Tunnel doesn't belong to this VF, so don't send HWRM
 		 * cmd, just delete the flow from driver
 		 */
-		if (bp->fw_fid != (tun_dst_fid + bp->first_vf_id))
+		if (bp->fw_fid != (tun_dst_fid + bp->first_vf_id)) {
 			PMD_DRV_LOG(ERR,
 				    "Tunnel does not belong to this VF, skip hwrm_tunnel_redirect_free\n");
-		else
+		} else {
 			ret = bnxt_hwrm_tunnel_redirect_free(bp,
 							filter->tunnel_type);
+			if (ret) {
+				rte_flow_error_set(error, -ret,
+						   RTE_FLOW_ERROR_TYPE_HANDLE,
+						   NULL,
+						   "Unable to free tunnel redirection");
+				return ret;
+			}
+		}
 	}
 	return ret;
 }
@@ -1999,12 +2032,7 @@ done:
 		 */
 		if (vnic && !vnic->func_default &&
 		    STAILQ_EMPTY(&vnic->flow_list)) {
-			rte_free(vnic->fw_grp_ids);
-			if (vnic->rx_queue_cnt > 1)
-				bnxt_hwrm_vnic_ctx_free(bp, vnic);
-
-			bnxt_hwrm_vnic_free(bp, vnic);
-			vnic->rx_queue_cnt = 0;
+			bnxt_vnic_cleanup(bp, vnic);
 			bp->nr_vnics--;
 		}
 	} else {

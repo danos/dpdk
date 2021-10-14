@@ -652,6 +652,79 @@ mlx5_flow_counter_mode_config(struct rte_eth_dev *dev __rte_unused)
 }
 
 /**
+ * DR flow drop action support detect.
+ *
+ * @param dev
+ *   Pointer to rte_eth_dev structure.
+ *
+ */
+static void
+mlx5_flow_drop_action_config(struct rte_eth_dev *dev __rte_unused)
+{
+#ifdef HAVE_MLX5DV_DR
+	struct mlx5_priv *priv = dev->data->dev_private;
+
+	if (!priv->config.dv_flow_en || !priv->sh->dr_drop_action)
+		return;
+	/**
+	 * DR supports drop action placeholder when it is supported;
+	 * otherwise, use the queue drop action.
+	 */
+	if (mlx5_flow_discover_dr_action_support(dev))
+		priv->root_drop_action = priv->drop_queue.hrxq->action;
+	else
+		priv->root_drop_action = priv->sh->dr_drop_action;
+#endif
+}
+
+static void
+mlx5_queue_counter_id_prepare(struct rte_eth_dev *dev)
+{
+	struct mlx5_priv *priv = dev->data->dev_private;
+	void *ctx = priv->sh->ctx;
+
+	priv->q_counters = mlx5_devx_cmd_queue_counter_alloc(ctx);
+	if (!priv->q_counters) {
+		struct ibv_cq *cq = mlx5_glue->create_cq(ctx, 1, NULL, NULL, 0);
+		struct ibv_wq *wq;
+
+		DRV_LOG(DEBUG, "Port %d queue counter object cannot be created "
+			"by DevX - fall-back to use the kernel driver global "
+			"queue counter.", dev->data->port_id);
+		/* Create WQ by kernel and query its queue counter ID. */
+		if (cq) {
+			wq = mlx5_glue->create_wq(ctx,
+						  &(struct ibv_wq_init_attr){
+						    .wq_type = IBV_WQT_RQ,
+						    .max_wr = 1,
+						    .max_sge = 1,
+						    .pd = priv->sh->pd,
+						    .cq = cq,
+						});
+			if (wq) {
+				/* Counter is assigned only on RDY state. */
+				int ret = mlx5_glue->modify_wq(wq,
+						 &(struct ibv_wq_attr){
+						 .attr_mask = IBV_WQ_ATTR_STATE,
+						 .wq_state = IBV_WQS_RDY,
+						});
+
+				if (ret == 0)
+					mlx5_devx_cmd_wq_query(wq,
+							 &priv->counter_set_id);
+				claim_zero(mlx5_glue->destroy_wq(wq));
+			}
+			claim_zero(mlx5_glue->destroy_cq(cq));
+		}
+	} else {
+		priv->counter_set_id = priv->q_counters->id;
+	}
+	if (priv->counter_set_id == 0)
+		DRV_LOG(INFO, "Part of the port %d statistics will not be "
+			"available.", dev->data->port_id);
+}
+
+/**
  * Spawn an Ethernet device from Verbs information.
  *
  * @param dpdk_dev
@@ -695,9 +768,7 @@ mlx5_dev_spawn(struct rte_device *dpdk_dev,
 	int own_domain_id = 0;
 	uint16_t port_id;
 	unsigned int i;
-#ifdef HAVE_MLX5DV_DR_DEVX_PORT
-	struct mlx5dv_devx_port devx_port = { .comp_mask = 0 };
-#endif
+	struct mlx5_port_info vport_info = { .query_flags = 0 };
 
 	/* Determine if this port representor is supposed to be spawned. */
 	if (switch_info->representor && dpdk_dev->devargs) {
@@ -940,29 +1011,27 @@ err_secondary:
 	priv->vport_meta_tag = 0;
 	priv->vport_meta_mask = 0;
 	priv->pf_bond = spawn->pf_bond;
-#ifdef HAVE_MLX5DV_DR_DEVX_PORT
 	/*
-	 * The DevX port query API is implemented. E-Switch may use
-	 * either vport or reg_c[0] metadata register to match on
-	 * vport index. The engaged part of metadata register is
-	 * defined by mask.
+	 * If we have E-Switch we should determine the vport attributes.
+	 * E-Switch may use either source vport field or reg_c[0] metadata
+	 * register to match on vport index. The engaged part of metadata
+	 * register is defined by mask.
 	 */
 	if (switch_info->representor || switch_info->master) {
-		devx_port.comp_mask = MLX5DV_DEVX_PORT_VPORT |
-				      MLX5DV_DEVX_PORT_MATCH_REG_C_0;
-		err = mlx5_glue->devx_port_query(sh->ctx, spawn->phys_port,
-						 &devx_port);
+		err = mlx5_glue->devx_port_query(sh->ctx,
+						 spawn->phys_port,
+						 &vport_info);
 		if (err) {
 			DRV_LOG(WARNING,
 				"can't query devx port %d on device %s",
 				spawn->phys_port,
 				mlx5_os_get_dev_device_name(spawn->phys_dev));
-			devx_port.comp_mask = 0;
+			vport_info.query_flags = 0;
 		}
 	}
-	if (devx_port.comp_mask & MLX5DV_DEVX_PORT_MATCH_REG_C_0) {
-		priv->vport_meta_tag = devx_port.reg_c_0.value;
-		priv->vport_meta_mask = devx_port.reg_c_0.mask;
+	if (vport_info.query_flags & MLX5_PORT_QUERY_REG_C0) {
+		priv->vport_meta_tag = vport_info.vport_meta_tag;
+		priv->vport_meta_mask = vport_info.vport_meta_mask;
 		if (!priv->vport_meta_mask) {
 			DRV_LOG(ERR, "vport zero mask for port %d"
 				     " on bonding device %s",
@@ -982,8 +1051,8 @@ err_secondary:
 			goto error;
 		}
 	}
-	if (devx_port.comp_mask & MLX5DV_DEVX_PORT_VPORT) {
-		priv->vport_id = devx_port.vport_num;
+	if (vport_info.query_flags & MLX5_PORT_QUERY_VPORT) {
+		priv->vport_id = vport_info.vport_id;
 	} else if (spawn->pf_bond >= 0 &&
 		   (switch_info->representor || switch_info->master)) {
 		DRV_LOG(ERR, "can't deduce vport index for port %d"
@@ -993,25 +1062,21 @@ err_secondary:
 		err = ENOTSUP;
 		goto error;
 	} else {
-		/* Suppose vport index in compatible way. */
+		/*
+		 * Suppose vport index in compatible way. Kernel/rdma_core
+		 * support single E-Switch per PF configurations only and
+		 * vport_id field contains the vport index for associated VF,
+		 * which is deduced from representor port name.
+		 * For example, let's have the IB device port 10, it has
+		 * attached network device eth0, which has port name attribute
+		 * pf0vf2, we can deduce the VF number as 2, and set vport index
+		 * as 3 (2+1). This assigning schema should be changed if the
+		 * multiple E-Switch instances per PF configurations or/and PCI
+		 * subfunctions are added.
+		 */
 		priv->vport_id = switch_info->representor ?
 				 switch_info->port_name + 1 : -1;
 	}
-#else
-	/*
-	 * Kernel/rdma_core support single E-Switch per PF configurations
-	 * only and vport_id field contains the vport index for
-	 * associated VF, which is deduced from representor port name.
-	 * For example, let's have the IB device port 10, it has
-	 * attached network device eth0, which has port name attribute
-	 * pf0vf2, we can deduce the VF number as 2, and set vport index
-	 * as 3 (2+1). This assigning schema should be changed if the
-	 * multiple E-Switch instances per PF configurations or/and PCI
-	 * subfunctions are added.
-	 */
-	priv->vport_id = switch_info->representor ?
-			 switch_info->port_name + 1 : -1;
-#endif
 	/* representor_id field keeps the unmodified VF index. */
 	priv->representor_id = switch_info->representor ?
 			       switch_info->port_name : -1;
@@ -1512,8 +1577,24 @@ err_secondary:
 					mlx5_rxq_ibv_obj_dummy_lb_create;
 		priv->obj_ops.lb_dummy_queue_release =
 					mlx5_rxq_ibv_obj_dummy_lb_release;
+		mlx5_queue_counter_id_prepare(eth_dev);
 	} else {
 		priv->obj_ops = ibv_obj_ops;
+	}
+	if (config->tx_pp &&
+	    (priv->config.dv_esw_en ||
+	     priv->obj_ops.txq_obj_new != mlx5_os_txq_obj_new)) {
+		/*
+		 * HAVE_MLX5DV_DEVX_UAR_OFFSET is required to support
+		 * packet pacing and already checked above.
+		 * Hence, we should only make sure the SQs will be created
+		 * with DevX, not with Verbs.
+		 * Verbs allocates the SQ UAR on its own and it can't be shared
+		 * with Clock Queue UAR as required for Tx scheduling.
+		 */
+		DRV_LOG(ERR, "Verbs SQs, UAR can't be shared as required for packet pacing");
+		err = ENODEV;
+		goto error;
 	}
 	priv->drop_queue.hrxq = mlx5_drop_action_create(eth_dev);
 	if (!priv->drop_queue.hrxq)
@@ -1580,6 +1661,7 @@ err_secondary:
 	}
 	rte_spinlock_init(&priv->shared_act_sl);
 	mlx5_flow_counter_mode_config(eth_dev);
+	mlx5_flow_drop_action_config(eth_dev);
 	if (priv->config.dv_flow_en)
 		eth_dev->data->dev_flags |= RTE_ETH_DEV_FLOW_OPS_THREAD_SAFE;
 	return eth_dev;
@@ -1897,19 +1979,6 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 			goto exit;
 		}
 	}
-#ifndef HAVE_MLX5DV_DR_DEVX_PORT
-	if (bd >= 0) {
-		/*
-		 * This may happen if there is VF LAG kernel support and
-		 * application is compiled with older rdma_core library.
-		 */
-		DRV_LOG(ERR,
-			"No kernel/verbs support for VF LAG bonding found.");
-		rte_errno = ENOTSUP;
-		ret = -rte_errno;
-		goto exit;
-	}
-#endif
 	/*
 	 * Now we can determine the maximal
 	 * amount of devices to be spawned.
@@ -1972,10 +2041,18 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 						(list[ns].ifindex,
 						 &list[ns].info);
 			}
-#ifdef HAVE_MLX5DV_DR_DEVX_PORT
 			if (!ret && bd >= 0) {
 				switch (list[ns].info.name_type) {
 				case MLX5_PHYS_PORT_NAME_TYPE_UPLINK:
+					if (np == 1) {
+						/*
+						 * Force standalone bonding
+						 * device for ROCE LAG
+						 * confgiurations.
+						 */
+						list[ns].info.master = 0;
+						list[ns].info.representor = 0;
+					}
 					if (list[ns].info.port_name == bd)
 						ns++;
 					break;
@@ -1990,7 +2067,6 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 				}
 				continue;
 			}
-#endif
 			if (!ret && (list[ns].info.representor ^
 				     list[ns].info.master))
 				ns++;
@@ -2114,6 +2190,18 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 			ret = -rte_errno;
 			goto exit;
 		}
+		/*
+		 * New kernels may add the switch_id attribute for the case
+		 * there is no E-Switch and we wrongly recognized the
+		 * only device as master. Override this if there is the
+		 * single device with single port and new device name
+		 * format present.
+		 */
+		if (nd == 1 &&
+		    list[0].info.name_type == MLX5_PHYS_PORT_NAME_TYPE_UPLINK) {
+			list[0].info.master = 0;
+			list[0].info.representor = 0;
+		}
 	}
 	MLX5_ASSERT(ns);
 	/*
@@ -2168,6 +2256,31 @@ mlx5_os_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 		}
 		restore = list[i].eth_dev->data->dev_flags;
 		rte_eth_copy_pci_info(list[i].eth_dev, pci_dev);
+		/**
+		 * Each representor has a dedicated interrupts vector.
+		 * rte_eth_copy_pci_info() assigns PF interrupts handle to
+		 * representor eth_dev object because representor and PF
+		 * share the same PCI address.
+		 * Override representor device with a dedicated
+		 * interrupts handle here.
+		 * Representor interrupts handle is released in mlx5_dev_stop().
+		 */
+		if (list[i].info.representor) {
+			struct rte_intr_handle *intr_handle;
+			intr_handle = mlx5_malloc(MLX5_MEM_SYS | MLX5_MEM_ZERO,
+						  sizeof(*intr_handle), 0,
+						  SOCKET_ID_ANY);
+			if (!intr_handle) {
+				DRV_LOG(ERR,
+					"port %u failed to allocate memory for interrupt handler "
+					"Rx interrupts will not be supported",
+					i);
+				rte_errno = ENOMEM;
+				ret = -rte_errno;
+				goto exit;
+			}
+			list[i].eth_dev->intr_handle = intr_handle;
+		}
 		/* Restore non-PCI flags cleared by the above call. */
 		list[i].eth_dev->data->dev_flags |= restore;
 		rte_eth_dev_probing_finish(list[i].eth_dev);
@@ -2446,6 +2559,10 @@ mlx5_os_read_dev_stat(struct mlx5_priv *priv, const char *ctr_name,
 	int fd;
 
 	if (priv->sh) {
+		if (priv->q_counters != NULL &&
+		    strcmp(ctr_name, "out_of_buffer") == 0)
+			return mlx5_devx_cmd_queue_counter_query(priv->sh->ctx,
+							   0, (uint32_t *)stat);
 		MKSTR(path, "%s/ports/%d/hw_counters/%s",
 		      priv->sh->ibdev_path,
 		      priv->dev_port,

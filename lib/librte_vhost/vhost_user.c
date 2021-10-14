@@ -474,8 +474,8 @@ vhost_user_set_vring_num(struct virtio_net **pdev,
 }
 
 /*
- * Reallocate virtio_dev and vhost_virtqueue data structure to make them on the
- * same numa node as the memory of vring descriptor.
+ * Reallocate virtio_dev, vhost_virtqueue and related data structures to
+ * make them on the same numa node as the memory of vring descriptor.
  */
 #ifdef RTE_LIBRTE_VHOST_NUMA
 static struct virtio_net*
@@ -489,11 +489,15 @@ numa_realloc(struct virtio_net *dev, int index)
 	struct batch_copy_elem *new_batch_copy_elems;
 	int ret;
 
-	if (dev->flags & VIRTIO_DEV_RUNNING)
-		return dev;
-
 	old_dev = dev;
 	vq = old_vq = dev->virtqueue[index];
+
+	/*
+	 * If VQ is ready, it is too late to reallocate, it certainly already
+	 * happened anyway on VHOST_USER_SET_VRING_ADRR.
+	 */
+	if (vq->ready)
+		return dev;
 
 	ret = get_mempolicy(&newnode, NULL, 0, old_vq->desc,
 			    MPOL_F_NODE | MPOL_F_ADDR);
@@ -549,6 +553,9 @@ numa_realloc(struct virtio_net *dev, int index)
 		rte_free(old_vq);
 	}
 
+	if (dev->flags & VIRTIO_DEV_RUNNING)
+		goto out;
+
 	/* check if we need to reallocate dev */
 	ret = get_mempolicy(&oldnode, NULL, 0, old_dev,
 			    MPOL_F_NODE | MPOL_F_ADDR);
@@ -558,6 +565,10 @@ numa_realloc(struct virtio_net *dev, int index)
 		goto out;
 	}
 	if (oldnode != newnode) {
+		struct rte_vhost_memory *old_mem;
+		struct guest_page *old_gp;
+		ssize_t mem_size, gp_size;
+
 		VHOST_LOG_CONFIG(INFO,
 			"reallocate dev from %d to %d node\n",
 			oldnode, newnode);
@@ -569,6 +580,29 @@ numa_realloc(struct virtio_net *dev, int index)
 
 		memcpy(dev, old_dev, sizeof(*dev));
 		rte_free(old_dev);
+
+		mem_size = sizeof(struct rte_vhost_memory) +
+			sizeof(struct rte_vhost_mem_region) * dev->mem->nregions;
+		old_mem = dev->mem;
+		dev->mem = rte_malloc_socket(NULL, mem_size, 0, newnode);
+		if (!dev->mem) {
+			dev->mem = old_mem;
+			goto out;
+		}
+
+		memcpy(dev->mem, old_mem, mem_size);
+		rte_free(old_mem);
+
+		gp_size = dev->max_guest_pages * sizeof(*dev->guest_pages);
+		old_gp = dev->guest_pages;
+		dev->guest_pages = rte_malloc_socket(NULL, gp_size, RTE_CACHE_LINE_SIZE, newnode);
+		if (!dev->guest_pages) {
+			dev->guest_pages = old_gp;
+			goto out;
+		}
+
+		memcpy(dev->guest_pages, old_gp, gp_size);
+		rte_free(old_gp);
 	}
 
 out:
@@ -2643,6 +2677,7 @@ vhost_user_check_and_alloc_queue_pair(struct virtio_net *dev,
 		break;
 	case VHOST_USER_SET_VRING_NUM:
 	case VHOST_USER_SET_VRING_BASE:
+	case VHOST_USER_GET_VRING_BASE:
 	case VHOST_USER_SET_VRING_ENABLE:
 		vring_idx = msg->payload.state.index;
 		break;
@@ -2858,9 +2893,6 @@ skip_to_post_handle:
 		}
 	}
 
-	if (unlock_required)
-		vhost_user_unlock_all_queue_pairs(dev);
-
 	/* If message was not handled at this stage, treat it as an error */
 	if (!handled) {
 		VHOST_LOG_CONFIG(ERR,
@@ -2895,6 +2927,8 @@ skip_to_post_handle:
 		}
 	}
 
+	if (unlock_required)
+		vhost_user_unlock_all_queue_pairs(dev);
 
 	if (!virtio_is_ready(dev))
 		goto out;

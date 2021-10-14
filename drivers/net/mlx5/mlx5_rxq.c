@@ -904,9 +904,6 @@ mlx5_rx_intr_vec_enable(struct rte_eth_dev *dev)
 	unsigned int count = 0;
 	struct rte_intr_handle *intr_handle = dev->intr_handle;
 
-	/* Representor shares dev->intr_handle with PF. */
-	if (priv->representor)
-		return 0;
 	if (!dev->data->dev_conf.intr_conf.rxq)
 		return 0;
 	mlx5_rx_intr_vec_disable(dev);
@@ -987,9 +984,6 @@ mlx5_rx_intr_vec_disable(struct rte_eth_dev *dev)
 	unsigned int rxqs_n = priv->rxqs_n;
 	unsigned int n = RTE_MIN(rxqs_n, (uint32_t)RTE_MAX_RXTX_INTR_VEC_ID);
 
-	/* Representor shares dev->intr_handle with PF. */
-	if (priv->representor)
-		return;
 	if (!dev->data->dev_conf.intr_conf.rxq)
 		return;
 	if (!intr_handle->intr_vec)
@@ -1310,7 +1304,7 @@ mlx5_mprq_alloc_mp(struct rte_eth_dev *dev)
 	snprintf(name, sizeof(name), "port-%u-mprq", dev->data->port_id);
 	mp = rte_mempool_create(name, obj_num, obj_size, MLX5_MPRQ_MP_CACHE_SZ,
 				0, NULL, NULL, mlx5_mprq_buf_init,
-				(void *)(uintptr_t)(1 << strd_num_n),
+				(void *)((uintptr_t)1 << strd_num_n),
 				dev->device->numa_node, 0);
 	if (mp == NULL) {
 		DRV_LOG(ERR,
@@ -1782,7 +1776,7 @@ mlx5_rxq_release(struct rte_eth_dev *dev, uint16_t idx)
 	struct mlx5_priv *priv = dev->data->dev_private;
 	struct mlx5_rxq_ctrl *rxq_ctrl;
 
-	if (!(*priv->rxqs)[idx])
+	if (priv->rxqs == NULL || (*priv->rxqs)[idx] == NULL)
 		return 0;
 	rxq_ctrl = container_of((*priv->rxqs)[idx], struct mlx5_rxq_ctrl, rxq);
 	if (__atomic_sub_fetch(&rxq_ctrl->refcnt, 1, __ATOMIC_RELAXED) > 1)
@@ -2150,7 +2144,7 @@ mlx5_ind_table_obj_modify(struct rte_eth_dev *dev,
 error:
 	err = rte_errno;
 	for (j = 0; j < i; j++)
-		mlx5_rxq_release(dev, ind_tbl->queues[j]);
+		mlx5_rxq_release(dev, queues[j]);
 	rte_errno = err;
 	DEBUG("Port %u cannot setup indirection table.", dev->data->port_id);
 	return ret;

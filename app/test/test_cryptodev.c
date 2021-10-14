@@ -135,10 +135,11 @@ setup_test_string(struct rte_mempool *mpool,
 	struct rte_mbuf *m = rte_pktmbuf_alloc(mpool);
 	size_t t_len = len - (blocksize ? (len % blocksize) : 0);
 
-	memset(m->buf_addr, 0, m->buf_len);
 	if (m) {
-		char *dst = rte_pktmbuf_append(m, t_len);
+		char *dst;
 
+		memset(m->buf_addr, 0, m->buf_len);
+		dst = rte_pktmbuf_append(m, t_len);
 		if (!dst) {
 			rte_pktmbuf_free(m);
 			return NULL;
@@ -12024,7 +12025,7 @@ test_authenticated_decryption_fail_when_corruption(
 }
 
 static int
-test_authenticated_encryt_with_esn(
+test_authenticated_encrypt_with_esn(
 		struct crypto_testsuite_params *ts_params,
 		struct crypto_unittest_params *ut_params,
 		const struct test_crypto_vector *reference)
@@ -12811,7 +12812,7 @@ auth_decryption_AES128CBC_HMAC_SHA1_fail_tag_corrupt(void)
 static int
 auth_encrypt_AES128CBC_HMAC_SHA1_esn_check(void)
 {
-	return test_authenticated_encryt_with_esn(
+	return test_authenticated_encrypt_with_esn(
 			&testsuite_params,
 			&unittest_params,
 			&aes128cbc_hmac_sha1_aad_test_vector);
@@ -13786,7 +13787,7 @@ static struct unit_test_suite cryptodev_ccp_testsuite  = {
 };
 
 static int
-test_cryptodev_qat(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_qat(void)
 {
 	gbl_driver_id =	rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_QAT_SYM_PMD));
@@ -13800,7 +13801,7 @@ test_cryptodev_qat(void /*argv __rte_unused, int argc __rte_unused*/)
 }
 
 static int
-test_cryptodev_virtio(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_virtio(void)
 {
 	gbl_driver_id =	rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_VIRTIO_PMD));
@@ -13814,7 +13815,7 @@ test_cryptodev_virtio(void /*argv __rte_unused, int argc __rte_unused*/)
 }
 
 static int
-test_cryptodev_aesni_mb(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_aesni_mb(void)
 {
 	gbl_driver_id =	rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_AESNI_MB_PMD));
@@ -13912,7 +13913,7 @@ test_cryptodev_null(void)
 }
 
 static int
-test_cryptodev_sw_snow3g(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_sw_snow3g(void)
 {
 	gbl_driver_id = rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_SNOW3G_PMD));
@@ -13926,7 +13927,7 @@ test_cryptodev_sw_snow3g(void /*argv __rte_unused, int argc __rte_unused*/)
 }
 
 static int
-test_cryptodev_sw_kasumi(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_sw_kasumi(void)
 {
 	gbl_driver_id = rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_KASUMI_PMD));
@@ -13940,7 +13941,7 @@ test_cryptodev_sw_kasumi(void /*argv __rte_unused, int argc __rte_unused*/)
 }
 
 static int
-test_cryptodev_sw_zuc(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_sw_zuc(void)
 {
 	gbl_driver_id = rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_ZUC_PMD));
@@ -13984,7 +13985,7 @@ test_cryptodev_mrvl(void)
 #ifdef RTE_CRYPTO_SCHEDULER
 
 static int
-test_cryptodev_scheduler(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_scheduler(void)
 {
 	gbl_driver_id =	rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_SCHEDULER_PMD));
@@ -14007,7 +14008,7 @@ REGISTER_TEST_COMMAND(cryptodev_scheduler_autotest, test_cryptodev_scheduler);
 #endif
 
 static int
-test_cryptodev_dpaa2_sec(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_dpaa2_sec(void)
 {
 	gbl_driver_id =	rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_DPAA2_SEC_PMD));
@@ -14021,7 +14022,7 @@ test_cryptodev_dpaa2_sec(void /*argv __rte_unused, int argc __rte_unused*/)
 }
 
 static int
-test_cryptodev_dpaa_sec(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_dpaa_sec(void)
 {
 	gbl_driver_id =	rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_DPAA_SEC_PMD));
@@ -14073,7 +14074,7 @@ test_cryptodev_octeontx2(void)
 }
 
 static int
-test_cryptodev_caam_jr(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_caam_jr(void)
 {
 	gbl_driver_id =	rte_cryptodev_driver_id_get(
 			RTE_STR(CRYPTODEV_NAME_CAAM_JR_PMD));
@@ -14115,7 +14116,7 @@ test_cryptodev_bcmfs(void)
 }
 
 static int
-test_cryptodev_qat_raw_api(void /*argv __rte_unused, int argc __rte_unused*/)
+test_cryptodev_qat_raw_api(void)
 {
 	int ret;
 

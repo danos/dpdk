@@ -467,7 +467,6 @@ struct ice_devargs {
 struct ice_adapter {
 	/* Common for both PF and VF */
 	struct ice_hw hw;
-	struct rte_eth_dev *eth_dev;
 	struct ice_pf pf;
 	bool rx_bulk_alloc_allowed;
 	bool rx_vec_allowed;
@@ -479,6 +478,12 @@ struct ice_adapter {
 	struct ice_devargs devargs;
 	enum ice_pkg_type active_pkg_type; /* loaded ddp package type */
 	uint16_t fdir_ref_cnt;
+#ifdef RTE_ARCH_X86
+	bool rx_use_avx2;
+	bool rx_use_avx512;
+	bool tx_use_avx2;
+	bool tx_use_avx512;
+#endif
 };
 
 struct ice_vsi_vlan_pvid_info {
@@ -512,8 +517,6 @@ struct ice_vsi_vlan_pvid_info {
 	(&(((struct ice_vsi *)vsi)->adapter->hw))
 #define ICE_VSI_TO_PF(vsi) \
 	(&(((struct ice_vsi *)vsi)->adapter->pf))
-#define ICE_VSI_TO_ETH_DEV(vsi) \
-	(((struct ice_vsi *)vsi)->adapter->eth_dev)
 
 /* ICE_PF_TO */
 #define ICE_PF_TO_HW(pf) \

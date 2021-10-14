@@ -7342,14 +7342,13 @@ flow_dv_translate_item_mpls(void *matcher, void *key,
 			 MLX5_UDP_PORT_MPLS);
 		break;
 	case MLX5_FLOW_LAYER_GRE:
+		/* Fall-through. */
+	case MLX5_FLOW_LAYER_GRE_KEY:
 		MLX5_SET(fte_match_set_misc, misc_m, gre_protocol, 0xffff);
 		MLX5_SET(fte_match_set_misc, misc_v, gre_protocol,
 			 RTE_ETHER_TYPE_MPLS);
 		break;
 	default:
-		MLX5_SET(fte_match_set_lyr_2_4, headers_m, ip_protocol, 0xff);
-		MLX5_SET(fte_match_set_lyr_2_4, headers_v, ip_protocol,
-			 IPPROTO_MPLS);
 		break;
 	}
 	if (!in_mpls_v)
@@ -8499,7 +8498,7 @@ flow_dv_translate_action_port_id(struct rte_eth_dev *dev,
 					  RTE_FLOW_ERROR_TYPE_ACTION,
 					  NULL,
 					  "No eswitch info was found for port");
-#ifdef HAVE_MLX5DV_DR_DEVX_PORT
+#ifdef HAVE_MLX5DV_DR_CREATE_DEST_IB_PORT
 	/*
 	 * This parameter is transferred to
 	 * mlx5dv_dr_action_create_dest_ib_port().
@@ -8617,10 +8616,8 @@ flow_dv_hashfields_set(struct mlx5_flow *dev_flow,
 
 	dev_flow->hash_fields = 0;
 #ifdef HAVE_IBV_DEVICE_TUNNEL_SUPPORT
-	if (rss_desc->level >= 2) {
-		dev_flow->hash_fields |= IBV_RX_HASH_INNER;
+	if (rss_desc->level >= 2)
 		rss_inner = 1;
-	}
 #endif
 	if ((rss_inner && (items & MLX5_FLOW_LAYER_INNER_L3_IPV4)) ||
 	    (!rss_inner && (items & MLX5_FLOW_LAYER_OUTER_L3_IPV4))) {
@@ -8643,6 +8640,12 @@ flow_dv_hashfields_set(struct mlx5_flow *dev_flow,
 				dev_flow->hash_fields |= MLX5_IPV6_IBV_RX_HASH;
 		}
 	}
+	if (dev_flow->hash_fields == 0)
+		/*
+		 * There is no match between the RSS types and the
+		 * L3 protocol (IPv4/IPv6) defined in the flow rule.
+		 */
+		return;
 	if ((rss_inner && (items & MLX5_FLOW_LAYER_INNER_L4_UDP)) ||
 	    (!rss_inner && (items & MLX5_FLOW_LAYER_OUTER_L4_UDP))) {
 		if (rss_types & ETH_RSS_UDP) {
@@ -8668,6 +8671,8 @@ flow_dv_hashfields_set(struct mlx5_flow *dev_flow,
 				dev_flow->hash_fields |= MLX5_TCP_IBV_RX_HASH;
 		}
 	}
+	if (rss_inner)
+		dev_flow->hash_fields |= IBV_RX_HASH_INNER;
 }
 
 /**
@@ -8700,6 +8705,8 @@ flow_dv_hrxq_prepare(struct rte_eth_dev *dev,
 	rss_desc->hash_fields = dev_flow->hash_fields;
 	rss_desc->tunnel = !!(dh->layers & MLX5_FLOW_LAYER_TUNNEL);
 	rss_desc->shared_rss = 0;
+	if (rss_desc->hash_fields == 0)
+		rss_desc->queue_num = 1;
 	*hrxq_idx = mlx5_hrxq_get(dev, rss_desc);
 	if (!*hrxq_idx)
 		return NULL;
@@ -10833,7 +10840,9 @@ flow_dv_apply(struct rte_eth_dev *dev, struct rte_flow *flow,
 #ifdef HAVE_MLX5DV_DR
 				/* DR supports drop action placeholder. */
 				MLX5_ASSERT(priv->sh->dr_drop_action);
-				dv->actions[n++] = priv->sh->dr_drop_action;
+				dv->actions[n++] = dv->group ?
+					priv->sh->dr_drop_action :
+					priv->root_drop_action;
 #else
 				/* For DV we use the explicit drop queue. */
 				MLX5_ASSERT(priv->drop_queue.hrxq);
@@ -12560,6 +12569,72 @@ error:
 	flow_dv_destroy_policer_rules(dev, fm, attr);
 	return -1;
 }
+/**
+ * Check whether the DR drop action is supported on the root table or not.
+ *
+ * Create a simple flow with DR drop action on root table to validate
+ * if DR drop action on root table is supported or not.
+ *
+ * @param[in] dev
+ *   Pointer to rte_eth_dev structure.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
+int
+mlx5_flow_discover_dr_action_support(struct rte_eth_dev *dev)
+{
+	struct mlx5_priv *priv = dev->data->dev_private;
+	struct mlx5_dev_ctx_shared *sh = priv->sh;
+	struct mlx5_flow_dv_match_params mask = {
+		.size = sizeof(mask.buf),
+	};
+	struct mlx5_flow_dv_match_params value = {
+		.size = sizeof(value.buf),
+	};
+	struct mlx5dv_flow_matcher_attr dv_attr = {
+		.type = IBV_FLOW_ATTR_NORMAL,
+		.priority = 0,
+		.match_criteria_enable = 0,
+		.match_mask = (void *)&mask,
+	};
+	struct mlx5_flow_tbl_resource *tbl = NULL;
+	void *matcher = NULL;
+	void *flow = NULL;
+	int ret = -1;
+
+	tbl = flow_dv_tbl_resource_get(dev, 0, 0, 0, false, NULL,
+					0, 0, NULL);
+	if (!tbl)
+		goto err;
+	dv_attr.match_criteria_enable = flow_dv_matcher_enable(mask.buf);
+	ret = mlx5_flow_os_create_flow_matcher(sh->ctx, &dv_attr, tbl->obj,
+					       &matcher);
+	if (ret)
+		goto err;
+	ret = mlx5_flow_os_create_flow(matcher, (void *)&value, 1,
+				       &sh->dr_drop_action, &flow);
+err:
+	/*
+	 * If DR drop action is not supported on root table, flow create will
+	 * be failed with EOPNOTSUPP or EPROTONOSUPPORT.
+	 */
+	if (!flow) {
+		if (matcher &&
+		    (errno == EPROTONOSUPPORT || errno == EOPNOTSUPP))
+			DRV_LOG(INFO, "DR drop action is not supported in root table.");
+		else
+			DRV_LOG(ERR, "Unexpected error in DR drop action support detection");
+		ret = -1;
+	} else {
+		claim_zero(mlx5_flow_os_destroy_flow(flow));
+	}
+	if (matcher)
+		claim_zero(mlx5_flow_os_destroy_flow_matcher(matcher));
+	if (tbl)
+		flow_dv_tbl_resource_release(MLX5_SH(dev), tbl);
+	return ret;
+}
 
 /**
  * Validate the batch counter support in root table.
@@ -12709,7 +12784,7 @@ flow_dv_counter_query(struct rte_eth_dev *dev, uint32_t counter, bool clear,
  * @note: only stub for now
  */
 static int
-flow_get_aged_flows(struct rte_eth_dev *dev,
+flow_dv_get_aged_flows(struct rte_eth_dev *dev,
 		    void **context,
 		    uint32_t nb_contexts,
 		    struct rte_flow_error *error)
@@ -12857,7 +12932,7 @@ const struct mlx5_flow_driver_ops mlx5_flow_dv_drv_ops = {
 	.counter_alloc = flow_dv_counter_allocate,
 	.counter_free = flow_dv_counter_free,
 	.counter_query = flow_dv_counter_query,
-	.get_aged_flows = flow_get_aged_flows,
+	.get_aged_flows = flow_dv_get_aged_flows,
 	.action_validate = flow_dv_action_validate,
 	.action_create = flow_dv_action_create,
 	.action_destroy = flow_dv_action_destroy,

@@ -1335,6 +1335,11 @@ mlx5_dev_close(struct rte_eth_dev *dev)
 		priv->rxqs_n = 0;
 		priv->rxqs = NULL;
 	}
+	if (priv->representor) {
+		/* Each representor has a dedicated interrupts handler */
+		mlx5_free(dev->intr_handle);
+		dev->intr_handle = NULL;
+	}
 	if (priv->txqs != NULL) {
 		/* XXX race condition if mlx5_tx_burst() is still running. */
 		usleep(1000);
@@ -1344,6 +1349,10 @@ mlx5_dev_close(struct rte_eth_dev *dev)
 		priv->txqs = NULL;
 	}
 	mlx5_proc_priv_uninit(dev);
+	if (priv->q_counters) {
+		mlx5_devx_cmd_destroy(priv->q_counters);
+		priv->q_counters = NULL;
+	}
 	if (priv->drop_queue.hrxq)
 		mlx5_drop_action_destroy(dev);
 	if (priv->mreg_cp_tbl)

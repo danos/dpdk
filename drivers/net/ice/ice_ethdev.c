@@ -2157,7 +2157,6 @@ ice_dev_init(struct rte_eth_dev *dev)
 	intr_handle = &pci_dev->intr_handle;
 
 	pf->adapter = ICE_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
-	pf->adapter->eth_dev = dev;
 	pf->dev_data = dev->data;
 	hw->back = pf->adapter;
 	hw->hw_addr = (uint8_t *)pci_dev->mem_resource[0].addr;
@@ -2187,7 +2186,7 @@ ice_dev_init(struct rte_eth_dev *dev)
 		if (ad->devargs.safe_mode_support == 0) {
 			PMD_INIT_LOG(ERR, "Failed to load the DDP package,"
 					"Use safe-mode-support=1 to enter Safe Mode");
-			return ret;
+			goto err_init_fw;
 		}
 
 		PMD_INIT_LOG(WARNING, "Failed to load the DDP package,"
@@ -2279,10 +2278,11 @@ err_msix_pool_init:
 	rte_free(dev->data->mac_addrs);
 	dev->data->mac_addrs = NULL;
 err_init_mac:
-	ice_sched_cleanup_all(hw);
-	rte_free(hw->port_info);
-	ice_shutdown_all_ctrlq(hw);
 	rte_free(pf->proto_xtr);
+#ifndef RTE_EXEC_ENV_WINDOWS
+err_init_fw:
+#endif
+	ice_deinit_hw(hw);
 
 	return ret;
 }
@@ -2321,7 +2321,7 @@ ice_release_vsi(struct ice_vsi *vsi)
 void
 ice_vsi_disable_queues_intr(struct ice_vsi *vsi)
 {
-	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[vsi->adapter->pf.dev_data->port_id];
 	struct rte_pci_device *pci_dev = ICE_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	struct ice_hw *hw = ICE_VSI_TO_HW(vsi);
@@ -3177,11 +3177,36 @@ ice_rss_hash_set(struct ice_pf *pf, uint64_t rss_hf)
 	pf->rss_hf = rss_hf & ICE_RSS_HF_ALL;
 }
 
+static void
+ice_get_default_rss_key(uint8_t *rss_key, uint32_t rss_key_size)
+{
+	static struct ice_aqc_get_set_rss_keys default_key;
+	static bool default_key_done;
+	uint8_t *key = (uint8_t *)&default_key;
+	size_t i;
+
+	if (rss_key_size > sizeof(default_key)) {
+		PMD_DRV_LOG(WARNING,
+			    "requested size %u is larger than default %zu, "
+			    "only %zu bytes are gotten for key\n",
+			    rss_key_size, sizeof(default_key),
+			    sizeof(default_key));
+	}
+
+	if (!default_key_done) {
+		/* Calculate the default hash key */
+		for (i = 0; i < sizeof(default_key); i++)
+			key[i] = (uint8_t)rte_rand();
+		default_key_done = true;
+	}
+	rte_memcpy(rss_key, key, RTE_MIN(rss_key_size, sizeof(default_key)));
+}
+
 static int ice_init_rss(struct ice_pf *pf)
 {
 	struct ice_hw *hw = ICE_PF_TO_HW(pf);
 	struct ice_vsi *vsi = pf->main_vsi;
-	struct rte_eth_dev *dev = pf->adapter->eth_dev;
+	struct rte_eth_dev_data *dev_data = pf->dev_data;
 	struct ice_aq_get_set_rss_lut_params lut_params;
 	struct rte_eth_rss_conf *rss_conf;
 	struct ice_aqc_get_set_rss_keys key;
@@ -3190,8 +3215,8 @@ static int ice_init_rss(struct ice_pf *pf)
 	bool is_safe_mode = pf->adapter->is_safe_mode;
 	uint32_t reg;
 
-	rss_conf = &dev->data->dev_conf.rx_adv_conf.rss_conf;
-	nb_q = dev->data->nb_rx_queues;
+	rss_conf = &dev_data->dev_conf.rx_adv_conf.rss_conf;
+	nb_q = dev_data->nb_rx_queues;
 	vsi->rss_key_size = ICE_AQC_GET_SET_RSS_KEY_DATA_RSS_KEY_SIZE;
 	vsi->rss_lut_size = pf->hash_lut_size;
 
@@ -3225,15 +3250,13 @@ static int ice_init_rss(struct ice_pf *pf)
 		}
 	}
 	/* configure RSS key */
-	if (!rss_conf->rss_key) {
-		/* Calculate the default hash key */
-		for (i = 0; i < vsi->rss_key_size; i++)
-			vsi->rss_key[i] = (uint8_t)rte_rand();
-	} else {
+	if (!rss_conf->rss_key)
+		ice_get_default_rss_key(vsi->rss_key, vsi->rss_key_size);
+	else
 		rte_memcpy(vsi->rss_key, rss_conf->rss_key,
 			   RTE_MIN(rss_conf->rss_key_len,
 				   vsi->rss_key_size));
-	}
+
 	rte_memcpy(key.standard_rss_key, vsi->rss_key, vsi->rss_key_size);
 	ret = ice_aq_set_rss_key(hw, vsi->idx, &key);
 	if (ret)
@@ -3325,7 +3348,7 @@ __vsi_queues_bind_intr(struct ice_vsi *vsi, uint16_t msix_vect,
 void
 ice_vsi_queues_bind_intr(struct ice_vsi *vsi)
 {
-	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[vsi->adapter->pf.dev_data->port_id];
 	struct rte_pci_device *pci_dev = ICE_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	struct ice_hw *hw = ICE_VSI_TO_HW(vsi);
@@ -3378,7 +3401,7 @@ ice_vsi_queues_bind_intr(struct ice_vsi *vsi)
 void
 ice_vsi_enable_queues_intr(struct ice_vsi *vsi)
 {
-	struct rte_eth_dev *dev = vsi->adapter->eth_dev;
+	struct rte_eth_dev *dev = &rte_eth_devices[vsi->adapter->pf.dev_data->port_id];
 	struct rte_pci_device *pci_dev = ICE_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	struct ice_hw *hw = ICE_VSI_TO_HW(vsi);

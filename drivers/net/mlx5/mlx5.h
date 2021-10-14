@@ -969,6 +969,7 @@ struct mlx5_priv {
 	unsigned int reta_idx_n; /* RETA index size. */
 	struct mlx5_drop drop_queue; /* Flow drop queues. */
 	uint32_t flows; /* RTE Flow rules. */
+	void *root_drop_action; /* Pointer to root drop action. */
 	uint32_t ctrl_flows; /* Control flow rules. */
 	rte_spinlock_t flow_list_lock;
 	struct mlx5_obj_ops obj_ops; /* HW objects operations. */
@@ -1006,6 +1007,8 @@ struct mlx5_priv {
 	LIST_HEAD(fdir, mlx5_fdir_flow) fdir_flows; /* fdir flows. */
 	rte_spinlock_t shared_act_sl; /* Shared actions spinlock. */
 	uint32_t rss_shared_actions; /* RSS shared actions. */
+	struct mlx5_devx_obj *q_counters; /* DevX queue counter object. */
+	uint32_t counter_set_id; /* Queue counter ID to set in DevX objects. */
 };
 
 #define PORT_ID(priv) ((priv)->dev_data->port_id)

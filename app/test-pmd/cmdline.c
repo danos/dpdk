@@ -1225,7 +1225,7 @@ cmdline_parse_token_string_t cmd_operate_port_all_all =
 cmdline_parse_inst_t cmd_operate_port = {
 	.f = cmd_operate_port_parsed,
 	.data = NULL,
-	.help_str = "port start|stop|close all: Start/Stop/Close/Reset all ports",
+	.help_str = "port start|stop|close|reset all: Start/Stop/Close/Reset all ports",
 	.tokens = {
 		(void *)&cmd_operate_port_all_cmd,
 		(void *)&cmd_operate_port_all_port,
@@ -1272,7 +1272,7 @@ cmdline_parse_token_num_t cmd_operate_specific_port_id =
 cmdline_parse_inst_t cmd_operate_specific_port = {
 	.f = cmd_operate_specific_port_parsed,
 	.data = NULL,
-	.help_str = "port start|stop|close <port_id>: Start/Stop/Close/Reset port_id",
+	.help_str = "port start|stop|close|reset <port_id>: Start/Stop/Close/Reset port_id",
 	.tokens = {
 		(void *)&cmd_operate_specific_port_cmd,
 		(void *)&cmd_operate_specific_port_port,
@@ -1607,13 +1607,13 @@ cmd_config_speed_specific_parsed(void *parsed_result,
 	struct cmd_config_speed_specific *res = parsed_result;
 	uint32_t link_speed;
 
-	if (!all_ports_stopped()) {
-		printf("Please stop all ports first\n");
-		return;
-	}
-
 	if (port_id_is_invalid(res->id, ENABLED_WARN))
 		return;
+
+	if (!port_is_stopped(res->id)) {
+		printf("Please stop port %d first\n", res->id);
+		return;
+	}
 
 	if (parse_and_check_speed_duplex(res->value1, res->value2,
 			&link_speed) < 0)
@@ -16449,17 +16449,17 @@ cmd_set_port_fec_mode_parsed(
 {
 	struct cmd_set_port_fec_mode *res = parsed_result;
 	uint16_t port_id = res->port_id;
-	uint32_t mode;
+	uint32_t fec_capa;
 	int ret;
 
-	ret = parse_fec_mode(res->fec_value, &mode);
+	ret = parse_fec_mode(res->fec_value, &fec_capa);
 	if (ret < 0) {
 		printf("Unknown fec mode: %s for Port %d\n", res->fec_value,
 			port_id);
 		return;
 	}
 
-	ret = rte_eth_fec_set(port_id, mode);
+	ret = rte_eth_fec_set(port_id, fec_capa);
 	if (ret == -ENOTSUP) {
 		printf("Function not implemented\n");
 		return;

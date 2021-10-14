@@ -114,6 +114,35 @@ struct mlx5_flow_expand_rss {
 	} entry[];
 };
 
+static void
+mlx5_dbg__print_pattern(const struct rte_flow_item *item);
+
+static bool
+mlx5_flow_is_rss_expandable_item(const struct rte_flow_item *item)
+{
+	switch (item->type) {
+	case RTE_FLOW_ITEM_TYPE_ETH:
+	case RTE_FLOW_ITEM_TYPE_VLAN:
+	case RTE_FLOW_ITEM_TYPE_IPV4:
+	case RTE_FLOW_ITEM_TYPE_IPV6:
+	case RTE_FLOW_ITEM_TYPE_UDP:
+	case RTE_FLOW_ITEM_TYPE_TCP:
+	case RTE_FLOW_ITEM_TYPE_VXLAN:
+	case RTE_FLOW_ITEM_TYPE_NVGRE:
+	case RTE_FLOW_ITEM_TYPE_GRE:
+	case RTE_FLOW_ITEM_TYPE_GENEVE:
+	case RTE_FLOW_ITEM_TYPE_MPLS:
+	case RTE_FLOW_ITEM_TYPE_VXLAN_GPE:
+	case RTE_FLOW_ITEM_TYPE_GRE_KEY:
+	case RTE_FLOW_ITEM_TYPE_IPV6_FRAG_EXT:
+	case RTE_FLOW_ITEM_TYPE_GTP:
+		return true;
+	default:
+		break;
+	}
+	return false;
+}
+
 static enum rte_flow_item_type
 mlx5_flow_expand_rss_item_complete(const struct rte_flow_item *item)
 {
@@ -240,6 +269,7 @@ mlx5_flow_expand_rss_item_complete(const struct rte_flow_item *item)
  *   set, the following errors are defined:
  *
  *   -E2BIG: graph-depth @p graph is too deep.
+ *   -EINVAL: @p size has not enough space for expanded pattern.
  */
 static int
 mlx5_flow_expand_rss(struct mlx5_flow_expand_rss *buf, size_t size,
@@ -266,15 +296,18 @@ mlx5_flow_expand_rss(struct mlx5_flow_expand_rss *buf, size_t size,
 	memset(&missed_item, 0, sizeof(missed_item));
 	lsize = offsetof(struct mlx5_flow_expand_rss, entry) +
 		MLX5_RSS_EXP_ELT_N * sizeof(buf->entry[0]);
-	if (lsize <= size) {
-		buf->entry[0].priority = 0;
-		buf->entry[0].pattern = (void *)&buf->entry[MLX5_RSS_EXP_ELT_N];
-		buf->entries = 0;
-		addr = buf->entry[0].pattern;
-	}
+	if (lsize > size)
+		return -EINVAL;
+	buf->entry[0].priority = 0;
+	buf->entry[0].pattern = (void *)&buf->entry[MLX5_RSS_EXP_ELT_N];
+	buf->entries = 0;
+	addr = buf->entry[0].pattern;
 	for (item = pattern; item->type != RTE_FLOW_ITEM_TYPE_END; item++) {
-		if (item->type != RTE_FLOW_ITEM_TYPE_VOID)
-			last_item = item;
+		if (!mlx5_flow_is_rss_expandable_item(item)) {
+			user_pattern_size += sizeof(*item);
+			continue;
+		}
+		last_item = item;
 		for (i = 0; node->next && node->next[i]; ++i) {
 			next = &graph[node->next[i]];
 			if (next->type == item->type)
@@ -286,12 +319,12 @@ mlx5_flow_expand_rss(struct mlx5_flow_expand_rss *buf, size_t size,
 	}
 	user_pattern_size += sizeof(*item); /* Handle END item. */
 	lsize += user_pattern_size;
+	if (lsize > size)
+		return -EINVAL;
 	/* Copy the user pattern in the first entry of the buffer. */
-	if (lsize <= size) {
-		rte_memcpy(addr, pattern, user_pattern_size);
-		addr = (void *)(((uintptr_t)addr) + user_pattern_size);
-		buf->entries = 1;
-	}
+	rte_memcpy(addr, pattern, user_pattern_size);
+	addr = (void *)(((uintptr_t)addr) + user_pattern_size);
+	buf->entries = 1;
 	/* Start expanding. */
 	memset(flow_items, 0, sizeof(flow_items));
 	user_pattern_size -= sizeof(*item);
@@ -321,7 +354,9 @@ mlx5_flow_expand_rss(struct mlx5_flow_expand_rss *buf, size_t size,
 		elt = 2; /* missed item + item end. */
 		node = next;
 		lsize += elt * sizeof(*item) + user_pattern_size;
-		if ((node->rss_types & types) && lsize <= size) {
+		if (lsize > size)
+			return -EINVAL;
+		if (node->rss_types & types) {
 			buf->entry[buf->entries].priority = 1;
 			buf->entry[buf->entries].pattern = addr;
 			buf->entries++;
@@ -340,6 +375,7 @@ mlx5_flow_expand_rss(struct mlx5_flow_expand_rss *buf, size_t size,
 	while (node) {
 		flow_items[stack_pos].type = node->type;
 		if (node->rss_types & types) {
+			size_t n;
 			/*
 			 * compute the number of items to copy from the
 			 * expansion and copy it.
@@ -349,24 +385,23 @@ mlx5_flow_expand_rss(struct mlx5_flow_expand_rss *buf, size_t size,
 			elt = stack_pos + 2;
 			flow_items[stack_pos + 1].type = RTE_FLOW_ITEM_TYPE_END;
 			lsize += elt * sizeof(*item) + user_pattern_size;
-			if (lsize <= size) {
-				size_t n = elt * sizeof(*item);
-
-				buf->entry[buf->entries].priority =
-					stack_pos + 1 + missed;
-				buf->entry[buf->entries].pattern = addr;
-				buf->entries++;
-				rte_memcpy(addr, buf->entry[0].pattern,
-					   user_pattern_size);
-				addr = (void *)(((uintptr_t)addr) +
-						user_pattern_size);
-				rte_memcpy(addr, &missed_item,
-					   missed * sizeof(*item));
-				addr = (void *)(((uintptr_t)addr) +
-					missed * sizeof(*item));
-				rte_memcpy(addr, flow_items, n);
-				addr = (void *)(((uintptr_t)addr) + n);
-			}
+			if (lsize > size)
+				return -EINVAL;
+			n = elt * sizeof(*item);
+			buf->entry[buf->entries].priority =
+				stack_pos + 1 + missed;
+			buf->entry[buf->entries].pattern = addr;
+			buf->entries++;
+			rte_memcpy(addr, buf->entry[0].pattern,
+				   user_pattern_size);
+			addr = (void *)(((uintptr_t)addr) +
+					user_pattern_size);
+			rte_memcpy(addr, &missed_item,
+				   missed * sizeof(*item));
+			addr = (void *)(((uintptr_t)addr) +
+				missed * sizeof(*item));
+			rte_memcpy(addr, flow_items, n);
+			addr = (void *)(((uintptr_t)addr) + n);
 		}
 		/* Go deeper. */
 		if (!node->optional && node->next) {
@@ -420,6 +455,8 @@ enum mlx5_expansion {
 	MLX5_EXPANSION_IPV6,
 	MLX5_EXPANSION_IPV6_UDP,
 	MLX5_EXPANSION_IPV6_TCP,
+	MLX5_EXPANSION_IPV6_FRAG_EXT,
+	MLX5_EXPANSION_GTP
 };
 
 /** Supported expansion of items. */
@@ -447,8 +484,7 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
 	},
 	[MLX5_EXPANSION_OUTER_ETH] = {
 		.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_OUTER_IPV4,
-						  MLX5_EXPANSION_OUTER_IPV6,
-						  MLX5_EXPANSION_MPLS),
+						  MLX5_EXPANSION_OUTER_IPV6),
 		.type = RTE_FLOW_ITEM_TYPE_ETH,
 		.rss_types = 0,
 	},
@@ -476,7 +512,9 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
 	},
 	[MLX5_EXPANSION_OUTER_IPV4_UDP] = {
 		.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_VXLAN,
-						  MLX5_EXPANSION_VXLAN_GPE),
+						  MLX5_EXPANSION_VXLAN_GPE,
+						  MLX5_EXPANSION_MPLS,
+						  MLX5_EXPANSION_GTP),
 		.type = RTE_FLOW_ITEM_TYPE_UDP,
 		.rss_types = ETH_RSS_NONFRAG_IPV4_UDP,
 	},
@@ -498,7 +536,9 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
 	},
 	[MLX5_EXPANSION_OUTER_IPV6_UDP] = {
 		.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_VXLAN,
-						  MLX5_EXPANSION_VXLAN_GPE),
+						  MLX5_EXPANSION_VXLAN_GPE,
+						  MLX5_EXPANSION_MPLS,
+						  MLX5_EXPANSION_GTP),
 		.type = RTE_FLOW_ITEM_TYPE_UDP,
 		.rss_types = ETH_RSS_NONFRAG_IPV6_UDP,
 	},
@@ -521,12 +561,14 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
 	[MLX5_EXPANSION_GRE] = {
 		.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_IPV4,
 						  MLX5_EXPANSION_IPV6,
-						  MLX5_EXPANSION_GRE_KEY),
+						  MLX5_EXPANSION_GRE_KEY,
+						  MLX5_EXPANSION_MPLS),
 		.type = RTE_FLOW_ITEM_TYPE_GRE,
 	},
 	[MLX5_EXPANSION_GRE_KEY] = {
 		.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_IPV4,
-						  MLX5_EXPANSION_IPV6),
+						  MLX5_EXPANSION_IPV6,
+						  MLX5_EXPANSION_MPLS),
 		.type = RTE_FLOW_ITEM_TYPE_GRE_KEY,
 		.optional = 1,
 	},
@@ -536,7 +578,8 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
 	},
 	[MLX5_EXPANSION_MPLS] = {
 		.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_IPV4,
-						  MLX5_EXPANSION_IPV6),
+						  MLX5_EXPANSION_IPV6,
+						  MLX5_EXPANSION_ETH),
 		.type = RTE_FLOW_ITEM_TYPE_MPLS,
 	},
 	[MLX5_EXPANSION_ETH] = {
@@ -570,7 +613,8 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
 	},
 	[MLX5_EXPANSION_IPV6] = {
 		.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_IPV6_UDP,
-						  MLX5_EXPANSION_IPV6_TCP),
+						  MLX5_EXPANSION_IPV6_TCP,
+						  MLX5_EXPANSION_IPV6_FRAG_EXT),
 		.type = RTE_FLOW_ITEM_TYPE_IPV6,
 		.rss_types = ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6 |
 			ETH_RSS_NONFRAG_IPV6_OTHER,
@@ -583,6 +627,14 @@ static const struct mlx5_flow_expand_node mlx5_support_expansion[] = {
 		.type = RTE_FLOW_ITEM_TYPE_TCP,
 		.rss_types = ETH_RSS_NONFRAG_IPV6_TCP,
 	},
+	[MLX5_EXPANSION_IPV6_FRAG_EXT] = {
+		.type = RTE_FLOW_ITEM_TYPE_IPV6_FRAG_EXT,
+	},
+	[MLX5_EXPANSION_GTP] = {
+			.next = MLX5_FLOW_EXPAND_RSS_NEXT(MLX5_EXPANSION_IPV4,
+							  MLX5_EXPANSION_IPV6),
+			.type = RTE_FLOW_ITEM_TYPE_GTP
+	}
 };
 
 static struct rte_flow_shared_action *
@@ -1862,6 +1914,10 @@ mlx5_flow_validate_item_eth(const struct rte_flow_item *item,
 		return rte_flow_error_set(error, EINVAL,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "L2 layer should not follow VLAN");
+	if (item_flags & MLX5_FLOW_LAYER_GTP)
+		return rte_flow_error_set(error, EINVAL,
+					  RTE_FLOW_ERROR_TYPE_ITEM, item,
+					  "L2 layer should not follow GTP");
 	if (!mask)
 		mask = &rte_flow_item_eth_mask;
 	ret = mlx5_flow_item_acceptable(item, (const uint8_t *)mask,
@@ -2017,7 +2073,7 @@ mlx5_flow_validate_item_ipv4(const struct rte_flow_item *item,
 					  RTE_FLOW_ERROR_TYPE_ITEM, item,
 					  "IPv4 cannot follow L2/VLAN layer "
 					  "which ether type is not IPv4");
-	if (item_flags & MLX5_FLOW_LAYER_IPIP) {
+	if (item_flags & MLX5_FLOW_LAYER_TUNNEL) {
 		if (mask && spec)
 			next_proto = mask->hdr.next_proto_id &
 				     spec->hdr.next_proto_id;
@@ -2125,7 +2181,7 @@ mlx5_flow_validate_item_ipv6(const struct rte_flow_item *item,
 					  "which ether type is not IPv6");
 	if (mask && mask->hdr.proto == UINT8_MAX && spec)
 		next_proto = spec->hdr.proto;
-	if (item_flags & MLX5_FLOW_LAYER_IPV6_ENCAP) {
+	if (item_flags & MLX5_FLOW_LAYER_TUNNEL) {
 		if (next_proto == IPPROTO_IPIP || next_proto == IPPROTO_IPV6)
 			return rte_flow_error_set(error, EINVAL,
 						  RTE_FLOW_ERROR_TYPE_ITEM,
@@ -2670,9 +2726,8 @@ mlx5_flow_validate_item_mpls(struct rte_eth_dev *dev __rte_unused,
 					  "MPLS not supported or"
 					  " disabled in firmware"
 					  " configuration.");
-	/* MPLS over IP, UDP, GRE is allowed */
-	if (!(prev_layer & (MLX5_FLOW_LAYER_OUTER_L3 |
-			    MLX5_FLOW_LAYER_OUTER_L4_UDP |
+	/* MPLS over UDP, GRE is allowed */
+	if (!(prev_layer & (MLX5_FLOW_LAYER_OUTER_L4_UDP |
 			    MLX5_FLOW_LAYER_GRE |
 			    MLX5_FLOW_LAYER_GRE_KEY)))
 		return rte_flow_error_set(error, EINVAL,
@@ -5370,6 +5425,10 @@ flow_list_create(struct rte_eth_dev *dev, uint32_t *list,
 					   mlx5_support_expansion, graph_root);
 		MLX5_ASSERT(ret > 0 &&
 		       (unsigned int)ret < sizeof(expand_buffer.buffer));
+		if (rte_log_can_log(mlx5_logtype, RTE_LOG_DEBUG)) {
+			for (i = 0; i < buf->entries; ++i)
+				mlx5_dbg__print_pattern(buf->entry[i].pattern);
+		}
 	} else {
 		buf->entries = 1;
 		buf->entry[0].pattern = (void *)(uintptr_t)items;
@@ -7987,3 +8046,21 @@ mlx5_release_tunnel_hub(__rte_unused struct mlx5_dev_ctx_shared *sh,
 }
 #endif /* HAVE_IBV_FLOW_DV_SUPPORT */
 
+static void
+mlx5_dbg__print_pattern(const struct rte_flow_item *item)
+{
+	int ret;
+	struct rte_flow_error error;
+
+	for (; item->type != RTE_FLOW_ITEM_TYPE_END; item++) {
+		char *item_name;
+		ret = rte_flow_conv(RTE_FLOW_CONV_OP_ITEM_NAME_PTR, &item_name,
+				    sizeof(item_name),
+				    (void *)(uintptr_t)item->type, &error);
+		if (ret > 0)
+			printf("%s ", item_name);
+		else
+			printf("%d\n", (int)item->type);
+	}
+	printf("END\n");
+}

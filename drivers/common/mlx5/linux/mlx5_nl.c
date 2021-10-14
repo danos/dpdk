@@ -33,6 +33,8 @@
 #define MLX5_SEND_BUF_SIZE 32768
 /* Receive buffer size for the Netlink socket */
 #define MLX5_RECV_BUF_SIZE 32768
+/* Maximal physical port name length. */
+#define MLX5_PHYS_PORT_NAME_MAX 128
 
 /** Parameters of VLAN devices created by driver. */
 #define MLX5_VMWA_VLAN_DEVICE_PFX "evmlx"
@@ -187,8 +189,8 @@ int
 mlx5_nl_init(int protocol)
 {
 	int fd;
-	int sndbuf_size = MLX5_SEND_BUF_SIZE;
-	int rcvbuf_size = MLX5_RECV_BUF_SIZE;
+	int buf_size;
+	socklen_t opt_size;
 	struct sockaddr_nl local = {
 		.nl_family = AF_NETLINK,
 	};
@@ -199,15 +201,35 @@ mlx5_nl_init(int protocol)
 		rte_errno = errno;
 		return -rte_errno;
 	}
-	ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_size, sizeof(int));
+	opt_size = sizeof(buf_size);
+	ret = getsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buf_size, &opt_size);
 	if (ret == -1) {
 		rte_errno = errno;
 		goto error;
 	}
-	ret = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf_size, sizeof(int));
+	DRV_LOG(DEBUG, "Netlink socket send buffer: %d", buf_size);
+	if (buf_size < MLX5_SEND_BUF_SIZE) {
+		ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF,
+				 &buf_size, sizeof(buf_size));
+		if (ret == -1) {
+			rte_errno = errno;
+			goto error;
+		}
+	}
+	opt_size = sizeof(buf_size);
+	ret = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf_size, &opt_size);
 	if (ret == -1) {
 		rte_errno = errno;
 		goto error;
+	}
+	DRV_LOG(DEBUG, "Netlink socket recv buffer: %d", buf_size);
+	if (buf_size < MLX5_RECV_BUF_SIZE) {
+		ret = setsockopt(fd, SOL_SOCKET, SO_RCVBUF,
+				 &buf_size, sizeof(buf_size));
+		if (ret == -1) {
+			rte_errno = errno;
+			goto error;
+		}
 	}
 	ret = bind(fd, (struct sockaddr *)&local, sizeof(local));
 	if (ret == -1) {
@@ -330,11 +352,7 @@ mlx5_nl_recv(int nlsk_fd, uint32_t sn, int (*cb)(struct nlmsghdr *, void *arg),
 	     void *arg)
 {
 	struct sockaddr_nl sa;
-	void *buf = mlx5_malloc(0, MLX5_RECV_BUF_SIZE, 0, SOCKET_ID_ANY);
-	struct iovec iov = {
-		.iov_base = buf,
-		.iov_len = MLX5_RECV_BUF_SIZE,
-	};
+	struct iovec iov;
 	struct msghdr msg = {
 		.msg_name = &sa,
 		.msg_namelen = sizeof(sa),
@@ -342,18 +360,43 @@ mlx5_nl_recv(int nlsk_fd, uint32_t sn, int (*cb)(struct nlmsghdr *, void *arg),
 		/* One message at a time */
 		.msg_iovlen = 1,
 	};
+	void *buf = NULL;
 	int multipart = 0;
 	int ret = 0;
 
-	if (!buf) {
-		rte_errno = ENOMEM;
-		return -rte_errno;
-	}
 	do {
 		struct nlmsghdr *nh;
-		int recv_bytes = 0;
+		int recv_bytes;
 
 		do {
+			/* Query length of incoming message. */
+			iov.iov_base = NULL;
+			iov.iov_len = 0;
+			recv_bytes = recvmsg(nlsk_fd, &msg,
+					     MSG_PEEK | MSG_TRUNC);
+			if (recv_bytes < 0) {
+				rte_errno = errno;
+				ret = -rte_errno;
+				goto exit;
+			}
+			if (recv_bytes == 0) {
+				rte_errno = ENODATA;
+				ret = -rte_errno;
+				goto exit;
+			}
+			/* Allocate buffer to fetch the message. */
+			if (recv_bytes < MLX5_RECV_BUF_SIZE)
+				recv_bytes = MLX5_RECV_BUF_SIZE;
+			mlx5_free(buf);
+			buf = mlx5_malloc(0, recv_bytes, 0, SOCKET_ID_ANY);
+			if (!buf) {
+				rte_errno = ENOMEM;
+				ret = -rte_errno;
+				goto exit;
+			}
+			/* Fetch the message. */
+			iov.iov_base = buf;
+			iov.iov_len = recv_bytes;
 			recv_bytes = recvmsg(nlsk_fd, &msg, 0);
 			if (recv_bytes == -1) {
 				rte_errno = errno;
@@ -1188,6 +1231,7 @@ mlx5_nl_switch_info_cb(struct nlmsghdr *nh, void *arg)
 	size_t off = NLMSG_LENGTH(sizeof(struct ifinfomsg));
 	bool switch_id_set = false;
 	bool num_vf_set = false;
+	int len;
 
 	if (nh->nlmsg_type != RTM_NEWLINK)
 		goto error;
@@ -1203,7 +1247,24 @@ mlx5_nl_switch_info_cb(struct nlmsghdr *nh, void *arg)
 			num_vf_set = true;
 			break;
 		case IFLA_PHYS_PORT_NAME:
-			mlx5_translate_port_name((char *)payload, &info);
+			len = RTA_PAYLOAD(ra);
+			/* Some kernels do not pad attributes with zero. */
+			if (len > 0 && len < MLX5_PHYS_PORT_NAME_MAX) {
+				char name[MLX5_PHYS_PORT_NAME_MAX];
+
+				/*
+				 * We can't just patch the message with padding
+				 * zero - it might corrupt the following items
+				 * in the message, we have to copy the string
+				 * by attribute length and pad the copied one.
+				 */
+				memcpy(name, payload, len);
+				name[len] = 0;
+				mlx5_translate_port_name(name, &info);
+			} else {
+				info.name_type =
+					MLX5_PHYS_PORT_NAME_TYPE_UNKNOWN;
+			}
 			break;
 		case IFLA_PHYS_SWITCH_ID:
 			info.switch_id = 0;
