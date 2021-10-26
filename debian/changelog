@@ -1,3 +1,9 @@
+dpdk (20.11.3-2vyatta2) unstable; urgency=medium
+
+  * debian: Add linux-firmware dependencies (Bugfix: VRVDR-56045)
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Tue, 26 Oct 2021 18:27:00 -0400
+
 dpdk (20.11.3-2vyatta1) unstable; urgency=medium
 
   [ Hongbo Zheng ]
