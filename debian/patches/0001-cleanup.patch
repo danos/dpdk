@@ -1,0 +1,36 @@
+Remove the runtime dir created by eal_create_runtime_dir
+
+Signed-off-by: Paul Aitken <paitken@ciena.com>
+---
+ lib/librte_eal/linux/eal.c |   13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+--- a/lib/librte_eal/linux/eal.c
++++ b/lib/librte_eal/linux/eal.c
+@@ -142,6 +142,18 @@ eal_create_runtime_dir(void)
+ 	return 0;
+ }
+ 
++void
++eal_delete_runtime_dir(void)
++{
++	char cmd[PATH_MAX + 6];
++
++	sprintf(cmd, "rm -r %s", rte_eal_get_runtime_dir());
++
++	if (system(cmd))
++	       RTE_LOG(ERR, EAL, "Error deleting '%s'\n",
++		       rte_eal_get_runtime_dir());
++}
++
+ int
+ eal_clean_runtime_dir(void)
+ {
+@@ -1367,6 +1379,7 @@ rte_eal_cleanup(void)
+ 	rte_trace_save();
+ 	eal_trace_fini();
+ 	eal_cleanup_config(internal_conf);
++	eal_delete_runtime_dir();
+ 	return 0;
+ }
+ 
