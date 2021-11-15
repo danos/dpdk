@@ -1,3 +1,10 @@
+dpdk (20.11.3-2vyatta3) unstable; urgency=medium
+
+  [ Paul Aitken ]
+  * Remove the runtime dir created by eal_create_runtime_dir
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 15 Nov 2021 07:53:26 -0500
+
 dpdk (20.11.3-2vyatta2) unstable; urgency=medium
 
   * debian: Add linux-firmware dependencies (Bugfix: VRVDR-56045)
