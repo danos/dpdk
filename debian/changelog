@@ -1,3 +1,10 @@
+dpdk (20.11.3-2vyatta4) unstable; urgency=medium
+
+  [ Paul Aitken ]
+  * Add "static" to avoid "missing prototype" warning
+
+ -- Charles (Chas) Williams <ciwillia@vyatta.att-mail.com>  Mon, 15 Nov 2021 10:29:13 -0500
+
 dpdk (20.11.3-2vyatta3) unstable; urgency=medium
 
   [ Paul Aitken ]
