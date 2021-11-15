@@ -11,7 +11,7 @@ Signed-off-by: Paul Aitken <paitken@ciena.com>
  	return 0;
  }
  
-+void
++static void
 +eal_delete_runtime_dir(void)
 +{
 +	char cmd[PATH_MAX + 6];
